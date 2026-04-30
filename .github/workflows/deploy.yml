@@ -1,0 +1,34 @@
+name: Deploy Backend to EC2
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'backend/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Execute deployment commands via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_PRIVATE_KEY }}
+          script: |
+            # Navigate to the backend folder inside the repository
+            # Replace 'Mingo' with the exact folder name of your repo on the EC2 instance
+            cd ~/Mingo/backend
+            
+            # Pull the latest changes from GitHub
+            git pull origin main
+            
+            # Install any new dependencies
+            npm install
+            
+            # Restart the Node.js application using PM2
+            pm2 restart mingo-backend
