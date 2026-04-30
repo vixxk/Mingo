@@ -7,7 +7,9 @@ let io;
 const initSocket = (server) => {
   io = new Server(server, {
     cors: {
-      origin: '*', 
+      origin: '*',
+      methods: ['GET', 'POST'],
+      allowedHeaders: '*'
     }
   });
 
