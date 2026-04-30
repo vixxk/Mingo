@@ -1,0 +1,17 @@
+# dependencies
+node_modules/
+.expo/
+dist/
+build/
+
+# environment variables
+.env
+.env.*
+
+# logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
