@@ -24,14 +24,51 @@ const INTERESTS = [
   { label: 'Family & Relationships', icon: 'heart-outline' },
 ];
 
+const getAvatarImage = (gender, index) => {
+  const parsedIndex = parseInt(index, 10) || 0;
+  if (gender === 'Male') {
+    const maleAvatars = [
+      require('../../images/male_avatar_1_1776972918440.png'),
+      require('../../images/male_avatar_2_1776972933241.png'),
+      require('../../images/male_avatar_3_1776972950218.png'),
+      require('../../images/male_avatar_4_1776972963577.png'),
+      require('../../images/male_avatar_5_1776972978900.png'),
+      require('../../images/male_avatar_6_1776972993180.png'),
+      require('../../images/male_avatar_7_1776973008143.png'),
+      require('../../images/male_avatar_8_1776973021635.png'),
+    ];
+    return maleAvatars[parsedIndex] || maleAvatars[0];
+  } else {
+    const femaleAvatars = [
+      require('../../images/female_avatar_1_1776973035859.png'),
+      require('../../images/female_avatar_2_1776973050039.png'),
+      require('../../images/female_avatar_3_1776973063471.png'),
+      require('../../images/female_avatar_4_1776973077539.png'),
+      require('../../images/female_avatar_5_1776973090730.png'),
+      require('../../images/female_avatar_6_1776973108100.png'),
+      require('../../images/female_avatar_7_1776973124018.png'),
+      require('../../images/female_avatar_8_1776973138772.png'),
+    ];
+    return femaleAvatars[parsedIndex] || femaleAvatars[0];
+  }
+};
+
 export default function ConnectingScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { name = 'Priya Sharma' } = useLocalSearchParams();
+  const { 
+    name = 'Priya Sharma',
+    callId,
+    roomId,
+    listenerId,
+    avatarIndex,
+    gender,
+    zegoAppId,
+    zegoAppSign,
+    callType = 'audio'
+  } = useLocalSearchParams();
 
-  
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  
   const dotsAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -52,7 +89,11 @@ export default function ConnectingScreen() {
     ).start();
 
     const timer = setTimeout(() => {
-      router.replace({ pathname: '/(call)/audio-call', params: { name, callId: 'demo_zego_call' } });
+      const targetScreen = callType === 'video' ? '/(call)/video-call' : '/(call)/audio-call';
+      router.replace({ 
+        pathname: targetScreen, 
+        params: { name, callId, roomId, listenerId, avatarIndex, gender, zegoAppId, zegoAppSign, callType } 
+      });
     }, 2500);
 
     return () => clearTimeout(timer);
@@ -72,7 +113,7 @@ export default function ConnectingScreen() {
       <View style={[styles.topSection, { paddingTop: insets.top + vs(30) }]}>
         <Animated.View style={[styles.avatarRing, { transform: [{ scale: pulseAnim }] }]}>
           <Image
-            source={require('../../images/user_priya.png')}
+            source={getAvatarImage(gender, avatarIndex)}
             style={styles.avatar}
           />
         </Animated.View>

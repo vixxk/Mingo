@@ -1,10 +1,11 @@
 import { Tabs, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { View, StyleSheet, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { s, vs, ms } from '../../utils/responsive';
 import { authAPI } from '../../utils/api';
+import { socketService } from '../../utils/socket';
 
 export default function TabLayout() {
   const router = useRouter();
@@ -17,9 +18,14 @@ export default function TabLayout() {
         router.replace('/welcome');
       } else {
         setIsAuthenticated(true);
+        socketService.connect();
       }
     };
     checkAuth();
+    
+    return () => {
+      socketService.disconnect();
+    };
   }, []);
 
   const insets = useSafeAreaInsets();

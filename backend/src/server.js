@@ -1,3 +1,4 @@
+console.log('DEBUG: Loading app from', require.resolve('./app'));
 const app = require('./app');
 const config = require('./config/env');
 const { connectDB, mongoose } = require('./config/database');

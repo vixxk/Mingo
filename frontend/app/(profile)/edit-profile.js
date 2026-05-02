@@ -15,6 +15,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, SCREEN_WIDTH } from '../../utils/responsive';
+import { userAPI } from '../../utils/api';
 
 const MALE_AVATARS = [
   require('../../images/male_avatar_1_1776972918440.png'),
@@ -59,26 +60,58 @@ export default function EditProfileScreen() {
   useEffect(() => {
     const loadProfile = async () => {
       try {
-        const storedGender = await AsyncStorage.getItem('userGender');
-        const storedAvatar = await AsyncStorage.getItem('userAvatarIndex');
-        const storedUsername = await AsyncStorage.getItem('userName');
-        
-        if (storedGender) setGender(storedGender);
-        if (storedAvatar) setSelectedAvatar(storedAvatar);
-        if (storedUsername) setUsername(storedUsername);
+        const userStr = await AsyncStorage.getItem('user');
+        if (userStr) {
+          const userObj = JSON.parse(userStr);
+          if (userObj.gender) setGender(userObj.gender);
+          if (userObj.avatarIndex !== undefined) setSelectedAvatar(userObj.avatarIndex.toString());
+          if (userObj.name) setUsername(userObj.name);
+          if (userObj.interests) setSelectedInterests(userObj.interests);
+        } else {
+          const storedGender = await AsyncStorage.getItem('userGender');
+          const storedAvatar = await AsyncStorage.getItem('userAvatarIndex');
+          const storedUsername = await AsyncStorage.getItem('userName');
+          
+          if (storedGender) setGender(storedGender);
+          if (storedAvatar) setSelectedAvatar(storedAvatar);
+          if (storedUsername) setUsername(storedUsername);
+        }
       } catch (e) {}
     };
     loadProfile();
   }, []);
 
+  const [isSaving, setIsSaving] = useState(false);
+
   const handleSave = async () => {
     try {
+      setIsSaving(true);
+      await userAPI.updateProfile({
+        name: username,
+        gender,
+        avatarIndex: parseInt(selectedAvatar, 10),
+        interests: selectedInterests,
+      });
+
+      // Update local storage
+      const userStr = await AsyncStorage.getItem('user');
+      if (userStr) {
+        const userObj = JSON.parse(userStr);
+        userObj.name = username;
+        userObj.gender = gender;
+        userObj.avatarIndex = parseInt(selectedAvatar, 10);
+        userObj.interests = selectedInterests;
+        await AsyncStorage.setItem('user', JSON.stringify(userObj));
+      }
+
       await AsyncStorage.setItem('userGender', gender);
       await AsyncStorage.setItem('userAvatarIndex', selectedAvatar);
       await AsyncStorage.setItem('userName', username);
       router.back();
     } catch (e) {
       console.error('Save error:', e);
+    } finally {
+      setIsSaving(false);
     }
   };
 

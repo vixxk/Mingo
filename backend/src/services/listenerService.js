@@ -19,11 +19,16 @@ class ListenerService {
         .filter((l) => l.isOnline)
         .map((l) => ({
           id: l.userId?._id || l.userId,
-          name: l.userId?.name,
+          name: l.displayName || l.userId?.name,
           username: l.userId?.username,
+          gender: l.userId?.gender,
+          avatarIndex: l.userId?.avatarIndex,
           rating: l.rating,
           totalSessions: l.totalSessions,
           isOnline: l.isOnline,
+          isVerified: l.verified,
+          bestChoice: l.bestChoice,
+          gradientColors: l.gradientColors,
         }));
     }
 
@@ -45,11 +50,16 @@ class ListenerService {
       if (listener) {
         results.push({
           id: listener.userId?._id || listener.userId,
-          name: listener.userId?.name,
+          name: listener.displayName || listener.userId?.name,
           username: listener.userId?.username,
+          gender: listener.userId?.gender,
+          avatarIndex: listener.userId?.avatarIndex,
           rating: listener.rating,
           totalSessions: listener.totalSessions,
           isOnline: listener.isOnline,
+          isVerified: listener.verified,
+          bestChoice: listener.bestChoice,
+          gradientColors: listener.gradientColors,
           score,
         });
       }

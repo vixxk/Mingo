@@ -17,65 +17,45 @@ import { useRouter } from 'expo-router';
 import { ms, s, vs } from '../../utils/responsive';
 
 
-const DEMO_MESSAGES = [
-  {
-    id: '1',
-    name: 'Priya Sharma',
-    imageKey: 'priya',
-    image: require('../../images/user_priya.png'),
-    lastMessage: 'Hey! How are you doing today?',
-    time: '10:42 AM',
-    unread: 2,
-    isOnline: true,
-  },
-  {
-    id: '2',
-    name: 'Shruti Jaiswal',
-    imageKey: 'shruti',
-    image: require('../../images/user_shruti.png'),
-    lastMessage: "Let's catch up later this evening.",
-    time: 'Yesterday',
-    unread: 0,
-    isOnline: false,
-  },
-  {
-    id: '3',
-    name: 'Ananya',
-    imageKey: 'ananya',
-    image: require('../../images/user_ananya.png'),
-    lastMessage: 'Thanks for the great conversation! 😊',
-    time: 'Mon',
-    unread: 1,
-    isOnline: true,
-  },
-  {
-    id: '4',
-    name: 'Neha',
-    imageKey: 'neha',
-    image: require('../../images/user_neha.png'),
-    lastMessage: 'Call me when you are free.',
-    time: 'Sun',
-    unread: 0,
-    isOnline: false,
-  },
-  {
-    id: '5',
-    name: 'Riya',
-    imageKey: 'riya',
-    image: require('../../images/user_riya.png'),
-    lastMessage: 'That sounds like a great plan.',
-    time: 'Last Week',
-    unread: 0,
-    isOnline: true,
-  },
-];
+import { chatAPI } from '../../utils/api';
+import { useFocusEffect } from 'expo-router';
+
+const getAvatarImage = (gender, index) => {
+  const parsedIndex = parseInt(index, 10) || 0;
+  if (gender === 'Male') {
+    const maleAvatars = [
+      require('../../images/male_avatar_1_1776972918440.png'),
+      require('../../images/male_avatar_2_1776972933241.png'),
+      require('../../images/male_avatar_3_1776972950218.png'),
+      require('../../images/male_avatar_4_1776972963577.png'),
+      require('../../images/male_avatar_5_1776972978900.png'),
+      require('../../images/male_avatar_6_1776972993180.png'),
+      require('../../images/male_avatar_7_1776973008143.png'),
+      require('../../images/male_avatar_8_1776973021635.png'),
+    ];
+    return maleAvatars[parsedIndex] || maleAvatars[0];
+  } else {
+    const femaleAvatars = [
+      require('../../images/female_avatar_1_1776973035859.png'),
+      require('../../images/female_avatar_2_1776973050039.png'),
+      require('../../images/female_avatar_3_1776973063471.png'),
+      require('../../images/female_avatar_4_1776973077539.png'),
+      require('../../images/female_avatar_5_1776973090730.png'),
+      require('../../images/female_avatar_6_1776973108100.png'),
+      require('../../images/female_avatar_7_1776973124018.png'),
+      require('../../images/female_avatar_8_1776973138772.png'),
+    ];
+    return femaleAvatars[parsedIndex] || femaleAvatars[0];
+  }
+};
 
 export default function MessagesScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
+  const [conversations, setConversations] = useState([]);
 
-  const filteredMessages = DEMO_MESSAGES.filter(msg => 
+  const filteredMessages = conversations.filter(msg => 
     msg.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -94,41 +74,65 @@ export default function MessagesScreen() {
     ]).start();
   }, []);
 
-  const renderMessageItem = ({ item }) => (
-    <TouchableOpacity 
-      style={styles.messageItem} 
-      activeOpacity={0.7}
-      onPress={() => router.push({ pathname: '/chat', params: { name: item.name, imageKey: item.imageKey } })}
-    >
-      <View style={styles.avatarContainer}>
-        <Image source={item.image} style={styles.avatar} />
-        {item.isOnline && <View style={styles.onlineIndicator} />}
-      </View>
-      
-      <View style={styles.messageDetails}>
-        <View style={styles.nameRow}>
-          <Text style={styles.nameText} numberOfLines={1}>{item.name}</Text>
-          <Text style={[styles.timeText, item.unread > 0 && styles.timeTextUnread]}>{item.time}</Text>
-        </View>
-        <View style={styles.messageRow}>
-          <Text 
-            style={[styles.messageText, item.unread > 0 && styles.messageTextUnread]} 
-            numberOfLines={1}
-          >
-            {item.lastMessage}
-          </Text>
-          {item.unread > 0 && (
-            <LinearGradient
-              colors={['#3B82F6', '#8B5CF6']}
-              style={styles.unreadBadge}
-            >
-              <Text style={styles.unreadText}>{item.unread}</Text>
-            </LinearGradient>
-          )}
-        </View>
-      </View>
-    </TouchableOpacity>
+  useFocusEffect(
+    React.useCallback(() => {
+      const loadConversations = async () => {
+        try {
+          const res = await chatAPI.getConversations();
+          if (res?.data) {
+            setConversations(res.data);
+          }
+        } catch (e) {
+          console.error('Error fetching conversations:', e);
+        }
+      };
+      loadConversations();
+    }, [])
   );
+
+  const renderMessageItem = ({ item }) => {
+    let timeStr = item.time;
+    if (typeof timeStr === 'string' && timeStr.includes('T')) {
+      const d = new Date(timeStr);
+      timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    }
+
+    return (
+      <TouchableOpacity 
+        style={styles.messageItem} 
+        activeOpacity={0.7}
+        onPress={() => router.push({ pathname: '/chat', params: { id: item.id, name: item.name } })}
+      >
+        <View style={styles.avatarContainer}>
+          <Image source={item.image || getAvatarImage(item.gender, item.avatarIndex)} style={styles.avatar} />
+          {item.isOnline && <View style={styles.onlineIndicator} />}
+        </View>
+        
+        <View style={styles.messageDetails}>
+          <View style={styles.nameRow}>
+            <Text style={styles.nameText} numberOfLines={1}>{item.name}</Text>
+            <Text style={[styles.timeText, item.unread > 0 && styles.timeTextUnread]}>{timeStr}</Text>
+          </View>
+          <View style={styles.messageRow}>
+            <Text 
+              style={[styles.messageText, item.unread > 0 && styles.messageTextUnread]} 
+              numberOfLines={1}
+            >
+              {item.lastMessage}
+            </Text>
+            {item.unread > 0 && (
+              <LinearGradient
+                colors={['#3B82F6', '#8B5CF6']}
+                style={styles.unreadBadge}
+              >
+                <Text style={styles.unreadText}>{item.unread}</Text>
+              </LinearGradient>
+            )}
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>

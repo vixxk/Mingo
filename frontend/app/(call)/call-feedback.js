@@ -16,6 +16,8 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ms, s, vs, SCREEN_HEIGHT } from '../../utils/responsive';
 
+import { ratingAPI } from '../../utils/api';
+
 const TAGS = [
   'Fun Conversation',
   'Helpful Advice',
@@ -26,10 +28,11 @@ const TAGS = [
 export default function CallFeedbackScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { name = 'Priya Sharma' } = useLocalSearchParams();
+  const { name = 'Priya Sharma', sessionId } = useLocalSearchParams();
   const [rating, setRating] = useState(4);
   const [selectedTags, setSelectedTags] = useState([]);
   const [feedback, setFeedback] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const toggleTag = (tag) => {
     setSelectedTags((prev) =>
@@ -37,9 +40,25 @@ export default function CallFeedbackScreen() {
     );
   };
 
-  const handleSubmit = () => {
-    console.log('Feedback:', { rating, selectedTags, feedback });
-    router.back();
+  const handleSubmit = async () => {
+    if (!sessionId) {
+      router.replace('/(tabs)');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const combinedFeedback = selectedTags.length > 0 
+        ? `${selectedTags.join(', ')}. ${feedback}`
+        : feedback;
+        
+      await ratingAPI.submit(sessionId, rating, combinedFeedback);
+    } catch (e) {
+      console.log('Error submitting feedback:', e);
+    } finally {
+      setIsSubmitting(false);
+      router.replace('/(tabs)');
+    }
   };
 
   return (

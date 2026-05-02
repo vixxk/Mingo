@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -16,66 +16,49 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, SCREEN_WIDTH } from '../../utils/responsive';
+import { callAPI, userAPI, walletAPI } from '../../utils/api';
 import FavouriteListenerPopup from '../../components/shared/FavouriteListenerPopup';
+import { useFocusEffect } from 'expo-router';
 
 
-const RECENT_CALLS_DATA = [
-  {
-    id: '1',
-    name: 'Riya Singh',
-    duration: '1:30 secs call',
-    image: require('../../images/user_riya.png'),
-    gradientColors: ['#6B21A8', '#A855F7', '#C084FC'],
-  },
-  {
-    id: '2',
-    name: 'Roshni Singh',
-    duration: '4:45 Secs Call',
-    image: require('../../images/user_priya.png'),
-    gradientColors: ['#4B5563', '#6B7280', '#9CA3AF'],
-  },
-  {
-    id: '3',
-    name: 'Shreya',
-    duration: '3:24 Secs Calls',
-    image: require('../../images/user_deepika.png'),
-    gradientColors: ['#065F46', '#10B981', '#6EE7B7'],
-  },
-  {
-    id: '4',
-    name: 'Anvi',
-    duration: '2:00 Secs Calls',
-    image: require('../../images/user_priyanka.png'),
-    gradientColors: ['#92400E', '#F59E0B', '#FDE68A'],
-  },
-];
 
-
-const FAVOURITES_DATA = [
-  {
-    id: '1',
-    name: 'Shruti Jaiswal',
-    duration: 'Favourite Listener',
-    image: require('../../images/user_shruti.png'),
-    gradientColors: ['#B91C1C', '#EF4444', '#FCA5A5'],
-  },
-  {
-    id: '2',
-    name: 'Ananya',
-    duration: 'Favourite Listener',
-    image: require('../../images/user_ananya.png'),
-    gradientColors: ['#BE185D', '#EC4899', '#F9A8D4'],
+const getAvatarImage = (gender, index) => {
+  const parsedIndex = parseInt(index, 10) || 0;
+  if (gender === 'Male') {
+    const maleAvatars = [
+      require('../../images/male_avatar_1_1776972918440.png'),
+      require('../../images/male_avatar_2_1776972933241.png'),
+      require('../../images/male_avatar_3_1776972950218.png'),
+      require('../../images/male_avatar_4_1776972963577.png'),
+      require('../../images/male_avatar_5_1776972978900.png'),
+      require('../../images/male_avatar_6_1776972993180.png'),
+      require('../../images/male_avatar_7_1776973008143.png'),
+      require('../../images/male_avatar_8_1776973021635.png'),
+    ];
+    return maleAvatars[parsedIndex] || maleAvatars[0];
+  } else {
+    const femaleAvatars = [
+      require('../../images/female_avatar_1_1776973035859.png'),
+      require('../../images/female_avatar_2_1776973050039.png'),
+      require('../../images/female_avatar_3_1776973063471.png'),
+      require('../../images/female_avatar_4_1776973077539.png'),
+      require('../../images/female_avatar_5_1776973090730.png'),
+      require('../../images/female_avatar_6_1776973108100.png'),
+      require('../../images/female_avatar_7_1776973124018.png'),
+      require('../../images/female_avatar_8_1776973138772.png'),
+    ];
+    return femaleAvatars[parsedIndex] || femaleAvatars[0];
   }
-];
+};
 
 const CallItem = ({ item, index }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
-    Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true }).start();
+    Animated.spring(scaleAnim, { toValue: 0.97, friction: 8, tension: 100, useNativeDriver: true }).start();
   };
   const handlePressOut = () => {
-    Animated.spring(scaleAnim, { toValue: 1, friction: 3, useNativeDriver: true }).start();
+    Animated.spring(scaleAnim, { toValue: 1, friction: 5, tension: 80, useNativeDriver: true }).start();
   };
 
   return (
@@ -86,12 +69,12 @@ const CallItem = ({ item, index }) => {
         onPressOut={handlePressOut}
       >
         <LinearGradient
-          colors={item.gradientColors}
+          colors={item.gradientColors || ['#4B5563', '#6B7280']}
           start={{ x: 0, y: 0.5 }}
           end={{ x: 1, y: 0.5 }}
           style={styles.callItem}
         >
-          <Image source={item.image} style={styles.callAvatar} />
+          <Image source={item.image || getAvatarImage(item.gender, item.avatarIndex)} style={styles.callAvatar} />
           <View style={styles.callInfo}>
             <Text style={styles.callName}>{item.name}</Text>
             <Text style={styles.callDuration}>{item.duration}</Text>
@@ -130,6 +113,11 @@ export default function RecentCallsScreen() {
   const contentAnim = useRef(new Animated.Value(0)).current;
   const contentSlide = useRef(new Animated.Value(15)).current;
 
+  const [recentCalls, setRecentCalls] = useState([]);
+  const [favourites, setFavourites] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [coinBalance, setCoinBalance] = useState(0);
+
   useEffect(() => {
     Animated.sequence([
       Animated.timing(headerAnim, { toValue: 1, duration: 350, useNativeDriver: true }),
@@ -139,6 +127,50 @@ export default function RecentCallsScreen() {
       ]),
     ]).start();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      const loadData = async () => {
+        try {
+          setIsLoading(true);
+          const [callsRes, favsRes, balRes] = await Promise.all([
+            callAPI.getHistory(20, 0),
+            userAPI.getFavourites(),
+            walletAPI.getBalance()
+          ]);
+
+          if (callsRes?.data) {
+            setRecentCalls(callsRes.data.map(call => ({
+              id: call._id,
+              name: call.listenerId?.name || 'Unknown',
+              gender: call.listenerId?.gender,
+              avatarIndex: call.listenerId?.avatarIndex,
+              duration: `${call.duration || 0} mins call`,
+            })));
+          }
+
+          if (favsRes?.data) {
+            setFavourites(favsRes.data.map(fav => ({
+              id: fav._id,
+              name: fav.name,
+              gender: fav.gender,
+              avatarIndex: fav.avatarIndex,
+              duration: 'Favourite Listener',
+            })));
+          }
+
+          if (balRes?.data) {
+            setCoinBalance(balRes.data.coins || 0);
+          }
+        } catch (e) {
+          console.error('Failed to load recent calls:', e);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      loadData();
+    }, [])
+  );
 
   const handleTabSwitch = async (tab) => {
     setActiveTab(tab);
@@ -157,7 +189,7 @@ export default function RecentCallsScreen() {
     await AsyncStorage.setItem('hasSeenFavouritePopup', 'true');
   };
 
-  const data = activeTab === 'recent' ? RECENT_CALLS_DATA : FAVOURITES_DATA;
+  const data = activeTab === 'recent' ? recentCalls : favourites;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -176,7 +208,7 @@ export default function RecentCallsScreen() {
             onPress={() => router.push('/balance')}
           >
             <Text style={styles.coinEmoji}>🪙</Text>
-            <Text style={styles.coinCount}>0</Text>
+            <Text style={styles.coinCount}>{coinBalance}</Text>
           </TouchableOpacity>
         </View>
         <TouchableOpacity style={styles.notificationBtn} activeOpacity={0.7}>

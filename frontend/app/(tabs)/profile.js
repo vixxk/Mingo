@@ -57,6 +57,8 @@ export default function ProfileScreen() {
   const menuSlide = useRef(new Animated.Value(20)).current;
   const logoutSlide = useRef(new Animated.Value(20)).current;
 
+  const [createdAtStr, setCreatedAtStr] = useState('Profile created recently');
+
   useEffect(() => {
     Animated.stagger(120, [
       Animated.parallel([
@@ -78,11 +80,18 @@ export default function ProfileScreen() {
     useCallback(() => {
       const loadProfile = async () => {
         try {
+          const userStr = await AsyncStorage.getItem('user');
+          if (userStr) {
+            const userObj = JSON.parse(userStr);
+            setUsername(userObj.username || userObj.name || 'User');
+            if (userObj.createdAt) {
+              const d = new Date(userObj.createdAt);
+              setCreatedAtStr(`Profile created on ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth()+1).padStart(2, '0')}/${d.getFullYear()}`);
+            }
+          }
+
           const gender = await AsyncStorage.getItem('userGender');
           const avatarIndex = await AsyncStorage.getItem('userAvatarIndex');
-          const storedUsername = await AsyncStorage.getItem('userName');
-          
-          if (storedUsername) setUsername(storedUsername);
           
           if (gender && avatarIndex) {
             const maleAvatars = [
@@ -168,7 +177,7 @@ export default function ProfileScreen() {
 
           {}
           <Text style={styles.username}>{username}</Text>
-          <Text style={styles.profileDate}>Profile created on 17/04/2025</Text>
+          <Text style={styles.profileDate}>{createdAtStr}</Text>
         </Animated.View>
 
         {}

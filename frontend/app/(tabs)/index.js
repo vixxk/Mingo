@@ -17,6 +17,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, wp, hp, SCREEN_WIDTH } from '../../utils/responsive';
+import { walletAPI, listenersAPI, authAPI, callAPI } from '../../utils/api';
 import WelcomePopup from '../../components/shared/WelcomePopup';
 import CoinsOfferPopup from '../../components/shared/CoinsOfferPopup';
 import CertifiedListenerPopup from '../../components/shared/CertifiedListenerPopup';
@@ -24,94 +25,6 @@ import InsufficientBalancePopup from '../../components/shared/InsufficientBalanc
 import NotificationsPopup from '../../components/shared/NotificationsPopup';
 
 
-const BEST_CHOICE_DATA = [
-  {
-    id: '1',
-    name: 'Shruti Jaiswal',
-    image: require('../../images/user_shruti.png'),
-    isLive: true,
-    isVerified: true,
-    gradientColors: ['#3B82F6', '#8B5CF6'],
-  },
-  {
-    id: '2',
-    name: 'Priya Sharma',
-    image: require('../../images/user_priya.png'),
-    isLive: true,
-    isVerified: true,
-    gradientColors: ['#EC4899', '#F43F5E'],
-  },
-  {
-    id: '3',
-    name: 'Riya',
-    image: require('../../images/user_riya.png'),
-    isLive: true,
-    isVerified: false,
-    gradientColors: ['#8B5CF6', '#6366F1'],
-  },
-  {
-    id: '4',
-    name: 'Ananya',
-    image: require('../../images/user_ananya.png'),
-    isLive: true,
-    isVerified: true,
-    gradientColors: ['#F59E0B', '#EF4444'],
-  },
-  {
-    id: '5',
-    name: 'Neha',
-    image: require('../../images/user_neha.png'),
-    isLive: true,
-    isVerified: true,
-    gradientColors: ['#10B981', '#3B82F6'],
-  },
-];
-
-
-const PEOPLE_DATA = [
-  {
-    id: '1',
-    name: 'Priyanka',
-    image: require('../../images/user_priyanka.png'),
-    isLive: true,
-    isVerified: true,
-  },
-  {
-    id: '2',
-    name: 'Deepika',
-    image: require('../../images/user_deepika.png'),
-    isLive: true,
-    isVerified: true,
-  },
-  {
-    id: '3',
-    name: 'Ananya',
-    image: require('../../images/user_ananya.png'),
-    isLive: true,
-    isVerified: false,
-  },
-  {
-    id: '4',
-    name: 'Neha',
-    image: require('../../images/user_neha.png'),
-    isLive: true,
-    isVerified: false,
-  },
-  {
-    id: '5',
-    name: 'Shruti',
-    image: require('../../images/user_shruti.png'),
-    isLive: true,
-    isVerified: true,
-  },
-  {
-    id: '6',
-    name: 'Priya',
-    image: require('../../images/user_priya.png'),
-    isLive: true,
-    isVerified: true,
-  },
-];
 
 const CARD_WIDTH = wp(42);
 const CARD_GAP = s(10);
@@ -133,12 +46,43 @@ const VerifiedBadge = () => (
 );
 
 
+const getAvatarImage = (gender, index) => {
+  const parsedIndex = parseInt(index, 10) || 0;
+  if (gender === 'Male') {
+    const maleAvatars = [
+      require('../../images/male_avatar_1_1776972918440.png'),
+      require('../../images/male_avatar_2_1776972933241.png'),
+      require('../../images/male_avatar_3_1776972950218.png'),
+      require('../../images/male_avatar_4_1776972963577.png'),
+      require('../../images/male_avatar_5_1776972978900.png'),
+      require('../../images/male_avatar_6_1776972993180.png'),
+      require('../../images/male_avatar_7_1776973008143.png'),
+      require('../../images/male_avatar_8_1776973021635.png'),
+    ];
+    return maleAvatars[parsedIndex] || maleAvatars[0];
+  } else {
+    const femaleAvatars = [
+      require('../../images/female_avatar_1_1776973035859.png'),
+      require('../../images/female_avatar_2_1776973050039.png'),
+      require('../../images/female_avatar_3_1776973063471.png'),
+      require('../../images/female_avatar_4_1776973077539.png'),
+      require('../../images/female_avatar_5_1776973090730.png'),
+      require('../../images/female_avatar_6_1776973108100.png'),
+      require('../../images/female_avatar_7_1776973124018.png'),
+      require('../../images/female_avatar_8_1776973138772.png'),
+    ];
+    return femaleAvatars[parsedIndex] || femaleAvatars[0];
+  }
+};
+
 const BestChoiceCard = ({ item, onCallPress, onProfilePress }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
     Animated.spring(scaleAnim, {
-      toValue: 0.95,
+      toValue: 0.97,
+      friction: 8,
+      tension: 100,
       useNativeDriver: true,
     }).start();
   };
@@ -146,7 +90,8 @@ const BestChoiceCard = ({ item, onCallPress, onProfilePress }) => {
   const handlePressOut = () => {
     Animated.spring(scaleAnim, {
       toValue: 1,
-      friction: 3,
+      friction: 5,
+      tension: 80,
       useNativeDriver: true,
     }).start();
   };
@@ -161,14 +106,14 @@ const BestChoiceCard = ({ item, onCallPress, onProfilePress }) => {
     >
       <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
         <LinearGradient
-          colors={item.gradientColors}
+          colors={item.gradientColors || ['#3B82F6', '#8B5CF6']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.bestChoiceGradientBorder}
         >
           <View style={styles.bestChoiceCardInner}>
             <Image
-              source={item.image}
+              source={item.image || getAvatarImage(item.gender, item.avatarIndex)}
               style={styles.bestChoiceImage}
               resizeMode="cover"
             />
@@ -210,7 +155,9 @@ const PeopleCard = ({ item, onCallPress, onProfilePress }) => {
 
   const handlePressIn = () => {
     Animated.spring(scaleAnim, {
-      toValue: 0.95,
+      toValue: 0.97,
+      friction: 8,
+      tension: 100,
       useNativeDriver: true,
     }).start();
   };
@@ -218,7 +165,8 @@ const PeopleCard = ({ item, onCallPress, onProfilePress }) => {
   const handlePressOut = () => {
     Animated.spring(scaleAnim, {
       toValue: 1,
-      friction: 3,
+      friction: 5,
+      tension: 80,
       useNativeDriver: true,
     }).start();
   };
@@ -233,7 +181,7 @@ const PeopleCard = ({ item, onCallPress, onProfilePress }) => {
     >
       <Animated.View style={[styles.peopleCard, { transform: [{ scale: scaleAnim }] }]}>
         <Image
-          source={item.image}
+          source={item.image || getAvatarImage(item.gender, item.avatarIndex)}
           style={styles.peopleImage}
           resizeMode="cover"
         />
@@ -275,6 +223,12 @@ export default function HomeScreen() {
   const scrollX = useRef(new Animated.Value(0)).current;
 
   const [userAvatar, setUserAvatar] = useState(require('../../images/user_avatar.png'));
+  const [coinBalance, setCoinBalance] = useState(0);
+  const [discountTimeLeft, setDiscountTimeLeft] = useState(0);
+  const [isFirstPurchaseEligible, setIsFirstPurchaseEligible] = useState(false);
+  const [topOffer, setTopOffer] = useState(null);
+  const [bestChoiceData, setBestChoiceData] = useState([]);
+  const [peopleData, setPeopleData] = useState([]);
 
   useFocusEffect(
     useCallback(() => {
@@ -315,6 +269,76 @@ export default function HomeScreen() {
     }, [])
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      const loadRealData = async () => {
+        try {
+          const balRes = await walletAPI.getBalance();
+          if (balRes?.data) {
+            setCoinBalance(balRes.data.coins || 0);
+            setIsFirstPurchaseEligible(!!balRes.data.isFirstPurchaseEligible);
+            if (balRes.data.isFirstPurchaseEligible && balRes.data.signupTimestamp) {
+              const expiry = new Date(balRes.data.signupTimestamp).getTime() + 6 * 3600 * 1000;
+              setDiscountTimeLeft(Math.max(0, Math.floor((expiry - Date.now()) / 1000)));
+
+              
+              const pkgRes = await walletAPI.getPackages();
+              if (pkgRes?.data?.packages) {
+                const bestPkg = pkgRes.data.packages[0]; 
+                if (bestPkg) {
+                  setTopOffer({
+                    title: `${bestPkg.discount}% Off`,
+                    coins: bestPkg.coins,
+                    originalPrice: bestPkg.originalPrice,
+                    newPrice: bestPkg.price,
+                  });
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.log('Wallet fetch fallback:', e.message);
+        }
+
+        try {
+          const listenersRes = await listenersAPI.getRecommended(20);
+          if (listenersRes?.data && listenersRes.data.length > 0) {
+            const mappedListeners = listenersRes.data.map(l => ({
+              id: l.id,
+              name: l.name,
+              isLive: l.isOnline,
+              isVerified: l.isVerified,
+              bestChoice: l.bestChoice,
+              gradientColors: l.gradientColors || ['#3B82F6', '#8B5CF6'],
+              gender: l.gender,
+              avatarIndex: l.avatarIndex || 0,
+            }));
+
+            const bestChoice = mappedListeners.filter(l => l.bestChoice);
+            const people = mappedListeners.filter(l => !l.bestChoice);
+
+            if (bestChoice.length > 0) setBestChoiceData(bestChoice);
+            if (people.length > 0) setPeopleData(people);
+          }
+        } catch (e) {
+          console.log('Listeners fetch fallback:', e.message);
+        }
+      };
+      loadRealData();
+    }, [])
+  );
+
+  useEffect(() => {
+    if (discountTimeLeft <= 0) return;
+    const interval = setInterval(() => {
+      setDiscountTimeLeft(prev => {
+        if (prev <= 1) { clearInterval(interval); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [discountTimeLeft > 0]);
+
   
   const [showWelcome, setShowWelcome] = useState(false);
   const [showCoinsOffer, setShowCoinsOffer] = useState(false);
@@ -328,29 +352,22 @@ export default function HomeScreen() {
       try {
         const hasSeenWelcome = await AsyncStorage.getItem('hasSeenWelcomePopup');
         if (!hasSeenWelcome) {
-          
-          const ts = Date.now();
-          await AsyncStorage.setItem('signupTimestamp', String(ts));
-          setSignupTimestamp(ts);
           setShowWelcome(true);
         } else {
-          
           const hasSeenCoins = await AsyncStorage.getItem('hasSeenCoinsPopup');
-          const storedTs = await AsyncStorage.getItem('signupTimestamp');
-          if (!hasSeenCoins && storedTs) {
-            const elapsed = Date.now() - Number(storedTs);
-            if (elapsed < 6 * 3600 * 1000) {
-              setSignupTimestamp(Number(storedTs));
-              setShowCoinsOffer(true);
-            }
+          if (!hasSeenCoins && isFirstPurchaseEligible) {
+            setShowCoinsOffer(true);
           }
         }
       } catch (e) {
-        
+        console.log(e);
       }
     };
-    checkFirstSignup();
-  }, []);
+    
+    if (isFirstPurchaseEligible !== null) {
+      checkFirstSignup();
+    }
+  }, [isFirstPurchaseEligible]);
 
   
   useEffect(() => {
@@ -394,7 +411,7 @@ export default function HomeScreen() {
 
   
   const cardsPerPage = 2;
-  const totalPages = Math.ceil(BEST_CHOICE_DATA.length / cardsPerPage);
+  const totalPages = Math.ceil(bestChoiceData.length / cardsPerPage);
 
   const onCarouselScroll = Animated.event(
     [{ nativeEvent: { contentOffset: { x: scrollX } } }],
@@ -505,8 +522,20 @@ export default function HomeScreen() {
             onPress={() => router.push('/balance')}
           >
             <Text style={styles.coinEmoji}>🪙</Text>
-            <Text style={styles.coinCount}>0</Text>
+            <Text style={styles.coinCount}>{coinBalance}</Text>
           </TouchableOpacity>
+          {discountTimeLeft > 0 && (
+            <TouchableOpacity
+              style={styles.timerCapsule}
+              activeOpacity={0.7}
+              onPress={() => setShowCoinsOffer(true)}
+            >
+              <Ionicons name="timer-outline" size={14} color="#F59E0B" />
+              <Text style={styles.timerCapsuleText}>
+                {`${String(Math.floor(discountTimeLeft / 3600)).padStart(2,'0')}:${String(Math.floor((discountTimeLeft % 3600) / 60)).padStart(2,'0')}:${String(discountTimeLeft % 60).padStart(2,'0')}`}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
         <TouchableOpacity 
           style={styles.notificationBtn} 
@@ -531,30 +560,37 @@ export default function HomeScreen() {
         <Text style={styles.sectionTitle}>Best Choice</Text>
 
         {}
-        <FlatList
-          ref={flatListRef}
-          data={BEST_CHOICE_DATA}
-          renderItem={renderBestChoiceItem}
-          keyExtractor={(item) => item.id}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          snapToInterval={CARD_WIDTH + CARD_GAP}
-          decelerationRate="fast"
-          contentContainerStyle={styles.carouselContainer}
-          onScroll={onCarouselScroll}
-          onViewableItemsChanged={onViewableItemsChanged}
-          viewabilityConfig={viewabilityConfig}
-          scrollEventThrottle={16}
-        />
+        {bestChoiceData.length === 0 ? (
+          <View style={styles.emptyCardContainer}>
+            <Text style={styles.emptyCardText}>No listeners available at the moment.</Text>
+          </View>
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={bestChoiceData}
+            renderItem={renderBestChoiceItem}
+            keyExtractor={(item) => item.id}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            snapToInterval={CARD_WIDTH + CARD_GAP}
+            decelerationRate="fast"
+            contentContainerStyle={styles.carouselContainer}
+            onScroll={onCarouselScroll}
+            onViewableItemsChanged={onViewableItemsChanged}
+            viewabilityConfig={viewabilityConfig}
+            scrollEventThrottle={16}
+          />
+        )}
 
         {}
         <View style={styles.pagination}>
-          {Array.from({ length: totalPages }).map((_, index) => (
+          {Array.from({ length: Math.max(1, totalPages) }).map((_, index) => (
             <View
               key={index}
               style={[
                 styles.paginationDot,
                 activeSlide === index && styles.paginationDotActive,
+                totalPages === 0 && { opacity: 0.2 }
               ]}
             />
           ))}
@@ -566,9 +602,16 @@ export default function HomeScreen() {
         {}
         <View style={styles.peopleGridContainer}>
           <View style={styles.peopleGrid}>
-            {PEOPLE_DATA.map((item) => (
-              <PeopleCard key={item.id} item={item} onCallPress={handleCallPress} onProfilePress={() => handleProfilePress(item.id)} />
-            ))}
+            {peopleData.length === 0 ? (
+              <View style={styles.emptyPeopleContainer}>
+                <Ionicons name="people-outline" size={40} color="#374151" />
+                <Text style={styles.emptyPeopleText}>No listeners found.</Text>
+              </View>
+            ) : (
+              peopleData.map((item) => (
+                <PeopleCard key={item.id} item={item} onCallPress={handleCallPress} onProfilePress={() => handleProfilePress(item.id)} />
+              ))
+            )}
           </View>
         </View>
 
@@ -602,35 +645,69 @@ export default function HomeScreen() {
           style={[
             styles.fabContainer,
             {
-              bottom: 4,
-              right: 4,
+              bottom: vs(90),
+              right: s(16),
               transform: [{ scale: fabScale }],
             },
           ]}
           pointerEvents="box-none"
         >
-          {}
-          <TouchableOpacity style={styles.fabOptionBtn1} activeOpacity={0.8} onPress={handleCallPress}>
-            <View style={styles.fabOptionInner}>
-              <Ionicons name="call-outline" size={wp(13)} color="#000" />
+          {/* Audio call */}
+          <TouchableOpacity
+            style={[styles.premiumFabOption, { bottom: vs(125) }]}
+            activeOpacity={0.8}
+            onPress={() => {
+              handleCloseFab();
+              handleCallPress();
+            }}
+          >
+            <View style={styles.premiumFabLabelContainer}>
+              <Text style={styles.premiumFabLabel}>Audio Call</Text>
             </View>
-          </TouchableOpacity>
-
-          {}
-          <TouchableOpacity style={styles.fabOptionBtn2} activeOpacity={0.8} onPress={handleCallPress}>
-            <View style={styles.fabOptionInner}>
-              <Ionicons name="videocam-outline" size={wp(13)} color="#000" />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity activeOpacity={0.8} onPress={handleCloseFab}>
             <LinearGradient
-              colors={['#8B5CF6', '#EC4899', '#F59E0B']}
+              colors={['#22C55E', '#16A34A']}
+              style={styles.premiumFabCircle}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Ionicons name="call" size={ms(20)} color="#fff" />
+            </LinearGradient>
+          </TouchableOpacity>
+
+          {/* Video call */}
+          <TouchableOpacity
+            style={[styles.premiumFabOption, { bottom: vs(65) }]}
+            activeOpacity={0.8}
+            onPress={() => {
+              handleCloseFab();
+              handleCallPress();
+            }}
+          >
+            <View style={styles.premiumFabLabelContainer}>
+              <Text style={styles.premiumFabLabel}>Video Call</Text>
+            </View>
+            <LinearGradient
+              colors={['#3B82F6', '#2563EB']}
+              style={styles.premiumFabCircle}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Ionicons name="videocam" size={ms(20)} color="#fff" />
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            activeOpacity={0.8} 
+            onPress={handleCloseFab}
+            style={styles.fabCloseWrapper}
+          >
+            <LinearGradient
+              colors={['#EF4444', '#DC2626']}
               style={styles.fab}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
             >
-              <Ionicons name="close" size={wp(17)} color="#fff" />
+              <Ionicons name="close" size={wp(6)} color="#fff" />
             </LinearGradient>
           </TouchableOpacity>
         </Animated.View>
@@ -666,6 +743,7 @@ export default function HomeScreen() {
         onClose={handleCoinsClose}
         onAddCoins={handleAddCoins}
         signupTimestamp={signupTimestamp}
+        offerData={topOffer}
       />
       <CertifiedListenerPopup
         visible={showCertified}
@@ -732,6 +810,22 @@ const styles = StyleSheet.create({
   coinCount: {
     fontSize: ms(13, 0.3),
     color: '#fff',
+    fontFamily: 'Inter_700Bold',
+  },
+  timerCapsule: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    borderRadius: 20,
+    paddingHorizontal: s(10),
+    paddingVertical: vs(4),
+    gap: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+  },
+  timerCapsuleText: {
+    fontSize: ms(11, 0.3),
+    color: '#F59E0B',
     fontFamily: 'Inter_700Bold',
   },
   notificationBtn: {
@@ -890,6 +984,41 @@ const styles = StyleSheet.create({
     paddingHorizontal: s(12),
     gap: s(8),
   },
+  emptyCardContainer: {
+    height: vs(240),
+    width: SCREEN_WIDTH - s(40),
+    marginHorizontal: s(20),
+    backgroundColor: '#0A0A0A',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#1F2937',
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: vs(10),
+  },
+  emptyCardText: {
+    color: '#6B7280',
+    fontSize: ms(14),
+    fontFamily: 'Inter_500Medium',
+  },
+  emptyPeopleContainer: {
+    width: '100%',
+    paddingVertical: vs(40),
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0A0A0A',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#1F2937',
+    borderStyle: 'dashed',
+  },
+  emptyPeopleText: {
+    color: '#6B7280',
+    fontSize: ms(14),
+    fontFamily: 'Inter_500Medium',
+    marginTop: vs(8),
+  },
   floatingRandomWrapper: {
     position: 'absolute',
     zIndex: 50,
@@ -971,56 +1100,60 @@ const styles = StyleSheet.create({
   fabContainer: {
     position: 'absolute',
     zIndex: 100,
+    alignItems: 'flex-end',
+    justifyContent: 'flex-end',
+    width: s(200),
+    height: vs(300),
+  },
+  fabCloseWrapper: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
   },
   fab: {
-    width: wp(34),
-    height: wp(34),
-    borderRadius: wp(17),
+    width: wp(14),
+    height: wp(14),
+    borderRadius: wp(7),
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#EC4899',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
   },
-  fabOptionBtn1: {
+  premiumFabOption: {
     position: 'absolute',
-    top: wp(3),
-    left: -wp(36),
-    width: wp(28),
-    height: wp(28),
-    borderRadius: wp(14),
-    backgroundColor: '#fff',
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(12),
+  },
+  premiumFabCircle: {
+    width: wp(13),
+    height: wp(13),
+    borderRadius: wp(6.5),
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowRadius: 6,
+    elevation: 6,
   },
-  fabOptionBtn2: {
-    position: 'absolute',
-    top: -wp(36),
-    left: wp(3),
-    width: wp(28),
-    height: wp(28),
-    borderRadius: wp(14),
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
+  premiumFabLabelContainer: {
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    paddingHorizontal: s(12),
+    paddingVertical: vs(6),
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
-  fabOptionInner: {
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
+  premiumFabLabel: {
+    color: '#fff',
+    fontSize: ms(13, 0.3),
+    fontWeight: '700',
+    fontFamily: 'Inter_700Bold',
   },
 
   

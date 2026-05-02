@@ -58,6 +58,35 @@ export default function LoginScreen() {
         useNativeDriver: true,
       }),
     ]).start();
+
+    // Auto-login check
+    const checkAuth = async () => {
+      const token = await AsyncStorage.getItem('userToken');
+      const userStr = await AsyncStorage.getItem('user');
+      const isAdmin = await AsyncStorage.getItem('isAdmin');
+
+      if (isAdmin === 'true') {
+        router.replace('/(admin)');
+        return;
+      }
+
+      if (token && userStr) {
+        try {
+          const user = JSON.parse(userStr);
+          const role = user.role || 'USER';
+          if (role === 'ADMIN') {
+            router.replace('/(admin)');
+          } else if (role === 'LISTENER') {
+            router.replace('/(listener)');
+          } else {
+            router.replace('/(tabs)');
+          }
+        } catch (e) {
+          console.error('Auto-auth error:', e);
+        }
+      }
+    };
+    checkAuth();
   }, []);
 
   useEffect(() => {

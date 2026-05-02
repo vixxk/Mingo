@@ -102,4 +102,191 @@ export const authAPI = {
   },
 };
 
+export const listenersAPI = {
+  getRecommended: async (limit = 20) => {
+    return apiRequest(`/listeners?limit=${limit}`);
+  },
+
+  getProfile: async (id) => {
+    return apiRequest(`/listeners/${id}`);
+  },
+};
+
+export const listenerAPI = {
+  goOnline: async () => {
+    return apiRequest('/listeners/go-online', { method: 'POST' });
+  },
+
+  goOffline: async () => {
+    return apiRequest('/listeners/go-offline', { method: 'POST' });
+  },
+
+  heartbeat: async () => {
+    return apiRequest('/listeners/heartbeat', { method: 'POST' });
+  },
+};
+
+export const callAPI = {
+  startCall: async (listenerId, callType = 'audio') => {
+    return apiRequest('/call/start', {
+      method: 'POST',
+      body: JSON.stringify({ listenerId, callType }),
+    });
+  },
+
+  endCall: async (sessionId) => {
+    return apiRequest('/call/end', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId }),
+    });
+  },
+
+  getHistory: async (limit = 20, offset = 0) => {
+    return apiRequest(`/call/history?limit=${limit}&offset=${offset}`);
+  },
+
+  getSession: async (sessionId) => {
+    return apiRequest(`/call/${sessionId}`);
+  },
+};
+
+export const matchAPI = {
+  findMatch: async () => {
+    return apiRequest('/match', { method: 'POST' });
+  },
+};
+
+export const ratingAPI = {
+  submit: async (sessionId, rating, feedback) => {
+    return apiRequest('/rating', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId, rating, feedback }),
+    });
+  },
+
+  getForListener: async (listenerId, limit = 20, offset = 0) => {
+    return apiRequest(`/rating/listener/${listenerId}?limit=${limit}&offset=${offset}`);
+  },
+};
+
+export const walletAPI = {
+  getBalance: async () => {
+    return apiRequest('/wallet/balance');
+  },
+
+  getPackages: async () => {
+    return apiRequest('/wallet/packages');
+  },
+
+  purchaseCoins: async (packageId) => {
+    return apiRequest('/wallet/purchase', {
+      method: 'POST',
+      body: JSON.stringify({ packageId }),
+    });
+  },
+
+  getTransactions: async (page = 1, limit = 20) => {
+    return apiRequest(`/wallet/transactions?page=${page}&limit=${limit}`);
+  },
+};
+
+export const userAPI = {
+  updateProfile: async (data) => {
+    return apiRequest('/user/profile', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  applyAsListener: async (data) => {
+    return apiRequest('/user/apply-listener', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  toggleFavourite: async (listenerId) => {
+    return apiRequest('/user/favourite', {
+      method: 'POST',
+      body: JSON.stringify({ listenerId }),
+    });
+  },
+
+  getFavourites: async () => {
+    return apiRequest('/user/favourites');
+  },
+
+  submitReport: async (message) => {
+    return apiRequest('/user/report', {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    });
+  },
+};
+
+export const adminAPI = {
+  getStats: async () => {
+    return apiRequest('/admin/stats');
+  },
+
+  getUsers: async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/admin/users?${query}`);
+  },
+
+  getListeners: async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/admin/listeners?${query}`);
+  },
+
+  approveListener: async (id) => {
+    return apiRequest(`/admin/listeners/${id}/approve`, { method: 'PATCH' });
+  },
+
+  rejectListener: async (id) => {
+    return apiRequest(`/admin/listeners/${id}/reject`, { method: 'PATCH' });
+  },
+
+  toggleBestChoice: async (id) => {
+    return apiRequest(`/admin/listeners/${id}/best-choice`, { method: 'PATCH' });
+  },
+
+  toggleVerified: async (id) => {
+    return apiRequest(`/admin/listeners/${id}/verify`, { method: 'PATCH' });
+  },
+
+  toggleBanUser: async (id) => {
+    return apiRequest(`/admin/users/${id}/ban`, { method: 'PATCH' });
+  },
+
+  getActivities: async (limit = 20, page = 1) => {
+    return apiRequest(`/admin/activities?limit=${limit}&page=${page}`);
+  },
+
+  getReports: async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/admin/reports?${query}`);
+  },
+
+  updateReport: async (id, data) => {
+    return apiRequest(`/admin/reports/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  getBannedMembers: async () => {
+    return apiRequest('/admin/banned');
+  },
+};
+
+export const chatAPI = {
+  getConversations: async () => {
+    return apiRequest('/chat/conversations');
+  },
+  getMessages: async (conversationId) => {
+    return apiRequest(`/chat/conversations/${conversationId}/messages`);
+  },
+};
+
 export default apiRequest;

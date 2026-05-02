@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,27 +15,87 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import { useFocusEffect } from 'expo-router';
 import { ms, s, vs } from '../../utils/responsive';
-import { DEMO_USERS } from '../../data/admin/adminData';
 import UserDetailModal from '../../components/admin/UserDetailModal';
+import { adminAPI } from '../../utils/api';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+const getAvatarImage = (gender, index) => {
+  const parsedIndex = parseInt(index, 10) || 0;
+  if (gender === 'Male') {
+    const maleAvatars = [
+      require('../../images/male_avatar_1_1776972918440.png'),
+      require('../../images/male_avatar_2_1776972933241.png'),
+      require('../../images/male_avatar_3_1776972950218.png'),
+      require('../../images/male_avatar_4_1776972963577.png'),
+      require('../../images/male_avatar_5_1776972978900.png'),
+      require('../../images/male_avatar_6_1776972993180.png'),
+      require('../../images/male_avatar_7_1776973008143.png'),
+      require('../../images/male_avatar_8_1776973021635.png'),
+    ];
+    return maleAvatars[parsedIndex] || maleAvatars[0];
+  } else {
+    const femaleAvatars = [
+      require('../../images/female_avatar_1_1776973035859.png'),
+      require('../../images/female_avatar_2_1776973050039.png'),
+      require('../../images/female_avatar_3_1776973063471.png'),
+      require('../../images/female_avatar_4_1776973077539.png'),
+      require('../../images/female_avatar_5_1776973090730.png'),
+      require('../../images/female_avatar_6_1776973108100.png'),
+      require('../../images/female_avatar_7_1776973124018.png'),
+      require('../../images/female_avatar_8_1776973138772.png'),
+    ];
+    return femaleAvatars[parsedIndex] || femaleAvatars[0];
+  }
+};
+
 export default function AdminUsersScreen() {
   const insets = useSafeAreaInsets();
-  const [users, setUsers] = useState(DEMO_USERS);
+  const [users, setUsers] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
   const [showDetail, setShowDetail] = useState(false);
   const [filter, setFilter] = useState('all');
 
+  const loadUsers = async () => {
+    try {
+      const res = await adminAPI.getUsers({ limit: 100 });
+      if (res?.data) {
+        const formatted = res.data.map(u => ({
+          id: u._id,
+          name: u.name || 'Unknown',
+          phone: u.phone || 'Unknown',
+          language: u.language || 'English',
+          avatar: getAvatarImage(u.gender, u.avatarIndex),
+          status: u.isBanned ? 'inactive' : 'active',
+          appOpens: u.appOpens || 0,
+          totalTimeSpent: u.totalTimeSpent || '0h 0m'
+        }));
+        setUsers(formatted);
+      }
+    } catch (e) {
+      console.log('Failed to fetch users:', e);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      loadUsers();
+    }, [])
+  );
+
   const handleDeleteUser = (userId) => {
-    Alert.alert('Delete User', 'Are you sure you want to permanently delete this user?', [
+    Alert.alert('Ban User', 'Are you sure you want to ban this user?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => {
-        setUsers(prev => prev.filter(u => u.id !== userId));
-        setShowDetail(false);
-        setSelectedUser(null);
+      { text: 'Ban', style: 'destructive', onPress: async () => {
+        try {
+          await adminAPI.toggleBanUser(userId);
+          setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: 'inactive' } : u));
+          setShowDetail(false);
+          setSelectedUser(null);
+        } catch(e) {}
       }},
     ]);
   };

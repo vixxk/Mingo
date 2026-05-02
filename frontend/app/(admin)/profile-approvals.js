@@ -1,51 +1,136 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Image, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Dimensions,
+  Image,
+  Alert,
+  ActivityIndicator,
+  RefreshControl,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { adminAPI } from '../../utils/api';
+import { ms, s, vs } from '../../utils/responsive';
 
-const { width: SW } = Dimensions.get('window');
+const { width: SW, height: SH } = Dimensions.get('window');
 
-
-const MOCK_APPROVALS = [
-  {
-    id: '1',
-    listenerName: 'Shruti Jaiswal',
-    avatar: require('../../images/user_shruti.png'),
-    submittedAt: '10 mins ago',
-    changes: {
-      hookline: "Here to listen, understand, and help you find peace. Let's talk!",
-      tags: ['Anxiety', 'Relationship', 'Career', 'Loneliness'],
-      about: "Hi! I am Shruti. I have been a certified listener for over 2 years. I specialize in helping people navigate through difficult times...",
-    }
-  },
-  {
-    id: '2',
-    listenerName: 'Priya Sharma',
-    avatar: require('../../images/user_priya.png'),
-    submittedAt: '2 hours ago',
-    changes: {
-      hookline: "Your safe space to vent without judgment.",
-      tags: ['Stress', 'Depression'],
-      about: "I'm Priya, a trained active listener. I believe everyone deserves to be heard.",
-    }
+const getAvatarImage = (gender, index) => {
+  const parsedIndex = parseInt(index, 10) || 0;
+  if (gender === 'Male') {
+    const maleAvatars = [
+      require('../../images/male_avatar_1_1776972918440.png'),
+      require('../../images/male_avatar_2_1776972933241.png'),
+      require('../../images/male_avatar_3_1776972950218.png'),
+      require('../../images/male_avatar_4_1776972963577.png'),
+      require('../../images/male_avatar_5_1776972978900.png'),
+      require('../../images/male_avatar_6_1776972993180.png'),
+      require('../../images/male_avatar_7_1776973008143.png'),
+      require('../../images/male_avatar_8_1776973021635.png'),
+    ];
+    return maleAvatars[parsedIndex] || maleAvatars[0];
+  } else {
+    const femaleAvatars = [
+      require('../../images/female_avatar_1_1776973035859.png'),
+      require('../../images/female_avatar_2_1776973050039.png'),
+      require('../../images/female_avatar_3_1776973063471.png'),
+      require('../../images/female_avatar_4_1776973077539.png'),
+      require('../../images/female_avatar_5_1776973090730.png'),
+      require('../../images/female_avatar_6_1776973108100.png'),
+      require('../../images/female_avatar_7_1776973124018.png'),
+      require('../../images/female_avatar_8_1776973138772.png'),
+    ];
+    return femaleAvatars[parsedIndex] || femaleAvatars[0];
   }
-];
+};
+
+const formatTime = (dateStr) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now - d;
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins} mins ago`;
+  if (diffHrs < 24) return `${diffHrs} hours ago`;
+  if (diffDays < 7) return `${diffDays} days ago`;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
 
 export default function ProfileApprovalsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [approvals, setApprovals] = useState(MOCK_APPROVALS);
+  const [approvals, setApprovals] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [processing, setProcessing] = useState(null);
 
-  const handleApprove = (id) => {
-    Alert.alert('Approved', 'Listener profile changes have been approved and are now live.');
-    setApprovals(prev => prev.filter(req => req.id !== id));
+  const fetchPendingListeners = useCallback(async () => {
+    try {
+      const response = await adminAPI.getListeners({ status: 'pending' });
+      const data = response.data?.listeners || response.data || [];
+      setApprovals(data);
+    } catch (error) {
+      console.error('Failed to load pending approvals:', error);
+      Alert.alert('Error', 'Failed to load pending approvals.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPendingListeners();
+  }, [fetchPendingListeners]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchPendingListeners();
+  }, [fetchPendingListeners]);
+
+  const handleApprove = async (id) => {
+    setProcessing(id);
+    try {
+      await adminAPI.approveListener(id);
+      Alert.alert('Approved', 'Listener has been approved and is now live.');
+      setApprovals((prev) => prev.filter((req) => req.id !== id));
+    } catch (error) {
+      console.error('Failed to approve:', error);
+      Alert.alert('Error', 'Failed to approve listener.');
+    } finally {
+      setProcessing(null);
+    }
   };
 
-  const handleReject = (id) => {
-    Alert.alert('Rejected', 'Listener profile changes have been rejected.');
-    setApprovals(prev => prev.filter(req => req.id !== id));
+  const handleReject = async (id) => {
+    setProcessing(id);
+    try {
+      await adminAPI.rejectListener(id);
+      Alert.alert('Rejected', 'Listener application has been rejected.');
+      setApprovals((prev) => prev.filter((req) => req.id !== id));
+    } catch (error) {
+      console.error('Failed to reject:', error);
+      Alert.alert('Error', 'Failed to reject listener.');
+    } finally {
+      setProcessing(null);
+    }
   };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centerContent, { paddingTop: insets.top }]}>
+        <ActivityIndicator size="large" color="#A855F7" />
+        <Text style={styles.loadingText}>Loading pending approvals...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -57,48 +142,83 @@ export default function ProfileApprovalsScreen() {
         <View style={{ width: 28 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#A855F7"
+            colors={['#A855F7']}
+          />
+        }
+      >
         {approvals.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="checkmark-done-circle-outline" size={64} color="#22C55E" />
-            <Text style={styles.emptyText}>All caught up! No pending profile approvals.</Text>
+            <Text style={styles.emptyText}>
+              All caught up! No pending profile approvals.
+            </Text>
           </View>
         ) : (
           approvals.map((req) => (
             <View key={req.id} style={styles.card}>
               <View style={styles.cardHeader}>
-                <Image source={req.avatar} style={styles.avatar} />
+                <Image
+                  source={getAvatarImage(req.gender, req.avatarIndex)}
+                  style={styles.avatar}
+                />
                 <View style={styles.headerInfo}>
-                  <Text style={styles.listenerName}>{req.listenerName}</Text>
-                  <Text style={styles.submittedAt}>Submitted {req.submittedAt}</Text>
+                  <Text style={styles.listenerName}>{req.name}</Text>
+                  <Text style={styles.submittedAt}>
+                    Submitted {formatTime(req.createdAt)}
+                  </Text>
                 </View>
               </View>
 
               <View style={styles.changesSection}>
-                <Text style={styles.changeLabel}>Hookline:</Text>
-                <Text style={styles.changeValue}>"{req.changes.hookline}"</Text>
+                <Text style={styles.changeLabel}>Phone:</Text>
+                <Text style={styles.changeValue}>{req.phone || 'N/A'}</Text>
 
-                <Text style={styles.changeLabel}>Tags:</Text>
-                <Text style={styles.changeValue}>{req.changes.tags.join(', ')}</Text>
+                <Text style={styles.changeLabel}>Rating:</Text>
+                <Text style={styles.changeValue}>
+                  {req.rating ? `${req.rating} ⭐` : 'New Listener'}
+                </Text>
 
-                <Text style={styles.changeLabel}>About:</Text>
-                <Text style={styles.changeValue} numberOfLines={2}>{req.changes.about}</Text>
+                <Text style={styles.changeLabel}>Verified:</Text>
+                <Text style={styles.changeValue}>
+                  {req.verified ? 'Yes ✓' : 'No'}
+                </Text>
               </View>
 
               <View style={styles.actionRow}>
-                <TouchableOpacity 
-                  style={[styles.actionBtn, styles.rejectBtn]} 
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.rejectBtn]}
                   onPress={() => handleReject(req.id)}
+                  disabled={processing === req.id}
                 >
-                  <Ionicons name="close" size={20} color="#EF4444" />
-                  <Text style={[styles.btnText, { color: '#EF4444' }]}>Reject</Text>
+                  {processing === req.id ? (
+                    <ActivityIndicator size="small" color="#EF4444" />
+                  ) : (
+                    <>
+                      <Ionicons name="close" size={20} color="#EF4444" />
+                      <Text style={[styles.btnText, { color: '#EF4444' }]}>Reject</Text>
+                    </>
+                  )}
                 </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.actionBtn, styles.approveBtn]} 
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.approveBtn]}
                   onPress={() => handleApprove(req.id)}
+                  disabled={processing === req.id}
                 >
-                  <Ionicons name="checkmark" size={20} color="#fff" />
-                  <Text style={styles.btnText}>Approve</Text>
+                  {processing === req.id ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark" size={20} color="#fff" />
+                      <Text style={styles.btnText}>Approve</Text>
+                    </>
+                  )}
                 </TouchableOpacity>
               </View>
             </View>
@@ -113,6 +233,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: '#9CA3AF',
+    fontSize: SW * 0.035,
+    fontFamily: 'Inter_400Regular',
+    marginTop: '3%',
   },
   header: {
     flexDirection: 'row',

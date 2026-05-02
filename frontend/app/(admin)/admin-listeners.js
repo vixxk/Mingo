@@ -1,18 +1,47 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, Dimensions, Modal, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { ms, s, vs } from '../../utils/responsive';
-import { DEMO_LISTENERS } from '../../data/admin/adminData';
+import { adminAPI } from '../../utils/api';
 
 const { height: SH } = Dimensions.get('window');
+
+const getAvatarImage = (gender, index) => {
+  const parsedIndex = parseInt(index, 10) || 0;
+  if (gender === 'Male') {
+    const maleAvatars = [
+      require('../../images/male_avatar_1_1776972918440.png'),
+      require('../../images/male_avatar_2_1776972933241.png'),
+      require('../../images/male_avatar_3_1776972950218.png'),
+      require('../../images/male_avatar_4_1776972963577.png'),
+      require('../../images/male_avatar_5_1776972978900.png'),
+      require('../../images/male_avatar_6_1776972993180.png'),
+      require('../../images/male_avatar_7_1776973008143.png'),
+      require('../../images/male_avatar_8_1776973021635.png'),
+    ];
+    return maleAvatars[parsedIndex] || maleAvatars[0];
+  } else {
+    const femaleAvatars = [
+      require('../../images/female_avatar_1_1776973035859.png'),
+      require('../../images/female_avatar_2_1776973050039.png'),
+      require('../../images/female_avatar_3_1776973063471.png'),
+      require('../../images/female_avatar_4_1776973077539.png'),
+      require('../../images/female_avatar_5_1776973090730.png'),
+      require('../../images/female_avatar_6_1776973108100.png'),
+      require('../../images/female_avatar_7_1776973124018.png'),
+      require('../../images/female_avatar_8_1776973138772.png'),
+    ];
+    return femaleAvatars[parsedIndex] || femaleAvatars[0];
+  }
+};
 
 export default function AdminListenersScreen() {
   const insets = useSafeAreaInsets();
   const { initialFilter } = useLocalSearchParams();
-  const [listeners, setListeners] = useState(DEMO_LISTENERS);
+  const [listeners, setListeners] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState(initialFilter || 'all');
   const [selectedListener, setSelectedListener] = useState(null);
@@ -24,28 +53,74 @@ export default function AdminListenersScreen() {
     }
   }, [initialFilter]);
 
+  const loadListeners = async () => {
+    try {
+      const res = await adminAPI.getListeners({ limit: 100 });
+      if (res?.data) {
+        const formatted = res.data.map(l => ({
+          id: l._id,
+          name: l.userId?.name || 'Unknown',
+          phone: l.userId?.phone || 'Unknown',
+          avatar: getAvatarImage(l.userId?.gender, l.userId?.avatarIndex),
+          status: l.status,
+          verified: l.verified,
+          bestChoice: l.bestChoice,
+          totalCalls: l.audioCalls + l.videoCalls,
+          earnings: `₹${l.earnings}`,
+          rating: l.rating
+        }));
+        setListeners(formatted);
+      }
+    } catch (e) {
+      console.log('Failed to fetch listeners:', e);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      loadListeners();
+    }, [])
+  );
+
   const filtered = listeners.filter(l => {
     const matchSearch = l.name.toLowerCase().includes(searchQuery.toLowerCase()) || l.phone.includes(searchQuery);
     const matchFilter = filter === 'all' || filter === l.status || (filter === 'verified' && l.verified) || (filter === 'bestChoice' && l.bestChoice);
     return matchSearch && matchFilter;
   });
 
-  const updateListener = (id, updates) => {
+  const updateListenerState = (id, updates) => {
     setListeners(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
     if (selectedListener?.id === id) setSelectedListener(prev => ({ ...prev, ...updates }));
   };
 
-  const handleApprove = (id) => { updateListener(id, { status: 'approved' }); Alert.alert('Approved', 'Listener has been approved.'); };
-  const handleReject = (id) => { updateListener(id, { status: 'rejected' }); Alert.alert('Rejected', 'Listener has been rejected.'); };
-  const toggleVerified = (id, current) => { updateListener(id, { verified: !current }); };
-  const toggleBestChoice = (id, current) => { updateListener(id, { bestChoice: !current }); };
+  const handleApprove = async (id) => { 
+    await adminAPI.approveListener(id);
+    updateListenerState(id, { status: 'approved' }); 
+    Alert.alert('Approved', 'Listener has been approved.'); 
+  };
+  const handleReject = async (id) => { 
+    await adminAPI.rejectListener(id);
+    updateListenerState(id, { status: 'rejected' }); 
+    Alert.alert('Rejected', 'Listener has been rejected.'); 
+  };
+  const toggleVerified = async (id, current) => { 
+    await adminAPI.toggleVerified(id);
+    updateListenerState(id, { verified: !current }); 
+  };
+  const toggleBestChoice = async (id, current) => { 
+    await adminAPI.toggleBestChoice(id);
+    updateListenerState(id, { bestChoice: !current }); 
+  };
   const handleDeleteListener = (id) => {
     Alert.alert('Delete Listener', 'Are you sure you want to permanently delete this listener?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => {
-        setListeners(prev => prev.filter(l => l.id !== id));
-        setShowDetail(false);
-        setSelectedListener(null);
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        try {
+          // If there is an API for deleting listener, call it here. For now just filter.
+          setListeners(prev => prev.filter(l => l.id !== id));
+          setShowDetail(false);
+          setSelectedListener(null);
+        } catch(e) {}
       }},
     ]);
   };

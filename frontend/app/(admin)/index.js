@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,14 +15,45 @@ import { useRouter } from 'expo-router';
 import { ms, s, vs } from '../../utils/responsive';
 import { ADMIN_STATS, RECENT_ACTIVITIES } from '../../data/admin/adminData';
 import { StatCard, SectionTitle, ActivityItem } from '../../components/admin/AdminComponents';
+import { adminAPI } from '../../utils/api';
+import { useFocusEffect } from 'expo-router';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
-
-const STATS = ADMIN_STATS;
 
 export default function AdminDashboard() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+
+  const [stats, setStats] = useState({
+    totalUsers: 0,
+    totalListeners: 0,
+    pendingApprovals: 0,
+    pendingReports: 0,
+    activeNow: 0,
+    totalCalls: 0,
+    totalRevenue: 0,
+  });
+  const [activities, setActivities] = useState([]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const loadAdminData = async () => {
+        try {
+          const statsRes = await adminAPI.getStats();
+          if (statsRes?.data) {
+            setStats(statsRes.data);
+          }
+          const actsRes = await adminAPI.getActivities(3);
+          if (actsRes?.data) {
+            setActivities(actsRes.data);
+          }
+        } catch (e) {
+          console.error('Failed to load admin stats:', e);
+        }
+      };
+      loadAdminData();
+    }, [])
+  );
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -45,31 +76,28 @@ export default function AdminDashboard() {
         <View style={styles.statsGrid}>
           <StatCard
             title="Total Users"
-            value={STATS.totalUsers.toLocaleString()}
+            value={stats.totalUsers.toLocaleString()}
             icon="people"
             gradient={['#1E3A5F', '#0F2439']}
-            subtitle="+23 this week"
           />
           <StatCard
             title="Listeners"
-            value={STATS.totalListeners}
+            value={stats.totalListeners}
             icon="headset"
             gradient={['#2D1B4E', '#1A0F2E']}
-            subtitle={`${STATS.pendingApprovals} pending`}
+            subtitle={`${stats.pendingApprovals} pending`}
           />
           <StatCard
             title="Active Now"
-            value={STATS.activeNow}
+            value={stats.activeNow}
             icon="radio"
             gradient={['#1B4332', '#0B2B1F']}
-            subtitle="Online users"
           />
           <StatCard
             title="Total Calls"
-            value={STATS.totalCalls.toLocaleString()}
+            value={stats.totalCalls.toLocaleString()}
             icon="call"
             gradient={['#4A1D1D', '#2D1010']}
-            subtitle="All time"
           />
         </View>
 
@@ -77,12 +105,8 @@ export default function AdminDashboard() {
         <View style={styles.revenueCard}>
           <View style={styles.revenueHeader}>
             <Text style={styles.revenueTitle}>Total Revenue</Text>
-            <View style={styles.revenueBadge}>
-              <Ionicons name="trending-up" size={14} color="#10B981" />
-              <Text style={styles.revenueBadgeText}>+12.5%</Text>
-            </View>
           </View>
-          <Text style={styles.revenueValue}>₹{STATS.totalRevenue.toLocaleString()}</Text>
+          <Text style={styles.revenueValue}>₹{stats.totalRevenue.toLocaleString()}</Text>
           <Text style={styles.revenueSubtext}>Lifetime earnings across platform</Text>
         </View>
 
@@ -96,9 +120,9 @@ export default function AdminDashboard() {
           >
             <View style={[styles.quickActionIcon, { backgroundColor: 'rgba(168, 85, 247, 0.15)' }]}>
               <Ionicons name="checkmark-circle" size={22} color="#A855F7" />
-              {STATS.pendingApprovals > 0 && (
+              {stats.pendingApprovals > 0 && (
                 <View style={styles.actionBadge}>
-                  <Text style={styles.actionBadgeText}>{STATS.pendingApprovals}</Text>
+                  <Text style={styles.actionBadgeText}>{stats.pendingApprovals}</Text>
                 </View>
               )}
             </View>
@@ -111,9 +135,9 @@ export default function AdminDashboard() {
           >
             <View style={[styles.quickActionIcon, { backgroundColor: 'rgba(59, 130, 246, 0.15)' }]}>
               <Ionicons name="flag" size={22} color="#3B82F6" />
-              {STATS.pendingReports > 0 && (
+              {stats.pendingReports > 0 && (
                 <View style={styles.actionBadge}>
-                  <Text style={styles.actionBadgeText}>{STATS.pendingReports}</Text>
+                  <Text style={styles.actionBadgeText}>{stats.pendingReports}</Text>
                 </View>
               )}
             </View>
@@ -149,13 +173,20 @@ export default function AdminDashboard() {
           </TouchableOpacity>
         </View>
         <View style={styles.activityCard}>
-          {RECENT_ACTIVITIES.map((activity, index) => (
-            <ActivityItem 
-              key={activity.id} 
-              activity={activity} 
-              isLast={index === RECENT_ACTIVITIES.length - 1} 
-            />
-          ))}
+          {activities.length === 0 ? (
+            <View style={styles.emptyActivities}>
+              <Ionicons name="time-outline" size={32} color="#333" />
+              <Text style={styles.emptyActivitiesText}>No recent activities</Text>
+            </View>
+          ) : (
+            activities.map((activity, index) => (
+              <ActivityItem 
+                key={activity.id} 
+                activity={activity} 
+                isLast={index === activities.length - 1} 
+              />
+            ))
+          )}
         </View>
 
         <View style={{ height: vs(40) }} />
@@ -338,5 +369,16 @@ const styles = StyleSheet.create({
     paddingVertical: vs(6),
     borderWidth: 1,
     borderColor: '#1F1F1F',
+  },
+  emptyActivities: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: vs(30),
+  },
+  emptyActivitiesText: {
+    color: '#4B5563',
+    fontSize: ms(14, 0.3),
+    fontFamily: 'Inter_500Medium',
+    marginTop: vs(8),
   },
 });

@@ -4,8 +4,8 @@ const ApiResponse = require('../utils/apiResponse');
 class CallController {
     static async startCall(req, res, next) {
     try {
-      const { listenerId } = req.body;
-      const result = await CallService.startCall(req.user.id, listenerId);
+      const { listenerId, callType } = req.body;
+      const result = await CallService.startCall(req.user.id, listenerId, callType || 'audio');
       return ApiResponse.created(res, result, 'Call started successfully');
     } catch (err) {
       next(err);

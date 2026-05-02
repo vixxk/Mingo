@@ -51,6 +51,10 @@ class AuthService {
       throw new AppError('Account not found. Please sign up first.', 404);
     }
 
+    if (user && user.isBanned) {
+      throw new AppError('Your account has been suspended. Contact support.', 403);
+    }
+
     return await AuthService.sendOtp(phone);
   }
 
@@ -94,9 +98,19 @@ class AuthService {
       phone,
       role: isTestAdmin ? 'ADMIN' : (isTestListener ? 'LISTENER' : 'USER'),
       isVerified: true,
+      isFirstSignup: true,
+      signupTimestamp: new Date(),
     });
 
-
+    if (isTestListener) {
+      await Listener.create({
+        userId: user._id,
+        displayName: name,
+        status: 'approved',
+        audioEnabled: true,
+        videoEnabled: true,
+      });
+    }
 
     
     const token = AuthService._generateToken(user);
@@ -109,6 +123,12 @@ class AuthService {
         phone: user.phone,
         role: user.role,
         isVerified: user.isVerified,
+        coins: user.coins,
+        gender: user.gender,
+        language: user.language,
+        avatarIndex: user.avatarIndex,
+        isFirstSignup: user.isFirstSignup,
+        signupTimestamp: user.signupTimestamp,
         createdAt: user.createdAt,
       },
       token,
@@ -151,13 +171,33 @@ class AuthService {
           phone,
           role: isTestAdmin ? 'ADMIN' : 'LISTENER',
           isVerified: true,
+          isFirstSignup: false,
         });
+
+        if (isTestListener) {
+          await Listener.create({
+            userId: user._id,
+            displayName: 'Test Listener',
+            status: 'approved',
+            audioEnabled: true,
+            videoEnabled: true,
+          });
+        }
       } else {
         throw new AppError('User not found. Please sign up.', 404);
       }
     }
 
+    if (user.isBanned) {
+      throw new AppError('Your account has been suspended. Contact support.', 403);
+    }
+
     const token = AuthService._generateToken(user);
+
+    let listenerData = null;
+    if (user.role === 'LISTENER') {
+      listenerData = await Listener.findOne({ userId: user._id });
+    }
 
     return {
       user: {
@@ -166,7 +206,21 @@ class AuthService {
         username: user.username,
         phone: user.phone,
         role: user.role,
+        coins: user.coins,
+        gender: user.gender,
+        language: user.language,
+        avatarIndex: user.avatarIndex,
+        isFirstSignup: user.isFirstSignup,
+        signupTimestamp: user.signupTimestamp,
         createdAt: user.createdAt,
+        listener: listenerData ? {
+          status: listenerData.status,
+          isOnline: listenerData.isOnline,
+          rating: listenerData.rating,
+          totalSessions: listenerData.totalSessions,
+          audioEnabled: listenerData.audioEnabled,
+          videoEnabled: listenerData.videoEnabled,
+        } : undefined,
       },
       token,
     };
@@ -189,12 +243,29 @@ class AuthService {
       username: user.username,
       phone: user.phone,
       role: user.role,
+      gender: user.gender,
+      language: user.language,
+      avatarIndex: user.avatarIndex,
+      coins: user.coins,
+      interests: user.interests,
+      isFirstSignup: user.isFirstSignup,
+      signupTimestamp: user.signupTimestamp,
+      favouriteListeners: user.favouriteListeners,
       createdAt: user.createdAt,
       listener: listenerProfile
         ? {
             rating: listenerProfile.rating,
             totalSessions: listenerProfile.totalSessions,
             isOnline: listenerProfile.isOnline,
+            status: listenerProfile.status,
+            verified: listenerProfile.verified,
+            bestChoice: listenerProfile.bestChoice,
+            earnings: listenerProfile.earnings,
+            audioEnabled: listenerProfile.audioEnabled,
+            videoEnabled: listenerProfile.videoEnabled,
+            todayEarnings: listenerProfile.todayEarnings,
+            todayAudioCalls: listenerProfile.todayAudioCalls,
+            todayVideoCalls: listenerProfile.todayVideoCalls,
           }
         : undefined,
     };

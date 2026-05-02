@@ -14,7 +14,8 @@
       "backgroundColor": "#000000"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.vixxk.frontend"
     },
     "plugins": [
       "expo-router",
@@ -23,7 +24,8 @@
         "expo-build-properties",
         {
           "android": {
-            "minSdkVersion": 24
+            "minSdkVersion": 24,
+            "usesCleartextTraffic": true
           },
           "ios": {
             "deploymentTarget": "15.1"
@@ -35,7 +37,8 @@
         {
           "cameraPermission": "Allow Mingo to access your camera for video calls."
         }
-      ]
+      ],
+      "./plugins/withZegoCloud.js"
     ],
     "android": {
       "adaptiveIcon": {

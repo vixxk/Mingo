@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, Dimensions,
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import IssueSentPopup from './IssueSentPopup';
+import { userAPI } from '../../utils/api';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
@@ -19,8 +20,7 @@ export default function RaiseIssuePopup({ visible, onClose }) {
 
     setIsSending(true);
     try {
-      
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await userAPI.submitReport(message);
       setShowSuccess(true);
     } catch (err) {
       Alert.alert('Error', 'Failed to send report. Please try again.');

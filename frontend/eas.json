@@ -12,6 +12,10 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://13.60.51.35/api",
+        "EXPO_PUBLIC_SOCKET_URL": "http://13.60.51.35"
       }
     },
     "production": {

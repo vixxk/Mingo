@@ -11,7 +11,7 @@ const formatTime = (totalSeconds) => {
   return `${String(h).padStart(2, '0')}h: ${String(m).padStart(2, '0')}m: ${String(sec).padStart(2, '0')}s left`;
 };
 
-export default function CoinsOfferPopup({ visible, onClose, onAddCoins, signupTimestamp }) {
+export default function CoinsOfferPopup({ visible, onClose, onAddCoins, signupTimestamp, offerData }) {
   const slideAnim = useRef(new Animated.Value(500)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
   const [timeLeft, setTimeLeft] = useState(6 * 3600); 
@@ -52,6 +52,9 @@ export default function CoinsOfferPopup({ visible, onClose, onAddCoins, signupTi
 
   if (!visible || timeLeft <= 0) return null;
 
+  const defaultOffer = { title: '80% Off', coins: 80, originalPrice: 55, newPrice: 11 };
+  const offer = offerData || defaultOffer;
+
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
       <Animated.View style={[styles.overlay, { opacity: overlayAnim }]}>
@@ -78,8 +81,8 @@ export default function CoinsOfferPopup({ visible, onClose, onAddCoins, signupTi
           </TouchableOpacity>
 
           {}
-          <Text style={styles.offerTitle}>Flat <Text style={{fontWeight: '900'}}>80% Off</Text></Text>
-          <Text style={styles.offerSubtitle}>Limited Time Offer</Text>
+          <Text style={styles.offerTitle}>Flat <Text style={{fontWeight: '900'}}>{offer.title}</Text></Text>
+          <Text style={styles.offerSubtitle}>First Time Signup Offer</Text>
 
           {}
           <View style={styles.coinsImageWrap}>
@@ -91,11 +94,11 @@ export default function CoinsOfferPopup({ visible, onClose, onAddCoins, signupTi
           </View>
 
           {}
-          <Text style={styles.coinsAmount}>80 Coins</Text>
+          <Text style={styles.coinsAmount}>{offer.coins} Coins</Text>
           <View style={styles.priceRow}>
             <Text style={styles.priceAt}>@ </Text>
-            <Text style={styles.priceOld}>₹55</Text>
-            <Text style={styles.priceNew}> ₹11</Text>
+            <Text style={styles.priceOld}>₹{offer.originalPrice}</Text>
+            <Text style={styles.priceNew}> ₹{offer.newPrice}</Text>
           </View>
 
           {}

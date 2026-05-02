@@ -3,27 +3,28 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { ms, s, vs, SCREEN_WIDTH } from '../../utils/responsive';
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
+import { walletAPI } from '../../utils/api';
 
-const COIN_PACKAGES = [
-  { id: '1', coins: 100, original: 100, price: 50, discount: 50 },
-  { id: '2', coins: 250, original: 100, price: 50, discount: 50 },
-  { id: '3', coins: 500, original: 100, price: 50, discount: 50 },
-  { id: '4', coins: 1000, original: 100, price: 50, discount: 50 },
-  { id: '5', coins: 1250, original: 100, price: 50, discount: 50 },
-  { id: '6', coins: 1500, original: 100, price: 50, discount: 50 },
+const DEFAULT_PACKAGES = [
+  { id: '1', coins: 100, originalPrice: 100, price: 50, discount: 50 },
+  { id: '2', coins: 250, originalPrice: 100, price: 50, discount: 50 },
+  { id: '3', coins: 500, originalPrice: 100, price: 50, discount: 50 },
+  { id: '4', coins: 1000, originalPrice: 100, price: 50, discount: 50 },
+  { id: '5', coins: 1250, originalPrice: 100, price: 50, discount: 50 },
+  { id: '6', coins: 1500, originalPrice: 100, price: 50, discount: 50 },
 ];
 
 const CoinCard = ({ item, onPress }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
-    Animated.spring(scaleAnim, { toValue: 0.95, useNativeDriver: true }).start();
+    Animated.spring(scaleAnim, { toValue: 0.97, friction: 8, tension: 100, useNativeDriver: true }).start();
   };
   const handlePressOut = () => {
-    Animated.spring(scaleAnim, { toValue: 1, friction: 3, useNativeDriver: true }).start();
+    Animated.spring(scaleAnim, { toValue: 1, friction: 5, tension: 80, useNativeDriver: true }).start();
   };
 
   return (
@@ -55,7 +56,7 @@ const CoinCard = ({ item, onPress }) => {
 
           {}
           <View style={styles.priceRow}>
-            <Text style={styles.priceOld}>{item.original}₹</Text>
+            <Text style={styles.priceOld}>{item.originalPrice || item.original}₹</Text>
             <Text style={styles.priceNew}>{item.price}₹</Text>
           </View>
 
@@ -71,10 +72,37 @@ export default function BalanceScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const handleBuyCoins = (item) => {
-    
-    console.log('Buy coins:', item.coins);
+  const [packages, setPackages] = useState([]);
+  const [balance, setBalance] = useState(0);
+
+  const handleBuyCoins = async (item) => {
+    try {
+      await walletAPI.purchaseCoins({ packageId: item.id || item._id, amount: item.price });
+      const balRes = await walletAPI.getBalance();
+      if (balRes?.data) setBalance(balRes.data.coins);
+    } catch (e) {
+      console.log('Purchase error:', e);
+    }
   };
+
+  useFocusEffect(
+    useCallback(() => {
+      const loadData = async () => {
+        try {
+          const balRes = await walletAPI.getBalance();
+          if (balRes?.data) setBalance(balRes.data.coins);
+          
+          const pkgRes = await walletAPI.getPackages();
+          if (pkgRes?.data?.packages) {
+            setPackages(pkgRes.data.packages);
+          }
+        } catch (e) {
+          console.log('Wallet fetch error:', e);
+        }
+      };
+      loadData();
+    }, [])
+  );
 
   
   const headerAnim = useRef(new Animated.Value(0)).current;
@@ -107,7 +135,7 @@ export default function BalanceScreen() {
         </TouchableOpacity>
         <View style={styles.headerCoinBadge}>
           <Text style={styles.headerCoinEmoji}>🪙</Text>
-          <Text style={styles.headerCoinCount}>0</Text>
+          <Text style={styles.headerCoinCount}>{balance}</Text>
         </View>
       </Animated.View>
 
@@ -119,8 +147,8 @@ export default function BalanceScreen() {
       >
         {}
         <Animated.View style={[styles.grid, { opacity: gridAnim, transform: [{ translateY: gridSlide }] }]}>
-          {COIN_PACKAGES.map((item) => (
-            <CoinCard key={item.id} item={item} onPress={handleBuyCoins} />
+          {(packages.length ? packages : DEFAULT_PACKAGES).map((item, index) => (
+            <CoinCard key={item.id || item._id || index} item={item} onPress={handleBuyCoins} />
           ))}
         </Animated.View>
 

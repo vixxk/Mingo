@@ -11,14 +11,15 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ms, s, vs, SCREEN_HEIGHT } from '../../utils/responsive';
+import { callAPI } from '../../utils/api';
 
 export default function FindingListenerScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { callType = 'audio' } = useLocalSearchParams();
 
-  
   const scanAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -47,11 +48,35 @@ export default function FindingListenerScreen() {
   });
 
   useEffect(() => {
-    
-    const timer = setTimeout(() => {
-      router.replace({ pathname: '/(call)/audio-call', params: { name: 'Priya Sharma', callId: 'demo_zego_call' } });
-    }, 3000);
-    return () => clearTimeout(timer);
+    const startCall = async () => {
+      try {
+        const res = await callAPI.startCall(null, callType);
+        if (res?.data) {
+          router.replace({ 
+            pathname: '/(call)/connecting', 
+            params: { 
+              name: res.data.listenerName || 'Listener', 
+              callId: res.data.sessionId,
+              roomId: res.data.roomId,
+              listenerId: res.data.listenerId,
+              avatarIndex: res.data.listenerAvatarIndex,
+              gender: res.data.listenerGender,
+              zegoAppId: res.data.zegoAppId,
+              zegoAppSign: res.data.zegoAppSign,
+              callType: res.data.callType,
+            } 
+          });
+        } else {
+          router.back();
+        }
+      } catch (error) {
+        console.log('Call start failed:', error);
+        setTimeout(() => {
+          router.replace({ pathname: '/(call)/connecting', params: { name: 'Priya Sharma', callId: 'demo_zego_call' } });
+        }, 3000);
+      }
+    };
+    startCall();
   }, []);
 
   return (

@@ -35,6 +35,48 @@ const userSchema = new mongoose.Schema(
       enum: ['USER', 'LISTENER', 'ADMIN'],
       default: 'USER',
     },
+
+    gender: {
+      type: String,
+      enum: ['Male', 'Female', 'Other'],
+      default: null,
+    },
+    language: {
+      type: String,
+      default: 'English',
+    },
+    avatarIndex: {
+      type: Number,
+      default: 0,
+    },
+    coins: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    interests: [{
+      type: String,
+    }],
+    isBanned: {
+      type: Boolean,
+      default: false,
+    },
+    isFirstSignup: {
+      type: Boolean,
+      default: true,
+    },
+    signupTimestamp: {
+      type: Date,
+      default: null,
+    },
+    favouriteListeners: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    }],
+    pushToken: {
+      type: String,
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -43,6 +85,7 @@ const userSchema = new mongoose.Schema(
 
 
 userSchema.index({ role: 1 });
+userSchema.index({ isBanned: 1 });
 
 userSchema.statics.findByPhone = function (phone) {
   return this.findOne({ phone });

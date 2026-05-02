@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, SCREEN_HEIGHT, SCREEN_WIDTH } from '../../utils/responsive';
+import { listenerAPI, userAPI, walletAPI, authAPI, listenersAPI } from '../../utils/api';
+import { useFocusEffect } from 'expo-router';
+
 
 const ConfirmationModal = ({ visible, isOnline, onConfirm, onCancel }) => {
   return (
@@ -195,6 +198,43 @@ export default function ListenerHomeScreen() {
     loadAvatar();
   }, []);
 
+
+  const [earnings, setEarnings] = useState(0);
+  const [totalCalls, setTotalCalls] = useState({ audio: 0, video: 0 });
+  const [balance, setBalance] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      const loadListenerData = async () => {
+        try {
+          const userStr = await AsyncStorage.getItem('user');
+          let userId = null;
+          if (userStr) {
+            const userObj = JSON.parse(userStr);
+            userId = userObj.id || userObj._id;
+          }
+
+          if (userId) {
+            const profileRes = await listenersAPI.getProfile(userId);
+            if (profileRes?.data) {
+              setEarnings(profileRes.data.earnings || 0);
+              const sessions = profileRes.data.totalSessions || 0;
+              setTotalCalls({ audio: Math.floor(sessions/2), video: Math.floor(sessions/2) });
+              setIsOnline(profileRes.data.isOnline);
+            }
+          }
+
+          const balRes = await walletAPI.getBalance();
+          if (balRes?.data) setBalance(balRes.data.coins);
+
+        } catch (e) {
+          console.error('Error fetching listener data:', e);
+        }
+      };
+      loadListenerData();
+    }, [])
+  );
+
   const handleStatusToggle = () => {
     if (!isOnline && !audioEnabled && !videoEnabled) {
       setShowCantGoOnline(true);
@@ -203,8 +243,19 @@ export default function ListenerHomeScreen() {
     setShowConfirm(true);
   };
 
-  const confirmStatusChange = () => {
-    setIsOnline(!isOnline);
+  const confirmStatusChange = async () => {
+    try {
+      if (isOnline) {
+        await listenerAPI.goOffline();
+        setIsOnline(false);
+      } else {
+        await listenerAPI.goOnline();
+        setIsOnline(true);
+      }
+    } catch (e) {
+      console.error('Failed to change status', e);
+      Alert.alert('Error', 'Failed to update status. Please try again.');
+    }
     setShowConfirm(false);
   };
 
@@ -239,7 +290,7 @@ export default function ListenerHomeScreen() {
         <View style={styles.headerRight}>
           <View style={styles.balanceBadge}>
             <Text style={styles.coinEmoji}>🪙</Text>
-            <Text style={styles.balanceText}>₹1120</Text>
+            <Text style={styles.balanceText}>₹{balance}</Text>
           </View>
           <Image
             source={userAvatar}
@@ -349,7 +400,7 @@ export default function ListenerHomeScreen() {
           {}
           <View style={styles.earningsRow}>
             <Text style={styles.earningsLabel}>Estimated Earnings</Text>
-            <Text style={styles.earningsValue}>₹1,234</Text>
+            <Text style={styles.earningsValue}>₹{earnings}</Text>
           </View>
 
           {}
@@ -358,7 +409,7 @@ export default function ListenerHomeScreen() {
           {}
           <View style={styles.earningsRow}>
             <Text style={styles.earningsLabel}>Total Calls</Text>
-            <Text style={styles.earningsCallsValue}>03 Audio  •  09 Video</Text>
+            <Text style={styles.earningsCallsValue}>{String(totalCalls.audio).padStart(2, '0')} Audio  •  {String(totalCalls.video).padStart(2, '0')} Video</Text>
           </View>
         </View>
       </ScrollView>

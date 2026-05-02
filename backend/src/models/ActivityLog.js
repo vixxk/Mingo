@@ -1,32 +1,34 @@
 const mongoose = require('mongoose');
 
-const activityLogSchema = new mongoose.Schema({
-  user: {
-    type: String,
-    required: true
+const activityLogSchema = new mongoose.Schema(
+  {
+    user: {
+      type: String,
+      required: true,
+    },
+    action: {
+      type: String,
+      required: true,
+    },
+    type: {
+      type: String,
+      enum: ['call', 'admin', 'user', 'listener', 'system'],
+      default: 'system',
+    },
+    icon: {
+      type: String,
+      default: 'information-circle',
+    },
+    color: {
+      type: String,
+      default: '#3B82F6',
+    },
   },
-  action: {
-    type: String,
-    required: true
-  },
-  type: {
-    type: String,
-    enum: ['user', 'listener', 'admin', 'system', 'call', 'payment'],
-    default: 'system'
-  },
-  details: {
-    type: mongoose.Schema.Types.Mixed
-  },
-  icon: {
-    type: String,
-    default: 'information-circle'
-  },
-  color: {
-    type: String,
-    default: '#3B82F6'
+  {
+    timestamps: true,
   }
-}, {
-  timestamps: true
-});
+);
+
+activityLogSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model('ActivityLog', activityLogSchema);

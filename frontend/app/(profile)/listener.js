@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { ms, s, vs, SCREEN_WIDTH, SCREEN_HEIGHT } from '../../utils/responsive';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import FloatingCoin from '../../components/shared/FloatingCoin';
+import { userAPI } from '../../utils/api';
 
 
 const COIN_POSITIONS = [
@@ -68,9 +69,12 @@ export default function ListenerScreen() {
 
   const handleApply = async () => {
     try {
+      await userAPI.applyAsListener({});
       await AsyncStorage.setItem('listenerStatus', 'pending');
       setListenerStatus('pending');
-    } catch (e) {}
+    } catch (e) {
+      console.log('Error applying as listener:', e);
+    }
   };
 
   if (loading) return <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}><StatusBar style="light" /></View>;
