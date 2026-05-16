@@ -17,9 +17,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ms, s, vs, SCREEN_HEIGHT, SCREEN_WIDTH } from '../../utils/responsive';
+import { ms, s, vs, hp, wp, SCREEN_HEIGHT, SCREEN_WIDTH } from '../../utils/responsive';
 import { listenerAPI, userAPI, walletAPI, authAPI, listenersAPI } from '../../utils/api';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 
 
 const ConfirmationModal = ({ visible, isOnline, onConfirm, onCancel }) => {
@@ -108,7 +108,7 @@ const CantGoOnlinePopup = ({ visible, onClose }) => {
           
           <Text style={styles.modalTitle}>Cannot Go Online</Text>
           <Text style={styles.modalSub}>
-            Please enable audio or video calls to go online and receive calls.
+            Please enable audio, video calls or chat to go online and receive requests.
           </Text>
 
           <TouchableOpacity 
@@ -133,8 +133,10 @@ const CantGoOnlinePopup = ({ visible, onClose }) => {
 
 export default function ListenerHomeScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [videoEnabled, setVideoEnabled] = useState(false);
+  const [chatEnabled, setChatEnabled] = useState(true);
   const [isOnline, setIsOnline] = useState(false);
   const [userAvatar, setUserAvatar] = useState(require('../../images/user_avatar.png'));
   const [showConfirm, setShowConfirm] = useState(false);
@@ -164,39 +166,6 @@ export default function ListenerHomeScreen() {
     }
   }, [isOnline]);
 
-  useEffect(() => {
-    const loadAvatar = async () => {
-      try {
-        const gender = await AsyncStorage.getItem('userGender');
-        const avatarIndex = await AsyncStorage.getItem('userAvatarIndex');
-        if (gender && avatarIndex) {
-          const maleAvatars = [
-            require('../../images/male_avatar_1_1776972918440.png'),
-            require('../../images/male_avatar_2_1776972933241.png'),
-            require('../../images/male_avatar_3_1776972950218.png'),
-            require('../../images/male_avatar_4_1776972963577.png'),
-            require('../../images/male_avatar_5_1776972978900.png'),
-            require('../../images/male_avatar_6_1776972993180.png'),
-            require('../../images/male_avatar_7_1776973008143.png'),
-            require('../../images/male_avatar_8_1776973021635.png'),
-          ];
-          const femaleAvatars = [
-            require('../../images/female_avatar_1_1776973035859.png'),
-            require('../../images/female_avatar_2_1776973050039.png'),
-            require('../../images/female_avatar_3_1776973063471.png'),
-            require('../../images/female_avatar_4_1776973077539.png'),
-            require('../../images/female_avatar_5_1776973090730.png'),
-            require('../../images/female_avatar_6_1776973108100.png'),
-            require('../../images/female_avatar_7_1776973124018.png'),
-            require('../../images/female_avatar_8_1776973138772.png'),
-          ];
-          const avatars = gender === 'Male' ? maleAvatars : femaleAvatars;
-          setUserAvatar(avatars[parseInt(avatarIndex, 10)] || avatars[0]);
-        }
-      } catch (e) {}
-    };
-    loadAvatar();
-  }, []);
 
 
   const [earnings, setEarnings] = useState(0);
@@ -207,6 +176,34 @@ export default function ListenerHomeScreen() {
     useCallback(() => {
       const loadListenerData = async () => {
         try {
+          // Refresh Avatar/Profile first
+          const gender = await AsyncStorage.getItem('userGender');
+          const avatarIndex = await AsyncStorage.getItem('userAvatarIndex');
+          if (gender && avatarIndex) {
+            const maleAvatars = [
+              require('../../images/male_avatar_1_1776972918440.png'),
+              require('../../images/male_avatar_2_1776972933241.png'),
+              require('../../images/male_avatar_3_1776972950218.png'),
+              require('../../images/male_avatar_4_1776972963577.png'),
+              require('../../images/male_avatar_5_1776972978900.png'),
+              require('../../images/male_avatar_6_1776972993180.png'),
+              require('../../images/male_avatar_7_1776973008143.png'),
+              require('../../images/male_avatar_8_1776973021635.png'),
+            ];
+            const femaleAvatars = [
+              require('../../images/female_avatar_1_1776973035859.png'),
+              require('../../images/female_avatar_2_1776973050039.png'),
+              require('../../images/female_avatar_3_1776973063471.png'),
+              require('../../images/female_avatar_4_1776973077539.png'),
+              require('../../images/female_avatar_5_1776973090730.png'),
+              require('../../images/female_avatar_6_1776973108100.png'),
+              require('../../images/female_avatar_7_1776973124018.png'),
+              require('../../images/female_avatar_8_1776973138772.png'),
+            ];
+            const avatars = gender === 'Male' ? maleAvatars : femaleAvatars;
+            setUserAvatar(avatars[parseInt(avatarIndex, 10)] || avatars[0]);
+          }
+
           const userStr = await AsyncStorage.getItem('user');
           let userId = null;
           if (userStr) {
@@ -215,12 +212,15 @@ export default function ListenerHomeScreen() {
           }
 
           if (userId) {
-            const profileRes = await listenersAPI.getProfile(userId);
+            const profileRes = await listenerAPI.getMyProfile();
             if (profileRes?.data) {
               setEarnings(profileRes.data.earnings || 0);
               const sessions = profileRes.data.totalSessions || 0;
-              setTotalCalls({ audio: Math.floor(sessions/2), video: Math.floor(sessions/2) });
+              setTotalCalls({ audio: profileRes.data.audioCalls || 0, video: profileRes.data.videoCalls || 0 });
               setIsOnline(profileRes.data.isOnline);
+              setAudioEnabled(profileRes.data.audioEnabled !== false);
+              setVideoEnabled(profileRes.data.videoEnabled === true);
+              setChatEnabled(profileRes.data.chatEnabled !== false);
             }
           }
 
@@ -236,7 +236,7 @@ export default function ListenerHomeScreen() {
   );
 
   const handleStatusToggle = () => {
-    if (!isOnline && !audioEnabled && !videoEnabled) {
+    if (!isOnline && !audioEnabled && !videoEnabled && !chatEnabled) {
       setShowCantGoOnline(true);
       return;
     }
@@ -258,6 +258,15 @@ export default function ListenerHomeScreen() {
     }
     setShowConfirm(false);
   };
+
+  const updateSettings = async (updates) => {
+    try {
+      await listenerAPI.updateSettings(updates);
+    } catch (e) {
+      console.error('Failed to update settings', e);
+    }
+  };
+
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -285,22 +294,36 @@ export default function ListenerHomeScreen() {
       {}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.logoText}>∞ Mingo</Text>
+          <Image 
+            source={require('../../images/Mingo Splash Text.png')} 
+            style={styles.logoImage} 
+            resizeMode="contain" 
+          />
         </View>
         <View style={styles.headerRight}>
           <View style={styles.balanceBadge}>
             <Text style={styles.coinEmoji}>🪙</Text>
             <Text style={styles.balanceText}>₹{balance}</Text>
           </View>
-          <Image
-            source={userAvatar}
-            style={styles.headerAvatar}
-          />
+          <TouchableOpacity 
+            activeOpacity={0.7} 
+            onPress={() => router.push('/(listener)/listener-profile')}
+          >
+            <Image
+              source={userAvatar}
+              style={styles.headerAvatar}
+            />
+          </TouchableOpacity>
         </View>
       </View>
 
       {}
-      <View style={[styles.statusBanner, isOnline ? styles.statusBannerOnline : styles.statusBannerOffline]}>
+      <LinearGradient
+        colors={isOnline 
+          ? ['rgba(16, 185, 129, 0.15)', 'rgba(16, 185, 129, 0.05)'] 
+          : ['rgba(107, 114, 128, 0.15)', 'rgba(107, 114, 128, 0.05)']}
+        style={[styles.statusBanner, isOnline ? styles.statusBannerOnline : styles.statusBannerOffline]}
+      >
         <View style={styles.statusBannerContent}>
           <Animated.View style={[styles.bannerDot, isOnline && styles.bannerDotOnline, isOnline && { transform: [{ scale: pulseAnim }] }]} />
           <Text style={[styles.statusBannerText, isOnline ? styles.statusBannerTextOnline : styles.statusBannerTextOffline]}>
@@ -310,7 +333,7 @@ export default function ListenerHomeScreen() {
         <Text style={styles.statusBannerSub}>
           {isOnline ? 'You will receive calls from users' : 'Switch online to start earning'}
         </Text>
-      </View>
+      </LinearGradient>
 
       <ScrollView
         style={styles.scrollView}
@@ -318,8 +341,15 @@ export default function ListenerHomeScreen() {
         showsVerticalScrollIndicator={false}
       >
         {}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Mingo Mode</Text>
+        <View style={[styles.card, isOnline && { opacity: 0.7 }]}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: vs(14) }}>
+            <Text style={[styles.cardTitle, { marginBottom: 0 }]}>Mingo Mode</Text>
+            {isOnline && (
+              <View style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                <Text style={{ color: '#EF4444', fontSize: 10, fontWeight: 'bold' }}>OFFLINE TO EDIT</Text>
+              </View>
+            )}
+          </View>
 
           {}
           <View style={styles.toggleRow}>
@@ -329,10 +359,13 @@ export default function ListenerHomeScreen() {
             </View>
             <Switch
               value={audioEnabled}
+              disabled={isOnline}
               onValueChange={(val) => {
                 setAudioEnabled(val);
-                if (!val && !videoEnabled && isOnline) {
+                updateSettings({ audioEnabled: val });
+                if (!val && !videoEnabled && !chatEnabled && isOnline) {
                   setIsOnline(false);
+                  listenerAPI.goOffline();
                 }
               }}
               trackColor={{ false: '#333', true: '#22C55E' }}
@@ -352,10 +385,13 @@ export default function ListenerHomeScreen() {
             </View>
             <Switch
               value={videoEnabled}
+              disabled={isOnline}
               onValueChange={(val) => {
                 setVideoEnabled(val);
-                if (!val && !audioEnabled && isOnline) {
+                updateSettings({ videoEnabled: val });
+                if (!val && !audioEnabled && !chatEnabled && isOnline) {
                   setIsOnline(false);
+                  listenerAPI.goOffline();
                 }
               }}
               trackColor={{ false: '#333', true: '#22C55E' }}
@@ -363,6 +399,38 @@ export default function ListenerHomeScreen() {
               ios_backgroundColor="#333"
             />
           </View>
+
+          {}
+          <View style={styles.cardDivider} />
+
+          {}
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleLeft}>
+              <Ionicons name="chatbubble-outline" size={20} color="#9CA3AF" />
+              <Text style={styles.toggleLabel}>Chat</Text>
+            </View>
+            <Switch
+              value={chatEnabled}
+              disabled={isOnline}
+              onValueChange={(val) => {
+                setChatEnabled(val);
+                updateSettings({ chatEnabled: val });
+                if (!val && !audioEnabled && !videoEnabled && isOnline) {
+                  setIsOnline(false);
+                  listenerAPI.goOffline();
+                }
+              }}
+              trackColor={{ false: '#333', true: '#22C55E' }}
+              thumbColor="#fff"
+              ios_backgroundColor="#333"
+            />
+          </View>
+          
+          {isOnline && (
+            <Text style={{ color: '#6B7280', fontSize: 11, marginTop: 12, textAlign: 'center', fontStyle: 'italic' }}>
+              You must go offline to change these settings
+            </Text>
+          )}
         </View>
 
         {}
@@ -413,6 +481,7 @@ export default function ListenerHomeScreen() {
           </View>
         </View>
       </ScrollView>
+
     </View>
   );
 }
@@ -442,11 +511,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  logoText: {
-    fontSize: ms(20, 0.3),
-    fontWeight: '900',
-    color: '#fff',
-    fontFamily: 'Inter_900Black',
+  logoImage: {
+    width: s(100),
+    height: vs(40),
   },
   headerRight: {
     flexDirection: 'row',
@@ -773,5 +840,66 @@ const styles = StyleSheet.create({
     fontSize: ms(14, 0.3),
     color: '#E5E7EB',
     fontFamily: 'Inter_500Medium',
+  },
+
+  // FAB & Random Styles
+  floatingRandomWrapper: {
+    position: 'absolute',
+    zIndex: 100,
+  },
+  randomBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EC4899',
+    paddingVertical: vs(12),
+    paddingHorizontal: s(20),
+    borderRadius: 30,
+    elevation: 8,
+    shadowColor: '#EC4899',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  randomBtnText: {
+    color: '#fff',
+    fontSize: ms(16, 0.3),
+    fontWeight: '800',
+    fontFamily: 'Inter_900Black',
+  },
+  fabOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
+    paddingBottom: hp(15),
+    paddingRight: wp(5),
+  },
+  fabMenu: {
+    alignItems: 'center',
+    gap: hp(2),
+  },
+  fabVideoRow: {
+    alignSelf: 'flex-end',
+  },
+  fabBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: wp(4),
+  },
+  fabCircle: {
+    width: hp(7),
+    height: hp(7),
+    borderRadius: hp(3.5),
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
+  },
+  fabCloseCircle: {
+    width: hp(7.5),
+    height: hp(7.5),
+    borderRadius: hp(3.75),
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
   },
 });

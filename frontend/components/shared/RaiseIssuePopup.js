@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, Dimensions, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import IssueSentPopup from './IssueSentPopup';
+import StatusPopup from './StatusPopup';
 import { userAPI } from '../../utils/api';
 
 const { width: SW, height: SH } = Dimensions.get('window');
@@ -10,20 +10,34 @@ const { width: SW, height: SH } = Dimensions.get('window');
 export default function RaiseIssuePopup({ visible, onClose }) {
   const [message, setMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
+  const [statusPopup, setStatusPopup] = useState({
+    visible: false,
+    type: 'success',
+    title: '',
+    message: '',
+    onConfirm: null
+  });
+
+  const showStatus = (type, title, message, onConfirm = null) => {
+    setStatusPopup({ visible: true, type, title, message, onConfirm });
+  };
 
   const handleSend = async () => {
     if (!message.trim()) {
-      Alert.alert('Error', 'Please describe the issue before sending.');
+      showStatus('error', 'Empty Message', 'Please describe the issue before sending.');
       return;
     }
 
     setIsSending(true);
     try {
       await userAPI.submitReport(message);
-      setShowSuccess(true);
+      showStatus('success', 'Issue Sent', 'Your report has been received. Our team will look into it shortly.', () => {
+        setStatusPopup(prev => ({ ...prev, visible: false }));
+        setMessage('');
+        onClose();
+      });
     } catch (err) {
-      Alert.alert('Error', 'Failed to send report. Please try again.');
+      showStatus('error', 'Send Failed', 'Failed to send report. Please check your connection and try again.');
     } finally {
       setIsSending(false);
     }
@@ -37,7 +51,7 @@ export default function RaiseIssuePopup({ visible, onClose }) {
 
   return (
     <>
-      <Modal visible={visible && !showSuccess} transparent animationType="fade" statusBarTranslucent>
+      <Modal visible={visible && !statusPopup.visible} transparent animationType="fade" statusBarTranslucent>
         <View style={st.overlay}>
           <KeyboardAvoidingView 
             behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
@@ -97,9 +111,13 @@ export default function RaiseIssuePopup({ visible, onClose }) {
         </View>
       </Modal>
 
-      <IssueSentPopup 
-        visible={showSuccess} 
-        onClose={handleCloseSuccess} 
+      <StatusPopup
+        visible={statusPopup.visible}
+        type={statusPopup.type}
+        title={statusPopup.title}
+        message={statusPopup.message}
+        onClose={() => setStatusPopup(prev => ({ ...prev, visible: false }))}
+        onConfirm={statusPopup.onConfirm}
       />
     </>
   );

@@ -20,7 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ms, s, vs, SCREEN_HEIGHT, SCREEN_WIDTH, isSmallPhone } from '../../utils/responsive';
+import { ms, s, vs, hp, wp, SCREEN_HEIGHT, SCREEN_WIDTH, isSmallPhone } from '../../utils/responsive';
 import { authAPI } from '../../utils/api';
 
 export default function SignupScreen() {
@@ -135,11 +135,18 @@ export default function SignupScreen() {
     setErrors({});
 
     try {
+      const gender = await AsyncStorage.getItem('userGender') || 'Male';
+      const language = await AsyncStorage.getItem('userLanguage') || 'Hindi';
+      const avatarIndex = await AsyncStorage.getItem('userAvatarIndex') || '0';
+
       const result = await authAPI.signup({
         name: name.trim(),
         username: username.trim().toLowerCase(),
         phone: phone.trim(),
         otp: otp.trim(),
+        gender,
+        language,
+        avatarIndex: parseInt(avatarIndex, 10),
       });
       
       
@@ -218,7 +225,13 @@ export default function SignupScreen() {
                 } else if (role === 'LISTENER') {
                   router.replace('/(listener)');
                 } else {
-                  router.replace('/(tabs)');
+                  // Check gender for redirection
+                  const userGender = await AsyncStorage.getItem('userGender');
+                  if (userGender === 'Female') {
+                    router.replace('/(auth)/role-selection');
+                  } else {
+                    router.replace('/(tabs)');
+                  }
                 }
               }}
               style={{ width: '100%', marginTop: vs(20) }}
@@ -461,8 +474,6 @@ export default function SignupScreen() {
                 <TouchableOpacity activeOpacity={0.7}><Text style={styles.footerLink}>Privacy Policy</Text></TouchableOpacity>
               </View>
 
-              {}
-              <View style={{ height: insets.bottom + 60 }} />
             </Animated.View>
           </View>
         </ScrollView>
@@ -480,7 +491,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   topSection: {
-    height: isSmallPhone ? SCREEN_HEIGHT * 0.15 : SCREEN_HEIGHT * 0.22,
+    height: hp(30),
     width: '100%',
   },
   mapImage: {
@@ -517,14 +528,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
     borderTopLeftRadius: 50,
     borderTopRightRadius: 50,
-    marginTop: -vs(60), 
+    marginTop: -hp(4), 
     zIndex: 10,
   },
   cardContent: {
-    flex: 1,
-    paddingHorizontal: s(28),
-    paddingTop: vs(28),
-    paddingBottom: vs(20),
+    paddingHorizontal: wp(7),
+    paddingTop: hp(4),
+    paddingBottom: hp(4),
   },
   backButton: {
     position: 'absolute',
@@ -564,7 +574,7 @@ const styles = StyleSheet.create({
     fontSize: ms(32, 0.3),
     fontWeight: '900',
     color: '#fff',
-    marginBottom: vs(6),
+    marginBottom: hp(1),
     fontFamily: 'Inter_900Black',
     lineHeight: ms(38),
   },
@@ -572,7 +582,7 @@ const styles = StyleSheet.create({
     fontSize: ms(13),
     color: '#9CA3AF',
     lineHeight: ms(18),
-    marginBottom: vs(12),
+    marginBottom: hp(2),
     fontFamily: 'Inter_400Regular',
   },
   errorBanner: {
@@ -599,8 +609,8 @@ const styles = StyleSheet.create({
     fontSize: ms(14),
     color: '#fff',
     fontWeight: '700',
-    marginBottom: vs(6),
-    marginLeft: 4,
+    marginBottom: hp(1),
+    marginLeft: wp(1),
     fontFamily: 'Inter_700Bold',
   },
   inputWrapper: {
@@ -663,10 +673,10 @@ const styles = StyleSheet.create({
   },
   signupButtonContainer: {
     width: '100%',
-    height: Math.max(vs(52), 46),
+    height: hp(7),
     borderRadius: 30,
     overflow: 'hidden',
-    marginTop: vs(6),
+    marginTop: hp(2),
   },
   signupButton: {
     flex: 1,
@@ -682,8 +692,8 @@ const styles = StyleSheet.create({
   loginContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: vs(20),
-    marginBottom: vs(24),
+    marginTop: hp(2),
+    marginBottom: hp(2),
   },
   loginText: {
     color: '#fff',
@@ -721,8 +731,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     flexWrap: 'wrap',
-    marginTop: 'auto',
-    paddingBottom: 10,
+    marginTop: hp(2),
+    paddingBottom: hp(4),
   },
   footerText: {
     fontSize: ms(10),

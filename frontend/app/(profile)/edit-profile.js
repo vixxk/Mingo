@@ -15,7 +15,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, SCREEN_WIDTH } from '../../utils/responsive';
-import { userAPI } from '../../utils/api';
+import { userAPI, authAPI } from '../../utils/api';
 
 const MALE_AVATARS = [
   require('../../images/male_avatar_1_1776972918440.png'),
@@ -57,26 +57,68 @@ export default function EditProfileScreen() {
   const [selectedInterests, setSelectedInterests] = useState([]);
   const [gender, setGender] = useState('Male');
 
+  const [isLoading, setIsLoading] = useState(true);
+
   useEffect(() => {
     const loadProfile = async () => {
       try {
+        setIsLoading(true);
+        // 1. Load from local storage FIRST for instant UI
         const userStr = await AsyncStorage.getItem('user');
         if (userStr) {
           const userObj = JSON.parse(userStr);
-          if (userObj.gender) setGender(userObj.gender);
-          if (userObj.avatarIndex !== undefined) setSelectedAvatar(userObj.avatarIndex.toString());
+          if (userObj.gender) {
+            const normalizedGender = userObj.gender.charAt(0).toUpperCase() + userObj.gender.slice(1).toLowerCase();
+            setGender(normalizedGender);
+          }
+          if (userObj.avatarIndex !== undefined && userObj.avatarIndex !== null) {
+            setSelectedAvatar(userObj.avatarIndex.toString());
+          }
           if (userObj.name) setUsername(userObj.name);
           if (userObj.interests) setSelectedInterests(userObj.interests);
-        } else {
-          const storedGender = await AsyncStorage.getItem('userGender');
-          const storedAvatar = await AsyncStorage.getItem('userAvatarIndex');
-          const storedUsername = await AsyncStorage.getItem('userName');
-          
-          if (storedGender) setGender(storedGender);
-          if (storedAvatar) setSelectedAvatar(storedAvatar);
-          if (storedUsername) setUsername(storedUsername);
         }
-      } catch (e) {}
+
+        // 2. Fetch real data from API
+        const res = await authAPI.me();
+        if (res?.data) {
+          const userObj = res.data;
+          
+          // Normalize gender, properly falling back to AsyncStorage if backend is missing it
+          const localGender = await AsyncStorage.getItem('userGender');
+          const rawGender = userObj.gender || localGender;
+          if (rawGender) {
+            const normalizedGender = rawGender.charAt(0).toUpperCase() + rawGender.slice(1).toLowerCase();
+            setGender(normalizedGender);
+            await AsyncStorage.setItem('userGender', normalizedGender);
+          }
+          
+          const localAvatar = await AsyncStorage.getItem('userAvatarIndex');
+          const avatarIndex = userObj.avatarIndex !== undefined && userObj.avatarIndex !== null 
+            ? userObj.avatarIndex.toString() 
+            : localAvatar;
+          
+          if (avatarIndex !== null) {
+            setSelectedAvatar(avatarIndex);
+            await AsyncStorage.setItem('userAvatarIndex', avatarIndex);
+          }
+
+          const localName = await AsyncStorage.getItem('userName');
+          const nameToSet = userObj.name || localName;
+          if (nameToSet) {
+            setUsername(nameToSet);
+            await AsyncStorage.setItem('userName', nameToSet);
+          }
+          
+          if (userObj.interests) setSelectedInterests(userObj.interests);
+          
+          // Sync with local storage
+          await AsyncStorage.setItem('user', JSON.stringify({ ...userObj, gender: rawGender || gender, avatarIndex: parseInt(avatarIndex || selectedAvatar, 10), name: nameToSet || username }));
+        }
+      } catch (e) {
+        console.error('Error fetching live profile:', e);
+      } finally {
+        setIsLoading(false);
+      }
     };
     loadProfile();
   }, []);
@@ -84,32 +126,46 @@ export default function EditProfileScreen() {
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
+    if (username.length < 4) {
+      Alert.alert('Error', 'Username must be at least 4 characters.');
+      return;
+    }
+
     try {
       setIsSaving(true);
-      await userAPI.updateProfile({
+      // 1. Save to Database FIRST
+      const res = await userAPI.updateProfile({
         name: username,
+        username: username.toLowerCase().replace(/\s/g, ''), // Ensure unique-ish username
         gender,
         avatarIndex: parseInt(selectedAvatar, 10),
         interests: selectedInterests,
       });
 
-      // Update local storage
-      const userStr = await AsyncStorage.getItem('user');
-      if (userStr) {
-        const userObj = JSON.parse(userStr);
-        userObj.name = username;
-        userObj.gender = gender;
-        userObj.avatarIndex = parseInt(selectedAvatar, 10);
-        userObj.interests = selectedInterests;
-        await AsyncStorage.setItem('user', JSON.stringify(userObj));
-      }
+      if (res) {
+        // 2. Only if DB save succeeds, update local storage
+        const userStr = await AsyncStorage.getItem('user');
+        let updatedUser = {};
+        if (userStr) {
+          updatedUser = JSON.parse(userStr);
+          updatedUser.name = username;
+          updatedUser.username = username.toLowerCase().replace(/\s/g, '');
+          updatedUser.gender = gender;
+          updatedUser.avatarIndex = parseInt(selectedAvatar, 10);
+          updatedUser.interests = selectedInterests;
+          await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+        }
 
-      await AsyncStorage.setItem('userGender', gender);
-      await AsyncStorage.setItem('userAvatarIndex', selectedAvatar);
-      await AsyncStorage.setItem('userName', username);
-      router.back();
+        await AsyncStorage.setItem('userGender', gender);
+        await AsyncStorage.setItem('userAvatarIndex', selectedAvatar);
+        await AsyncStorage.setItem('userName', username);
+        
+        Alert.alert('Success', 'Profile updated successfully');
+        router.back();
+      }
     } catch (e) {
       console.error('Save error:', e);
+      Alert.alert('Error', e.message || 'Failed to save profile to database. Please check your connection.');
     } finally {
       setIsSaving(false);
     }

@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { ms, s, vs } from '../../utils/responsive';
+import { wp, hp } from '../../utils/responsive';
 
 
 import { chatAPI } from '../../utils/api';
@@ -130,6 +130,43 @@ export default function MessagesScreen() {
             )}
           </View>
         </View>
+
+        <View style={styles.quickActions}>
+          <TouchableOpacity 
+            onPress={() => router.push({
+              pathname: '/(call)/connecting',
+              params: {
+                name: item.name,
+                callType: 'audio',
+                callId: `call_${Date.now()}`,
+                roomId: `room_${Date.now()}`,
+                listenerId: item.id,
+                avatarIndex: item.avatarIndex,
+                gender: item.gender
+              }
+            })}
+            style={styles.quickActionBtn}
+          >
+            <Ionicons name="call-outline" size={20} color="#22C55E" />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={() => router.push({
+              pathname: '/(call)/connecting',
+              params: {
+                name: item.name,
+                callType: 'video',
+                callId: `call_${Date.now()}`,
+                roomId: `room_${Date.now()}`,
+                listenerId: item.id,
+                avatarIndex: item.avatarIndex,
+                gender: item.gender
+              }
+            })}
+            style={styles.quickActionBtn}
+          >
+            <Ionicons name="videocam-outline" size={20} color="#3B82F6" />
+          </TouchableOpacity>
+        </View>
       </TouchableOpacity>
     );
   };
@@ -184,11 +221,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: s(20),
-    paddingVertical: vs(12),
+    paddingHorizontal: wp(5),
+    paddingVertical: hp(1.5),
   },
   headerTitle: {
-    fontSize: ms(28, 0.3),
+    fontSize: wp(7.5),
     fontWeight: '900',
     color: '#fff',
     fontFamily: 'Inter_900Black',
@@ -197,53 +234,53 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#111827',
-    marginHorizontal: s(20),
-    marginBottom: vs(16),
-    borderRadius: 16,
-    paddingHorizontal: s(16),
-    height: vs(48),
+    marginHorizontal: wp(5),
+    marginBottom: hp(2),
+    borderRadius: wp(4),
+    paddingHorizontal: wp(4),
+    height: hp(6),
     borderWidth: 1,
     borderColor: '#1F2937',
   },
   searchIcon: {
-    marginRight: s(10),
+    marginRight: wp(2.5),
   },
   searchInput: {
     flex: 1,
     color: '#fff',
-    fontSize: ms(15),
+    fontSize: wp(3.8),
     fontFamily: 'Inter_400Regular',
   },
   listContainer: {
-    paddingHorizontal: s(20),
-    paddingBottom: vs(100),
+    paddingHorizontal: wp(5),
+    paddingBottom: hp(12),
   },
   messageItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: vs(12),
+    paddingVertical: hp(1.5),
     borderBottomWidth: 1,
     borderBottomColor: '#1F2937',
   },
   avatarContainer: {
     position: 'relative',
-    marginRight: s(16),
+    marginRight: wp(4),
   },
   avatar: {
-    width: s(54),
-    height: s(54),
-    borderRadius: s(27),
+    width: wp(14),
+    height: wp(14),
+    borderRadius: wp(7),
     backgroundColor: '#1F2937',
   },
   onlineIndicator: {
     position: 'absolute',
-    bottom: 2,
-    right: 2,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+    bottom: wp(0.5),
+    right: wp(0.5),
+    width: wp(3.5),
+    height: wp(3.5),
+    borderRadius: wp(1.75),
     backgroundColor: '#10B981',
-    borderWidth: 2,
+    borderWidth: wp(0.5),
     borderColor: '#000',
   },
   messageDetails: {
@@ -254,18 +291,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: vs(4),
+    marginBottom: hp(0.5),
   },
   nameText: {
-    fontSize: ms(16),
+    fontSize: wp(4),
     fontWeight: '700',
     color: '#fff',
     fontFamily: 'Inter_700Bold',
     flex: 1,
-    marginRight: s(10),
+    marginRight: wp(2.5),
   },
   timeText: {
-    fontSize: ms(12),
+    fontSize: wp(3),
     color: '#6B7280',
     fontFamily: 'Inter_500Medium',
   },
@@ -279,40 +316,55 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   messageText: {
-    fontSize: ms(14),
+    fontSize: wp(3.5),
     color: '#9CA3AF',
     fontFamily: 'Inter_400Regular',
     flex: 1,
-    marginRight: s(10),
+    marginRight: wp(2.5),
   },
   messageTextUnread: {
     color: '#fff',
     fontWeight: '600',
     fontFamily: 'Inter_600SemiBold',
   },
-  unreadBadge: {
-    minWidth: s(20),
-    height: s(20),
-    borderRadius: s(10),
+  quickActions: {
+    flexDirection: 'row',
+    gap: wp(2),
+    marginLeft: wp(2),
+  },
+  quickActionBtn: {
+    width: wp(10),
+    height: wp(10),
+    borderRadius: wp(5),
+    backgroundColor: '#111827',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: s(6),
+    borderWidth: 1,
+    borderColor: '#1F2937',
+  },
+  unreadBadge: {
+    minWidth: wp(5),
+    height: wp(5),
+    borderRadius: wp(2.5),
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: wp(1.5),
   },
   unreadText: {
     color: '#fff',
-    fontSize: ms(11),
+    fontSize: wp(2.8),
     fontWeight: '800',
     fontFamily: 'Inter_900Black',
   },
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: vs(60),
+    paddingTop: hp(8),
   },
   emptyText: {
     color: '#6B7280',
-    fontSize: ms(15),
+    fontSize: wp(3.8),
     fontFamily: 'Inter_500Medium',
-    marginTop: vs(12),
+    marginTop: hp(1.5),
   },
 });

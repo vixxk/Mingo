@@ -38,6 +38,11 @@ class RatingService {
       feedback,
     });
 
+    // Also persist rating on the session document for quick admin access
+    session.rating = rating;
+    session.feedback = feedback;
+    await session.save();
+
     
     const updatedListener = await Listener.updateRating(session.listenerId, rating);
 

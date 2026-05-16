@@ -104,8 +104,28 @@ const sendListenerApprovalNotification = async (fcmToken) => {
   return sendNotificationToDevice(
     fcmToken,
     'Congratulations! 🎉',
-    'Your listener application has been approved by the admin. You can now start taking calls!',
+    'Your listener application has been approved. You can now start taking calls!',
     { type: 'listener_approved' }
+  );
+};
+
+const sendListenerRejectionNotification = async (fcmToken, reason) => {
+  return sendNotificationToDevice(
+    fcmToken,
+    'Application Update ⚠️',
+    reason || 'Your listener application was not approved at this time. Please check your profile for details.',
+    { type: 'listener_rejected' }
+  );
+};
+
+const sendProfileUpdateNotification = async (fcmToken, isApproved) => {
+  return sendNotificationToDevice(
+    fcmToken,
+    isApproved ? 'Profile Updated! ✅' : 'Profile Update Rejected ❌',
+    isApproved 
+      ? 'Your profile changes have been approved and are now live.'
+      : 'Your recent profile changes were not approved. Please review and try again.',
+    { type: 'profile_update_status', isApproved: String(isApproved) }
   );
 };
 
@@ -116,5 +136,7 @@ module.exports = {
   sendNotificationToTopic,
   sendPaymentSuccessNotification,
   sendZeroBalanceNotification,
-  sendListenerApprovalNotification
+  sendListenerApprovalNotification,
+  sendListenerRejectionNotification,
+  sendProfileUpdateNotification,
 };

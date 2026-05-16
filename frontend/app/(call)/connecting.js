@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,12 +7,16 @@ import {
   TouchableOpacity,
   Animated,
   Easing,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { socketService } from '../../utils/socket';
+import { callAPI } from '../../utils/api';
 import { ms, s, vs, SCREEN_HEIGHT } from '../../utils/responsive';
 
 const INTERESTS = [
@@ -58,20 +62,26 @@ export default function ConnectingScreen() {
   const router = useRouter();
   const { 
     name = 'Priya Sharma',
-    callId,
-    roomId,
+    callId: initialCallId,
+    roomId: initialRoomId,
     listenerId,
     avatarIndex,
     gender,
     zegoAppId,
     zegoAppSign,
-    callType = 'audio'
+    callType = 'audio',
+    isRandom
   } = useLocalSearchParams();
+
+  // We'll use state to hold the real IDs once they come back from the API
+  const [realCallId, setRealCallId] = React.useState(initialCallId);
+  const [realRoomId, setRealRoomId] = React.useState(initialRoomId);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const dotsAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    // Start animations
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, { toValue: 1.06, duration: 1200, useNativeDriver: true }),
@@ -88,15 +98,175 @@ export default function ConnectingScreen() {
       })
     ).start();
 
-    const timer = setTimeout(() => {
-      const targetScreen = callType === 'video' ? '/(call)/video-call' : '/(call)/audio-call';
-      router.replace({ 
-        pathname: targetScreen, 
-        params: { name, callId, roomId, listenerId, avatarIndex, gender, zegoAppId, zegoAppSign, callType } 
-      });
-    }, 2500);
+    // Signal incoming call to listener via socket
+    const signalCall = async () => {
+      try {
+        const userStr = await AsyncStorage.getItem('user');
+        const userGender = await AsyncStorage.getItem('userGender') || 'Female';
+        const userAvatar = await AsyncStorage.getItem('userAvatarIndex') || '0';
+        
+        let callerName = 'User';
+        let callerId = null;
+        
+        if (userStr) {
+          const user = JSON.parse(userStr);
+          callerName = user.name || user.username || 'Mingo User';
+          callerId = user.id || user._id;
+        }
 
-    return () => clearTimeout(timer);
+        await socketService.connect();
+        
+        // Listen for acceptance
+        socketService.on('call_accepted', (data) => {
+          console.log('Call accepted by listener!');
+          const targetScreen = callType === 'video' ? '/(call)/video-call' : '/(call)/audio-call';
+          router.replace({ 
+            pathname: targetScreen, 
+            params: { 
+              name, 
+              callId: data.sessionId || realCallId || initialCallId, 
+              roomId: data.roomId || realRoomId || initialRoomId, 
+              listenerId, 
+              avatarIndex, 
+              gender, 
+              zegoAppId, 
+              zegoAppSign, 
+              callType 
+            } 
+          });
+        });
+
+        // Listen for rejection
+        socketService.on('call_rejected', (data) => {
+          console.log('Call rejected by listener:', data.reason);
+          router.replace({
+            pathname: '/(call)/user-busy',
+            params: { name, reason: data.reason || 'rejected' },
+          });
+        });
+
+        if (isRandom === 'true') {
+          // RANDOM CALL FLOW
+          const userRole = await AsyncStorage.getItem('userRole') || 'USER';
+          
+          socketService.on('random_match_found', async (data) => {
+            console.log('Random match found:', data);
+            
+            try {
+              // Now that we have a partner, create a real session in DB
+              const targetListenerId = data.role === 'LISTENER' ? data.partnerId : callerId;
+              const sessionRes = await callAPI.startCall(targetListenerId, callType);
+              
+              const finalSessionId = sessionRes.data.sessionId;
+              const finalRoomId = sessionRes.data.roomId;
+              
+              setRealCallId(finalSessionId);
+              setRealRoomId(finalRoomId);
+
+              // Found a partner, now signal them
+              socketService.emit('call_incoming', {
+                listenerId: targetListenerId,
+                callData: {
+                  callerId: data.role === 'USER' ? data.partnerId : callerId,
+                  callerName: data.partnerName,
+                  callType,
+                  callId: finalSessionId,
+                  roomId: finalRoomId,
+                  avatarIndex: data.partnerAvatar,
+                  gender: data.partnerGender,
+                  role: data.role
+                }
+              });
+              
+              // Navigate to call screen (caller side)
+              const targetScreen = callType === 'video' ? '/(call)/video-call' : '/(call)/audio-call';
+              router.replace({ 
+                pathname: targetScreen, 
+                params: { 
+                  name: data.partnerName, 
+                  callId: finalSessionId, 
+                  roomId: finalRoomId, 
+                  listenerId: targetListenerId,
+                  avatarIndex: data.partnerAvatar, 
+                  gender: data.partnerGender,
+                  zegoAppId, 
+                  zegoAppSign, 
+                  callType 
+                } 
+              });
+            } catch (err) {
+              console.error('Error starting random call session:', err);
+              Alert.alert('Error', err.message || 'Failed to start call session');
+              router.back();
+            }
+          });
+
+          socketService.on('searching_random', (data) => {
+            console.log(data.message);
+          });
+
+          socketService.on('random_search_timeout', () => {
+            Alert.alert('Timeout', 'No online partner found. Please try again later.');
+            router.back();
+          });
+
+          socketService.emit('request_random_call', { role: userRole });
+        } else {
+          // DIRECT CALL FLOW
+          try {
+            // 1. Create real session in backend first
+            const sessionRes = await callAPI.startCall(listenerId, callType);
+            const finalSessionId = sessionRes.data.sessionId;
+            const finalRoomId = sessionRes.data.roomId;
+            
+            setRealCallId(finalSessionId);
+            setRealRoomId(finalRoomId);
+
+            // 2. Signal the listener with the real IDs
+            socketService.emit('call_incoming', {
+              listenerId,
+              callData: {
+                callerId,
+                callerName,
+                callType,
+                callId: finalSessionId,
+                roomId: finalRoomId,
+                avatarIndex: userAvatar,
+                gender: userGender,
+              }
+            });
+          } catch (err) {
+            console.error('Error starting call session:', err);
+            Alert.alert('Error', err.message || 'Failed to start call session');
+            router.back();
+          }
+        }
+
+        // Timeout if no response after 30 seconds
+        const callTimeout = setTimeout(() => {
+          socketService.off('call_accepted');
+          socketService.off('call_rejected');
+          router.replace({
+            pathname: '/(call)/user-busy',
+            params: { name, reason: 'timeout' },
+          });
+        }, 30000);
+
+        return () => clearTimeout(callTimeout);
+      } catch (err) {
+        console.error('Error signaling call:', err);
+      }
+    };
+
+    const cleanupSignal = signalCall();
+
+    return () => {
+      socketService.off('call_accepted');
+      socketService.off('call_rejected');
+      socketService.off('random_match_found');
+      socketService.off('searching_random');
+      socketService.off('random_search_timeout');
+    };
   }, []);
 
   return (
@@ -109,7 +279,6 @@ export default function ConnectingScreen() {
         style={StyleSheet.absoluteFill}
       />
 
-      {}
       <View style={[styles.topSection, { paddingTop: insets.top + vs(30) }]}>
         <Animated.View style={[styles.avatarRing, { transform: [{ scale: pulseAnim }] }]}>
           <Image
@@ -121,7 +290,6 @@ export default function ConnectingScreen() {
         <Text style={styles.connectingText}>Connecting...</Text>
       </View>
 
-      {}
       <View style={styles.interestsSection}>
         <View style={styles.chipsWrap}>
           {INTERESTS.map((item, index) => (
@@ -133,7 +301,6 @@ export default function ConnectingScreen() {
         </View>
       </View>
 
-      {}
       <View style={[styles.bottomSection, { paddingBottom: Math.max(insets.bottom + vs(16), vs(32)) }]}>
         <Text style={styles.safetyText}>
           Keep the conversation safe & respectful.
@@ -155,8 +322,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-
-  
   topSection: {
     alignItems: 'center',
     marginBottom: vs(20),
@@ -188,8 +353,6 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     fontFamily: 'Inter_400Regular',
   },
-
-  
   interestsSection: {
     flex: 1,
     justifyContent: 'center',
@@ -217,8 +380,6 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     fontFamily: 'Inter_500Medium',
   },
-
-  
   bottomSection: {
     alignItems: 'center',
     paddingHorizontal: s(24),

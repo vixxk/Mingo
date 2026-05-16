@@ -13,18 +13,21 @@ const { height: SH } = Dimensions.get('window');
 
 const SETTINGS_SECTIONS = [
   {
-    title: 'Platform',
+    title: 'Platform Control',
     items: [
-      { id:'1', label:'Send a Notification', icon:'notifications-outline', action:'notify' },
-      { id:'2', label:'Platform Analytics', icon:'analytics-outline', action:'navigate' },
-      { id:'3', label:'Revenue Reports', icon:'bar-chart-outline', action:'navigate' },
+      { id:'0', label:'System Configuration', icon:'settings-outline', route:'/(admin)/system-config' },
+      { id:'1', label:'Push Campaigns', icon:'megaphone-outline', route:'/(admin)/admin-notifications' },
+      { id:'2', label:'System Analytics', icon:'stats-chart-outline', route:'/(admin)/admin-analytics' },
+      { id:'3', label:'Wallet & Coins', icon:'wallet-outline', route:'/(admin)/admin-wallet' },
+      { id:'4', label:'Payout Management', icon:'cash-outline', route:'/(admin)/admin-payouts' },
     ],
   },
   {
     title: 'Management',
     items: [
-      { id:'4', label:'Listener Categories', icon:'list-outline', action:'navigate' },
-      { id:'6', label:'Member Reports', icon:'flag-outline', action:'navigate' },
+      { id:'5', label:'Banned Members', icon:'ban-outline', route:'/(admin)/banned-members' },
+      { id:'6', label:'Member Reports', icon:'flag-outline', route:'/(admin)/member-reports' },
+      { id:'7', label:'Best Choice', icon:'star-outline', route:'/(admin)/best-choice' },
     ],
   },
 ];
@@ -41,20 +44,15 @@ export default function AdminSettingsScreen() {
 
   const confirmLogout = async () => {
     try { 
-      await AsyncStorage.multiRemove(['isAdmin', 'userToken', 'user', 'listenerStatus']); 
+      await AsyncStorage.multiRemove(['isAdmin', 'userToken', 'token', 'user', 'listenerStatus']); 
     } catch (e) {}
     setShowLogoutPopup(false);
     router.replace('/welcome');
   };
 
   const handleMenuPress = (item) => {
-    if (item.action === 'notify') {
-      setShowNotificationPopup(true);
-    } else if (item.label === 'Member Reports') {
-      router.push('/(admin)/member-reports');
-    } else {
-      
-      Alert.alert('Coming Soon', `${item.label} page is under construction.`);
+    if (item.route) {
+      router.push(item.route);
     }
   };
 

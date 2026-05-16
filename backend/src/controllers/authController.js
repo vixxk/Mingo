@@ -24,8 +24,8 @@ class AuthController {
 
     static async signup(req, res, next) {
     try {
-      const { name, username, phone, otp } = req.body;
-      const result = await AuthService.signup({ name, username, phone, otp });
+      const { name, username, phone, otp, gender, language, avatarIndex } = req.body;
+      const result = await AuthService.signup({ name, username, phone, otp, gender, language, avatarIndex });
       return ApiResponse.created(res, result, 'User registered successfully');
     } catch (err) {
       next(err);

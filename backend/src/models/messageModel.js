@@ -10,12 +10,11 @@ const messageSchema = new mongoose.Schema(
     sender: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
+      default: null,
     },
     senderModel: {
       type: String,
-      required: true,
-      enum: ['User'], 
+      enum: ['User', 'Listener', 'System'], 
       default: 'User'
     },
     content: {
@@ -24,7 +23,7 @@ const messageSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['text', 'image', 'audio', 'sticker'],
+      enum: ['text', 'image', 'audio', 'sticker', 'system'],
       default: 'text',
     },
     mediaUrl: {

@@ -42,10 +42,36 @@ const sessionSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    lastDeductionTime: {
+      type: Date,
+      default: null,
+    },
+    rating: {
+      type: Number,
+      default: null,
+      min: 1,
+      max: 5,
+    },
+    feedback: {
+      type: String,
+      default: null,
+    },
     status: {
       type: String,
       enum: ['active', 'completed', 'cancelled', 'missed'],
       default: 'active',
+    },
+    zegoCost: {
+      type: Number,
+      default: 0,
+    },
+    infraCost: {
+      type: Number,
+      default: 0,
+    },
+    platformProfit: {
+      type: Number,
+      default: 0,
     },
   },
   {
@@ -67,9 +93,23 @@ sessionSchema.statics.endSession = async function (sessionId) {
   const durationMs = endTime - session.startTime;
   const durationMinutes = Math.ceil(durationMs / 60000);
 
-  const coinsPerMinute = session.callType === 'video' ? 6 : 1;
+  const isVideo = session.callType === 'video';
+  
+  // Section A - Rates per minute
+  const coinsPerMinute = isVideo ? 30 : 10; // 30 coins = ₹15, 10 coins = ₹5
+  const payoutRate = isVideo ? 4.00 : 1.50;
+  const zegoRate = isVideo ? 0.20 : 0.06;
+  const infraRate = isVideo ? 0.15 : 0.09;
+
   const coinsDeducted = durationMinutes * coinsPerMinute;
-  const listenerEarnings = Math.floor(coinsDeducted * 0.6);
+  const listenerEarnings = durationMinutes * payoutRate;
+  const zegoCost = durationMinutes * zegoRate;
+  const infraCost = durationMinutes * infraRate;
+  
+  // Selling Price (in ₹)
+  const sellingPrice = isVideo ? 15.00 : 5.00;
+  const totalRevenue = durationMinutes * sellingPrice;
+  const platformProfit = totalRevenue - (listenerEarnings + zegoCost + infraCost);
 
   return this.findOneAndUpdate(
     { _id: sessionId, status: 'active' },
@@ -79,6 +119,9 @@ sessionSchema.statics.endSession = async function (sessionId) {
       duration: durationMinutes,
       coinsDeducted,
       listenerEarnings,
+      zegoCost,
+      infraCost,
+      platformProfit,
     },
     { new: true }
   );

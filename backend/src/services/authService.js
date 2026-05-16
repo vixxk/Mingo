@@ -22,9 +22,12 @@ class AuthService {
     }
 
     try {
+      // BYPASS: Skip Twilio SMS sending for now
+      console.log(`[BYPASS] OTP send requested for: ${phone}. Skipping Twilio call.`);
+      return { message: 'OTP sent successfully (Bypassed for testing)' };
+
+      /* 
       const client = twilio(config.twilio.accountSid, config.twilio.authToken);
-      
-      
       const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
 
       await client.verify.v2.services(config.twilio.serviceSid)
@@ -32,6 +35,7 @@ class AuthService {
         .create({ to: formattedPhone, channel: 'sms' });
       
       return { message: 'OTP sent successfully' };
+      */
     } catch (error) {
       console.error('Twilio Verify Send Error:', error.message);
       throw new AppError('Failed to send OTP SMS', 500);
@@ -58,7 +62,7 @@ class AuthService {
     return await AuthService.sendOtp(phone);
   }
 
-    static async signup({ name, username, phone, otp }) {
+    static async signup({ name, username, phone, otp, gender, language, avatarIndex }) {
     if (!phone || !otp) {
       throw new AppError('Phone number and OTP are required', 400);
     }
@@ -67,6 +71,10 @@ class AuthService {
     const isTestListener = phone === config.test.listenerPhone && otp === config.test.listenerOtp;
 
     if (!isTestAdmin && !isTestListener) {
+      // BYPASS: Skip Twilio verification check for now
+      console.log(`[BYPASS] OTP verification skipped for signup: ${phone}`);
+      
+      /*
       try {
         const client = twilio(config.twilio.accountSid, config.twilio.authToken);
         const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
@@ -83,6 +91,7 @@ class AuthService {
         console.error('Twilio Verify Check Error:', error.message);
         throw new AppError('Invalid or expired OTP', 400);
       }
+      */
     }
 
     
@@ -96,10 +105,14 @@ class AuthService {
       name,
       username,
       phone,
+      gender,
+      language,
+      avatarIndex,
       role: isTestAdmin ? 'ADMIN' : (isTestListener ? 'LISTENER' : 'USER'),
       isVerified: true,
       isFirstSignup: true,
       signupTimestamp: new Date(),
+      coins: 50,
     });
 
     if (isTestListener) {
@@ -144,6 +157,10 @@ class AuthService {
     const isTestListener = phone === config.test.listenerPhone && otp === config.test.listenerOtp;
 
     if (!isTestAdmin && !isTestListener) {
+      // BYPASS: Skip Twilio verification check for now
+      console.log(`[BYPASS] OTP verification skipped for login: ${phone}`);
+
+      /*
       try {
         const client = twilio(config.twilio.accountSid, config.twilio.authToken);
         const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
@@ -160,6 +177,7 @@ class AuthService {
         console.error('Twilio Verify Check Error:', error.message);
         throw new AppError('Invalid or expired OTP', 400);
       }
+      */
     }
 
     let user = await User.findByPhone(phone);

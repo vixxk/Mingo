@@ -32,7 +32,7 @@ const userSchema = new mongoose.Schema(
 
     role: {
       type: String,
-      enum: ['USER', 'LISTENER', 'ADMIN'],
+      enum: ['USER', 'LISTENER', 'ADMIN', 'SUPPORT_ADMIN', 'FINANCE_ADMIN', 'MODERATOR_ADMIN'],
       default: 'USER',
     },
 
@@ -51,7 +51,7 @@ const userSchema = new mongoose.Schema(
     },
     coins: {
       type: Number,
-      default: 0,
+      default: 50,
       min: 0,
     },
     interests: [{

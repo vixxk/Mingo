@@ -19,6 +19,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { ms, s, vs } from '../../utils/responsive';
 import { adminAPI } from '../../utils/api';
+import { AdminPageSkeleton } from '../../components/admin/Skeleton';
 
 const { height: SH } = Dimensions.get('window');
 
@@ -116,10 +117,9 @@ export default function BestChoiceScreen() {
 
   if (loading) {
     return (
-      <View style={[st.container, st.center, { paddingTop: insets.top }]}>
+      <View style={[st.container, { paddingTop: insets.top }]}>
         <StatusBar style="light" />
-        <ActivityIndicator size="large" color="#F59E0B" />
-        <Text style={st.loadingText}>Loading listeners...</Text>
+        <AdminPageSkeleton type="list" />
       </View>
     );
   }

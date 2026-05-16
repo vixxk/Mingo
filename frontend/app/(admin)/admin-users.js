@@ -15,12 +15,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { useFocusEffect } from 'expo-router';
-import { ms, s, vs } from '../../utils/responsive';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { ms, s, vs, wp, hp } from '../../utils/responsive';
 import UserDetailModal from '../../components/admin/UserDetailModal';
 import { adminAPI } from '../../utils/api';
-
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+import { AdminPageSkeleton } from '../../components/admin/Skeleton';
 
 const getAvatarImage = (gender, index) => {
   const parsedIndex = parseInt(index, 10) || 0;
@@ -53,30 +52,42 @@ const getAvatarImage = (gender, index) => {
 
 export default function AdminUsersScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [users, setUsers] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
   const [showDetail, setShowDetail] = useState(false);
   const [filter, setFilter] = useState('all');
+  const [loading, setLoading] = useState(true);
+  const FILTER_CONFIG = {
+    all: { icon: 'layers', color: '#8B5CF6', bg: 'rgba(139,92,246,0.1)' },
+    active: { icon: 'checkmark-circle', color: '#22C55E', bg: 'rgba(34,197,94,0.1)' },
+    inactive: { icon: 'ban', color: '#EF4444', bg: 'rgba(239,68,68,0.1)' },
+  };
 
   const loadUsers = async () => {
     try {
+      setLoading(true);
       const res = await adminAPI.getUsers({ limit: 100 });
       if (res?.data) {
-        const formatted = res.data.map(u => ({
+        const usersList = res.data.users || (Array.isArray(res.data) ? res.data : []);
+        const formatted = usersList.map(u => ({
+          ...u,
           id: u._id,
           name: u.name || 'Unknown',
           phone: u.phone || 'Unknown',
           language: u.language || 'English',
           avatar: getAvatarImage(u.gender, u.avatarIndex),
           status: u.isBanned ? 'inactive' : 'active',
-          appOpens: u.appOpens || 0,
-          totalTimeSpent: u.totalTimeSpent || '0h 0m'
+          totalCalls: u.totalCalls || 0,
+          coins: u.coins || 0
         }));
         setUsers(formatted);
       }
     } catch (e) {
       console.log('Failed to fetch users:', e);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -86,18 +97,52 @@ export default function AdminUsersScreen() {
     }, [])
   );
 
+  const handleBanUser = (userId, isCurrentlyBanned) => {
+    Alert.alert(
+      isCurrentlyBanned ? 'Unban User' : 'Ban User',
+      `Are you sure you want to ${isCurrentlyBanned ? 'unban' : 'ban'} this user?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: isCurrentlyBanned ? 'Unban' : 'Ban', 
+          style: isCurrentlyBanned ? 'default' : 'destructive', 
+          onPress: async () => {
+            try {
+              await adminAPI.toggleBanUser(userId);
+              setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: isCurrentlyBanned ? 'active' : 'inactive' } : u));
+              setShowDetail(false);
+              setSelectedUser(null);
+            } catch(e) {
+              Alert.alert('Error', 'Failed to update user status');
+            }
+          }
+        },
+      ]
+    );
+  };
+
   const handleDeleteUser = (userId) => {
-    Alert.alert('Ban User', 'Are you sure you want to ban this user?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Ban', style: 'destructive', onPress: async () => {
-        try {
-          await adminAPI.toggleBanUser(userId);
-          setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: 'inactive' } : u));
-          setShowDetail(false);
-          setSelectedUser(null);
-        } catch(e) {}
-      }},
-    ]);
+    Alert.alert(
+      'Delete User Permanently',
+      'This action cannot be undone. All user data will be lost. Are you sure?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive', 
+          onPress: async () => {
+            try {
+              await adminAPI.deleteUser(userId);
+              setUsers(prev => prev.filter(u => u.id !== userId));
+              setShowDetail(false);
+              setSelectedUser(null);
+            } catch(e) {
+              Alert.alert('Error', 'Failed to delete user');
+            }
+          }
+        },
+      ]
+    );
   };
 
   const filteredUsers = users.filter(u => {
@@ -106,6 +151,15 @@ export default function AdminUsersScreen() {
     const matchesFilter = filter === 'all' || u.status === filter;
     return matchesSearch && matchesFilter;
   });
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <StatusBar style="light" />
+        <AdminPageSkeleton type="list" />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -116,12 +170,16 @@ export default function AdminUsersScreen() {
         user={selectedUser}
         onClose={() => { setShowDetail(false); setSelectedUser(null); }}
         onDelete={handleDeleteUser}
+        onBan={handleBanUser}
       />
 
-      {}
+      {/* Header */}
       <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="chevron-back" size={24} color="#fff" />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Users</Text>
-        <Text style={styles.headerCount}>{users.length} total</Text>
+        <Text style={styles.headerCount}>{users.length}</Text>
       </View>
 
       {}
@@ -137,19 +195,36 @@ export default function AdminUsersScreen() {
       </View>
 
       {}
-      <View style={styles.filterRow}>
-        {['all', 'active', 'inactive'].map(f => (
-          <TouchableOpacity
-            key={f}
-            style={[styles.filterTab, filter === f && styles.filterTabActive]}
-            onPress={() => setFilter(f)}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.filterTabText, filter === f && styles.filterTabTextActive]}>
-              {f.charAt(0).toUpperCase() + f.slice(1)}
-            </Text>
-          </TouchableOpacity>
-        ))}
+      <View style={styles.filterContainer}>
+        <View style={styles.filterWrapper}>
+          {['all', 'active', 'inactive'].map((f) => {
+            const active = filter === f;
+            const config = FILTER_CONFIG[f];
+            return (
+              <TouchableOpacity
+                key={f}
+                style={[
+                  styles.filterTab,
+                  active && { backgroundColor: config.bg, borderColor: config.color }
+                ]}
+                onPress={() => setFilter(f)}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={active ? config.icon : `${config.icon}-outline`}
+                  size={16}
+                  color={active ? config.color : '#6B7280'}
+                />
+                <Text style={[
+                  styles.filterTabText,
+                  active && { color: config.color, fontWeight: '700' }
+                ]}>
+                  {f.charAt(0).toUpperCase() + f.slice(1)}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
 
       {}
@@ -158,29 +233,36 @@ export default function AdminUsersScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {filteredUsers.map((user) => (
-          <TouchableOpacity
-            key={user.id}
-            style={styles.userCard}
-            activeOpacity={0.7}
-            onPress={() => { setSelectedUser(user); setShowDetail(true); }}
-          >
-            <Image source={user.avatar} style={styles.userAvatar} />
-            <View style={styles.userInfo}>
-              <View style={styles.userNameRow}>
-                <Text style={styles.userName}>{user.name}</Text>
-                <View style={[styles.statusDot, user.status === 'active' ? styles.dotActive : styles.dotInactive]} />
+        {filteredUsers.length === 0 ? (
+          <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: hp(10) }}>
+            <Ionicons name="people-outline" size={64} color="#333" />
+            <Text style={{ color: '#6B7280', fontSize: ms(16, 0.3), fontFamily: 'Inter_500Medium', marginTop: vs(12) }}>No users found</Text>
+          </View>
+        ) : (
+          filteredUsers.map((user) => (
+            <TouchableOpacity
+              key={user.id}
+              style={styles.userCard}
+              activeOpacity={0.7}
+              onPress={() => { setSelectedUser(user); setShowDetail(true); }}
+            >
+              <Image source={user.avatar} style={styles.userAvatar} />
+              <View style={styles.userInfo}>
+                <View style={styles.userNameRow}>
+                  <Text style={styles.userName}>{user.name}</Text>
+                  <View style={[styles.statusDot, user.status === 'active' ? styles.dotActive : styles.dotInactive]} />
+                </View>
+                <Text style={styles.userMeta}>{user.phone} • {user.language}</Text>
+                <View style={styles.userStats}>
+                  <Text style={styles.userStatItem}>📞 {user.totalCalls} calls</Text>
+                  <Text style={styles.userStatItem}>🪙 {user.coins} coins</Text>
+                </View>
               </View>
-              <Text style={styles.userMeta}>{user.phone} • {user.language}</Text>
-              <View style={styles.userStats}>
-                <Text style={styles.userStatItem}>📱 {user.appOpens} opens</Text>
-                <Text style={styles.userStatItem}>⏱ {user.totalTimeSpent}</Text>
-              </View>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color="#4B5563" />
-          </TouchableOpacity>
-        ))}
-        <View style={{ height: SCREEN_HEIGHT * 0.04 }} />
+              <Ionicons name="chevron-forward" size={18} color="#4B5563" />
+            </TouchableOpacity>
+          ))
+        )}
+        <View style={{ height: hp(4) }} />
       </ScrollView>
     </View>
   );
@@ -193,21 +275,36 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    paddingHorizontal: s(16),
-    paddingVertical: SCREEN_HEIGHT * 0.015,
+    alignItems: 'center',
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1.5),
+    borderBottomWidth: 1,
+    borderBottomColor: '#1A1A1A',
+  },
+  backBtn: {
+    width: wp(10),
+    height: wp(10),
+    borderRadius: wp(5),
+    backgroundColor: '#141414',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: wp(3),
   },
   headerTitle: {
-    fontSize: ms(28, 0.3),
-    fontWeight: '900',
+    flex: 1,
+    fontSize: ms(20),
     color: '#fff',
     fontFamily: 'Inter_900Black',
   },
   headerCount: {
-    fontSize: ms(13, 0.3),
-    color: '#6B7280',
-    fontFamily: 'Inter_500Medium',
+    fontSize: ms(14),
+    color: '#A855F7',
+    fontFamily: 'Inter_700Bold',
+    backgroundColor: 'rgba(168,85,247,0.12)',
+    paddingHorizontal: s(10),
+    paddingVertical: vs(4),
+    borderRadius: 8,
+    overflow: 'hidden',
   },
 
   
@@ -215,9 +312,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#111',
-    marginHorizontal: s(16),
-    paddingHorizontal: s(14),
-    height: SCREEN_HEIGHT * 0.055,
+    marginHorizontal: wp(4),
+    paddingHorizontal: wp(4),
+    height: hp(5.5),
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#1F1F1F',
@@ -231,39 +328,40 @@ const styles = StyleSheet.create({
   },
 
   
-  filterRow: {
-    flexDirection: 'row',
-    paddingHorizontal: s(16),
-    marginTop: SCREEN_HEIGHT * 0.012,
-    marginBottom: SCREEN_HEIGHT * 0.01,
-    gap: s(8),
+  filterContainer: {
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1.2),
   },
-  filterTab: {
-    paddingHorizontal: s(16),
-    paddingVertical: SCREEN_HEIGHT * 0.008,
-    borderRadius: 20,
+  filterWrapper: {
+    flexDirection: 'row',
     backgroundColor: '#111',
+    borderRadius: ms(14),
+    padding: ms(4),
     borderWidth: 1,
     borderColor: '#1F1F1F',
   },
-  filterTabActive: {
-    backgroundColor: 'rgba(168, 85, 247, 0.15)',
-    borderColor: '#A855F7',
+  filterTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: hp(1.2),
+    borderRadius: ms(10),
+    gap: s(6),
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   filterTabText: {
-    fontSize: ms(12, 0.3),
+    fontSize: ms(11),
     color: '#6B7280',
     fontFamily: 'Inter_500Medium',
-  },
-  filterTabTextActive: {
-    color: '#A855F7',
   },
 
   
   scrollView: { flex: 1 },
   scrollContent: {
-    paddingHorizontal: s(16),
-    paddingTop: SCREEN_HEIGHT * 0.005,
+    paddingHorizontal: wp(4),
+    paddingTop: hp(0.5),
   },
 
   
@@ -272,16 +370,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#141414',
     borderRadius: 18,
-    padding: s(14),
-    marginBottom: SCREEN_HEIGHT * 0.01,
+    padding: wp(4),
+    marginBottom: hp(1),
     borderWidth: 1,
     borderColor: '#1F1F1F',
   },
   userAvatar: {
-    width: SCREEN_HEIGHT * 0.06,
-    height: SCREEN_HEIGHT * 0.06,
-    borderRadius: SCREEN_HEIGHT * 0.03,
-    marginRight: s(12),
+    width: hp(6),
+    height: hp(6),
+    borderRadius: hp(3),
+    marginRight: wp(3),
   },
   userInfo: {
     flex: 1,

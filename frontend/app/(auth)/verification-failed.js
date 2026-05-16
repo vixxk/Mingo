@@ -11,11 +11,22 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, SCREEN_WIDTH, SCREEN_HEIGHT } from '../../utils/responsive';
+import { useState, useEffect } from 'react';
 
 export default function VerificationFailedScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const [isFemale, setIsFemale] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem('userGender').then((g) => {
+      if (g && g.toLowerCase() === 'female') {
+        setIsFemale(true);
+      }
+    });
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -66,13 +77,15 @@ export default function VerificationFailedScreen() {
         </View>
 
         {}
-        <TouchableOpacity
-          style={styles.listenerBtn}
-          activeOpacity={0.85}
-          onPress={() => router.push('/listener')}
-        >
-          <Text style={styles.listenerBtnText}>Become a Listener</Text>
-        </TouchableOpacity>
+        {isFemale && (
+          <TouchableOpacity
+            style={styles.listenerBtn}
+            activeOpacity={0.85}
+            onPress={() => router.push('/listener')}
+          >
+            <Text style={styles.listenerBtnText}>Become a Listener</Text>
+          </TouchableOpacity>
+        )}
 
         {}
         <Text style={styles.supportText}>

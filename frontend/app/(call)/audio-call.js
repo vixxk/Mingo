@@ -1,23 +1,18 @@
-import React, { useState, useRef, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Image,
-  Animated,
-  Dimensions,
-} from 'react-native';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Animated, Dimensions, BackHandler, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import SafetyPopup from '../../components/call/SafetyPopup';
-import { callAPI } from '../../utils/api';
+import InCallRechargePopup from '../../components/call/InCallRechargePopup';
+import GiftPopup from '../../components/shared/GiftPopup';
+import { callAPI, walletAPI } from '../../utils/api';
+import { socketService } from '../../utils/socket';
 import { ZEGO_APP_ID, ZEGO_APP_SIGN } from '../../utils/zegoConfig';
-import { ms, s, vs, SCREEN_WIDTH } from '../../utils/responsive';
+import { ms, s, vs, SCREEN_WIDTH, hp, wp } from '../../utils/responsive';
 
 const { height: SH } = Dimensions.get('window');
 
@@ -75,13 +70,21 @@ export default function AudioCallScreen() {
   } = useLocalSearchParams();
 
   const [showSafety, setShowSafety] = useState(true);
+  const [showRecharge, setShowRecharge] = useState(false);
+  const [showGiftPopup, setShowGiftPopup] = useState(false);
+  const [receivedGift, setReceivedGift] = useState(null);
   const [userID, setUserID] = useState('');
   const [userName, setUserName] = useState('');
   const [callDuration, setCallDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isSpeaker, setIsSpeaker] = useState(true);
+  const [currentCoins, setCurrentCoins] = useState(null);
+  const [lowBalanceMessage, setLowBalanceMessage] = useState('');
+  
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const giftAnim = useRef(new Animated.Value(0)).current;
   const intervalRef = useRef(null);
+  const callEndedRef = useRef(false);
 
   const resolvedAppId = zegoAppId ? parseInt(zegoAppId) : ZEGO_APP_ID;
   const resolvedAppSign = zegoAppSign || ZEGO_APP_SIGN;
@@ -106,6 +109,63 @@ export default function AudioCallScreen() {
     loadUser();
   }, []);
 
+  // Start call billing and listen for socket events
+  useEffect(() => {
+    const setupBilling = async () => {
+      await socketService.connect();
+
+      // Tell the server to start per-minute billing for this session
+      if (callId && callId !== 'demo_zego_call' && callId !== 'test_call_id') {
+        socketService.emit('start_call_billing', { sessionId: callId });
+      }
+
+      // Real-time balance updates from server
+      socketService.on('balance_updated', (data) => {
+        if (data.reason === 'call_minute_charge' || data.reason === 'call_session_start') {
+          setCurrentCoins(data.coins);
+        }
+      });
+
+      // Low balance warning from server — show recharge popup
+      socketService.on('low_balance_warning', (data) => {
+        setLowBalanceMessage(data.message);
+        setShowRecharge(true);
+      });
+
+      // Server auto-ended the call due to 0 balance
+      socketService.on('call_auto_ended', (data) => {
+        if (data.sessionId === callId && !callEndedRef.current) {
+          callEndedRef.current = true;
+          clearInterval(intervalRef.current);
+          router.replace({
+            pathname: '/(call)/call-feedback',
+            params: { name, sessionId: callId, listenerId, callType: 'audio' },
+          });
+        }
+      });
+
+      // Gifting listener
+      socketService.on('gift_received', (data) => {
+        setReceivedGift(data);
+        // Animate gift
+        giftAnim.setValue(0);
+        Animated.sequence([
+          Animated.timing(giftAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+          Animated.delay(3000),
+          Animated.timing(giftAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
+        ]).start(() => setReceivedGift(null));
+      });
+    };
+
+    setupBilling();
+
+    return () => {
+      socketService.off('balance_updated');
+      socketService.off('low_balance_warning');
+      socketService.off('call_auto_ended');
+    };
+  }, [callId]);
+
   useEffect(() => {
     intervalRef.current = setInterval(() => {
       setCallDuration((prev) => prev + 1);
@@ -118,8 +178,30 @@ export default function AudioCallScreen() {
       ])
     ).start();
 
-    return () => clearInterval(intervalRef.current);
+    return () => {
+      clearInterval(intervalRef.current);
+    };
   }, []);
+
+  // Block back button and gestures
+  const navigation = useNavigation();
+  useEffect(() => {
+    navigation.setOptions({
+      gestureEnabled: false,
+    });
+
+    const backAction = () => {
+      // Return true to prevent default back action
+      return true;
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction
+    );
+
+    return () => backHandler.remove();
+  }, [navigation]);
 
   const formatDuration = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -127,10 +209,15 @@ export default function AudioCallScreen() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleEndCall = async () => {
+  const handleEndCall = useCallback(async () => {
+    if (callEndedRef.current) return;
+    callEndedRef.current = true;
     clearInterval(intervalRef.current);
+
     try {
       if (callId && callId !== 'demo_zego_call' && callId !== 'test_call_id') {
+        // Stop billing timer on server
+        socketService.emit('stop_call_billing', { sessionId: callId });
         await callAPI.endCall(callId);
       }
     } catch (error) {
@@ -138,10 +225,23 @@ export default function AudioCallScreen() {
     } finally {
       router.replace({
         pathname: '/(call)/call-feedback',
-        params: { name, sessionId: callId },
+        params: { name, sessionId: callId, listenerId, callType: 'audio' },
       });
     }
-  };
+  }, [callId, name, listenerId]);
+
+  const handleRechargeSuccess = useCallback(async () => {
+    // After successful in-call recharge, refresh balance
+    try {
+      const res = await walletAPI.getBalance();
+      if (res.data?.coins !== undefined) {
+        setCurrentCoins(res.data.coins);
+      }
+    } catch (e) {
+      console.log('Balance refresh failed after recharge', e);
+    }
+    setShowRecharge(false);
+  }, []);
 
   if (ZegoUIKitPrebuiltCall && userID && roomId) {
     return (
@@ -159,12 +259,46 @@ export default function AudioCallScreen() {
             durationConfig: { isDurationVisible: true },
           }}
         />
+
+        {/* Balance badge + Recharge button */}
+        <View style={styles.floatingTopRight}>
+          {currentCoins !== null && (
+            <View style={styles.coinsBadge}>
+              <Ionicons name="flash" size={14} color="#F59E0B" />
+              <Text style={styles.coinsBadgeText}>{currentCoins}</Text>
+            </View>
+          )}
+          <TouchableOpacity
+            style={styles.floatingRechargeBtn}
+            onPress={() => setShowRecharge(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="wallet-outline" size={20} color="#fff" />
+            <Text style={styles.floatingRechargeText}>Recharge</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.floatingRechargeBtn, { backgroundColor: 'rgba(168, 85, 247, 0.9)', shadowColor: '#A855F7' }]}
+            onPress={() => setShowGiftPopup(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="gift-outline" size={20} color="#fff" />
+            <Text style={styles.floatingRechargeText}>Gift</Text>
+          </TouchableOpacity>
+        </View>
+        
         {showSafety && (
           <SafetyPopup
             visible={showSafety}
             onDismiss={() => setShowSafety(false)}
           />
         )}
+        <InCallRechargePopup
+          visible={showRecharge}
+          onClose={() => setShowRecharge(false)}
+          onRechargeSuccess={handleRechargeSuccess}
+          lowBalanceMessage={lowBalanceMessage}
+        />
       </View>
     );
   }
@@ -179,6 +313,14 @@ export default function AudioCallScreen() {
 
       {}
       <View style={[styles.topSection, { paddingTop: insets.top + vs(40) }]}>
+        {/* Balance indicator */}
+        {currentCoins !== null && (
+          <View style={styles.balanceIndicator}>
+            <Ionicons name="flash" size={16} color="#F59E0B" />
+            <Text style={styles.balanceText}>{currentCoins} coins</Text>
+          </View>
+        )}
+
         <Animated.View style={[styles.avatarRing, { transform: [{ scale: pulseAnim }] }]}>
           <Image
             source={getAvatarImage(gender, avatarIndex)}
@@ -232,6 +374,14 @@ export default function AudioCallScreen() {
 
       {}
       <View style={[styles.bottomSection, { paddingBottom: Math.max(insets.bottom + vs(16), vs(32)) }]}>
+        <TouchableOpacity
+          style={styles.rechargeBarBtn}
+          onPress={() => setShowRecharge(true)}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="wallet-outline" size={18} color="#fff" />
+          <Text style={styles.rechargeBarText}>Add Coins</Text>
+        </TouchableOpacity>
         <Text style={styles.safetyHint}>
           Keep the conversation safe & respectful
         </Text>
@@ -242,6 +392,38 @@ export default function AudioCallScreen() {
           visible={showSafety}
           onDismiss={() => setShowSafety(false)}
         />
+      )}
+
+      <InCallRechargePopup
+        visible={showRecharge}
+        onClose={() => setShowRecharge(false)}
+        onRechargeSuccess={handleRechargeSuccess}
+        lowBalanceMessage={lowBalanceMessage}
+      />
+
+      <GiftPopup
+        visible={showGiftPopup}
+        onClose={() => setShowGiftPopup(false)}
+        receiverId={listenerId}
+        onGiftSent={(gift) => {
+          // You could show a local animation here if desired
+        }}
+      />
+
+      {/* Received Gift Animation/Overlay */}
+      {receivedGift && (
+        <Animated.View style={[styles.giftNotification, { opacity: giftAnim }]}>
+          <LinearGradient
+            colors={['#A855F7', '#6366F1']}
+            style={styles.giftNotifContent}
+          >
+            <Text style={styles.giftNotifIcon}>{receivedGift.gift.icon}</Text>
+            <View>
+              <Text style={styles.giftNotifTitle}>Received Gift!</Text>
+              <Text style={styles.giftNotifText}>{receivedGift.senderName} sent you {receivedGift.gift.name}</Text>
+            </View>
+          </LinearGradient>
+        </Animated.View>
       )}
     </View>
   );
@@ -257,6 +439,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
     justifyContent: 'center',
+  },
+  balanceIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    borderRadius: 20,
+    paddingHorizontal: s(14),
+    paddingVertical: vs(6),
+    gap: s(6),
+    marginBottom: vs(20),
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+  },
+  balanceText: {
+    fontSize: ms(13, 0.3),
+    color: '#F59E0B',
+    fontFamily: 'Inter_600SemiBold',
   },
   avatarRing: {
     width: SCREEN_WIDTH * 0.35,
@@ -353,10 +552,101 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: s(24),
   },
+  rechargeBarBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(236, 72, 153, 0.2)',
+    borderRadius: 24,
+    paddingHorizontal: s(20),
+    paddingVertical: vs(10),
+    gap: s(8),
+    marginBottom: vs(12),
+    borderWidth: 1,
+    borderColor: 'rgba(236, 72, 153, 0.4)',
+  },
+  rechargeBarText: {
+    color: '#EC4899',
+    fontSize: ms(13, 0.3),
+    fontFamily: 'Inter_600SemiBold',
+  },
   safetyHint: {
     fontSize: ms(12, 0.3),
     color: '#4B5563',
     fontFamily: 'Inter_400Regular',
     fontStyle: 'italic',
+  },
+
+  // Zego mode floating elements
+  floatingTopRight: {
+    position: 'absolute',
+    top: SH * 0.08,
+    right: s(12),
+    alignItems: 'flex-end',
+    gap: vs(8),
+    zIndex: 999,
+  },
+  coinsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: s(10),
+    paddingVertical: vs(4),
+    borderRadius: 16,
+    gap: s(4),
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+  },
+  coinsBadgeText: {
+    color: '#F59E0B',
+    fontSize: ms(13, 0.3),
+    fontFamily: 'Inter_700Bold',
+  },
+  floatingRechargeBtn: {
+    backgroundColor: 'rgba(236, 72, 153, 0.9)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: s(12),
+    paddingVertical: vs(8),
+    borderRadius: 20,
+    gap: s(6),
+    shadowColor: '#EC4899',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  floatingRechargeText: {
+    color: '#fff',
+    fontSize: ms(12, 0.3),
+    fontFamily: 'Inter_600SemiBold',
+  },
+  giftNotification: {
+    position: 'absolute',
+    top: hp(15),
+    left: wp(5),
+    right: wp(5),
+    zIndex: 1000,
+  },
+  giftNotifContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 20,
+    gap: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  giftNotifIcon: {
+    fontSize: ms(40),
+  },
+  giftNotifTitle: {
+    color: '#fff',
+    fontSize: ms(16),
+    fontFamily: 'Inter_700Bold',
+  },
+  giftNotifText: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: ms(13),
+    fontFamily: 'Inter_400Regular',
   },
 });

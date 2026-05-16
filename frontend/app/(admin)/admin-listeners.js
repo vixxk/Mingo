@@ -4,8 +4,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { ms, s, vs } from '../../utils/responsive';
+import { useVideoPlayer, VideoView } from 'expo-video';
+import { Linking } from 'react-native';
+import { ms, s, vs, wp, hp } from '../../utils/responsive';
 import { adminAPI } from '../../utils/api';
+import { AdminPageSkeleton } from '../../components/admin/Skeleton';
 
 const { height: SH } = Dimensions.get('window');
 
@@ -38,6 +41,37 @@ const getAvatarImage = (gender, index) => {
   }
 };
 
+const IntroVideo = ({ url }) => {
+  const [error, setError] = useState(false);
+  const player = useVideoPlayer(url, (p) => {
+    p.loop = true;
+    p.pause();
+  });
+
+  if (!url) return null;
+
+  return (
+    <View style={st.videoContainer}>
+      <VideoView 
+        style={st.video} 
+        player={player} 
+        fullscreenOptions={{ enabled: true }}
+        allowsPictureInPicture 
+        onError={() => setError(true)}
+      />
+      {error && (
+        <View style={st.videoError}>
+          <Ionicons name="alert-circle-outline" size={24} color="#EF4444" />
+          <Text style={st.errorText}>Video failed to load</Text>
+          <TouchableOpacity onPress={() => Linking.openURL(url)}>
+            <Text style={st.linkText}>Open link in browser</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+};
+
 export default function AdminListenersScreen() {
   const insets = useSafeAreaInsets();
   const { initialFilter } = useLocalSearchParams();
@@ -46,6 +80,15 @@ export default function AdminListenersScreen() {
   const [filter, setFilter] = useState(initialFilter || 'all');
   const [selectedListener, setSelectedListener] = useState(null);
   const [showDetail, setShowDetail] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const FILTER_CONFIG = {
+    all: { icon: 'layers', color: '#8B5CF6', bg: 'rgba(139,92,246,0.1)' },
+    pending: { icon: 'time', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
+    approved: { icon: 'checkmark-circle', color: '#22C55E', bg: 'rgba(34,197,94,0.1)' },
+    verified: { icon: 'shield-checkmark', color: '#3B82F6', bg: 'rgba(59,130,246,0.1)' },
+    bestChoice: { icon: 'star', color: '#EC4899', bg: 'rgba(236,72,153,0.1)' },
+    rejected: { icon: 'close-circle', color: '#EF4444', bg: 'rgba(239,68,68,0.1)' },
+  };
 
   useEffect(() => {
     if (initialFilter) {
@@ -55,24 +98,33 @@ export default function AdminListenersScreen() {
 
   const loadListeners = async () => {
     try {
+      setLoading(true);
       const res = await adminAPI.getListeners({ limit: 100 });
       if (res?.data) {
-        const formatted = res.data.map(l => ({
-          id: l._id,
-          name: l.userId?.name || 'Unknown',
-          phone: l.userId?.phone || 'Unknown',
-          avatar: getAvatarImage(l.userId?.gender, l.userId?.avatarIndex),
+        const listenersList = res.data.listeners || (Array.isArray(res.data) ? res.data : []);
+        const formatted = listenersList.map(l => ({
+          id: l._id || l.id,
+          userId: l.userId?._id || l.userId, // Add userId
+          name: l.name || l.userId?.name || 'Unknown',
+          phone: l.phone || l.userId?.phone || 'Unknown',
+          avatar: getAvatarImage(l.gender || l.userId?.gender, l.avatarIndex || l.userId?.avatarIndex),
           status: l.status,
+          isBanned: l.isBanned || l.userId?.isBanned, // Add isBanned status
           verified: l.verified,
           bestChoice: l.bestChoice,
-          totalCalls: l.audioCalls + l.videoCalls,
-          earnings: `₹${l.earnings}`,
-          rating: l.rating
+          totalCalls: l.totalCalls !== undefined ? l.totalCalls : (l.audioCalls || 0) + (l.videoCalls || 0),
+          audioCalls: l.audioCalls || 0,
+          videoCalls: l.videoCalls || 0,
+          earnings: typeof l.earnings === 'string' ? l.earnings : `₹${l.earnings || 0}`,
+          rating: l.rating,
+          introVideoUrl: l.introVideoUrl
         }));
         setListeners(formatted);
       }
     } catch (e) {
       console.log('Failed to fetch listeners:', e);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -111,16 +163,46 @@ export default function AdminListenersScreen() {
     await adminAPI.toggleBestChoice(id);
     updateListenerState(id, { bestChoice: !current }); 
   };
-  const handleDeleteListener = (id) => {
-    Alert.alert('Delete Listener', 'Are you sure you want to permanently delete this listener?', [
+
+  const handleBanUser = (userId, isCurrentlyBanned) => {
+    Alert.alert(
+      isCurrentlyBanned ? 'Unban User' : 'Ban User',
+      `Are you sure you want to ${isCurrentlyBanned ? 'unban' : 'ban'} this listener's user account?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: isCurrentlyBanned ? 'Unban' : 'Ban', 
+          style: isCurrentlyBanned ? 'default' : 'destructive', 
+          onPress: async () => {
+            try {
+              await adminAPI.toggleBanUser(userId);
+              setListeners(prev => prev.map(l => l.userId === userId ? { ...l, isBanned: !isCurrentlyBanned } : l));
+              if (selectedListener?.userId === userId) {
+                setSelectedListener(prev => ({ ...prev, isBanned: !isCurrentlyBanned }));
+              }
+              Alert.alert('Success', `User ${isCurrentlyBanned ? 'unbanned' : 'banned'} successfully.`);
+            } catch(e) {
+              Alert.alert('Error', 'Failed to update user status');
+            }
+          }
+        },
+      ]
+    );
+  };
+
+  const handleDeleteListener = (id, userId) => {
+    Alert.alert('Delete Listener Permanently', 'This will delete both the listener profile and the user account. This action cannot be undone. Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
         try {
-          // If there is an API for deleting listener, call it here. For now just filter.
+          await adminAPI.deleteUser(userId);
           setListeners(prev => prev.filter(l => l.id !== id));
           setShowDetail(false);
           setSelectedListener(null);
-        } catch(e) {}
+          Alert.alert('Success', 'Listener deleted successfully.');
+        } catch(e) {
+          Alert.alert('Error', 'Failed to delete listener');
+        }
       }},
     ]);
   };
@@ -130,6 +212,15 @@ export default function AdminListenersScreen() {
     if (status === 'pending') return '#F59E0B';
     return '#EF4444';
   };
+
+  if (loading) {
+    return (
+      <View style={[st.container, { paddingTop: insets.top }]}>
+        <StatusBar style="light" />
+        <AdminPageSkeleton type="list" />
+      </View>
+    );
+  }
 
   return (
     <View style={[st.container, { paddingTop: insets.top }]}>
@@ -175,6 +266,18 @@ export default function AdminListenersScreen() {
                   <View style={st.statBox}><Text style={st.statVal}>{selectedListener.rating || '-'}</Text><Text style={st.statLbl}>Rating</Text></View>
                 </View>
 
+                <View style={[st.statsRow, { marginTop: -SH * 0.01 }]}>
+                  <View style={st.statBox}><Text style={st.statVal}>{selectedListener.audioCalls}</Text><Text style={st.statLbl}>Audio</Text></View>
+                  <View style={st.statBox}><Text style={st.statVal}>{selectedListener.videoCalls}</Text><Text style={st.statLbl}>Video</Text></View>
+                </View>
+ 
+                {selectedListener.introVideoUrl && (
+                  <View style={{ width: '100%', marginBottom: SH * 0.02 }}>
+                    <Text style={st.sectionLabel}>Introductory Video</Text>
+                    <IntroVideo url={selectedListener.introVideoUrl} />
+                  </View>
+                )}
+
                 {}
                 <View style={{ width: '100%', gap: SH * 0.01 }}>
                   {selectedListener.status === 'pending' && (
@@ -201,10 +304,21 @@ export default function AdminListenersScreen() {
                       </TouchableOpacity>
                     </>
                   )}
-                  {}
+                  
+                  {/* Ban/Unban Button */}
+                  <TouchableOpacity 
+                    style={[st.actionBtn, { backgroundColor: selectedListener.isBanned ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)' }]} 
+                    onPress={() => handleBanUser(selectedListener.userId, selectedListener.isBanned)}
+                  >
+                    <Ionicons name={selectedListener.isBanned ? "checkmark-circle" : "ban"} size={18} color={selectedListener.isBanned ? "#10B981" : "#EF4444"} />
+                    <Text style={[st.actionBtnText, { color: selectedListener.isBanned ? "#10B981" : "#EF4444" }]}>
+                      {selectedListener.isBanned ? 'Unban User' : 'Ban User'}
+                    </Text>
+                  </TouchableOpacity>
+
                   <TouchableOpacity
                     style={[st.actionBtn, { backgroundColor: 'rgba(239,68,68,0.1)' }]}
-                    onPress={() => handleDeleteListener(selectedListener.id)}
+                    onPress={() => handleDeleteListener(selectedListener.id, selectedListener.userId)}
                     activeOpacity={0.7}
                   >
                     <Ionicons name="trash-outline" size={18} color="#EF4444" />
@@ -217,8 +331,14 @@ export default function AdminListenersScreen() {
         </View>
       </Modal>
 
-      {}
-      <View style={st.header}><Text style={st.headerTitle}>Listeners</Text><Text style={st.headerCount}>{listeners.length} total</Text></View>
+      {/* Header */}
+      <View style={st.header}>
+        <TouchableOpacity onPress={() => router.back()} style={st.backBtn}>
+          <Ionicons name="chevron-back" size={24} color="#fff" />
+        </TouchableOpacity>
+        <Text style={st.headerTitle}>Listeners</Text>
+        <Text style={st.headerCount}>{listeners.length}</Text>
+      </View>
 
       {}
       <View style={st.searchBox}>
@@ -228,49 +348,71 @@ export default function AdminListenersScreen() {
 
       {}
       <View style={{ paddingVertical: SH * 0.012 }}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: s(16) }}>
-          <View style={{ flexDirection: 'row', gap: s(8) }}>
-            {['all','pending','approved','verified','bestChoice','rejected'].map(f => (
-              <TouchableOpacity key={f} style={[st.filterTab, filter === f && st.filterActive]} onPress={() => setFilter(f)} activeOpacity={0.7}>
-                <Text style={[st.filterText, filter === f && st.filterTextActive]}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: s(16), gap: s(8) }}>
+          {['all','pending','approved','verified','bestChoice','rejected'].map(f => {
+            const active = filter === f;
+            const config = FILTER_CONFIG[f];
+            return (
+              <TouchableOpacity
+                key={f}
+                style={[
+                  st.filterTab,
+                  active && { backgroundColor: config.bg, borderColor: config.color }
+                ]}
+                onPress={() => setFilter(f)}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={active ? config.icon : `${config.icon}-outline`}
+                  size={14}
+                  color={active ? config.color : '#6B7280'}
+                />
+                <Text style={[st.filterText, active && { color: config.color, fontWeight: '700' }]}>
                   {f === 'bestChoice' ? 'Best Choice' : f.charAt(0).toUpperCase() + f.slice(1)}
                 </Text>
               </TouchableOpacity>
-            ))}
-          </View>
+            );
+          })}
         </ScrollView>
       </View>
 
       {}
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: s(16), paddingBottom: SH * 0.05 }} showsVerticalScrollIndicator={false}>
-        {filtered.map(listener => (
-          <TouchableOpacity key={listener.id} style={st.card} activeOpacity={0.7} onPress={() => { setSelectedListener(listener); setShowDetail(true); }}>
-            <Image source={listener.avatar} style={st.avatar} />
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: s(6) }}>
-                <Text style={st.name}>{listener.name}</Text>
-                {listener.verified && <Ionicons name="checkmark-circle" size={14} color="#3B82F6" />}
-                {listener.bestChoice && <Ionicons name="star" size={14} color="#F59E0B" />}
+        {filtered.length === 0 ? (
+          <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: SH * 0.1 }}>
+            <Ionicons name="headset-outline" size={64} color="#333" />
+            <Text style={{ color: '#6B7280', fontSize: ms(16, 0.3), fontFamily: 'Inter_500Medium', marginTop: vs(12) }}>No listeners found</Text>
+          </View>
+        ) : (
+          filtered.map(listener => (
+            <TouchableOpacity key={listener.id} style={st.card} activeOpacity={0.7} onPress={() => { setSelectedListener(listener); setShowDetail(true); }}>
+              <Image source={listener.avatar} style={st.avatar} />
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: s(6) }}>
+                  <Text style={st.name}>{listener.name}</Text>
+                  {listener.verified && <Ionicons name="checkmark-circle" size={14} color="#3B82F6" />}
+                  {listener.bestChoice && <Ionicons name="star" size={14} color="#F59E0B" />}
+                </View>
+                <Text style={st.meta}>{listener.phone} • {listener.totalCalls} calls</Text>
+                <View style={[st.statusBadge, { backgroundColor: `${getStatusColor(listener.status)}20` }]}>
+                  <View style={[st.statusDot, { backgroundColor: getStatusColor(listener.status) }]} />
+                  <Text style={[st.statusText, { color: getStatusColor(listener.status) }]}>{listener.status}</Text>
+                </View>
               </View>
-              <Text style={st.meta}>{listener.phone} • {listener.totalCalls} calls</Text>
-              <View style={[st.statusBadge, { backgroundColor: `${getStatusColor(listener.status)}20` }]}>
-                <View style={[st.statusDot, { backgroundColor: getStatusColor(listener.status) }]} />
-                <Text style={[st.statusText, { color: getStatusColor(listener.status) }]}>{listener.status}</Text>
-              </View>
-            </View>
-            {listener.status === 'pending' && (
-              <View style={{ flexDirection: 'row', gap: s(6) }}>
-                <TouchableOpacity style={[st.quickBtn, { backgroundColor: 'rgba(16,185,129,0.2)' }]} onPress={() => handleApprove(listener.id)}>
-                  <Ionicons name="checkmark" size={16} color="#10B981" />
-                </TouchableOpacity>
-                <TouchableOpacity style={[st.quickBtn, { backgroundColor: 'rgba(239,68,68,0.2)' }]} onPress={() => handleReject(listener.id)}>
-                  <Ionicons name="close" size={16} color="#EF4444" />
-                </TouchableOpacity>
-              </View>
-            )}
-            {listener.status !== 'pending' && <Ionicons name="chevron-forward" size={18} color="#4B5563" />}
-          </TouchableOpacity>
-        ))}
+              {listener.status === 'pending' && (
+                <View style={{ flexDirection: 'row', gap: s(6) }}>
+                  <TouchableOpacity style={[st.quickBtn, { backgroundColor: 'rgba(16,185,129,0.2)' }]} onPress={() => handleApprove(listener.id)}>
+                    <Ionicons name="checkmark" size={16} color="#10B981" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[st.quickBtn, { backgroundColor: 'rgba(239,68,68,0.2)' }]} onPress={() => handleReject(listener.id)}>
+                    <Ionicons name="close" size={16} color="#EF4444" />
+                  </TouchableOpacity>
+                </View>
+              )}
+              {listener.status !== 'pending' && <Ionicons name="chevron-forward" size={18} color="#4B5563" />}
+            </TouchableOpacity>
+          ))
+        )}
       </ScrollView>
     </View>
   );
@@ -278,16 +420,54 @@ export default function AdminListenersScreen() {
 
 const st = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', paddingHorizontal: s(16), paddingVertical: SH * 0.015 },
-  headerTitle: { fontSize: ms(28, 0.3), fontWeight: '900', color: '#fff', fontFamily: 'Inter_900Black' },
-  headerCount: { fontSize: ms(13, 0.3), color: '#6B7280', fontFamily: 'Inter_500Medium' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1.5),
+    borderBottomWidth: 1,
+    borderBottomColor: '#1A1A1A',
+  },
+  backBtn: {
+    width: wp(10),
+    height: wp(10),
+    borderRadius: wp(5),
+    backgroundColor: '#141414',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: wp(3),
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: ms(20),
+    color: '#fff',
+    fontFamily: 'Inter_900Black',
+  },
+  headerCount: {
+    fontSize: ms(14),
+    color: '#A855F7',
+    fontFamily: 'Inter_700Bold',
+    backgroundColor: 'rgba(168,85,247,0.12)',
+    paddingHorizontal: s(10),
+    paddingVertical: vs(4),
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
   searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', marginHorizontal: s(16), paddingHorizontal: s(14), height: SH * 0.055, borderRadius: 16, borderWidth: 1, borderColor: '#1F1F1F', gap: s(8) },
   searchInput: { flex: 1, color: '#fff', fontSize: ms(14, 0.3), fontFamily: 'Inter_400Regular' },
   filterRow: { paddingHorizontal: s(16), paddingVertical: SH * 0.012, gap: s(8) },
-  filterTab: { paddingHorizontal: s(14), paddingVertical: SH * 0.008, borderRadius: 20, backgroundColor: '#111', borderWidth: 1, borderColor: '#1F1F1F' },
-  filterActive: { backgroundColor: 'rgba(168,85,247,0.15)', borderColor: '#A855F7' },
-  filterText: { fontSize: ms(12, 0.3), color: '#6B7280', fontFamily: 'Inter_500Medium' },
-  filterTextActive: { color: '#A855F7' },
+  filterTab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: wp(3.5),
+    paddingVertical: hp(0.8),
+    borderRadius: ms(20),
+    backgroundColor: '#111',
+    borderWidth: 1,
+    borderColor: '#1F1F1F',
+    gap: s(6),
+  },
+  filterText: { fontSize: ms(11), color: '#6B7280', fontFamily: 'Inter_500Medium' },
   card: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#141414', borderRadius: 18, padding: s(14), marginBottom: SH * 0.01, borderWidth: 1, borderColor: '#1F1F1F' },
   avatar: { width: SH * 0.06, height: SH * 0.06, borderRadius: SH * 0.03, marginRight: s(12) },
   name: { fontSize: ms(15, 0.3), color: '#fff', fontFamily: 'Inter_700Bold' },
@@ -311,4 +491,45 @@ const st = StyleSheet.create({
   statLbl: { fontSize: ms(10, 0.3), color: '#6B7280', fontFamily: 'Inter_400Regular', marginTop: 2 },
   actionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: s(6), paddingVertical: SH * 0.016, borderRadius: 16 },
   actionBtnText: { fontSize: ms(14, 0.3), color: '#fff', fontFamily: 'Inter_700Bold' },
+  
+  sectionLabel: {
+    color: '#9CA3AF',
+    fontSize: ms(13, 0.3),
+    marginBottom: 8,
+    fontFamily: 'Inter_500Medium',
+    alignSelf: 'flex-start',
+  },
+  videoContainer: {
+    width: '100%',
+    height: SH * 0.25,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: '#111',
+    borderWidth: 1,
+    borderColor: '#222',
+  },
+  video: {
+    width: '100%',
+    height: '100%',
+  },
+  videoError: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#111',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    color: '#9CA3AF',
+    fontSize: 12,
+    marginTop: 8,
+    fontFamily: 'Inter_400Regular',
+  },
+  linkText: {
+    color: '#A855F7',
+    fontSize: 12,
+    marginTop: 10,
+    fontFamily: 'Inter_700Bold',
+    textDecorationLine: 'underline',
+  },
 });

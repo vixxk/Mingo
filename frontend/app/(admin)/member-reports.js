@@ -17,6 +17,7 @@ import { useRouter } from 'expo-router';
 import { ms, s, vs } from '../../utils/responsive';
 import { FilterTab } from '../../components/admin/AdminComponents';
 import { adminAPI } from '../../utils/api';
+import { AdminPageSkeleton } from '../../components/admin/Skeleton';
 
 const { height: SH } = Dimensions.get('window');
 
@@ -97,10 +98,9 @@ export default function MemberReportsScreen() {
 
   if (loading) {
     return (
-      <View style={[st.container, st.center, { paddingTop: insets.top }]}>
+      <View style={[st.container, { paddingTop: insets.top }]}>
         <StatusBar style="light" />
-        <ActivityIndicator size="large" color="#A855F7" />
-        <Text style={st.loadingText}>Loading reports...</Text>
+        <AdminPageSkeleton type="list" />
       </View>
     );
   }

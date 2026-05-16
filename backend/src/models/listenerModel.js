@@ -1,5 +1,45 @@
 const mongoose = require('mongoose');
 
+const publicProfileSchema = new mongoose.Schema(
+  {
+    hookline: {
+      type: String,
+      default: '',
+      maxlength: 150,
+    },
+    aboutMe: {
+      type: String,
+      default: '',
+      maxlength: 2000,
+    },
+    expertiseTags: {
+      type: [String],
+      default: [],
+    },
+    languages: {
+      type: [String],
+      default: ['English'],
+    },
+    galleryImages: {
+      type: [String],
+      default: [],
+    },
+    galleryVideos: {
+      type: [String],
+      default: [],
+    },
+    profileImage: {
+      type: String,
+      default: null,
+    },
+    coverImage: {
+      type: String,
+      default: null,
+    },
+  },
+  { _id: false }
+);
+
 const listenerSchema = new mongoose.Schema(
   {
     userId: {
@@ -17,6 +57,10 @@ const listenerSchema = new mongoose.Schema(
       default: '',
       maxlength: 500,
     },
+    introVideoUrl: {
+      type: String,
+      default: null,
+    },
     profileImage: {
       type: String,
       default: null,
@@ -33,6 +77,10 @@ const listenerSchema = new mongoose.Schema(
       min: 0,
     },
     isOnline: {
+      type: Boolean,
+      default: false,
+    },
+    isBusy: {
       type: Boolean,
       default: false,
     },
@@ -62,6 +110,10 @@ const listenerSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    chatEnabled: {
+      type: Boolean,
+      default: true,
+    },
     audioCalls: {
       type: Number,
       default: 0,
@@ -90,6 +142,37 @@ const listenerSchema = new mongoose.Schema(
       type: [String],
       default: ['#3B82F6', '#8B5CF6'],
     },
+
+    // ─── Public Profile ───────────────────────────────────────
+    publicProfile: {
+      type: publicProfileSchema,
+      default: () => ({}),
+    },
+
+    // Draft profile: stores changes awaiting admin approval
+    draftProfile: {
+      type: publicProfileSchema,
+      default: null,
+    },
+
+    // Profile approval status
+    profileStatus: {
+      type: String,
+      enum: ['none', 'draft', 'pending', 'approved', 'rejected'],
+      default: 'none',
+    },
+
+    // Admin notes for rejection reason
+    profileAdminNotes: {
+      type: String,
+      default: '',
+    },
+
+    // Timestamp when profile was submitted for approval
+    profileSubmittedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -101,6 +184,7 @@ listenerSchema.index({ isOnline: 1 });
 listenerSchema.index({ rating: -1 });
 listenerSchema.index({ status: 1 });
 listenerSchema.index({ bestChoice: 1 });
+listenerSchema.index({ profileStatus: 1 });
 
 listenerSchema.statics.findByUserId = function (userId) {
   return this.findOne({ userId }).populate('userId', 'name username phone role gender avatarIndex isBanned');
@@ -113,22 +197,18 @@ listenerSchema.statics.findAllWithUser = function () {
 };
 
 listenerSchema.statics.setOnlineStatus = async function (userId, isOnline) {
-  return this.findOneAndUpdate(
-    { userId },
-    { isOnline },
-    { new: true }
-  );
+  const update = { isOnline };
+  if (!isOnline) update.isBusy = false;
+  return this.findOneAndUpdate({ userId }, update, { new: true });
 };
 
 listenerSchema.statics.updateRating = async function (userId, newRating) {
   const listener = await this.findOne({ userId });
   if (!listener) return null;
 
-  const newTotal = listener.totalSessions + 1;
-  const newAvg = (listener.rating * listener.totalSessions + newRating) / newTotal;
+  const newAvg = (listener.rating * listener.totalSessions + newRating) / (listener.totalSessions || 1);
 
   listener.rating = Math.round(newAvg * 10) / 10;
-  listener.totalSessions = newTotal;
   await listener.save();
 
   return listener;

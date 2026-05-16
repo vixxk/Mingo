@@ -1,12 +1,33 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ms, vs } from '../../utils/responsive';
+import { adminAPI } from '../../utils/api';
 
 export default function AdminLayout() {
   const insets = useSafeAreaInsets();
+  const [counts, setCounts] = useState({ approvals: 0, reports: 0, payouts: 0 });
+
+  useEffect(() => {
+    const fetchCounts = async () => {
+      try {
+        const res = await adminAPI.getStats(7);
+        setCounts({
+          approvals: res.data.pendingApprovals || 0,
+          reports: res.data.pendingReports || 0,
+          payouts: res.data.pendingPayoutsCount || 0,
+        });
+      } catch (e) {
+        console.error('Failed to fetch admin counts:', e);
+      }
+    };
+    fetchCounts();
+    // Refresh every 2 minutes
+    const interval = setInterval(fetchCounts, 120000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <Tabs
@@ -27,6 +48,12 @@ export default function AdminLayout() {
           fontFamily: 'Inter_500Medium',
           fontSize: ms(10, 0.3),
         },
+        tabBarBadgeStyle: {
+          backgroundColor: '#EF4444',
+          fontSize: ms(8),
+          lineHeight: ms(11),
+          marginTop: vs(-2),
+        }
       }}
     >
       <Tabs.Screen
@@ -48,7 +75,7 @@ export default function AdminLayout() {
           title: 'Users',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
-              name={focused ? 'people' : 'people-outline'}
+              name={focused ? 'people-sharp' : 'people-outline'}
               size={22}
               color={color}
             />
@@ -61,7 +88,20 @@ export default function AdminLayout() {
           title: 'Listeners',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
-              name={focused ? 'headset' : 'headset-outline'}
+              name={focused ? 'headset-sharp' : 'headset-outline'}
+              size={22}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="admin-sessions"
+        options={{
+          title: 'Sessions',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? 'call-sharp' : 'call-outline'}
               size={22}
               color={color}
             />
@@ -72,9 +112,10 @@ export default function AdminLayout() {
         name="profile-approvals"
         options={{
           title: 'Approvals',
+          tabBarBadge: counts.approvals > 0 ? counts.approvals : null,
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
-              name={focused ? 'checkmark-circle' : 'checkmark-circle-outline'}
+              name={focused ? 'shield-checkmark-sharp' : 'shield-checkmark-outline'}
               size={22}
               color={color}
             />
@@ -84,14 +125,7 @@ export default function AdminLayout() {
       <Tabs.Screen
         name="admin-settings"
         options={{
-          title: 'Settings',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? 'settings' : 'settings-outline'}
-              size={22}
-              color={color}
-            />
-          ),
+          href: null,
         }}
       />
       <Tabs.Screen
@@ -114,6 +148,36 @@ export default function AdminLayout() {
       />
       <Tabs.Screen
         name="member-reports"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="admin-wallet"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="admin-payouts"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="admin-analytics"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="admin-notifications"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="system-config"
         options={{
           href: null,
         }}

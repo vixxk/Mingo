@@ -9,6 +9,9 @@ import {
   FlatList,
   Dimensions,
   Animated,
+  Modal,
+  Pressable,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
@@ -20,20 +23,26 @@ import { ms, s, vs, wp, hp, SCREEN_WIDTH } from '../../utils/responsive';
 import { walletAPI, listenersAPI, authAPI, callAPI } from '../../utils/api';
 import WelcomePopup from '../../components/shared/WelcomePopup';
 import CoinsOfferPopup from '../../components/shared/CoinsOfferPopup';
-import CertifiedListenerPopup from '../../components/shared/CertifiedListenerPopup';
 import InsufficientBalancePopup from '../../components/shared/InsufficientBalancePopup';
 import NotificationsPopup from '../../components/shared/NotificationsPopup';
 
 
 
-const CARD_WIDTH = wp(42);
-const CARD_GAP = s(10);
+const CARD_WIDTH = wp(85);
+const CARD_GAP = wp(4);
 
 
 const LiveBadge = () => (
   <View style={styles.liveBadge}>
     <View style={styles.liveDot} />
     <Text style={styles.liveText}>Live</Text>
+  </View>
+);
+
+const BusyBadge = () => (
+  <View style={[styles.liveBadge, { backgroundColor: 'rgba(239, 68, 68, 0.9)' }]}>
+    <View style={[styles.liveDot, { backgroundColor: '#fff' }]} />
+    <Text style={styles.liveText}>Busy</Text>
   </View>
 );
 
@@ -118,22 +127,38 @@ const BestChoiceCard = ({ item, onCallPress, onProfilePress }) => {
               resizeMode="cover"
             />
             {}
-            {item.isLive && (
-              <View style={styles.bestChoiceLiveBadgeWrapper}>
-                <LiveBadge />
-              </View>
-            )}
+            <View style={styles.bestChoiceLiveBadgeWrapper}>
+              {item.isBusy ? <BusyBadge /> : item.isLive ? <LiveBadge /> : null}
+            </View>
             {}
             <View style={styles.bestChoiceActionStack}>
-              <TouchableOpacity style={styles.bestChoiceActionBtn} activeOpacity={0.7} onPress={onCallPress}>
-                <Ionicons name="call-outline" size={18} color="#fff" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.bestChoiceActionBtn} activeOpacity={0.7} onPress={onCallPress}>
-                <Ionicons name="videocam-outline" size={18} color="#fff" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.bestChoiceActionBtn} activeOpacity={0.7}>
-                <Ionicons name="chatbubble-outline" size={18} color="#fff" />
-              </TouchableOpacity>
+              {item.audioEnabled && (
+                <TouchableOpacity 
+                  style={[styles.bestChoiceActionBtn, item.isBusy && { opacity: 0.5 }]} 
+                  activeOpacity={0.7} 
+                  onPress={onProfilePress}
+                >
+                  <Ionicons name="call-outline" size={18} color="#fff" />
+                </TouchableOpacity>
+              )}
+              {item.videoEnabled && (
+                <TouchableOpacity 
+                  style={[styles.bestChoiceActionBtn, item.isBusy && { opacity: 0.5 }]} 
+                  activeOpacity={0.7} 
+                  onPress={onProfilePress}
+                >
+                  <Ionicons name="videocam-outline" size={18} color="#fff" />
+                </TouchableOpacity>
+              )}
+              {item.chatEnabled && (
+                <TouchableOpacity 
+                  style={[styles.bestChoiceActionBtn, item.isBusy && { opacity: 0.5 }]} 
+                  activeOpacity={0.7}
+                  onPress={onProfilePress}
+                >
+                  <Ionicons name="chatbubble-outline" size={18} color="#fff" />
+                </TouchableOpacity>
+              )}
             </View>
             {}
             <View style={styles.bestChoiceNameRow}>
@@ -186,11 +211,9 @@ const PeopleCard = ({ item, onCallPress, onProfilePress }) => {
           resizeMode="cover"
         />
         {}
-        {item.isLive && (
-          <View style={styles.peopleLiveBadgeWrapper}>
-            <LiveBadge />
-          </View>
-        )}
+        <View style={styles.peopleLiveBadgeWrapper}>
+          {item.isBusy ? <BusyBadge /> : item.isLive ? <LiveBadge /> : null}
+        </View>
         {}
         <View style={styles.peopleNameRow}>
           <Text style={styles.peopleName} numberOfLines={1}>
@@ -200,15 +223,35 @@ const PeopleCard = ({ item, onCallPress, onProfilePress }) => {
         </View>
         {}
         <View style={styles.peopleActions}>
-          <TouchableOpacity style={styles.peopleActionBtn} activeOpacity={0.7} onPress={onCallPress}>
-            <Ionicons name="call-outline" size={18} color="#22C55E" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.peopleActionBtn} activeOpacity={0.7}>
-            <Ionicons name="chatbubble-outline" size={18} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.peopleActionBtn} activeOpacity={0.7} onPress={onCallPress}>
-            <Ionicons name="videocam-outline" size={18} color="#3B82F6" />
-          </TouchableOpacity>
+          {item.audioEnabled && (
+            <TouchableOpacity 
+              style={[styles.peopleActionBtn, item.isBusy && { opacity: 0.5 }]} 
+              activeOpacity={0.7} 
+              onPress={() => onCallPress('audio')}
+              disabled={item.isBusy}
+            >
+              <Ionicons name="call-outline" size={18} color="#22C55E" />
+            </TouchableOpacity>
+          )}
+          {item.chatEnabled && (
+            <TouchableOpacity 
+              style={[styles.peopleActionBtn, item.isBusy && { opacity: 0.5 }]} 
+              activeOpacity={0.7}
+              disabled={item.isBusy}
+            >
+              <Ionicons name="chatbubble-outline" size={18} color="#fff" />
+            </TouchableOpacity>
+          )}
+          {item.videoEnabled && (
+            <TouchableOpacity 
+              style={[styles.peopleActionBtn, item.isBusy && { opacity: 0.5 }]} 
+              activeOpacity={0.7} 
+              onPress={() => onCallPress('video')}
+              disabled={item.isBusy}
+            >
+              <Ionicons name="videocam-outline" size={18} color="#3B82F6" />
+            </TouchableOpacity>
+          )}
         </View>
       </Animated.View>
     </TouchableOpacity>
@@ -224,109 +267,118 @@ export default function HomeScreen() {
 
   const [userAvatar, setUserAvatar] = useState(require('../../images/user_avatar.png'));
   const [coinBalance, setCoinBalance] = useState(0);
+  const [diamondBalance, setDiamondBalance] = useState(0);
   const [discountTimeLeft, setDiscountTimeLeft] = useState(0);
   const [isFirstPurchaseEligible, setIsFirstPurchaseEligible] = useState(false);
   const [topOffer, setTopOffer] = useState(null);
   const [bestChoiceData, setBestChoiceData] = useState([]);
   const [peopleData, setPeopleData] = useState([]);
 
-  useFocusEffect(
-    useCallback(() => {
-      const loadUserAvatar = async () => {
-        try {
-          const gender = await AsyncStorage.getItem('userGender');
-          const avatarIndex = await AsyncStorage.getItem('userAvatarIndex');
+  const [refreshing, setRefreshing] = useState(false);
 
-          if (gender && avatarIndex) {
-            const maleAvatars = [
-              require('../../images/male_avatar_1_1776972918440.png'),
-              require('../../images/male_avatar_2_1776972933241.png'),
-              require('../../images/male_avatar_3_1776972950218.png'),
-              require('../../images/male_avatar_4_1776972963577.png'),
-              require('../../images/male_avatar_5_1776972978900.png'),
-              require('../../images/male_avatar_6_1776972993180.png'),
-              require('../../images/male_avatar_7_1776973008143.png'),
-              require('../../images/male_avatar_8_1776973021635.png'),
-            ];
-            const femaleAvatars = [
-              require('../../images/female_avatar_1_1776973035859.png'),
-              require('../../images/female_avatar_2_1776973050039.png'),
-              require('../../images/female_avatar_3_1776973063471.png'),
-              require('../../images/female_avatar_4_1776973077539.png'),
-              require('../../images/female_avatar_5_1776973090730.png'),
-              require('../../images/female_avatar_6_1776973108100.png'),
-              require('../../images/female_avatar_7_1776973124018.png'),
-              require('../../images/female_avatar_8_1776973138772.png'),
-            ];
-            const avatars = gender === 'Male' ? maleAvatars : femaleAvatars;
-            setUserAvatar(avatars[parseInt(avatarIndex, 10)] || avatars[0]);
-          }
-        } catch (e) {
-          console.error('Error loading avatar:', e);
-        }
-      };
-      loadUserAvatar();
-    }, [])
-  );
+  const loadRealData = useCallback(async () => {
+    try {
+      const gender = await AsyncStorage.getItem('userGender');
+      const avatarIndex = await AsyncStorage.getItem('userAvatarIndex');
+      if (gender && avatarIndex) {
+        const maleAvatars = [
+          require('../../images/male_avatar_1_1776972918440.png'),
+          require('../../images/male_avatar_2_1776972933241.png'),
+          require('../../images/male_avatar_3_1776972950218.png'),
+          require('../../images/male_avatar_4_1776972963577.png'),
+          require('../../images/male_avatar_5_1776972978900.png'),
+          require('../../images/male_avatar_6_1776972993180.png'),
+          require('../../images/male_avatar_7_1776973008143.png'),
+          require('../../images/male_avatar_8_1776973021635.png'),
+        ];
+        const femaleAvatars = [
+          require('../../images/female_avatar_1_1776973035859.png'),
+          require('../../images/female_avatar_2_1776973050039.png'),
+          require('../../images/female_avatar_3_1776973063471.png'),
+          require('../../images/female_avatar_4_1776973077539.png'),
+          require('../../images/female_avatar_5_1776973090730.png'),
+          require('../../images/female_avatar_6_1776973108100.png'),
+          require('../../images/female_avatar_7_1776973124018.png'),
+          require('../../images/female_avatar_8_1776973138772.png'),
+        ];
+        const avatars = gender === 'Male' ? maleAvatars : femaleAvatars;
+        setUserAvatar(avatars[parseInt(avatarIndex, 10)] || avatars[0]);
+      }
+    } catch (e) {
+      console.error('Error loading avatar:', e);
+    }
 
-  useFocusEffect(
-    useCallback(() => {
-      const loadRealData = async () => {
-        try {
-          const balRes = await walletAPI.getBalance();
-          if (balRes?.data) {
-            setCoinBalance(balRes.data.coins || 0);
-            setIsFirstPurchaseEligible(!!balRes.data.isFirstPurchaseEligible);
-            if (balRes.data.isFirstPurchaseEligible && balRes.data.signupTimestamp) {
-              const expiry = new Date(balRes.data.signupTimestamp).getTime() + 6 * 3600 * 1000;
-              setDiscountTimeLeft(Math.max(0, Math.floor((expiry - Date.now()) / 1000)));
+    try {
+      const balRes = await walletAPI.getBalance();
+      if (balRes?.data) {
+        setCoinBalance(balRes.data.coins || 0);
+        setDiamondBalance(balRes.data.diamonds || Math.floor((balRes.data.coins || 0) / 10));
+        setIsFirstPurchaseEligible(!!balRes.data.isFirstPurchaseEligible);
+        if (balRes.data.isFirstPurchaseEligible && balRes.data.signupTimestamp) {
+          const actualSignupTime = new Date(balRes.data.signupTimestamp).getTime();
+          const expiry = actualSignupTime + 6 * 3600 * 1000;
+          setDiscountTimeLeft(Math.max(0, Math.floor((expiry - Date.now()) / 1000)));
+          setSignupTimestamp(actualSignupTime);
 
-              
-              const pkgRes = await walletAPI.getPackages();
-              if (pkgRes?.data?.packages) {
-                const bestPkg = pkgRes.data.packages[0]; 
-                if (bestPkg) {
-                  setTopOffer({
-                    title: `${bestPkg.discount}% Off`,
-                    coins: bestPkg.coins,
-                    originalPrice: bestPkg.originalPrice,
-                    newPrice: bestPkg.price,
-                  });
-                }
-              }
+          
+          const pkgRes = await walletAPI.getPackages();
+          if (pkgRes?.data?.packages) {
+            const bestPkg = pkgRes.data.packages[0]; 
+            if (bestPkg) {
+              setTopOffer({
+                title: `${bestPkg.discount}% Off`,
+                coins: bestPkg.coins,
+                originalPrice: bestPkg.originalPrice,
+                newPrice: bestPkg.price,
+              });
             }
           }
-        } catch (e) {
-          console.log('Wallet fetch fallback:', e.message);
         }
+      }
+    } catch (e) {
+      console.log('Wallet fetch fallback:', e.message);
+    }
 
-        try {
-          const listenersRes = await listenersAPI.getRecommended(20);
-          if (listenersRes?.data && listenersRes.data.length > 0) {
-            const mappedListeners = listenersRes.data.map(l => ({
-              id: l.id,
-              name: l.name,
-              isLive: l.isOnline,
-              isVerified: l.isVerified,
-              bestChoice: l.bestChoice,
-              gradientColors: l.gradientColors || ['#3B82F6', '#8B5CF6'],
-              gender: l.gender,
-              avatarIndex: l.avatarIndex || 0,
-            }));
+    try {
+      const listenersRes = await listenersAPI.getRecommended(20);
+      if (listenersRes?.data && listenersRes.data.length > 0) {
+        const mappedListeners = listenersRes.data.map(l => ({
+          id: l.id,
+          name: l.name,
+          isLive: l.isOnline,
+          isBusy: l.isBusy,
+          isVerified: l.isVerified,
+          bestChoice: l.bestChoice,
+          audioEnabled: l.audioEnabled !== false, // default true
+          videoEnabled: l.videoEnabled === true,  // default false
+          chatEnabled: l.chatEnabled !== false,   // default true
+          gradientColors: l.gradientColors || ['#3B82F6', '#8B5CF6'],
+          gender: l.gender,
+          avatarIndex: l.avatarIndex || 0,
+        }));
 
-            const bestChoice = mappedListeners.filter(l => l.bestChoice);
-            const people = mappedListeners.filter(l => !l.bestChoice);
+        const bestChoice = mappedListeners.filter(l => l.bestChoice);
+        const people = mappedListeners.filter(l => !l.bestChoice);
 
-            if (bestChoice.length > 0) setBestChoiceData(bestChoice);
-            if (people.length > 0) setPeopleData(people);
-          }
-        } catch (e) {
-          console.log('Listeners fetch fallback:', e.message);
-        }
-      };
+        if (bestChoice.length > 0) setBestChoiceData(bestChoice);
+        if (people.length > 0) setPeopleData(people);
+      }
+    } catch (e) {
+      console.log('Listeners fetch fallback:', e.message);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
       loadRealData();
-    }, [])
+    }, [loadRealData])
   );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadRealData();
+    setRefreshing(false);
+  }, [loadRealData]);
 
   useEffect(() => {
     if (discountTimeLeft <= 0) return;
@@ -342,7 +394,6 @@ export default function HomeScreen() {
   
   const [showWelcome, setShowWelcome] = useState(false);
   const [showCoinsOffer, setShowCoinsOffer] = useState(false);
-  const [showCertified, setShowCertified] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [signupTimestamp, setSignupTimestamp] = useState(Date.now());
 
@@ -377,11 +428,6 @@ export default function HomeScreen() {
         let count = countStr ? parseInt(countStr, 10) : 0;
         count += 1;
         await AsyncStorage.setItem('appOpenCount', count.toString());
-
-        const hasSeenWelcome = await AsyncStorage.getItem('hasSeenWelcomePopup');
-        if (hasSeenWelcome && count > 0 && count % 10 === 0) {
-          setTimeout(() => setShowCertified(true), 1500);
-        }
       } catch (e) {}
     };
     handleAppOpenCount();
@@ -400,14 +446,51 @@ export default function HomeScreen() {
   };
 
   const handleAddCoins = async () => {
-    
     setShowCoinsOffer(false);
     await AsyncStorage.setItem('hasSeenCoinsPopup', 'true');
+    router.push('/balance');
   };
 
   
   const [showInsufficientBalance, setShowInsufficientBalance] = useState(false);
-  const handleCallPress = () => setShowInsufficientBalance(true);
+  const handleCallPress = (listener, callType = 'audio') => {
+    // Minimum: audio=10 coins/min, video=40 coins/min
+    const minCoins = callType === 'video' ? 40 : 10;
+    
+    if (coinBalance < minCoins) {
+      setShowInsufficientBalance(true);
+      return;
+    }
+
+    if (listener) {
+      // Direct call
+      router.push({
+        pathname: '/(call)/connecting',
+        params: {
+          name: listener.name,
+          callType,
+          callId: `call_${Date.now()}`,
+          roomId: `room_${Date.now()}`,
+          listenerId: listener.id,
+          avatarIndex: listener.avatarIndex,
+          gender: listener.gender
+        }
+      });
+    } else {
+      // Random call
+      router.push({
+        pathname: '/(call)/connecting',
+        params: {
+          name: 'Random User',
+          callType,
+          callId: `call_${Date.now()}`,
+          roomId: `room_${Date.now()}`,
+          isRandom: 'true',
+          role: 'USER'
+        }
+      });
+    }
+  };
 
   
   const cardsPerPage = 2;
@@ -433,28 +516,19 @@ export default function HomeScreen() {
 
   
   const [showFab, setShowFab] = useState(false);
-  const fabScale = useRef(new Animated.Value(0)).current;
 
   const handleRandomClick = () => {
     setShowFab(true);
-    
-    Animated.parallel([
-      Animated.spring(fabScale, { toValue: 1, friction: 5, useNativeDriver: true }),
-      Animated.timing(randomAnim, { toValue: 120, duration: 200, useNativeDriver: true }),
-    ]).start();
+    // Hide the random button
+    Animated.timing(randomAnim, { toValue: 120, duration: 200, useNativeDriver: true }).start();
   };
 
   const handleCloseFab = () => {
-    
-    const animations = [
-      Animated.timing(fabScale, { toValue: 0, duration: 200, useNativeDriver: true }),
-    ];
-    Animated.parallel(animations).start(() => {
-      setShowFab(false);
-      if (showRandom) {
-        Animated.spring(randomAnim, { toValue: 0, friction: 6, useNativeDriver: true }).start();
-      }
-    });
+    setShowFab(false);
+    // Bring random button back if scrolled
+    if (showRandom) {
+      Animated.spring(randomAnim, { toValue: 0, friction: 6, useNativeDriver: true }).start();
+    }
   };
 
   
@@ -502,7 +576,11 @@ export default function HomeScreen() {
   };
 
   const renderBestChoiceItem = useCallback(({ item }) => (
-    <BestChoiceCard item={item} onCallPress={handleCallPress} onProfilePress={() => handleProfilePress(item.id)} />
+    <BestChoiceCard 
+      item={item} 
+      onCallPress={(type) => handleCallPress(item, type)} 
+      onProfilePress={() => handleProfilePress(item.id)} 
+    />
   ), []);
 
   return (
@@ -512,10 +590,15 @@ export default function HomeScreen() {
       {}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Image
-            source={userAvatar}
-            style={styles.avatar}
-          />
+          <TouchableOpacity 
+            activeOpacity={0.7} 
+            onPress={() => router.push('/profile')}
+          >
+            <Image
+              source={userAvatar}
+              style={styles.avatar}
+            />
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.coinBadge}
             activeOpacity={0.7}
@@ -524,6 +607,7 @@ export default function HomeScreen() {
             <Text style={styles.coinEmoji}>🪙</Text>
             <Text style={styles.coinCount}>{coinBalance}</Text>
           </TouchableOpacity>
+
           {discountTimeLeft > 0 && (
             <TouchableOpacity
               style={styles.timerCapsule}
@@ -555,6 +639,14 @@ export default function HomeScreen() {
         bounces={true}
         onScroll={handleScroll}
         scrollEventThrottle={16}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#3B82F6"
+            colors={['#3B82F6', '#8B5CF6']}
+          />
+        }
       >
         {}
         <Text style={styles.sectionTitle}>Best Choice</Text>
@@ -609,7 +701,12 @@ export default function HomeScreen() {
               </View>
             ) : (
               peopleData.map((item) => (
-                <PeopleCard key={item.id} item={item} onCallPress={handleCallPress} onProfilePress={() => handleProfilePress(item.id)} />
+                <PeopleCard 
+                  key={item.id} 
+                  item={item} 
+                  onCallPress={(type) => handleCallPress(item, type)} 
+                  onProfilePress={() => handleProfilePress(item.id)} 
+                />
               ))
             )}
           </View>
@@ -624,7 +721,7 @@ export default function HomeScreen() {
         <Animated.View
           style={[
             styles.floatingRandomWrapper,
-            { bottom: vs(160), right: s(20), transform: [{ translateX: randomAnim }] },
+            { bottom: hp(18), right: wp(5), transform: [{ translateX: randomAnim }] },
           ]}
           pointerEvents="box-none"
         >
@@ -634,84 +731,76 @@ export default function HomeScreen() {
             onPress={handleRandomClick}
           >
             <Text style={styles.randomBtnText}>Random </Text>
-            <Ionicons name="shuffle" size={18} color="#fff" />
+            <Ionicons name="shuffle" size={ms(18)} color="#fff" />
           </TouchableOpacity>
         </Animated.View>
       )}
 
-      {}
-      {!showWelcome && showFab && (
-        <Animated.View
-          style={[
-            styles.fabContainer,
-            {
-              bottom: vs(90),
-              right: s(16),
-              transform: [{ scale: fabScale }],
-            },
-          ]}
-          pointerEvents="box-none"
-        >
-          {/* Audio call */}
-          <TouchableOpacity
-            style={[styles.premiumFabOption, { bottom: vs(125) }]}
-            activeOpacity={0.8}
-            onPress={() => {
-              handleCloseFab();
-              handleCallPress();
-            }}
-          >
-            <View style={styles.premiumFabLabelContainer}>
-              <Text style={styles.premiumFabLabel}>Audio Call</Text>
-            </View>
-            <LinearGradient
-              colors={['#22C55E', '#16A34A']}
-              style={styles.premiumFabCircle}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
+      {/* FAB Menu Modal */}
+      <Modal
+        transparent
+        visible={showFab}
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={handleCloseFab}
+      >
+        <Pressable style={styles.fabOverlay} onPress={handleCloseFab}>
+          <View style={styles.fabMenu}>
+            {/* Video Call — top, right-aligned */}
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => {
+                handleCloseFab();
+                handleCallPress(null, 'video');
+              }}
+              style={styles.fabVideoRow}
             >
-              <Ionicons name="call" size={ms(20)} color="#fff" />
-            </LinearGradient>
-          </TouchableOpacity>
+              <LinearGradient
+                colors={['#3B82F6', '#2563EB']}
+                style={styles.fabCircle}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <Ionicons name="videocam" size={hp(3)} color="#fff" />
+              </LinearGradient>
+            </TouchableOpacity>
 
-          {/* Video call */}
-          <TouchableOpacity
-            style={[styles.premiumFabOption, { bottom: vs(65) }]}
-            activeOpacity={0.8}
-            onPress={() => {
-              handleCloseFab();
-              handleCallPress();
-            }}
-          >
-            <View style={styles.premiumFabLabelContainer}>
-              <Text style={styles.premiumFabLabel}>Video Call</Text>
-            </View>
-            <LinearGradient
-              colors={['#3B82F6', '#2563EB']}
-              style={styles.premiumFabCircle}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <Ionicons name="videocam" size={ms(20)} color="#fff" />
-            </LinearGradient>
-          </TouchableOpacity>
+            {/* Bottom row: Audio (left) + Close (right) */}
+            <View style={styles.fabBottomRow}>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => {
+                  handleCloseFab();
+                  handleCallPress(null, 'audio');
+                }}
+              >
+                <LinearGradient
+                  colors={['#22C55E', '#16A34A']}
+                  style={styles.fabCircle}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <Ionicons name="call" size={hp(3)} color="#fff" />
+                </LinearGradient>
+              </TouchableOpacity>
 
-          <TouchableOpacity 
-            activeOpacity={0.8} 
-            onPress={handleCloseFab}
-            style={styles.fabCloseWrapper}
-          >
-            <LinearGradient
-              colors={['#EF4444', '#DC2626']}
-              style={styles.fab}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <Ionicons name="close" size={wp(6)} color="#fff" />
-            </LinearGradient>
-          </TouchableOpacity>
-        </Animated.View>
-      )}
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={handleCloseFab}
+              >
+                <LinearGradient
+                  colors={['#EF4444', '#DC2626']}
+                  style={styles.fabCloseCircle}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <Ionicons name="close" size={hp(3.5)} color="#fff" />
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
 
       {}
       <WelcomePopup visible={showWelcome} onAgree={handleWelcomeAgree} />
@@ -742,16 +831,12 @@ export default function HomeScreen() {
         visible={showCoinsOffer}
         onClose={handleCoinsClose}
         onAddCoins={handleAddCoins}
-        signupTimestamp={signupTimestamp}
+        timeLeft={discountTimeLeft}
         offerData={topOffer}
       />
-      <CertifiedListenerPopup
-        visible={showCertified}
-        onExplore={() => {
-          setShowCertified(false);
-          console.log('Explore certified listeners');
-        }}
-        onDismiss={() => setShowCertified(false)}
+      <NotificationsPopup
+        visible={showNotifications}
+        onClose={() => setShowNotifications(false)}
       />
       <InsufficientBalancePopup
         visible={showInsufficientBalance}
@@ -760,6 +845,7 @@ export default function HomeScreen() {
           setShowInsufficientBalance(false);
           router.push('/balance');
         }}
+        balance={coinBalance}
       />
       <NotificationsPopup
         visible={showNotifications}
@@ -774,41 +860,41 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-
-  
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: s(16),
-    paddingVertical: vs(10),
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1.5),
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: s(8),
+    gap: wp(2),
   },
   avatar: {
-    width: s(40),
-    height: s(40),
-    borderRadius: s(20),
+    width: wp(10),
+    height: wp(10),
+    borderRadius: wp(5),
     borderWidth: 2,
-    borderColor: '#333',
+    borderColor: '#EC4899',
   },
   coinBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#1A1A1A',
-    borderRadius: 20,
-    paddingHorizontal: s(10),
-    paddingVertical: vs(4),
-    gap: 4,
+    borderRadius: wp(5),
+    paddingHorizontal: wp(2.5),
+    paddingVertical: hp(0.5),
+    gap: wp(1),
+    borderWidth: 1,
+    borderColor: '#333',
   },
   coinEmoji: {
-    fontSize: ms(14, 0.3),
+    fontSize: wp(3.5),
   },
   coinCount: {
-    fontSize: ms(13, 0.3),
+    fontSize: wp(3.2),
     color: '#fff',
     fontFamily: 'Inter_700Bold',
   },
@@ -816,62 +902,56 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    borderRadius: 20,
-    paddingHorizontal: s(10),
-    paddingVertical: vs(4),
-    gap: 4,
+    borderRadius: wp(5),
+    paddingHorizontal: wp(2.5),
+    paddingVertical: hp(0.5),
+    gap: wp(1),
     borderWidth: 1,
     borderColor: 'rgba(245, 158, 11, 0.3)',
   },
   timerCapsuleText: {
-    fontSize: ms(11, 0.3),
+    fontSize: wp(2.8),
     color: '#F59E0B',
     fontFamily: 'Inter_700Bold',
   },
   notificationBtn: {
-    width: s(40),
-    height: s(40),
-    borderRadius: s(20),
+    width: wp(10),
+    height: wp(10),
+    borderRadius: wp(5),
     alignItems: 'center',
     justifyContent: 'center',
   },
-
-  
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: vs(80),
+    paddingBottom: hp(10),
   },
-
-  
   sectionTitle: {
-    fontSize: ms(22, 0.3),
+    fontSize: wp(5.5),
     fontWeight: '800',
     color: '#fff',
     fontFamily: 'Inter_900Black',
-    paddingHorizontal: s(16),
-    marginTop: vs(12),
-    marginBottom: vs(12),
+    paddingHorizontal: wp(4),
+    marginTop: hp(1.5),
+    marginBottom: hp(1.5),
   },
-
-  
   carouselContainer: {
-    paddingHorizontal: s(16),
-    gap: CARD_GAP,
+    paddingHorizontal: wp(4),
+    gap: wp(4),
   },
   bestChoiceCardOuter: {
-    width: CARD_WIDTH,
+    width: wp(85),
   },
   bestChoiceGradientBorder: {
-    borderRadius: 20,
+    borderRadius: wp(5),
     padding: 2.5,
   },
   bestChoiceCardInner: {
-    borderRadius: 18,
+    borderRadius: wp(4.5),
     overflow: 'hidden',
     backgroundColor: '#111',
-    height: vs(200),
+    height: hp(25),
   },
   bestChoiceImage: {
     width: '100%',
@@ -879,18 +959,18 @@ const styles = StyleSheet.create({
   },
   bestChoiceLiveBadgeWrapper: {
     position: 'absolute',
-    top: 10,
-    left: 10,
+    top: hp(1.2),
+    left: wp(2.5),
   },
   bestChoiceActionStack: {
     position: 'absolute',
     top: '30%',
-    right: 6,
+    right: wp(1.5),
     backgroundColor: 'rgba(255,255,255,0.25)',
-    borderRadius: 20,
-    paddingVertical: 10,
-    paddingHorizontal: 4,
-    gap: 12,
+    borderRadius: wp(5),
+    paddingVertical: hp(1.2),
+    paddingHorizontal: wp(1),
+    gap: hp(1.5),
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.4)',
   },
@@ -900,124 +980,117 @@ const styles = StyleSheet.create({
   },
   bestChoiceNameRow: {
     position: 'absolute',
-    bottom: 10,
-    left: 10,
-    right: 10,
+    bottom: hp(1.2),
+    left: wp(2.5),
+    right: wp(2.5),
     flexDirection: 'row',
     alignItems: 'center',
   },
   bestChoiceName: {
-    fontSize: ms(12, 0.3),
+    fontSize: wp(3.5),
     color: '#fff',
     fontFamily: 'Inter_700Bold',
     textShadowColor: 'rgba(0,0,0,0.8)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
-
-  
   liveBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    gap: 4,
+    borderRadius: wp(3),
+    paddingHorizontal: wp(2),
+    paddingVertical: hp(0.4),
+    gap: wp(1),
   },
   liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: wp(1.5),
+    height: wp(1.5),
+    borderRadius: wp(0.75),
     backgroundColor: '#22C55E',
   },
   liveText: {
-    fontSize: ms(10, 0.3),
+    fontSize: wp(2.5),
     color: '#fff',
     fontFamily: 'Inter_700Bold',
   },
-
-  
   verifiedBadge: {
-    marginLeft: 4,
+    marginLeft: wp(1),
     justifyContent: 'center',
     alignItems: 'center',
-    width: ms(16, 0.3),
-    height: ms(16, 0.3),
+    width: wp(4),
+    height: wp(4),
   },
   verifiedBadgeBg: {
     position: 'absolute',
-    width: ms(8, 0.3),
-    height: ms(8, 0.3),
+    width: wp(2),
+    height: wp(2),
     backgroundColor: '#fff',
-    borderRadius: ms(4, 0.3),
+    borderRadius: wp(1),
   },
-
-  
   pagination: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: vs(14),
-    marginBottom: vs(8),
-    gap: 6,
+    marginTop: hp(1.8),
+    marginBottom: hp(1),
+    gap: wp(1.5),
   },
   paginationDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: wp(2),
+    height: wp(2),
+    borderRadius: wp(1),
     backgroundColor: '#333',
   },
   paginationDotActive: {
     backgroundColor: '#fff',
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: wp(2.5),
+    height: wp(2.5),
+    borderRadius: wp(1.25),
   },
-
   peopleGridContainer: {
     position: 'relative',
   },
   peopleGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: s(12),
-    gap: s(8),
+    paddingHorizontal: wp(3),
+    gap: wp(2),
   },
   emptyCardContainer: {
-    height: vs(240),
-    width: SCREEN_WIDTH - s(40),
-    marginHorizontal: s(20),
+    height: hp(30),
+    width: wp(90),
+    marginHorizontal: wp(5),
     backgroundColor: '#0A0A0A',
-    borderRadius: 24,
+    borderRadius: wp(6),
     borderWidth: 1,
     borderColor: '#1F2937',
     borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: vs(10),
+    marginBottom: hp(1.2),
   },
   emptyCardText: {
     color: '#6B7280',
-    fontSize: ms(14),
+    fontSize: wp(3.5),
     fontFamily: 'Inter_500Medium',
   },
   emptyPeopleContainer: {
     width: '100%',
-    paddingVertical: vs(40),
+    paddingVertical: hp(5),
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#0A0A0A',
-    borderRadius: 24,
+    borderRadius: wp(6),
     borderWidth: 1,
     borderColor: '#1F2937',
     borderStyle: 'dashed',
   },
   emptyPeopleText: {
     color: '#6B7280',
-    fontSize: ms(14),
+    fontSize: wp(3.5),
     fontFamily: 'Inter_500Medium',
-    marginTop: vs(8),
+    marginTop: hp(1),
   },
   floatingRandomWrapper: {
     position: 'absolute',
@@ -1027,9 +1100,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#38BDF8',
-    borderRadius: 24,
-    paddingHorizontal: s(16),
-    paddingVertical: vs(10),
+    borderRadius: wp(6),
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1.2),
     shadowColor: '#38BDF8',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
@@ -1043,32 +1116,32 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_700Bold',
   },
   peopleCardWrapper: {
-    width: '48%',
+    width: wp(45),
   },
   peopleCard: {
-    borderRadius: 20,
+    borderRadius: wp(5),
     overflow: 'hidden',
     backgroundColor: '#111',
   },
   peopleImage: {
     width: '100%',
-    height: vs(210),
+    height: hp(25),
   },
   peopleLiveBadgeWrapper: {
     position: 'absolute',
-    top: 10,
-    left: 10,
+    top: hp(1.2),
+    left: wp(2.5),
   },
   peopleNameRow: {
     position: 'absolute',
-    bottom: vs(40),
-    left: 10,
-    right: 10,
+    bottom: hp(5.5),
+    left: wp(2.5),
+    right: wp(2.5),
     flexDirection: 'row',
     alignItems: 'center',
   },
   peopleName: {
-    fontSize: ms(13, 0.3),
+    fontSize: wp(3.5),
     color: '#fff',
     fontFamily: 'Inter_700Bold',
     textShadowColor: 'rgba(0,0,0,0.8)',
@@ -1081,14 +1154,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: vs(10),
-    paddingHorizontal: s(12),
+    paddingVertical: hp(1.2),
+    paddingHorizontal: wp(3),
     backgroundColor: '#111',
   },
   peopleActionBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: wp(9),
+    height: wp(9),
+    borderRadius: wp(4.5),
     backgroundColor: '#1C1C1C',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1097,63 +1170,41 @@ const styles = StyleSheet.create({
   },
 
   
-  fabContainer: {
-    position: 'absolute',
-    zIndex: 100,
-    alignItems: 'flex-end',
+  fabOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'flex-end',
-    width: s(200),
-    height: vs(300),
+    alignItems: 'flex-end',
   },
-  fabCloseWrapper: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
+  fabMenu: {
+    marginBottom: hp(10),
+    marginRight: wp(5),
+    alignItems: 'flex-end',
+    gap: hp(2),
   },
-  fab: {
+  fabVideoRow: {
+    alignSelf: 'flex-end',
+  },
+  fabBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: wp(4),
+  },
+  fabCircle: {
     width: wp(14),
     height: wp(14),
     borderRadius: wp(7),
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
     elevation: 8,
   },
-  premiumFabOption: {
-    position: 'absolute',
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: s(12),
-  },
-  premiumFabCircle: {
-    width: wp(13),
-    height: wp(13),
-    borderRadius: wp(6.5),
+  fabCloseCircle: {
+    width: wp(16),
+    height: wp(16),
+    borderRadius: wp(8),
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 6,
-  },
-  premiumFabLabelContainer: {
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    paddingHorizontal: s(12),
-    paddingVertical: vs(6),
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  premiumFabLabel: {
-    color: '#fff',
-    fontSize: ms(13, 0.3),
-    fontWeight: '700',
-    fontFamily: 'Inter_700Bold',
+    elevation: 10,
   },
 
   
@@ -1169,10 +1220,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#1A1A1A',
-    borderRadius: 28,
-    paddingHorizontal: s(14),
-    paddingVertical: vs(8),
-    gap: s(8),
+    borderRadius: wp(7),
+    paddingHorizontal: wp(3.5),
+    paddingVertical: hp(1),
+    gap: wp(2),
     borderWidth: 1,
     borderColor: '#2A2A2A',
     shadowColor: '#000',
@@ -1186,14 +1237,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   nlAvatar: {
-    width: s(28),
-    height: s(28),
-    borderRadius: s(14),
+    width: wp(7),
+    height: wp(7),
+    borderRadius: wp(3.5),
     borderWidth: 2,
     borderColor: '#1A1A1A',
   },
   newListenersText: {
-    fontSize: ms(14, 0.3),
+    fontSize: wp(3.5),
     color: '#fff',
     fontWeight: '700',
     fontFamily: 'Inter_700Bold',

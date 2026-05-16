@@ -11,6 +11,10 @@ const PORT = config.port;
 const startServer = async () => {
   
   await connectDB();
+  
+  // Seed initial gifts
+  const GiftService = require('./services/giftService');
+  await GiftService.seedGifts();
 
   const server = http.createServer(app);
   initSocket(server);

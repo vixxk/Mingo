@@ -26,9 +26,15 @@ class ListenerService {
           rating: l.rating,
           totalSessions: l.totalSessions,
           isOnline: l.isOnline,
+          isBusy: l.isBusy,
           isVerified: l.verified,
           bestChoice: l.bestChoice,
+          audioEnabled: l.audioEnabled,
+          videoEnabled: l.videoEnabled,
+          chatEnabled: l.chatEnabled,
           gradientColors: l.gradientColors,
+          hookline: l.publicProfile?.hookline || '',
+          profileImage: l.publicProfile?.profileImage || l.profileImage,
         }));
     }
 
@@ -39,8 +45,8 @@ class ListenerService {
       const score = parseFloat(listenerIds[i + 1]);
 
       
-      const isAvailable = await redis.sismember(REDIS_KEYS.LISTENERS_AVAILABLE, userId);
-      if (!isAvailable) continue;
+      // We no longer skip busy listeners, we show them as busy in the UI
+      // const isAvailable = await redis.sismember(REDIS_KEYS.LISTENERS_AVAILABLE, userId);
 
       
       const isLocked = await redis.exists(REDIS_KEYS.LOCK(userId));
@@ -57,9 +63,15 @@ class ListenerService {
           rating: listener.rating,
           totalSessions: listener.totalSessions,
           isOnline: listener.isOnline,
+          isBusy: listener.isBusy,
           isVerified: listener.verified,
           bestChoice: listener.bestChoice,
+          audioEnabled: listener.audioEnabled,
+          videoEnabled: listener.videoEnabled,
+          chatEnabled: listener.chatEnabled,
           gradientColors: listener.gradientColors,
+          hookline: listener.publicProfile?.hookline || '',
+          profileImage: listener.publicProfile?.profileImage || listener.profileImage,
           score,
         });
       }
@@ -77,11 +89,26 @@ class ListenerService {
     return {
       id: listener.userId?._id || listener.userId,
       name: listener.userId?.name,
+      displayName: listener.displayName,
       username: listener.userId?.username,
+      gender: listener.userId?.gender,
+      avatarIndex: listener.userId?.avatarIndex,
       email: listener.userId?.email,
       rating: listener.rating,
       totalSessions: listener.totalSessions,
       isOnline: listener.isOnline,
+      verified: listener.verified,
+      bestChoice: listener.bestChoice,
+      introVideoUrl: listener.introVideoUrl,
+      gradientColors: listener.gradientColors,
+      earnings: listener.earnings,
+      audioCalls: listener.audioCalls,
+      videoCalls: listener.videoCalls,
+      audioEnabled: listener.audioEnabled,
+      videoEnabled: listener.videoEnabled,
+      chatEnabled: listener.chatEnabled,
+      profileImage: listener.publicProfile?.profileImage || listener.profileImage,
+      publicProfile: listener.publicProfile || {},
       createdAt: listener.createdAt,
     };
   }

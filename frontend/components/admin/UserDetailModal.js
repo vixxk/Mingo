@@ -14,19 +14,20 @@ import { ms, s, vs } from '../../utils/responsive';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-const UserDetailModal = ({ visible, user, onClose, onDelete }) => {
+const UserDetailModal = ({ visible, user, onClose, onDelete, onBan }) => {
   if (!user) return null;
+
+  const isBanned = user.status === 'inactive';
 
   return (
     <Modal transparent visible={visible} animationType="slide" statusBarTranslucent>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
-          {}
+          {/* ... existing header ... */}
           <TouchableOpacity style={styles.modalClose} onPress={onClose}>
             <Ionicons name="close" size={22} color="#fff" />
           </TouchableOpacity>
 
-          {}
           <Image source={user.avatar} style={styles.modalAvatar} />
           <Text style={styles.modalName}>{user.name}</Text>
           <Text style={styles.modalPhone}>{user.phone}</Text>
@@ -37,30 +38,29 @@ const UserDetailModal = ({ visible, user, onClose, onDelete }) => {
           </View>
 
           <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
-            {}
+            {/* ... stats and details ... */}
             <View style={styles.modalStatsRow}>
               <View style={styles.modalStatBox}>
-                <Text style={styles.modalStatValue}>{user.appOpens}</Text>
+                <Text style={styles.modalStatValue}>{user.appOpens || 0}</Text>
                 <Text style={styles.modalStatLabel}>App Opens</Text>
               </View>
               <View style={styles.modalStatBox}>
-                <Text style={styles.modalStatValue}>{user.totalTimeSpent}</Text>
+                <Text style={styles.modalStatValue}>{user.totalTimeSpent || '0h 0m'}</Text>
                 <Text style={styles.modalStatLabel}>Time Spent</Text>
               </View>
               <View style={styles.modalStatBox}>
-                <Text style={styles.modalStatValue}>{user.totalCalls}</Text>
+                <Text style={styles.modalStatValue}>{user.totalCalls || 0}</Text>
                 <Text style={styles.modalStatLabel}>Calls</Text>
               </View>
             </View>
 
-            {}
             <View style={styles.modalDetailCard}>
               {[
-                { label: 'Gender', value: user.gender, icon: 'person-outline' },
-                { label: 'Language', value: user.language, icon: 'globe-outline' },
-                { label: 'Coins', value: `🪙 ${user.coins}`, icon: 'wallet-outline' },
-                { label: 'Joined', value: user.joinDate, icon: 'calendar-outline' },
-                { label: 'Last Active', value: user.lastActive, icon: 'time-outline' },
+                { label: 'Gender', value: user.gender || 'Not specified', icon: 'person-outline' },
+                { label: 'Language', value: user.language || 'English', icon: 'globe-outline' },
+                { label: 'Coins', value: `🪙 ${user.coins || 0}`, icon: 'wallet-outline' },
+                { label: 'Joined', value: user.joinDate || (user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Unknown'), icon: 'calendar-outline' },
+                { label: 'Last Active', value: user.lastActive || 'Recently', icon: 'time-outline' },
               ].map((item, i) => (
                 <View key={i}>
                   <View style={styles.modalDetailRow}>
@@ -75,21 +75,25 @@ const UserDetailModal = ({ visible, user, onClose, onDelete }) => {
               ))}
             </View>
 
-            {}
             <Text style={styles.modalSubtitle}>Interests</Text>
             <View style={styles.modalChips}>
-              {user.interests.map((interest, i) => (
+              {(user.interests || []).map((interest, i) => (
                 <View key={i} style={styles.modalChip}>
                   <Text style={styles.modalChipText}>{interest}</Text>
                 </View>
               ))}
             </View>
 
-            {}
             <View style={styles.modalActions}>
-              <TouchableOpacity style={[styles.modalActionBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)' }]} activeOpacity={0.7}>
-                <Ionicons name="ban" size={18} color="#EF4444" />
-                <Text style={[styles.modalActionText, { color: '#EF4444' }]}>Ban User</Text>
+              <TouchableOpacity 
+                style={[styles.modalActionBtn, { backgroundColor: isBanned ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)' }]} 
+                activeOpacity={0.7}
+                onPress={() => onBan(user.id, isBanned)}
+              >
+                <Ionicons name={isBanned ? "checkmark-circle" : "ban"} size={18} color={isBanned ? "#10B981" : "#EF4444"} />
+                <Text style={[styles.modalActionText, { color: isBanned ? "#10B981" : "#EF4444" }]}>
+                  {isBanned ? 'Unban User' : 'Ban User'}
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.modalActionBtn, { backgroundColor: 'rgba(59, 130, 246, 0.15)' }]} activeOpacity={0.7}>
                 <Ionicons name="chatbubble" size={18} color="#3B82F6" />

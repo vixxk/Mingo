@@ -7,7 +7,7 @@ const AppError = require('../utils/appError');
 class UserController {
   static async updateProfile(req, res, next) {
     try {
-      const { name, gender, language, avatarIndex, interests } = req.body;
+      const { name, username, gender, language, avatarIndex, interests } = req.body;
       const update = {};
       if (name !== undefined) update.name = name;
       if (gender !== undefined) update.gender = gender;
@@ -15,8 +15,29 @@ class UserController {
       if (avatarIndex !== undefined) update.avatarIndex = avatarIndex;
       if (interests !== undefined) update.interests = interests;
 
+      // Handle username update with uniqueness check
+      if (username !== undefined) {
+        const normalizedUsername = username.toLowerCase().replace(/\s/g, '');
+        const existing = await User.findOne({ 
+          username: normalizedUsername, 
+          _id: { $ne: req.user.id } 
+        });
+        if (existing) {
+          throw new AppError('Username already taken', 400);
+        }
+        update.username = normalizedUsername;
+      }
+
       const user = await User.findByIdAndUpdate(req.user.id, update, { new: true });
       if (!user) throw new AppError('User not found', 404);
+
+      // If user is a listener, sync the displayName if name was updated
+      if (user.role === 'LISTENER' && name !== undefined) {
+        await Listener.findOneAndUpdate(
+          { userId: user._id },
+          { displayName: name }
+        );
+      }
 
       return ApiResponse.success(res, {
         id: user._id,
@@ -35,9 +56,27 @@ class UserController {
     }
   }
 
+  static async updatePushToken(req, res, next) {
+    try {
+      const { pushToken } = req.body;
+      if (!pushToken) throw new AppError('Push token is required', 400);
+
+      const user = await User.findByIdAndUpdate(
+        req.user.id,
+        { pushToken },
+        { new: true }
+      );
+      if (!user) throw new AppError('User not found', 404);
+
+      return ApiResponse.success(res, { pushToken: user.pushToken }, 'Push token updated');
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async applyAsListener(req, res, next) {
     try {
-      const { displayName, bio, audioEnabled, videoEnabled } = req.body;
+      const { displayName, bio, audioEnabled, videoEnabled, introVideoUrl } = req.body;
       
       const existing = await Listener.findOne({ userId: req.user.id });
       if (existing) {
@@ -52,8 +91,15 @@ class UserController {
         existing.bio = bio || '';
         existing.audioEnabled = audioEnabled !== false;
         existing.videoEnabled = videoEnabled === true;
+        if (introVideoUrl) {
+          existing.introVideoUrl = introVideoUrl;
+        }
         await existing.save();
         return ApiResponse.success(res, existing, 'Application resubmitted');
+      }
+
+      if (!introVideoUrl) {
+        throw new AppError('Introductory video is required to become a listener', 400);
       }
 
       const listener = await Listener.create({
@@ -62,10 +108,26 @@ class UserController {
         bio: bio || '',
         audioEnabled: audioEnabled !== false,
         videoEnabled: videoEnabled === true,
+        introVideoUrl,
         status: 'pending',
       });
 
       return ApiResponse.created(res, listener, 'Listener application submitted');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async getUploadUrl(req, res, next) {
+    try {
+      const { fileType, extension } = req.body;
+      if (!fileType || !extension) {
+        throw new AppError('File type and extension are required', 400);
+      }
+      const { generateUploadUrl } = require('../utils/s3');
+      const { uploadUrl, fileUrl } = await generateUploadUrl(fileType, extension);
+      
+      return ApiResponse.success(res, { uploadUrl, fileUrl }, 'Upload URL generated');
     } catch (err) {
       next(err);
     }

@@ -18,7 +18,8 @@ class CallService {
     if (!user) throw new AppError('User not found', 404);
     if (user.isBanned) throw new AppError('Your account is suspended', 403);
 
-    const minCoins = callType === 'video' ? 6 : 1;
+    // Minimum 1 minute cost: audio=10 coins/min, video=30 coins/min
+    const minCoins = callType === 'video' ? 30 : 10;
     if (user.coins < minCoins) {
       throw new AppError('Insufficient coins. Please recharge.', 402);
     }
@@ -62,6 +63,9 @@ class CallService {
     });
 
     
+    // Mark listener as busy in DB
+    await Listener.findOneAndUpdate({ userId: matchedListenerId }, { isBusy: true });
+
     await redis.srem(REDIS_KEYS.LISTENERS_AVAILABLE, matchedListenerId);
 
     
@@ -111,46 +115,59 @@ class CallService {
     }
 
     if (session.status !== 'active') {
-      throw new AppError('Session is already ended', 400);
+      // Already ended (possibly by the billing timer auto-end)
+      return {
+        sessionId: session._id,
+        roomId: session.roomId,
+        callType: session.callType,
+        startTime: session.startTime,
+        endTime: session.endTime,
+        duration: session.duration,
+        coinsDeducted: session.coinsDeducted,
+        status: session.status,
+      };
+    }
+
+    // Stop the real-time billing timer
+    try {
+      const { stopCallBillingTimer } = require('../socket');
+      stopCallBillingTimer(sessionId);
+    } catch (e) {
+      // Socket module may not be loaded in tests
+    }
+
+    // Finalize session status
+    const endTime = new Date();
+    session.endTime = endTime;
+    session.status = 'completed';
+
+    // Duration is already tracked incrementally by billing timer,
+    // but do a final calculation in case of mismatch
+    if (!session.duration || session.duration === 0) {
+      const durationMs = endTime - session.startTime;
+      session.duration = Math.ceil(durationMs / 60000);
+    }
+
+    await session.save();
+
+    // Update listener call counters (earnings already credited per-minute by billing timer)
+    const listener = await Listener.findOne({ userId: session.listenerId });
+    if (listener) {
+      if (session.callType === 'audio') {
+        listener.audioCalls += 1;
+        listener.todayAudioCalls += 1;
+      } else {
+        listener.videoCalls += 1;
+        listener.todayVideoCalls += 1;
+      }
+      listener.totalSessions += 1;
+      await listener.save();
     }
 
     
-    const endedSession = await Session.endSession(sessionId);
+    // Mark listener as not busy in DB
+    await Listener.findOneAndUpdate({ userId: sessionListenerIdStr }, { isBusy: false });
 
-    
-    if (endedSession.coinsDeducted > 0) {
-      const user = await User.findById(session.userId);
-      if (user) {
-        user.coins = Math.max(0, user.coins - endedSession.coinsDeducted);
-        await user.save();
-
-        await Transaction.create({
-          userId: session.userId,
-          type: 'call_debit',
-          amount: 0,
-          coins: -endedSession.coinsDeducted,
-          description: `${session.callType} call - ${endedSession.duration} min`,
-          status: 'completed',
-          metadata: { sessionId: session._id },
-        });
-      }
-
-      const listener = await Listener.findOne({ userId: session.listenerId });
-      if (listener) {
-        listener.earnings += endedSession.listenerEarnings;
-        listener.todayEarnings += endedSession.listenerEarnings;
-        if (session.callType === 'audio') {
-          listener.audioCalls += 1;
-          listener.todayAudioCalls += 1;
-        } else {
-          listener.videoCalls += 1;
-          listener.todayVideoCalls += 1;
-        }
-        await listener.save();
-      }
-    }
-
-    
     await MatchingService.releaseLock(sessionListenerIdStr);
     await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, sessionListenerIdStr);
 
@@ -161,14 +178,14 @@ class CallService {
     await PresenceService._updateScore(session.listenerId);
 
     return {
-      sessionId: endedSession._id,
-      roomId: endedSession.roomId,
-      callType: endedSession.callType,
-      startTime: endedSession.startTime,
-      endTime: endedSession.endTime,
-      duration: endedSession.duration,
-      coinsDeducted: endedSession.coinsDeducted,
-      status: endedSession.status,
+      sessionId: session._id,
+      roomId: session.roomId,
+      callType: session.callType,
+      startTime: session.startTime,
+      endTime: session.endTime,
+      duration: session.duration,
+      coinsDeducted: session.coinsDeducted,
+      status: session.status,
     };
   }
 

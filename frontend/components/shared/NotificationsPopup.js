@@ -1,53 +1,17 @@
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, ScrollView } from 'react-native';
-import { useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, ScrollView, FlatList, ActivityIndicator } from 'react-native';
+import { useRef, useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { notificationAPI } from '../../utils/api';
 
 const { width: SW, height: SH } = Dimensions.get('window');
-
-const MOCK_NOTIFICATIONS = [
-  {
-    id: '1',
-    title: 'Welcome to Mingo! 🎉',
-    message: 'Complete your profile to get more visibility and start connecting with listeners.',
-    time: '2 hours ago',
-    type: 'system',
-    read: false,
-  },
-  {
-    id: '2',
-    title: 'Issue Resolved',
-    message: 'The issue you reported has been resolved by our support team. Let us know if you need anything else.',
-    time: '1 day ago',
-    type: 'support',
-    read: true,
-  },
-  {
-    id: '3',
-    title: 'Flash Sale! 🪙',
-    message: 'Get Flat 80% Off on your next coin recharge. Limited time offer!',
-    time: '2 days ago',
-    type: 'offer',
-    read: true,
-  },
-];
-
-const getNotificationIcon = (type) => {
-  switch (type) {
-    case 'system':
-      return { name: 'planet', color: '#3B82F6', bg: 'rgba(59, 130, 246, 0.15)' };
-    case 'support':
-      return { name: 'headset', color: '#22C55E', bg: 'rgba(34, 197, 94, 0.15)' };
-    case 'offer':
-      return { name: 'gift', color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.15)' };
-    default:
-      return { name: 'notifications', color: '#A855F7', bg: 'rgba(168, 85, 247, 0.15)' };
-  }
-};
 
 export default function NotificationsPopup({ visible, onClose }) {
   const slideAnim = useRef(new Animated.Value(SH)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
+
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -55,6 +19,7 @@ export default function NotificationsPopup({ visible, onClose }) {
         Animated.timing(overlayAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
         Animated.spring(slideAnim, { toValue: 0, friction: 8, tension: 40, useNativeDriver: true }),
       ]).start();
+      loadNotifications();
     } else {
       Animated.parallel([
         Animated.timing(overlayAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
@@ -63,7 +28,54 @@ export default function NotificationsPopup({ visible, onClose }) {
     }
   }, [visible]);
 
+  const loadNotifications = async () => {
+    try {
+      setLoading(true);
+      const res = await notificationAPI.getNotifications();
+      if (res?.data?.notifications) {
+        setNotifications(res.data.notifications);
+      }
+    } catch (e) {
+      console.log('Failed to fetch notifications:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const markAsRead = async (id) => {
+    try {
+      await notificationAPI.markAsRead(id);
+      setNotifications(prev => prev.map(n => n._id === id ? { ...n, isRead: true } : n));
+    } catch (e) {
+      console.log('Failed to mark as read:', e);
+    }
+  };
+
   if (!visible) return null;
+
+  const renderItem = ({ item }) => (
+    <TouchableOpacity
+      style={[styles.notificationCard, !item.isRead && styles.notificationCardUnread]}
+      activeOpacity={0.7}
+      onPress={() => {
+        if (!item.isRead) markAsRead(item._id);
+      }}
+    >
+      <View style={styles.iconWrap}>
+        <Ionicons
+          name={item.type === 'payment' ? 'cash' : item.type === 'call' ? 'call' : 'notifications'}
+          size={SW * 0.05}
+          color="#A855F7"
+        />
+      </View>
+      <View style={styles.cardContent}>
+        <Text style={[styles.cardTitle, !item.isRead && styles.cardTitleUnread]}>{item.title}</Text>
+        <Text style={styles.cardBody} numberOfLines={2}>{item.body}</Text>
+        <Text style={styles.cardTime}>{new Date(item.createdAt).toLocaleDateString()}</Text>
+      </View>
+      {!item.isRead && <View style={styles.unreadDot} />}
+    </TouchableOpacity>
+  );
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
@@ -77,7 +89,6 @@ export default function NotificationsPopup({ visible, onClose }) {
           start={{ x: 0, y: 0 }}
           end={{ x: 0, y: 1 }}
         >
-          {}
           <View style={styles.header}>
             <View style={styles.titleRow}>
               <Ionicons name="notifications" size={SW * 0.06} color="#A855F7" />
@@ -88,35 +99,27 @@ export default function NotificationsPopup({ visible, onClose }) {
             </TouchableOpacity>
           </View>
 
-          {}
-          <ScrollView 
-            style={styles.scrollArea}
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {MOCK_NOTIFICATIONS.map((notif) => {
-              const iconStyle = getNotificationIcon(notif.type);
-              return (
-                <View 
-                  key={notif.id} 
-                  style={[
-                    styles.notificationItem, 
-                    !notif.read && styles.unreadItem
-                  ]}
-                >
-                  <View style={[styles.iconContainer, { backgroundColor: iconStyle.bg }]}>
-                    <Ionicons name={iconStyle.name} size={SW * 0.055} color={iconStyle.color} />
-                  </View>
-                  <View style={styles.textContainer}>
-                    <Text style={styles.notifTitle} numberOfLines={1}>{notif.title}</Text>
-                    <Text style={styles.notifMessage}>{notif.message}</Text>
-                    <Text style={styles.notifTime}>{notif.time}</Text>
-                  </View>
-                  {!notif.read && <View style={styles.unreadDot} />}
-                </View>
-              );
-            })}
-          </ScrollView>
+          {loading ? (
+            <View style={styles.emptyState}>
+              <ActivityIndicator color="#A855F7" />
+            </View>
+          ) : notifications.length === 0 ? (
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIconWrap}>
+                <Ionicons name="notifications-off-outline" size={SW * 0.12} color="#374151" />
+              </View>
+              <Text style={styles.emptyTitle}>No notifications yet</Text>
+              <Text style={styles.emptySubtext}>You're all caught up! We'll notify you when something important happens.</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={notifications}
+              renderItem={renderItem}
+              keyExtractor={item => item._id}
+              contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
+            />
+          )}
         </LinearGradient>
       </Animated.View>
     </View>
@@ -173,64 +176,91 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  scrollArea: {
-    maxHeight: SH * 0.65,
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SH * 0.06,
+    paddingHorizontal: SW * 0.1,
   },
-  scrollContent: {
-    paddingHorizontal: SW * 0.05,
-    paddingTop: SH * 0.02,
-    paddingBottom: SH * 0.04,
+  emptyIconWrap: {
+    width: SW * 0.2,
+    height: SW * 0.2,
+    borderRadius: SW * 0.1,
+    backgroundColor: 'rgba(55, 65, 81, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SH * 0.02,
   },
-  notificationItem: {
-    flexDirection: 'row',
+  emptyTitle: {
+    fontSize: SW * 0.045,
+    color: '#fff',
+    fontFamily: 'Inter_700Bold',
+    marginBottom: SH * 0.01,
+  },
+  emptySubtext: {
+    fontSize: SW * 0.032,
+    color: '#6B7280',
+    fontFamily: 'Inter_400Regular',
+    textAlign: 'center',
+    lineHeight: SW * 0.05,
+  },
+  listContent: {
     padding: SW * 0.04,
-    backgroundColor: '#111',
+    paddingBottom: SH * 0.1,
+  },
+  notificationCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#141414',
+    padding: SW * 0.04,
     borderRadius: SW * 0.04,
     marginBottom: SH * 0.015,
     borderWidth: 1,
-    borderColor: '#222',
+    borderColor: '#1F1F1F',
   },
-  unreadItem: {
-    backgroundColor: '#1A1A1A',
-    borderColor: 'rgba(168, 85, 247, 0.4)',
+  notificationCardUnread: {
+    backgroundColor: '#1A1525',
+    borderColor: '#3B1A65',
   },
-  iconContainer: {
+  iconWrap: {
     width: SW * 0.12,
     height: SW * 0.12,
     borderRadius: SW * 0.06,
+    backgroundColor: 'rgba(168, 85, 247, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: SW * 0.03,
   },
-  textContainer: {
+  cardContent: {
     flex: 1,
-    justifyContent: 'center',
   },
-  notifTitle: {
-    fontSize: SW * 0.04,
+  cardTitle: {
+    fontSize: SW * 0.038,
+    color: '#E5E7EB',
+    fontFamily: 'Inter_600SemiBold',
+    marginBottom: 4,
+  },
+  cardTitleUnread: {
     color: '#fff',
     fontFamily: 'Inter_700Bold',
-    marginBottom: SH * 0.005,
   },
-  notifMessage: {
+  cardBody: {
     fontSize: SW * 0.032,
     color: '#9CA3AF',
     fontFamily: 'Inter_400Regular',
     lineHeight: SW * 0.045,
-    marginBottom: SH * 0.01,
   },
-  notifTime: {
+  cardTime: {
     fontSize: SW * 0.028,
     color: '#6B7280',
-    fontFamily: 'Inter_500Medium',
+    fontFamily: 'Inter_400Regular',
+    marginTop: 6,
   },
   unreadDot: {
-    width: SW * 0.025,
-    height: SW * 0.025,
-    borderRadius: SW * 0.0125,
+    width: SW * 0.02,
+    height: SW * 0.02,
+    borderRadius: SW * 0.01,
     backgroundColor: '#A855F7',
-    position: 'absolute',
-    top: SW * 0.04,
-    right: SW * 0.04,
+    marginLeft: SW * 0.02,
   },
 });

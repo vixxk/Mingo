@@ -71,8 +71,17 @@ export default function FindingListenerScreen() {
         }
       } catch (error) {
         console.log('Call start failed:', error);
+        
+        // Check if error is insufficient balance
+        if (error?.status === 402 || error?.message?.includes('balance') || error?.message?.includes('coins')) {
+          router.replace('/(wallet)/wallet');
+          // We can't use Alert in replaced route easily, but we can pass a param if needed. 
+          // For now, redirecting to wallet is good enough.
+          return;
+        }
+
         setTimeout(() => {
-          router.replace({ pathname: '/(call)/connecting', params: { name: 'Priya Sharma', callId: 'demo_zego_call' } });
+          router.replace({ pathname: '/(call)/connecting', params: { name: 'Priya Sharma', callId: 'demo_zego_call', callType } });
         }, 3000);
       }
     };

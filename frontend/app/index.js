@@ -31,12 +31,9 @@ export default function SplashScreenPage() {
       try {
         const userStr = await AsyncStorage.getItem('user');
         const userToken = await AsyncStorage.getItem('userToken');
-        const isAdmin = await AsyncStorage.getItem('isAdmin');
 
         let role = 'USER';
-        if (isAdmin === 'true') {
-          role = 'ADMIN';
-        } else if (userStr) {
+        if (userStr) {
           try {
             const user = JSON.parse(userStr);
             if (user.role) role = user.role;

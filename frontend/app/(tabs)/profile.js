@@ -58,6 +58,7 @@ export default function ProfileScreen() {
   const logoutSlide = useRef(new Animated.Value(20)).current;
 
   const [createdAtStr, setCreatedAtStr] = useState('Profile created recently');
+  const [activeMenuItems, setActiveMenuItems] = useState(MENU_ITEMS);
 
   useEffect(() => {
     Animated.stagger(120, [
@@ -80,42 +81,66 @@ export default function ProfileScreen() {
     useCallback(() => {
       const loadProfile = async () => {
         try {
-          const userStr = await AsyncStorage.getItem('user');
-          if (userStr) {
-            const userObj = JSON.parse(userStr);
-            setUsername(userObj.username || userObj.name || 'User');
+          // Fetch fresh data from API
+          const res = await authAPI.me();
+          let userObj = null;
+          
+          if (res?.data) {
+            userObj = res.data;
+            // Sync fresh data to local storage
+            await AsyncStorage.setItem('user', JSON.stringify(userObj));
+            if (userObj.gender) await AsyncStorage.setItem('userGender', userObj.gender);
+            if (userObj.avatarIndex !== undefined && userObj.avatarIndex !== null) {
+              await AsyncStorage.setItem('userAvatarIndex', userObj.avatarIndex.toString());
+            }
+          } else {
+            // Fallback to local storage if API fails
+            const userStr = await AsyncStorage.getItem('user');
+            if (userStr) userObj = JSON.parse(userStr);
+          }
+
+          if (userObj) {
+            setUsername(userObj.name || userObj.username || 'User');
             if (userObj.createdAt) {
               const d = new Date(userObj.createdAt);
               setCreatedAtStr(`Profile created on ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth()+1).padStart(2, '0')}/${d.getFullYear()}`);
             }
-          }
 
-          const gender = await AsyncStorage.getItem('userGender');
-          const avatarIndex = await AsyncStorage.getItem('userAvatarIndex');
-          
-          if (gender && avatarIndex) {
-            const maleAvatars = [
-              require('../../images/male_avatar_1_1776972918440.png'),
-              require('../../images/male_avatar_2_1776972933241.png'),
-              require('../../images/male_avatar_3_1776972950218.png'),
-              require('../../images/male_avatar_4_1776972963577.png'),
-              require('../../images/male_avatar_5_1776972978900.png'),
-              require('../../images/male_avatar_6_1776972993180.png'),
-              require('../../images/male_avatar_7_1776973008143.png'),
-              require('../../images/male_avatar_8_1776973021635.png'),
-            ];
-            const femaleAvatars = [
-              require('../../images/female_avatar_1_1776973035859.png'),
-              require('../../images/female_avatar_2_1776973050039.png'),
-              require('../../images/female_avatar_3_1776973063471.png'),
-              require('../../images/female_avatar_4_1776973077539.png'),
-              require('../../images/female_avatar_5_1776973090730.png'),
-              require('../../images/female_avatar_6_1776973108100.png'),
-              require('../../images/female_avatar_7_1776973124018.png'),
-              require('../../images/female_avatar_8_1776973138772.png'),
-            ];
-            const avatars = gender === 'Male' ? maleAvatars : femaleAvatars;
-            setUserAvatar(avatars[parseInt(avatarIndex, 10)] || avatars[0]);
+            const rawGender = userObj.gender || (await AsyncStorage.getItem('userGender')) || 'Male';
+            const normalizedGender = rawGender.charAt(0).toUpperCase() + rawGender.slice(1).toLowerCase();
+            
+            const avatarIndex = userObj.avatarIndex !== undefined ? userObj.avatarIndex.toString() : (await AsyncStorage.getItem('userAvatarIndex') || '0');
+            
+            if (normalizedGender && avatarIndex !== null) {
+              const maleAvatars = [
+                require('../../images/male_avatar_1_1776972918440.png'),
+                require('../../images/male_avatar_2_1776972933241.png'),
+                require('../../images/male_avatar_3_1776972950218.png'),
+                require('../../images/male_avatar_4_1776972963577.png'),
+                require('../../images/male_avatar_5_1776972978900.png'),
+                require('../../images/male_avatar_6_1776972993180.png'),
+                require('../../images/male_avatar_7_1776973008143.png'),
+                require('../../images/male_avatar_8_1776973021635.png'),
+              ];
+              const femaleAvatars = [
+                require('../../images/female_avatar_1_1776973035859.png'),
+                require('../../images/female_avatar_2_1776973050039.png'),
+                require('../../images/female_avatar_3_1776973063471.png'),
+                require('../../images/female_avatar_4_1776973077539.png'),
+                require('../../images/female_avatar_5_1776973090730.png'),
+                require('../../images/female_avatar_6_1776973108100.png'),
+                require('../../images/female_avatar_7_1776973124018.png'),
+                require('../../images/female_avatar_8_1776973138772.png'),
+              ];
+              const avatars = normalizedGender === 'Male' ? maleAvatars : femaleAvatars;
+              setUserAvatar(avatars[parseInt(avatarIndex, 10)] || avatars[0]);
+
+              if (normalizedGender === 'Male') {
+                setActiveMenuItems(MENU_ITEMS.filter(item => item.id !== '4'));
+              } else {
+                setActiveMenuItems(MENU_ITEMS);
+              }
+            }
           }
         } catch (e) {
           console.error('Error loading profile:', e);
@@ -142,7 +167,7 @@ export default function ProfileScreen() {
   const confirmLogout = async () => {
     try {
       await authAPI.logout();
-      await AsyncStorage.multiRemove(['userToken', 'user', 'listenerStatus', 'isAdmin']);
+      await AsyncStorage.multiRemove(['userToken', 'token', 'user', 'listenerStatus', 'isAdmin']);
       setShowLogoutPopup(false);
       router.replace('/welcome');
     } catch (error) {
@@ -182,10 +207,10 @@ export default function ProfileScreen() {
 
         {}
         <Animated.View style={[styles.menuCard, { opacity: menuCardAnim, transform: [{ translateY: menuSlide }] }]}>
-          {MENU_ITEMS.map((item, index) => (
+          {activeMenuItems.map((item, index) => (
             <View key={item.id}>
               <MenuItem item={item} onPress={handleMenuPress} />
-              {index < MENU_ITEMS.length - 1 && <View style={styles.menuDivider} />}
+              {index < activeMenuItems.length - 1 && <View style={styles.menuDivider} />}
             </View>
           ))}
         </Animated.View>

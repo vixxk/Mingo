@@ -12,13 +12,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { authAPI } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs } from '../../utils/responsive';
 import RaiseIssuePopup from '../../components/shared/RaiseIssuePopup';
 import LogoutPopup from '../../components/shared/LogoutPopup';
 
 const MENU_ITEMS = [
-  { id: '1', label: 'Wallet', icon: 'wallet-outline', route: '/balance' },
   { id: '2', label: 'Transactions', icon: 'receipt-outline', route: '/payment-failed' },
   { id: '3', label: 'Language Settings', icon: 'globe-outline', route: '/language?fromSettings=true' },
   { id: '5', label: 'Help & Support', icon: 'headset-outline', route: '/help-support' },
@@ -45,19 +45,39 @@ export default function ListenerProfileScreen() {
   const [showIssuePopup, setShowIssuePopup] = useState(false);
   const [showLogoutPopup, setShowLogoutPopup] = useState(false);
   const [userAvatar, setUserAvatar] = useState(require('../../images/user_avatar.png'));
-  const [username, setUsername] = useState('Listener1234');
+  const [username, setUsername] = useState('Listener');
+  const [joinDate, setJoinDate] = useState('Member');
 
   useFocusEffect(
     useCallback(() => {
       const loadProfile = async () => {
         try {
-          const gender = await AsyncStorage.getItem('userGender');
-          const avatarIndex = await AsyncStorage.getItem('userAvatarIndex');
-          const storedUsername = await AsyncStorage.getItem('userName');
+          // 1. Fetch fresh data from API
+          const res = await authAPI.me();
+          let userObj = null;
           
-          if (storedUsername) setUsername(storedUsername);
-          
-          if (gender && avatarIndex) {
+          if (res?.data) {
+            userObj = res.data;
+            await AsyncStorage.setItem('user', JSON.stringify(userObj));
+            if (userObj.gender) await AsyncStorage.setItem('userGender', userObj.gender);
+            if (userObj.avatarIndex !== undefined) await AsyncStorage.setItem('userAvatarIndex', userObj.avatarIndex.toString());
+            if (userObj.name) await AsyncStorage.setItem('userName', userObj.name);
+          } else {
+            const userStr = await AsyncStorage.getItem('user');
+            if (userStr) userObj = JSON.parse(userStr);
+          }
+
+          if (userObj) {
+            setUsername(userObj.name || userObj.username || 'Listener');
+            if (userObj.createdAt) {
+              const d = new Date(userObj.createdAt);
+              setJoinDate(`Listener since ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth()+1).padStart(2, '0')}/${d.getFullYear()}`);
+            }
+
+            const rawGender = userObj.gender || (await AsyncStorage.getItem('userGender')) || 'Male';
+            const normalizedGender = rawGender.charAt(0).toUpperCase() + rawGender.slice(1).toLowerCase();
+            const avatarIndex = userObj.avatarIndex !== undefined ? userObj.avatarIndex.toString() : (await AsyncStorage.getItem('userAvatarIndex') || '0');
+            
             const maleAvatars = [
               require('../../images/male_avatar_1_1776972918440.png'),
               require('../../images/male_avatar_2_1776972933241.png'),
@@ -78,7 +98,7 @@ export default function ListenerProfileScreen() {
               require('../../images/female_avatar_7_1776973124018.png'),
               require('../../images/female_avatar_8_1776973138772.png'),
             ];
-            const avatars = gender === 'Male' ? maleAvatars : femaleAvatars;
+            const avatars = normalizedGender === 'Male' ? maleAvatars : femaleAvatars;
             setUserAvatar(avatars[parseInt(avatarIndex, 10)] || avatars[0]);
           }
         } catch (e) {
@@ -135,7 +155,7 @@ export default function ListenerProfileScreen() {
           </View>
 
           <Text style={styles.username}>{username}</Text>
-          <Text style={styles.profileDate}>Listener since 17/04/2025</Text>
+          <Text style={styles.profileDate}>{joinDate}</Text>
         </View>
 
         {}

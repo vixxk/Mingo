@@ -110,6 +110,10 @@ export const listenersAPI = {
   getProfile: async (id) => {
     return apiRequest(`/listeners/${id}`);
   },
+
+  getPublicProfile: async (id) => {
+    return apiRequest(`/listeners/${id}/public-profile`);
+  },
 };
 
 export const listenerAPI = {
@@ -123,6 +127,37 @@ export const listenerAPI = {
 
   heartbeat: async () => {
     return apiRequest('/listeners/heartbeat', { method: 'POST' });
+  },
+
+  getMyProfile: async () => {
+    return apiRequest('/listener/my-profile');
+  },
+
+  updatePublicProfile: async (data) => {
+    return apiRequest('/listener/public-profile', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  submitProfileForApproval: async () => {
+    return apiRequest('/listener/public-profile/submit', {
+      method: 'POST',
+    });
+  },
+
+  getMediaUploadUrls: async (files) => {
+    return apiRequest('/listener/upload-media', {
+      method: 'POST',
+      body: JSON.stringify({ files }),
+    });
+  },
+
+  updateSettings: async (data) => {
+    return apiRequest('/listener/update-settings', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
   },
 };
 
@@ -174,6 +209,10 @@ export const walletAPI = {
     return apiRequest('/wallet/balance');
   },
 
+  checkBalance: async (feature = 'chat') => {
+    return apiRequest(`/wallet/check-balance?feature=${feature}`);
+  },
+
   getPackages: async () => {
     return apiRequest('/wallet/packages');
   },
@@ -198,10 +237,24 @@ export const userAPI = {
     });
   },
 
+  updatePushToken: async (pushToken) => {
+    return apiRequest('/user/push-token', {
+      method: 'PATCH',
+      body: JSON.stringify({ pushToken }),
+    });
+  },
+
   applyAsListener: async (data) => {
     return apiRequest('/user/apply-listener', {
       method: 'POST',
       body: JSON.stringify(data),
+    });
+  },
+
+  getUploadUrl: async (fileType, extension) => {
+    return apiRequest('/user/get-upload-url', {
+      method: 'POST',
+      body: JSON.stringify({ fileType, extension }),
     });
   },
 
@@ -259,6 +312,10 @@ export const adminAPI = {
     return apiRequest(`/admin/users/${id}/ban`, { method: 'PATCH' });
   },
 
+  deleteUser: async (id) => {
+    return apiRequest(`/admin/users/${id}`, { method: 'DELETE' });
+  },
+
   getActivities: async (limit = 20, page = 1) => {
     return apiRequest(`/admin/activities?limit=${limit}&page=${page}`);
   },
@@ -277,6 +334,104 @@ export const adminAPI = {
 
   getBannedMembers: async () => {
     return apiRequest('/admin/banned');
+  },
+
+  // Wallet & Coins
+  getCoinPackages: async () => {
+    return apiRequest('/admin/coin-packages');
+  },
+  updateCoinPackages: async (packages) => {
+    return apiRequest('/admin/coin-packages', {
+      method: 'PUT',
+      body: JSON.stringify({ packages }),
+    });
+  },
+
+  // Payouts
+  getPayouts: async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/admin/payouts?${query}`);
+  },
+  updatePayoutStatus: async (id, data) => {
+    return apiRequest(`/admin/payouts/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Settings
+  getSettings: async () => {
+    return apiRequest('/admin/settings');
+  },
+  updateSettings: async (data) => {
+    return apiRequest('/admin/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  sendPushNotification: async (data) => {
+    return apiRequest('/admin/notifications/send', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  getCampaigns: async () => {
+    return apiRequest('/admin/notifications/campaigns');
+  },
+
+  // Profile Approvals
+  getProfileApprovals: async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/admin/profile-approvals?${query}`);
+  },
+
+  approveProfileChanges: async (id) => {
+    return apiRequest(`/admin/profile-approvals/${id}/approve`, { method: 'PATCH' });
+  },
+
+  rejectProfileChanges: async (id, adminNotes) => {
+    return apiRequest(`/admin/profile-approvals/${id}/reject`, {
+      method: 'PATCH',
+      body: JSON.stringify({ adminNotes }),
+    });
+  },
+
+  // Sessions
+  getSessions: async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/admin/sessions?${query}`);
+  },
+
+  // Ratings
+  getRatings: async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/admin/ratings?${query}`);
+  },
+};
+
+export const giftsAPI = {
+  getAll: async () => {
+    return apiRequest('/gifts');
+  },
+  send: async (data) => {
+    return apiRequest('/gifts/send', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+};
+
+export const notificationAPI = {
+  getNotifications: async (page = 1, limit = 20) => {
+    return apiRequest(`/notifications?page=${page}&limit=${limit}`);
+  },
+  markAsRead: async (id) => {
+    return apiRequest(`/notifications/${id}/read`, { method: 'PATCH' });
+  },
+  markAllAsRead: async () => {
+    return apiRequest('/notifications/mark-all-read', { method: 'POST' });
   },
 };
 

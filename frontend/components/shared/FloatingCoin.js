@@ -43,7 +43,7 @@ const FloatingCoin = ({ style, delay }) => {
 const styles = StyleSheet.create({
   floatingCoin: {
     position: 'absolute',
-    zIndex: 5,
+    zIndex: 0,
   },
 });
 

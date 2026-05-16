@@ -1,21 +1,21 @@
 {
   "expo": {
-    "name": "frontend",
+    "name": "Mingo",
     "slug": "frontend",
-    "scheme": "talk-to-me",
+    "scheme": "mingo",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./images/logo.png",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./images/logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#000000"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.vixxk.frontend"
+      "bundleIdentifier": "com.vixxk.mingo"
     },
     "plugins": [
       "expo-router",
@@ -38,15 +38,16 @@
           "cameraPermission": "Allow Mingo to access your camera for video calls."
         }
       ],
-      "./plugins/withZegoCloud.js"
+      "./plugins/withZegoCloud.js",
+      "expo-video"
     ],
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./images/logo.png",
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.vixxk.frontend",
+      "package": "com.vixxk.mingo",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",

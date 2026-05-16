@@ -44,8 +44,8 @@ class PresenceService {
 
     static async heartbeat(userId) {
     const userIdStr = userId.toString();
-    const isAvailable = await redis.sismember(REDIS_KEYS.LISTENERS_AVAILABLE, userIdStr);
-    if (!isAvailable) {
+    const isOnline = await redis.exists(REDIS_KEYS.ONLINE(userIdStr));
+    if (!isOnline) {
       throw new AppError('Listener is not online', 400);
     }
 

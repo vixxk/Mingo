@@ -6,15 +6,21 @@ import { ms, s, vs } from '../../utils/responsive';
 const { height: SH, width: SW } = Dimensions.get('window');
 
 
-export const StatCard = ({ title, value, icon, gradient, subtitle }) => (
-  <LinearGradient colors={gradient} start={{ x:0,y:0 }} end={{ x:1,y:1 }} style={cStyles.statCard}>
-    <View style={cStyles.statIconWrap}>
-      <Ionicons name={icon} size={20} color="rgba(255,255,255,0.9)" />
-    </View>
-    <Text style={cStyles.statValue}>{value}</Text>
-    <Text style={cStyles.statTitle}>{title}</Text>
-    {subtitle && <Text style={cStyles.statSub}>{subtitle}</Text>}
-  </LinearGradient>
+export const StatCard = ({ title, value, icon, gradient, subtitle, onPress }) => (
+  <TouchableOpacity 
+    activeOpacity={onPress ? 0.8 : 1} 
+    onPress={onPress}
+    disabled={!onPress}
+  >
+    <LinearGradient colors={gradient} start={{ x:0,y:0 }} end={{ x:1,y:1 }} style={cStyles.statCard}>
+      <View style={cStyles.statIconWrap}>
+        <Ionicons name={icon} size={20} color="rgba(255,255,255,0.9)" />
+      </View>
+      <Text style={cStyles.statValue} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
+      <Text style={cStyles.statTitle} numberOfLines={1} adjustsFontSizeToFit>{title}</Text>
+      {subtitle && <Text style={cStyles.statSub} numberOfLines={1} adjustsFontSizeToFit>{subtitle}</Text>}
+    </LinearGradient>
+  </TouchableOpacity>
 );
 
 

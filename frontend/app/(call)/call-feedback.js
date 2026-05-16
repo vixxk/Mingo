@@ -28,7 +28,7 @@ const TAGS = [
 export default function CallFeedbackScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { name = 'Priya Sharma', sessionId } = useLocalSearchParams();
+  const { name = 'Priya Sharma', sessionId, listenerId, callType = 'audio' } = useLocalSearchParams();
   const [rating, setRating] = useState(4);
   const [selectedTags, setSelectedTags] = useState([]);
   const [feedback, setFeedback] = useState('');

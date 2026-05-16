@@ -18,6 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, SCREEN_WIDTH } from '../../utils/responsive';
 import { callAPI, userAPI, walletAPI } from '../../utils/api';
 import FavouriteListenerPopup from '../../components/shared/FavouriteListenerPopup';
+import NotificationsPopup from '../../components/shared/NotificationsPopup';
 import { useFocusEffect } from 'expo-router';
 
 
@@ -51,8 +52,9 @@ const getAvatarImage = (gender, index) => {
   }
 };
 
-const CallItem = ({ item, index }) => {
+const CallItem = ({ item }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  const router = useRouter();
 
   const handlePressIn = () => {
     Animated.spring(scaleAnim, { toValue: 0.97, friction: 8, tension: 100, useNativeDriver: true }).start();
@@ -61,12 +63,50 @@ const CallItem = ({ item, index }) => {
     Animated.spring(scaleAnim, { toValue: 1, friction: 5, tension: 80, useNativeDriver: true }).start();
   };
 
+  const handleAudioCall = () => {
+    router.push({
+      pathname: '/(call)/connecting',
+      params: {
+        name: item.name,
+        callType: 'audio',
+        callId: `call_${Date.now()}`,
+        roomId: `room_${Date.now()}`,
+        listenerId: item.listenerId || item.id, // item.id is fallback for favourites
+        avatarIndex: item.avatarIndex || '0',
+        gender: item.gender || 'Female'
+      }
+    });
+  };
+
+  const handleVideoCall = () => {
+    router.push({
+      pathname: '/(call)/connecting',
+      params: {
+        name: item.name,
+        callType: 'video',
+        callId: `call_${Date.now()}`,
+        roomId: `room_${Date.now()}`,
+        listenerId: item.listenerId || item.id, // item.id is fallback for favourites
+        avatarIndex: item.avatarIndex || '0',
+        gender: item.gender || 'Female'
+      }
+    });
+  };
+
+  const handleProfilePress = () => {
+    const targetId = item.listenerId || item.id;
+    if (targetId) {
+      router.push(`/listener-profile/${targetId}`);
+    }
+  };
+
   return (
     <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
       <TouchableOpacity
         activeOpacity={0.9}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
+        onPress={handleProfilePress}
       >
         <LinearGradient
           colors={item.gradientColors || ['#4B5563', '#6B7280']}
@@ -80,10 +120,10 @@ const CallItem = ({ item, index }) => {
             <Text style={styles.callDuration}>{item.duration}</Text>
           </View>
           <View style={styles.callActions}>
-            <TouchableOpacity style={styles.callActionBtn} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.callActionBtn} activeOpacity={0.7} onPress={handleAudioCall}>
               <Ionicons name="call" size={18} color="#22C55E" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.callActionBtn} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.callActionBtn} activeOpacity={0.7} onPress={handleVideoCall}>
               <Ionicons name="videocam" size={18} color="#22C55E" />
             </TouchableOpacity>
           </View>
@@ -93,20 +133,62 @@ const CallItem = ({ item, index }) => {
   );
 };
 
-const EmptyState = ({ tab }) => (
-  <View style={styles.emptyContainer}>
-    <Text style={styles.emptyTitle}>No Past Sessions!</Text>
-    <Text style={styles.emptySubtitle}>
-      Start call now and a good{'\n'}conversation with strangers.
-    </Text>
-  </View>
-);
+const EmptyState = ({ tab }) => {
+  const router = useRouter();
+  return (
+    <View style={styles.emptyContainer}>
+      {tab === 'favourite' ? (
+        <>
+          <View style={styles.emptyIconContainer}>
+            <LinearGradient
+              colors={['#7F1D1D', '#991B1B']}
+              style={styles.emptyIconCircle}
+            >
+              <Ionicons name="heart" size={s(40)} color="#fff" />
+            </LinearGradient>
+          </View>
+          <Text style={styles.emptyTitle}>No Favourites!</Text>
+          <Text style={styles.emptySubtitle}>
+            Mark listeners as favourites to quickly{'\n'}find them here later.
+          </Text>
+          <TouchableOpacity
+            style={styles.exploreBtn}
+            onPress={() => router.replace('/(tabs)')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.exploreBtnText}>Explore Listeners</Text>
+          </TouchableOpacity>
+        </>
+      ) : (
+        <>
+          <View style={styles.emptyIconContainer}>
+            <View style={[styles.emptyIconCircle, { backgroundColor: '#1F2937' }]}>
+              <Ionicons name="call-outline" size={s(40)} color="#9CA3AF" />
+            </View>
+          </View>
+          <Text style={styles.emptyTitle}>No Past Sessions!</Text>
+          <Text style={styles.emptySubtitle}>
+            Start call now and a good{'\n'}conversation with strangers.
+          </Text>
+          <TouchableOpacity
+            style={styles.exploreBtn}
+            onPress={() => router.replace('/(tabs)')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.exploreBtnText}>Find Listeners</Text>
+          </TouchableOpacity>
+        </>
+      )}
+    </View>
+  );
+};
 
 export default function RecentCallsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('recent'); 
   const [showFavPopup, setShowFavPopup] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   
   const headerAnim = useRef(new Animated.Value(0)).current;
@@ -142,6 +224,7 @@ export default function RecentCallsScreen() {
           if (callsRes?.data) {
             setRecentCalls(callsRes.data.map(call => ({
               id: call._id,
+              listenerId: call.listenerId?._id || call.listenerId,
               name: call.listenerId?.name || 'Unknown',
               gender: call.listenerId?.gender,
               avatarIndex: call.listenerId?.avatarIndex,
@@ -198,10 +281,15 @@ export default function RecentCallsScreen() {
       {}
       <Animated.View style={[styles.header, { opacity: headerAnim }]}>
         <View style={styles.headerLeft}>
-          <Image
-            source={require('../../images/user_avatar.png')}
-            style={styles.avatar}
-          />
+          <TouchableOpacity 
+            activeOpacity={0.7} 
+            onPress={() => router.push('/profile')}
+          >
+            <Image
+              source={require('../../images/user_avatar.png')}
+              style={styles.avatar}
+            />
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.coinBadge}
             activeOpacity={0.7}
@@ -211,7 +299,11 @@ export default function RecentCallsScreen() {
             <Text style={styles.coinCount}>{coinBalance}</Text>
           </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.notificationBtn} activeOpacity={0.7}>
+        <TouchableOpacity 
+          style={styles.notificationBtn} 
+          activeOpacity={0.7}
+          onPress={() => setShowNotifications(true)}
+        >
           <Ionicons name="notifications-outline" size={24} color="#fff" />
         </TouchableOpacity>
       </Animated.View>
@@ -267,6 +359,7 @@ export default function RecentCallsScreen() {
 
       {}
       <FavouriteListenerPopup visible={showFavPopup} onGotIt={handleFavGotIt} />
+      <NotificationsPopup visible={showNotifications} onClose={() => setShowNotifications(false)} />
     </View>
   );
 }
@@ -431,5 +524,35 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     textAlign: 'center',
     lineHeight: ms(20),
+  },
+  emptyIconContainer: {
+    marginBottom: vs(24),
+  },
+  emptyIconCircle: {
+    width: s(80),
+    height: s(80),
+    borderRadius: s(40),
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  exploreBtn: {
+    marginTop: vs(24),
+    backgroundColor: '#1F2937',
+    paddingHorizontal: s(32),
+    paddingVertical: vs(12),
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: '#374151',
+  },
+  exploreBtnText: {
+    color: '#fff',
+    fontSize: ms(14, 0.3),
+    fontFamily: 'Inter_600SemiBold',
+    fontWeight: '600',
   },
 });

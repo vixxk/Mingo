@@ -38,7 +38,7 @@ const signupValidation = [
   body('otp')
     .trim()
     .notEmpty().withMessage('OTP is required')
-    .isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits'),
+    .isLength({ min: 4, max: 6 }).withMessage('OTP must be 4 to 6 digits'),
   validate,
 ];
 
@@ -50,7 +50,7 @@ const loginValidation = [
   body('otp')
     .trim()
     .notEmpty().withMessage('OTP is required')
-    .isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits'),
+    .isLength({ min: 4, max: 6 }).withMessage('OTP must be 4 to 6 digits'),
   validate,
 ];
 

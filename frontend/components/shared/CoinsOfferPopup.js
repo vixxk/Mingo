@@ -11,30 +11,17 @@ const formatTime = (totalSeconds) => {
   return `${String(h).padStart(2, '0')}h: ${String(m).padStart(2, '0')}m: ${String(sec).padStart(2, '0')}s left`;
 };
 
-export default function CoinsOfferPopup({ visible, onClose, onAddCoins, signupTimestamp, offerData }) {
+export default function CoinsOfferPopup({ visible, onClose, onAddCoins, timeLeft: timeLeftProp, offerData }) {
   const slideAnim = useRef(new Animated.Value(500)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
-  const [timeLeft, setTimeLeft] = useState(6 * 3600); 
+  const [internalTimeLeft, setInternalTimeLeft] = useState(timeLeftProp || 0);
 
   
   useEffect(() => {
-    if (!visible) return;
-
-    const calcRemaining = () => {
-      const now = Date.now();
-      const expiry = signupTimestamp + 6 * 3600 * 1000;
-      return Math.max(0, Math.floor((expiry - now) / 1000));
-    };
-
-    setTimeLeft(calcRemaining());
-    const interval = setInterval(() => {
-      const remaining = calcRemaining();
-      setTimeLeft(remaining);
-      if (remaining <= 0) clearInterval(interval);
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [visible, signupTimestamp]);
+    if (timeLeftProp !== undefined) {
+      setInternalTimeLeft(timeLeftProp);
+    }
+  }, [timeLeftProp]);
 
   useEffect(() => {
     if (visible) {
@@ -50,7 +37,7 @@ export default function CoinsOfferPopup({ visible, onClose, onAddCoins, signupTi
     }
   }, [visible]);
 
-  if (!visible || timeLeft <= 0) return null;
+  if (!visible || internalTimeLeft <= 0) return null;
 
   const defaultOffer = { title: '80% Off', coins: 80, originalPrice: 55, newPrice: 11 };
   const offer = offerData || defaultOffer;
@@ -68,7 +55,7 @@ export default function CoinsOfferPopup({ visible, onClose, onAddCoins, signupTi
         >
           <View style={styles.timerBadge}>
             <Ionicons name="timer-outline" size={14} color="#000" />
-            <Text style={styles.timerText}>{formatTime(timeLeft)}</Text>
+            <Text style={styles.timerText}>{formatTime(internalTimeLeft)}</Text>
           </View>
 
           {}
