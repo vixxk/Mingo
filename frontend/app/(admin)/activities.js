@@ -12,7 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { ms, s, vs } from '../../utils/responsive';
 import { ActivityItem } from '../../components/admin/AdminComponents';
 import { adminAPI } from '../../utils/api';
@@ -79,9 +79,11 @@ export default function ActivitiesScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchActivities(1);
-  }, [fetchActivities]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchActivities(1);
+    }, [fetchActivities])
+  );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

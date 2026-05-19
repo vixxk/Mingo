@@ -25,6 +25,13 @@ class PresenceService {
     
     await PresenceService._updateScore(userId);
 
+    try {
+      const { getIo } = require('../socket');
+      getIo().emit('listener_status_changed', { userId: userIdStr, isOnline: true, isBusy: false });
+    } catch (e) {
+      console.log('Socket not initialized yet', e.message);
+    }
+
     return { status: 'online', userId: userIdStr };
   }
 
@@ -38,6 +45,13 @@ class PresenceService {
     await pipeline.exec();
 
     await Listener.setOnlineStatus(userId, false);
+
+    try {
+      const { getIo } = require('../socket');
+      getIo().emit('listener_status_changed', { userId: userIdStr, isOnline: false, isBusy: false });
+    } catch (e) {
+      console.log('Socket not initialized yet', e.message);
+    }
 
     return { status: 'offline', userId: userIdStr };
   }

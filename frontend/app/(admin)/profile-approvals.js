@@ -4,7 +4,7 @@ import {
   Dimensions, Image, Alert, ActivityIndicator, RefreshControl,
   Linking, TextInput, Modal,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
@@ -161,10 +161,12 @@ export default function ProfileApprovalsScreen() {
     }
   }, [filter]);
 
-  useEffect(() => {
-    setLoading(true);
-    fetchApprovals();
-  }, [fetchApprovals]);
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      fetchApprovals();
+    }, [fetchApprovals])
+  );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

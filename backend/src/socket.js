@@ -7,6 +7,7 @@ const Transaction = require('./models/transactionModel');
 const Session = require('./models/sessionModel');
 const jwt = require('jsonwebtoken');
 const config = require('./config/env');
+const { redis, REDIS_KEYS } = require('./config/redis');
 
 let io;
 
@@ -292,9 +293,49 @@ const initSocket = (server) => {
       io.to(`user_${userId}`).emit('call_accepted', { sessionId });
     });
 
-    socket.on('call_rejected', (data) => {
-      const { userId, reason } = data;
-      io.to(`user_${userId}`).emit('call_rejected', { reason });
+    socket.on('call_rejected', async (data) => {
+      const { userId, sessionId, reason } = data;
+      console.log(`[Socket] call_rejected received from listener. Caller user: ${userId}, Session: ${sessionId}`);
+      io.to(`user_${userId}`).emit('call_rejected', { reason: reason || 'rejected' });
+      try {
+        if (sessionId) {
+          await Session.findByIdAndUpdate(sessionId, { status: 'cancelled' });
+        }
+        let listenerUserId = socket.userId;
+        if (!listenerUserId && sessionId) {
+          const sess = await Session.findById(sessionId);
+          if (sess) listenerUserId = sess.listenerId;
+        }
+        if (listenerUserId) {
+          await Listener.findOneAndUpdate({ userId: listenerUserId }, { isBusy: false });
+          io.emit('listener_status_changed', { userId: listenerUserId, isOnline: true, isBusy: false });
+          await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, listenerUserId.toString());
+          await redis.del(REDIS_KEYS.LOCK(listenerUserId.toString()));
+        }
+      } catch (err) {
+        console.error('[Socket] Error handling call_rejected DB updates:', err.message);
+      }
+    });
+
+    socket.on('call_cancelled', async (data) => {
+      const { userId, sessionId } = data;
+      console.log(`[Socket] call_cancelled received from caller. Listener: ${userId}, Session: ${sessionId}`);
+      if (userId) {
+        io.to(`user_${userId}`).emit('call_cancelled', { sessionId });
+      }
+      try {
+        if (sessionId) {
+          await Session.findByIdAndUpdate(sessionId, { status: 'cancelled' });
+        }
+        if (userId) {
+          await Listener.findOneAndUpdate({ userId: userId }, { isBusy: false });
+          io.emit('listener_status_changed', { userId: userId, isOnline: true, isBusy: false });
+          await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, userId.toString());
+          await redis.del(REDIS_KEYS.LOCK(userId.toString()));
+        }
+      } catch (err) {
+        console.error('[Socket] Error handling call_cancelled DB updates:', err.message);
+      }
     });
 
     socket.on('call_ended', (data) => {
@@ -430,6 +471,28 @@ const initSocket = (server) => {
 
     socket.on('disconnect', () => {
       console.log('User disconnected:', socket.id);
+      if (socket.userId) {
+        randomUsers.delete(socket.userId);
+        randomListeners.delete(socket.userId);
+        if (randomSearchTimeouts[socket.userId]) {
+          clearTimeout(randomSearchTimeouts[socket.userId]);
+          delete randomSearchTimeouts[socket.userId];
+        }
+        
+        // Auto-offline listener
+        (async () => {
+          try {
+            const listener = await Listener.findOne({ userId: socket.userId });
+            if (listener) {
+              const PresenceService = require('./services/presenceService');
+              await PresenceService.goOffline(socket.userId);
+              console.log(`Listener ${socket.userId} automatically set to offline on socket disconnect.`);
+            }
+          } catch (e) {
+            console.error('Error setting listener offline on disconnect:', e.message);
+          }
+        })();
+      }
     });
   });
 };

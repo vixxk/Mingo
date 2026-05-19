@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { adminAPI } from '../../utils/api';
 import { ms, s, wp, hp } from '../../utils/responsive';
 import { Skeleton } from '../../components/admin/Skeleton';
@@ -72,7 +72,11 @@ export default function AdminNotifications() {
     }
   };
 
-  useEffect(() => { loadHistory(); }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadHistory();
+    }, [])
+  );
 
   useEffect(() => {
     if (target === 'specific' && userSearchQuery.length > 2) {

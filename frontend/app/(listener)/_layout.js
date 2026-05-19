@@ -3,9 +3,80 @@ import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { View, StyleSheet, Platform, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Device from 'expo-device';
+import Constants from 'expo-constants';
 import { ms, vs } from '../../utils/responsive';
 import { socketService } from '../../utils/socket';
+import { userAPI, callAPI } from '../../utils/api';
 import IncomingCallPopup from '../../components/shared/IncomingCallPopup';
+
+// Conditional import for expo-notifications to avoid crash
+let Notifications = null;
+const isExpoGo = Constants.appOwnership === 'expo';
+
+try {
+  Notifications = require('expo-notifications');
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
+} catch (e) {
+  console.warn('Failed to load expo-notifications:', e);
+}
+
+async function registerForPushNotificationsAsync() {
+  if (!Notifications) {
+    console.log('expo-notifications is not loaded');
+    return null;
+  }
+
+  let token;
+
+  if (Platform.OS === 'android') {
+    try {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF231F7C',
+      });
+    } catch (e) {
+      console.log('Error setting notification channel:', e);
+    }
+  }
+
+  if (Device.isDevice || isExpoGo) {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== 'granted') {
+      console.log('Failed to get push token for push notification!');
+      return;
+    }
+    try {
+      token = (await Notifications.getExpoPushTokenAsync({
+        projectId: Constants.expoConfig?.extra?.eas?.projectId || '29226353-1b41-4785-8ac5-74ded0cd7328'
+      })).data;
+    } catch (e) {
+      console.log('Error getting expo push token, trying device token...', e);
+      try {
+        token = (await Notifications.getDevicePushTokenAsync()).data;
+      } catch (err) {
+        console.log('Error getting device push token', err);
+      }
+    }
+  } else {
+    console.log('Must use physical device for Push Notifications');
+  }
+
+  return token;
+}
 
 export default function ListenerLayout() {
   const insets = useSafeAreaInsets();
@@ -22,16 +93,48 @@ export default function ListenerLayout() {
         setIncomingCall(callData);
       });
 
+      socketService.on('call_cancelled', (data) => {
+        console.log('Call cancelled by caller:', data);
+        setIncomingCall(null);
+      });
+
       socketService.on('new_message_notification', (data) => {
         console.log('New message received:', data);
-        // We could show a toast here if we had a toast provider
       });
+
+      registerForPushNotificationsAsync().then(token => {
+        if (token) {
+          userAPI.updatePushToken(token).catch(e => console.log('Update push token err:', e));
+        }
+      });
+
+      // Redirect listener to ongoing active session if any
+      callAPI.getActiveSession().then(res => {
+        if (res?.data) {
+          const session = res.data;
+          const targetScreen = session.callType === 'video' ? '/(call)/video-call' : '/(call)/audio-call';
+          router.replace({
+            pathname: targetScreen,
+            params: {
+              name: session.userId?.name || 'User',
+              callId: session._id,
+              roomId: session.roomId,
+              userId: session.userId?._id || session.userId,
+              avatarIndex: session.userId?.avatarIndex || '0',
+              gender: session.userId?.gender || 'Female',
+              callType: session.callType,
+              isIncoming: 'true',
+            }
+          });
+        }
+      }).catch(err => console.log('Error checking active session for listener:', err));
     };
 
     setupSocket();
 
     return () => {
       socketService.off('incoming_call');
+      socketService.off('call_cancelled');
     };
   }, []);
 
@@ -64,7 +167,11 @@ export default function ListenerLayout() {
 
   const handleRejectCall = () => {
     if (!incomingCall) return;
-    socketService.emit('call_rejected', { userId: incomingCall.callerId, reason: 'busy' });
+    socketService.emit('call_rejected', { 
+      userId: incomingCall.callerId, 
+      sessionId: incomingCall.callId,
+      reason: 'busy' 
+    });
     setIncomingCall(null);
   };
 

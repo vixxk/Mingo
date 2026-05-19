@@ -126,16 +126,25 @@ export default function ChatScreen() {
   const [isTyping, setIsTyping] = useState(false);
   const [coinBalance, setCoinBalance] = useState(0);
   const [chatBlocked, setChatBlocked] = useState(false);
+  const [realConversationId, setRealConversationId] = useState(conversationId);
+  const [otherUserId, setOtherUserId] = useState(null);
   const scrollRef = useRef(null);
   const typingTimeout = useRef(null);
+  const realConversationIdRef = useRef(conversationId);
+
+  useEffect(() => {
+    realConversationIdRef.current = realConversationId;
+  }, [realConversationId]);
 
   useEffect(() => {
     const init = async () => {
       try {
+        let myId = null;
         const userData = await AsyncStorage.getItem('user');
         if (userData) {
           const user = JSON.parse(userData);
-          setCurrentUserId(user._id || user.id);
+          myId = user._id || user.id;
+          setCurrentUserId(myId);
           setUserRole(user.role || 'USER');
         }
 
@@ -148,24 +157,39 @@ export default function ChatScreen() {
         await socketService.connect();
 
         if (conversationId) {
-          console.log('[Chat] Joining room:', conversationId);
-          socketService.joinRoom(conversationId);
-          const response = await chatAPI.getMessages(conversationId);
-          const apiMessages = response.data || response || [];
+          console.log('[Chat] Initiating conversation for ID:', conversationId);
+          const response = await chatAPI.getOrCreateConversation(conversationId);
+          
+          if (response?.data) {
+            const actualConvId = response.data.conversationId;
+            setRealConversationId(actualConvId);
+            
+            const parts = response.data.participants || [];
+            const other = parts.find(p => p.toString() !== myId?.toString());
+            if (other) {
+              setOtherUserId(other.toString());
+            } else {
+              setOtherUserId(conversationId);
+            }
 
-          const formatted = insertDateLabels(
-            apiMessages.map((msg) => ({
-              id: msg._id,
-              text: msg.content,
-              sent: false,
-              type: msg.type || 'text',
-              mediaUrl: msg.mediaUrl,
-              senderId: msg.sender?._id || msg.sender,
-              senderModel: msg.senderModel,
-              createdAt: msg.createdAt,
-            }))
-          );
-          setMessages(formatted);
+            console.log('[Chat] Joining room:', actualConvId);
+            socketService.joinRoom(actualConvId);
+
+            const apiMessages = response.data.messages || [];
+            const formatted = insertDateLabels(
+              apiMessages.map((msg) => ({
+                id: msg._id,
+                text: msg.content,
+                sent: false,
+                type: msg.type || 'text',
+                mediaUrl: msg.mediaUrl,
+                senderId: msg.sender?._id || msg.sender,
+                senderModel: msg.senderModel,
+                createdAt: msg.createdAt,
+              }))
+            );
+            setMessages(formatted);
+          }
         }
       } catch (error) {
         console.error('Failed to load chat:', error);
@@ -175,7 +199,7 @@ export default function ChatScreen() {
       }
     };
     init();
-    return () => { if (conversationId) socketService.leaveRoom(conversationId); };
+    return () => { if (realConversationIdRef.current) socketService.leaveRoom(realConversationIdRef.current); };
   }, [conversationId]);
 
   useEffect(() => {
@@ -201,6 +225,29 @@ export default function ChatScreen() {
       setMessages((prev) => {
         const messageId = msg._id || Math.random().toString();
         if (prev.some(m => m.id === messageId)) return prev;
+        
+        // If it's a message we sent, look for a matching optimistic message (temp_*) to replace
+        if (isSent) {
+          const optimisticIndex = prev.findIndex(m => 
+            String(m.id).startsWith('temp_') && 
+            m.text === msg.content && 
+            m.senderId === msgSenderId
+          );
+          if (optimisticIndex !== -1) {
+            const updated = [...prev];
+            updated[optimisticIndex] = {
+              id: messageId,
+              text: msg.content,
+              sent: true,
+              type: msg.type || 'text',
+              mediaUrl: msg.mediaUrl,
+              senderId: msgSenderId,
+              senderModel: msg.senderModel,
+              createdAt: msg.createdAt,
+            };
+            return updated;
+          }
+        }
         
         return [
           ...prev,
@@ -258,21 +305,38 @@ export default function ChatScreen() {
   };
 
   const handleSend = () => {
-    if (message.trim() && conversationId && currentUserId) {
+    if (message.trim() && realConversationId && currentUserId) {
       if (chatBlocked && userRole === 'USER') {
         router.push('/balance');
         return;
       }
+      
+      const tempId = `temp_${Date.now()}`;
+      const msgContent = message.trim();
+
+      // Add optimistic message to the UI instantly
+      const optimisticMsg = {
+        id: tempId,
+        text: msgContent,
+        sent: true,
+        type: 'text',
+        senderId: currentUserId,
+        senderModel: userRole === 'LISTENER' ? 'Listener' : 'User',
+        createdAt: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, optimisticMsg]);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+
       const msgData = {
-        conversationId, 
+        conversationId: realConversationId, 
         senderId: currentUserId, 
         senderModel: userRole === 'LISTENER' ? 'Listener' : 'User',
-        content: message.trim(), 
+        content: msgContent, 
         type: 'text',
       };
       console.log('[Chat] Sending message:', msgData);
       socketService.emit('send_message', msgData);
-      socketService.emit('stop_typing', { conversationId, userId: currentUserId });
+      socketService.emit('stop_typing', { conversationId: realConversationId, userId: currentUserId });
       setMessage('');
       setShowEmojis(false);
     }
@@ -280,11 +344,11 @@ export default function ChatScreen() {
 
   const handleTextChange = (text) => {
     setMessage(text);
-    if (conversationId && currentUserId) {
-      socketService.emit('typing', { conversationId, userId: currentUserId });
+    if (realConversationId && currentUserId) {
+      socketService.emit('typing', { conversationId: realConversationId, userId: currentUserId });
       clearTimeout(typingTimeout.current);
       typingTimeout.current = setTimeout(() => {
-        socketService.emit('stop_typing', { conversationId, userId: currentUserId });
+        socketService.emit('stop_typing', { conversationId: realConversationId, userId: currentUserId });
       }, 2000);
     }
   };
@@ -292,11 +356,30 @@ export default function ChatScreen() {
   const handleEmojiPress = (emoji) => setMessage((prev) => prev + emoji);
 
   const handleSendSticker = (stickerUrl) => {
-    if (conversationId && currentUserId) {
-      if (chatBlocked) { router.push('/balance'); return; }
+    if (realConversationId && currentUserId) {
+      if (chatBlocked && userRole === 'USER') { router.push('/balance'); return; }
+      
+      const tempId = `temp_${Date.now()}`;
+      const optimisticMsg = {
+        id: tempId,
+        text: '',
+        sent: true,
+        type: 'sticker',
+        mediaUrl: stickerUrl,
+        senderId: currentUserId,
+        senderModel: userRole === 'LISTENER' ? 'Listener' : 'User',
+        createdAt: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, optimisticMsg]);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+
       socketService.emit('send_message', {
-        conversationId, senderId: currentUserId, senderModel: 'User',
-        content: '', type: 'sticker', mediaUrl: stickerUrl,
+        conversationId: realConversationId, 
+        senderId: currentUserId, 
+        senderModel: userRole === 'LISTENER' ? 'Listener' : 'User',
+        content: '', 
+        type: 'sticker', 
+        mediaUrl: stickerUrl,
       });
       setShowStickers(false);
     }
@@ -342,8 +425,8 @@ export default function ChatScreen() {
                 callType: 'audio',
                 callId: `call_${Date.now()}`,
                 roomId: `room_${Date.now()}`,
-                listenerId: userRole === 'USER' ? conversationId : currentUserId,
-                userId: userRole === 'LISTENER' ? conversationId : currentUserId,
+                listenerId: userRole === 'USER' ? (otherUserId || conversationId) : currentUserId,
+                userId: userRole === 'LISTENER' ? (otherUserId || conversationId) : currentUserId,
                 avatarIndex: avatarIndex,
                 gender: gender,
                 role: userRole
@@ -363,8 +446,8 @@ export default function ChatScreen() {
                 callType: 'video',
                 callId: `call_${Date.now()}`,
                 roomId: `room_${Date.now()}`,
-                listenerId: userRole === 'USER' ? conversationId : currentUserId,
-                userId: userRole === 'LISTENER' ? conversationId : currentUserId,
+                listenerId: userRole === 'USER' ? (otherUserId || conversationId) : currentUserId,
+                userId: userRole === 'LISTENER' ? (otherUserId || conversationId) : currentUserId,
                 avatarIndex: avatarIndex,
                 gender: gender,
                 role: userRole

@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Dimensions, Animated, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Dimensions, Animated, ActivityIndicator, Modal, RefreshControl } from 'react-native';
 import { Skeleton } from '../../components/admin/Skeleton';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
@@ -57,13 +57,15 @@ export default function ListenerProfileScreen() {
   const actionsAnim = useRef(new Animated.Value(0)).current;
   const coverOpacity = useRef(new Animated.Value(0)).current;
 
+  const [refreshing, setRefreshing] = useState(false);
+
   useEffect(() => {
     fetchProfile();
   }, [id]);
 
-  const fetchProfile = async () => {
+  const fetchProfile = async (isRefreshing = false) => {
     try {
-      setLoading(true);
+      if (!isRefreshing) setLoading(true);
       const res = await listenersAPI.getPublicProfile(id);
       setProfile(res.data);
 
@@ -89,7 +91,13 @@ export default function ListenerProfileScreen() {
       console.error('Failed to fetch listener profile:', err);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchProfile(true);
   };
 
   const runEntryAnimation = () => {
@@ -195,7 +203,18 @@ export default function ListenerProfileScreen() {
         </TouchableOpacity>
       </Animated.View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#fff"
+            colors={['#fff']}
+          />
+        }
+      >
         {/* Hero Section */}
         <Animated.View style={[styles.heroSection, { opacity: headerOpacity }]}>
           {coverImage ? (

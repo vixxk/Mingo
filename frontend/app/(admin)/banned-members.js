@@ -14,7 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { ms, s, vs } from '../../utils/responsive';
 import { adminAPI } from '../../utils/api';
 import { AdminPageSkeleton } from '../../components/admin/Skeleton';
@@ -72,9 +72,11 @@ export default function BannedMembersScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchBannedMembers();
-  }, [fetchBannedMembers]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchBannedMembers();
+    }, [fetchBannedMembers])
+  );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

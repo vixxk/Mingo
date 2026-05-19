@@ -21,6 +21,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, wp, hp, SCREEN_WIDTH } from '../../utils/responsive';
 import { walletAPI, listenersAPI, authAPI, callAPI } from '../../utils/api';
+import { socketService } from '../../utils/socket';
 import WelcomePopup from '../../components/shared/WelcomePopup';
 import CoinsOfferPopup from '../../components/shared/CoinsOfferPopup';
 import InsufficientBalancePopup from '../../components/shared/InsufficientBalancePopup';
@@ -275,6 +276,33 @@ export default function HomeScreen() {
   const [peopleData, setPeopleData] = useState([]);
 
   const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    const handleStatusChanged = (data) => {
+      console.log('[Home] Listener status changed:', data);
+      const { userId, isOnline, isBusy } = data;
+      
+      const updateStatus = (list) => 
+        list.map(item => {
+          if (item.id === userId) {
+            return {
+              ...item,
+              isLive: isOnline,
+              isBusy: isBusy
+            };
+          }
+          return item;
+        });
+
+      setBestChoiceData(prev => updateStatus(prev));
+      setPeopleData(prev => updateStatus(prev));
+    };
+
+    socketService.on('listener_status_changed', handleStatusChanged);
+    return () => {
+      socketService.off('listener_status_changed', handleStatusChanged);
+    };
+  }, []);
 
   const loadRealData = useCallback(async () => {
     try {

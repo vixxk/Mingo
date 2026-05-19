@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { ms, s, vs, wp, hp } from '../../utils/responsive';
 import { adminAPI } from '../../utils/api';
 import { LineChart, BarChart, PieChart } from "react-native-gifted-charts";
@@ -46,9 +46,11 @@ export default function AdminAnalytics() {
     }
   };
 
-  useEffect(() => {
-    loadData();
-  }, [timeline]);
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [timeline])
+  );
 
   if (loading) {
     return (

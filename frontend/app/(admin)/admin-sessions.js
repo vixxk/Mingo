@@ -11,7 +11,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { ms, s, vs, wp, hp } from '../../utils/responsive';
 import { adminAPI } from '../../utils/api';
 import { AdminPageSkeleton } from '../../components/admin/Skeleton';
@@ -52,7 +52,6 @@ export default function AdminSessions() {
   const [filter, setFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
-
   const loadSessions = useCallback(async (p = 1, statusFilter = filter) => {
     try {
       if (p === 1) setLoading(true);
@@ -60,7 +59,7 @@ export default function AdminSessions() {
       if (statusFilter !== 'all') params.status = statusFilter;
       const res = await adminAPI.getSessions(params);
       const data = res.data;
-      setSessions(p === 1 ? data.sessions : [...sessions, ...data.sessions]);
+      setSessions(prev => p === 1 ? data.sessions : [...prev, ...data.sessions]);
       setTotal(data.total);
       setPage(p);
     } catch (e) {
@@ -69,12 +68,13 @@ export default function AdminSessions() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [filter, sessions]);
-
-  useEffect(() => {
-    loadSessions(1, filter);
   }, [filter]);
 
+  useFocusEffect(
+    useCallback(() => {
+      loadSessions(1, filter);
+    }, [filter, loadSessions])
+  );
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     loadSessions(1, filter);

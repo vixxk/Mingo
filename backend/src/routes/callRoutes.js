@@ -10,6 +10,8 @@ router.post('/end', authenticate, authorize('USER', 'LISTENER'), callEndValidati
 
 router.get('/history', authenticate, CallController.getHistory);
 
+router.get('/active/session', authenticate, CallController.getActiveSession);
+
 router.get('/:sessionId', authenticate, CallController.getSession);
 
 module.exports = router;

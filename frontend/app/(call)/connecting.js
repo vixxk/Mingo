@@ -77,8 +77,26 @@ export default function ConnectingScreen() {
   const [realCallId, setRealCallId] = React.useState(initialCallId);
   const [realRoomId, setRealRoomId] = React.useState(initialRoomId);
 
+  const realCallIdRef = useRef(initialCallId);
+  useEffect(() => {
+    realCallIdRef.current = realCallId;
+  }, [realCallId]);
+
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const dotsAnim = useRef(new Animated.Value(0)).current;
+  const callTimeoutRef = useRef(null);
+
+  const handleCancel = useCallback(() => {
+    if (callTimeoutRef.current) {
+      clearTimeout(callTimeoutRef.current);
+      callTimeoutRef.current = null;
+    }
+    socketService.emit('call_cancelled', { 
+      userId: listenerId, 
+      sessionId: realCallIdRef.current || initialCallId 
+    });
+    router.back();
+  }, [listenerId, initialCallId]);
 
   useEffect(() => {
     // Start animations
@@ -119,6 +137,10 @@ export default function ConnectingScreen() {
         // Listen for acceptance
         socketService.on('call_accepted', (data) => {
           console.log('Call accepted by listener!');
+          if (callTimeoutRef.current) {
+            clearTimeout(callTimeoutRef.current);
+            callTimeoutRef.current = null;
+          }
           const targetScreen = callType === 'video' ? '/(call)/video-call' : '/(call)/audio-call';
           router.replace({ 
             pathname: targetScreen, 
@@ -139,6 +161,10 @@ export default function ConnectingScreen() {
         // Listen for rejection
         socketService.on('call_rejected', (data) => {
           console.log('Call rejected by listener:', data.reason);
+          if (callTimeoutRef.current) {
+            clearTimeout(callTimeoutRef.current);
+            callTimeoutRef.current = null;
+          }
           router.replace({
             pathname: '/(call)/user-busy',
             params: { name, reason: data.reason || 'rejected' },
@@ -151,6 +177,10 @@ export default function ConnectingScreen() {
           
           socketService.on('random_match_found', async (data) => {
             console.log('Random match found:', data);
+            if (callTimeoutRef.current) {
+              clearTimeout(callTimeoutRef.current);
+              callTimeoutRef.current = null;
+            }
             
             try {
               // Now that we have a partner, create a real session in DB
@@ -206,6 +236,10 @@ export default function ConnectingScreen() {
           });
 
           socketService.on('random_search_timeout', () => {
+            if (callTimeoutRef.current) {
+              clearTimeout(callTimeoutRef.current);
+              callTimeoutRef.current = null;
+            }
             Alert.alert('Timeout', 'No online partner found. Please try again later.');
             router.back();
           });
@@ -243,24 +277,30 @@ export default function ConnectingScreen() {
         }
 
         // Timeout if no response after 30 seconds
-        const callTimeout = setTimeout(() => {
+        callTimeoutRef.current = setTimeout(() => {
           socketService.off('call_accepted');
           socketService.off('call_rejected');
+          socketService.emit('call_cancelled', { 
+            userId: listenerId, 
+            sessionId: realCallIdRef.current || initialCallId 
+          });
           router.replace({
             pathname: '/(call)/user-busy',
             params: { name, reason: 'timeout' },
           });
         }, 30000);
 
-        return () => clearTimeout(callTimeout);
       } catch (err) {
         console.error('Error signaling call:', err);
       }
     };
 
-    const cleanupSignal = signalCall();
+    signalCall();
 
     return () => {
+      if (callTimeoutRef.current) {
+        clearTimeout(callTimeoutRef.current);
+      }
       socketService.off('call_accepted');
       socketService.off('call_rejected');
       socketService.off('random_match_found');
@@ -308,7 +348,7 @@ export default function ConnectingScreen() {
         <TouchableOpacity
           style={styles.cancelBtn}
           activeOpacity={0.8}
-          onPress={() => router.back()}
+          onPress={handleCancel}
         >
           <Text style={styles.cancelText}>Cancel Call</Text>
         </TouchableOpacity>

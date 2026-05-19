@@ -66,6 +66,13 @@ class CallService {
     // Mark listener as busy in DB
     await Listener.findOneAndUpdate({ userId: matchedListenerId }, { isBusy: true });
 
+    try {
+      const { getIo } = require('../socket');
+      getIo().emit('listener_status_changed', { userId: matchedListenerId, isOnline: true, isBusy: true });
+    } catch (e) {
+      console.log('Socket error emitting status changed', e.message);
+    }
+
     await redis.srem(REDIS_KEYS.LISTENERS_AVAILABLE, matchedListenerId);
 
     
@@ -168,6 +175,13 @@ class CallService {
     // Mark listener as not busy in DB
     await Listener.findOneAndUpdate({ userId: sessionListenerIdStr }, { isBusy: false });
 
+    try {
+      const { getIo } = require('../socket');
+      getIo().emit('listener_status_changed', { userId: sessionListenerIdStr, isOnline: true, isBusy: false });
+    } catch (e) {
+      console.log('Socket error emitting status changed', e.message);
+    }
+
     await MatchingService.releaseLock(sessionListenerIdStr);
     await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, sessionListenerIdStr);
 
@@ -205,6 +219,18 @@ class CallService {
 
     static async getListenerHistory(listenerId, limit, offset) {
     return Session.findByListenerId(listenerId, limit, offset);
+  }
+
+  static async getActiveSession(userId) {
+    const userIdStr = userId.toString();
+    return Session.findOne({
+      status: 'active',
+      $or: [
+        { userId: userIdStr },
+        { listenerId: userIdStr }
+      ]
+    }).populate('userId', 'name username avatarIndex gender')
+      .populate('listenerId', 'name username avatarIndex gender');
   }
 }
 

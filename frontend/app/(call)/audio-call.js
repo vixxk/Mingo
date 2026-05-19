@@ -2,9 +2,11 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Animated, Dimensions, BackHandler, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
+import { Camera } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 
 import SafetyPopup from '../../components/call/SafetyPopup';
 import InCallRechargePopup from '../../components/call/InCallRechargePopup';
@@ -15,13 +17,18 @@ import { ZEGO_APP_ID, ZEGO_APP_SIGN } from '../../utils/zegoConfig';
 import { ms, s, vs, SCREEN_WIDTH, hp, wp } from '../../utils/responsive';
 
 const { height: SH } = Dimensions.get('window');
+const isExpoGo = Constants.appOwnership === 'expo';
 
 let ZegoUIKitPrebuiltCall, ONE_ON_ONE_VOICE_CALL_CONFIG;
 try {
-  const zegoModule = require('@zegocloud/zego-uikit-prebuilt-call-rn');
-  ZegoUIKitPrebuiltCall = zegoModule.default || zegoModule.ZegoUIKitPrebuiltCall;
-  ONE_ON_ONE_VOICE_CALL_CONFIG =
-    zegoModule.ONE_ON_ONE_VOICE_CALL_CONFIG || zegoModule.ZegoMenuBarButtonName;
+  if (!isExpoGo) {
+    const zegoModule = require('@zegocloud/zego-uikit-prebuilt-call-rn');
+    ZegoUIKitPrebuiltCall = zegoModule.default || zegoModule.ZegoUIKitPrebuiltCall;
+    ONE_ON_ONE_VOICE_CALL_CONFIG =
+      zegoModule.ONE_ON_ONE_VOICE_CALL_CONFIG || zegoModule.ZegoMenuBarButtonName;
+  } else {
+    console.log('Skipping ZegoCloud load in Expo Go mode');
+  }
 } catch (e) {
   console.log('ZegoCloud not available (Expo Go mode)');
 }
@@ -88,6 +95,18 @@ export default function AudioCallScreen() {
 
   const resolvedAppId = zegoAppId ? parseInt(zegoAppId) : ZEGO_APP_ID;
   const resolvedAppSign = zegoAppSign || ZEGO_APP_SIGN;
+
+  useEffect(() => {
+    const requestPermissions = async () => {
+      try {
+        const { status: micStatus } = await Camera.requestMicrophonePermissionsAsync();
+        console.log('Microphone permission status:', micStatus);
+      } catch (err) {
+        console.log('Failed to request mic permission:', err);
+      }
+    };
+    requestPermissions();
+  }, []);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -243,7 +262,7 @@ export default function AudioCallScreen() {
     setShowRecharge(false);
   }, []);
 
-  if (ZegoUIKitPrebuiltCall && userID && roomId) {
+  if (!isExpoGo && ZegoUIKitPrebuiltCall && userID && roomId) {
     return (
       <View style={{ flex: 1 }}>
         <ZegoUIKitPrebuiltCall

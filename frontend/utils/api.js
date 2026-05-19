@@ -180,6 +180,10 @@ export const callAPI = {
     return apiRequest(`/call/history?limit=${limit}&offset=${offset}`);
   },
 
+  getActiveSession: async () => {
+    return apiRequest('/call/active/session');
+  },
+
   getSession: async (sessionId) => {
     return apiRequest(`/call/${sessionId}`);
   },
@@ -438,6 +442,9 @@ export const notificationAPI = {
 export const chatAPI = {
   getConversations: async () => {
     return apiRequest('/chat/conversations');
+  },
+  getOrCreateConversation: async (targetId) => {
+    return apiRequest('/chat/conversations/init', { method: 'POST', body: { targetId } });
   },
   getMessages: async (conversationId) => {
     return apiRequest(`/chat/conversations/${conversationId}/messages`);

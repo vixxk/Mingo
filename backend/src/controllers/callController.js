@@ -48,6 +48,15 @@ class CallController {
       next(err);
     }
   }
+
+  static async getActiveSession(req, res, next) {
+    try {
+      const session = await CallService.getActiveSession(req.user.id);
+      return ApiResponse.success(res, session, 'Active session checked');
+    } catch (err) {
+      next(err);
+    }
+  }
 }
 
 module.exports = CallController;

@@ -1,5 +1,6 @@
 const Conversation = require('../models/conversationModel');
 const Message = require('../models/messageModel');
+const User = require('../models/userModel');
 const ApiResponse = require('../utils/apiResponse');
 
 class ChatController {
@@ -48,6 +49,59 @@ class ChatController {
       });
 
       return ApiResponse.success(res, messages, 'Messages retrieved successfully');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async initiateConversation(req, res, next) {
+    try {
+      const { targetId } = req.body;
+      if (!targetId) {
+        return ApiResponse.validationError(res, 'targetId is required');
+      }
+
+      let conversation = null;
+      const mongoose = require('mongoose');
+
+      if (mongoose.Types.ObjectId.isValid(targetId)) {
+        conversation = await Conversation.findById(targetId);
+      }
+
+      if (!conversation && mongoose.Types.ObjectId.isValid(targetId)) {
+        const userExists = await User.findById(targetId);
+        if (userExists) {
+          conversation = await Conversation.findOne({
+            participants: { $all: [req.user.id, targetId] }
+          });
+
+          if (!conversation) {
+            conversation = await Conversation.create({
+              participants: [req.user.id, targetId],
+              unreadCount: {},
+              freeMessageUsed: {}
+            });
+          }
+        }
+      }
+
+      if (!conversation) {
+        return ApiResponse.notFound(res, 'Conversation or participant not found');
+      }
+
+      const messages = await Message.find({
+        conversationId: conversation._id
+      }).sort({ createdAt: 1 });
+
+      await Conversation.findByIdAndUpdate(conversation._id, {
+        [`unreadCount.${req.user.id}`]: 0
+      });
+
+      return ApiResponse.success(res, {
+        conversationId: conversation._id,
+        participants: conversation.participants,
+        messages
+      }, 'Conversation initiated successfully');
     } catch (err) {
       next(err);
     }

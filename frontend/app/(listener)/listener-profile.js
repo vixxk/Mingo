@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -47,6 +48,53 @@ export default function ListenerProfileScreen() {
   const [userAvatar, setUserAvatar] = useState(require('../../images/user_avatar.png'));
   const [username, setUsername] = useState('Listener');
   const [joinDate, setJoinDate] = useState('Member');
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const res = await authAPI.me();
+      if (res?.data) {
+        const userObj = res.data;
+        await AsyncStorage.setItem('user', JSON.stringify(userObj));
+        setUsername(userObj.name || userObj.username || 'Listener');
+        if (userObj.createdAt) {
+          const d = new Date(userObj.createdAt);
+          setJoinDate(`Listener since ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth()+1).padStart(2, '0')}/${d.getFullYear()}`);
+        }
+        const rawGender = userObj.gender || 'Male';
+        const normalizedGender = rawGender.charAt(0).toUpperCase() + rawGender.slice(1).toLowerCase();
+        const avatarIndex = userObj.avatarIndex !== undefined ? userObj.avatarIndex.toString() : '0';
+        
+        const maleAvatars = [
+          require('../../images/male_avatar_1_1776972918440.png'),
+          require('../../images/male_avatar_2_1776972933241.png'),
+          require('../../images/male_avatar_3_1776972950218.png'),
+          require('../../images/male_avatar_4_1776972963577.png'),
+          require('../../images/male_avatar_5_1776972978900.png'),
+          require('../../images/male_avatar_6_1776972993180.png'),
+          require('../../images/male_avatar_7_1776973008143.png'),
+          require('../../images/male_avatar_8_1776973021635.png'),
+        ];
+        const femaleAvatars = [
+          require('../../images/female_avatar_1_1776973035859.png'),
+          require('../../images/female_avatar_2_1776973050039.png'),
+          require('../../images/female_avatar_3_1776973063471.png'),
+          require('../../images/female_avatar_4_1776973077539.png'),
+          require('../../images/female_avatar_5_1776973090730.png'),
+          require('../../images/female_avatar_6_1776973108100.png'),
+          require('../../images/female_avatar_7_1776973124018.png'),
+          require('../../images/female_avatar_8_1776973138772.png'),
+        ];
+        const avatars = normalizedGender === 'Male' ? maleAvatars : femaleAvatars;
+        setUserAvatar(avatars[parseInt(avatarIndex, 10)] || avatars[0]);
+      }
+    } catch (e) {
+      console.log('Error refreshing profile:', e);
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -140,6 +188,14 @@ export default function ListenerProfileScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#fff"
+            colors={['#fff']}
+          />
+        }
       >
         {}
         <View style={styles.profileCard}>

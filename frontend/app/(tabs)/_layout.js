@@ -6,47 +6,49 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { s, vs, ms } from '../../utils/responsive';
-import { authAPI, userAPI } from '../../utils/api';
+import { authAPI, userAPI, callAPI } from '../../utils/api';
 import { socketService } from '../../utils/socket';
 import IncomingCallPopup from '../../components/shared/IncomingCallPopup';
 
-// Conditional import for expo-notifications to avoid crash in Expo Go (SDK 53+)
+// Conditional import for expo-notifications to avoid crash
 let Notifications = null;
 const isExpoGo = Constants.appOwnership === 'expo';
 
-if (!isExpoGo) {
-  try {
-    Notifications = require('expo-notifications');
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: true,
-      }),
-    });
-  } catch (e) {
-    console.warn('Failed to load expo-notifications:', e);
-  }
+try {
+  Notifications = require('expo-notifications');
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
+} catch (e) {
+  console.warn('Failed to load expo-notifications:', e);
 }
 
 async function registerForPushNotificationsAsync() {
-  if (isExpoGo || !Notifications) {
-    console.log('Skipping push notification registration in Expo Go');
+  if (!Notifications) {
+    console.log('expo-notifications is not loaded');
     return null;
   }
 
   let token;
 
   if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('default', {
-      name: 'default',
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#FF231F7C',
-    });
+    try {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF231F7C',
+      });
+    } catch (e) {
+      console.log('Error setting notification channel:', e);
+    }
   }
 
-  if (Device.isDevice) {
+  if (Device.isDevice || isExpoGo) {
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
     if (existingStatus !== 'granted') {
@@ -58,9 +60,16 @@ async function registerForPushNotificationsAsync() {
       return;
     }
     try {
-      token = (await Notifications.getDevicePushTokenAsync()).data;
+      token = (await Notifications.getExpoPushTokenAsync({
+        projectId: Constants.expoConfig?.extra?.eas?.projectId || '29226353-1b41-4785-8ac5-74ded0cd7328'
+      })).data;
     } catch (e) {
-      console.log('Error getting push token', e);
+      console.log('Error getting expo push token, trying device token...', e);
+      try {
+        token = (await Notifications.getDevicePushTokenAsync()).data;
+      } catch (err) {
+        console.log('Error getting device push token', err);
+      }
     }
   } else {
     console.log('Must use physical device for Push Notifications');
@@ -83,6 +92,11 @@ export default function TabLayout() {
         setIncomingCall(callData);
       });
 
+      socketService.on('call_cancelled', (data) => {
+        console.log('Call cancelled by caller:', data);
+        setIncomingCall(null);
+      });
+
       socketService.on('new_message_notification', (data) => {
         console.log('New message notification received:', data);
       });
@@ -92,6 +106,7 @@ export default function TabLayout() {
 
     return () => {
       socketService.off('incoming_call');
+      socketService.off('call_cancelled');
     };
   }, []);
 
@@ -124,7 +139,11 @@ export default function TabLayout() {
 
   const handleRejectCall = () => {
     if (!incomingCall) return;
-    socketService.emit('call_rejected', { userId: incomingCall.callerId, reason: 'busy' });
+    socketService.emit('call_rejected', { 
+      userId: incomingCall.callerId, 
+      sessionId: incomingCall.callId,
+      reason: 'busy' 
+    });
     setIncomingCall(null);
   };
 
@@ -137,14 +156,32 @@ export default function TabLayout() {
         setIsAuthenticated(true);
         socketService.connect();
         
-        // Push notification registration (only if not in Expo Go)
-        if (!isExpoGo) {
-          registerForPushNotificationsAsync().then(token => {
-            if (token) {
-              userAPI.updatePushToken(token).catch(e => console.log('Update push token err:', e));
-            }
-          });
-        }
+        // Push notification registration
+        registerForPushNotificationsAsync().then(token => {
+          if (token) {
+            userAPI.updatePushToken(token).catch(e => console.log('Update push token err:', e));
+          }
+        });
+
+        // Redirect to ongoing active session if any
+        callAPI.getActiveSession().then(res => {
+          if (res?.data) {
+            const session = res.data;
+            const targetScreen = session.callType === 'video' ? '/(call)/video-call' : '/(call)/audio-call';
+            router.replace({
+              pathname: targetScreen,
+              params: {
+                name: session.listenerId?.name || 'Listener',
+                callId: session._id,
+                roomId: session.roomId,
+                listenerId: session.listenerId?._id || session.listenerId,
+                avatarIndex: session.listenerId?.avatarIndex || '0',
+                gender: session.listenerId?.gender || 'Female',
+                callType: session.callType,
+              }
+            });
+          }
+        }).catch(err => console.log('Error checking active session:', err));
       }
     };
     checkAuth();

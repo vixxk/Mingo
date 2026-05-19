@@ -14,7 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { ms, s, vs, wp, hp } from '../../utils/responsive';
 import { adminAPI } from '../../utils/api';
 import { AdminPageSkeleton } from '../../components/admin/Skeleton';
@@ -43,9 +43,11 @@ export default function AdminPayouts() {
     }
   };
 
-  useEffect(() => {
-    loadPayouts();
-  }, [filter]);
+  useFocusEffect(
+    useCallback(() => {
+      loadPayouts();
+    }, [filter])
+  );
 
   const handleUpdateStatus = async (id, status) => {
     try {

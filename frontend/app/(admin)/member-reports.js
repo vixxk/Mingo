@@ -13,7 +13,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { ms, s, vs } from '../../utils/responsive';
 import { FilterTab } from '../../components/admin/AdminComponents';
 import { adminAPI } from '../../utils/api';
@@ -60,10 +60,12 @@ export default function MemberReportsScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    setLoading(true);
-    fetchReports(filter);
-  }, [filter, fetchReports]);
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      fetchReports(filter);
+    }, [filter, fetchReports])
+  );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

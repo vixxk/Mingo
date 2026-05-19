@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Tabs } from 'expo-router';
+import { Tabs, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,6 +8,7 @@ import { adminAPI } from '../../utils/api';
 
 export default function AdminLayout() {
   const insets = useSafeAreaInsets();
+  const pathname = usePathname();
   const [counts, setCounts] = useState({ approvals: 0, reports: 0, payouts: 0 });
 
   useEffect(() => {
@@ -27,7 +28,7 @@ export default function AdminLayout() {
     // Refresh every 2 minutes
     const interval = setInterval(fetchCounts, 120000);
     return () => clearInterval(interval);
-  }, []);
+  }, [pathname]);
 
   return (
     <Tabs
