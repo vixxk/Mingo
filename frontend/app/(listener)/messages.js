@@ -111,7 +111,7 @@ export default function MessagesScreen() {
       <TouchableOpacity 
         style={styles.messageItem} 
         activeOpacity={0.7}
-        onPress={() => router.push({ pathname: '/chat', params: { id: item.id, name: item.name } })}
+        onPress={() => router.push({ pathname: '/chat', params: { id: item.id, name: item.name, avatarIndex: item.avatarIndex?.toString() || '0', gender: item.gender || 'Female' } })}
       >
         <View style={styles.avatarContainer}>
           <Image source={item.image || getAvatarImage(item.gender, item.avatarIndex)} style={styles.avatar} />

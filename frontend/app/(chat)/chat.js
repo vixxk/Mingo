@@ -215,6 +215,14 @@ export default function ChatScreen() {
   useEffect(() => {
     const handleNewMessage = (msg) => {
       console.log('[Chat] Received message via socket:', msg);
+      
+      // Only process messages for the current conversation
+      const msgConvId = (msg.conversationId?._id || msg.conversationId || '').toString();
+      const currentConvId = (realConversationIdRef.current || '').toString();
+      if (msgConvId && currentConvId && msgConvId !== currentConvId) {
+        return; // Message belongs to a different conversation
+      }
+
       const isSystem = msg.senderModel === 'System' || msg.type === 'system';
       
       const msgSenderId = (msg.sender?._id || msg.sender || '').toString();
@@ -223,8 +231,8 @@ export default function ChatScreen() {
       const isSent = !isSystem && msgSenderId === myId;
       
       setMessages((prev) => {
-        const messageId = msg._id || Math.random().toString();
-        if (prev.some(m => m.id === messageId)) return prev;
+        const messageId = (msg._id || Math.random()).toString();
+        if (prev.some(m => m.id?.toString() === messageId)) return prev;
         
         // If it's a message we sent, look for a matching optimistic message (temp_*) to replace
         if (isSent) {

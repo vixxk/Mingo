@@ -117,6 +117,22 @@ const initSocket = (server) => {
           await Conversation.findByIdAndUpdate(conversationId, { lastMessage: message._id });
           console.log(`[Socket] Emitting receive_message (free) to room ${conversationId}`);
           io.to(conversationId).emit('receive_message', message);
+
+          // Also emit to participants' personal rooms for reliability
+          conversation.participants.forEach(p => {
+            io.to(`user_${p}`).emit('receive_message', message);
+          });
+
+          // Notify the recipient specifically
+          const recipientId = conversation.participants.find(p => p.toString() !== senderId.toString());
+          if (recipientId) {
+            io.to(`user_${recipientId}`).emit('new_message_notification', {
+              conversationId,
+              senderName: sender.name || 'Mingo User',
+              content: type === 'text' ? content : `Sent a ${type}`,
+              message
+            });
+          }
           return;
         }
 

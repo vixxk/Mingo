@@ -87,6 +87,7 @@ export default function AudioCallScreen() {
   const [isSpeaker, setIsSpeaker] = useState(true);
   const [currentCoins, setCurrentCoins] = useState(null);
   const [lowBalanceMessage, setLowBalanceMessage] = useState('');
+  const [hasPermission, setHasPermission] = useState(null);
   
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const giftAnim = useRef(new Animated.Value(0)).current;
@@ -101,8 +102,10 @@ export default function AudioCallScreen() {
       try {
         const { status: micStatus } = await Camera.requestMicrophonePermissionsAsync();
         console.log('Microphone permission status:', micStatus);
+        setHasPermission(micStatus === 'granted');
       } catch (err) {
         console.log('Failed to request mic permission:', err);
+        setHasPermission(false);
       }
     };
     requestPermissions();
@@ -262,7 +265,7 @@ export default function AudioCallScreen() {
     setShowRecharge(false);
   }, []);
 
-  if (!isExpoGo && ZegoUIKitPrebuiltCall && userID && roomId) {
+  if (!isExpoGo && ZegoUIKitPrebuiltCall && userID && roomId && hasPermission) {
     return (
       <View style={{ flex: 1 }}>
         <ZegoUIKitPrebuiltCall

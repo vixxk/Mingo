@@ -88,6 +88,7 @@ export default function VideoCallScreen() {
   const [isFrontCamera, setIsFrontCamera] = useState(true);
   const [currentCoins, setCurrentCoins] = useState(null);
   const [lowBalanceMessage, setLowBalanceMessage] = useState('');
+  const [hasPermission, setHasPermission] = useState(null);
   
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const giftAnim = useRef(new Animated.Value(0)).current;
@@ -103,8 +104,10 @@ export default function VideoCallScreen() {
         const { status: cameraStatus } = await Camera.requestCameraPermissionsAsync();
         const { status: micStatus } = await Camera.requestMicrophonePermissionsAsync();
         console.log('Permissions - Camera:', cameraStatus, 'Mic:', micStatus);
+        setHasPermission(cameraStatus === 'granted' && micStatus === 'granted');
       } catch (err) {
         console.log('Failed to request video/mic permissions:', err);
+        setHasPermission(false);
       }
     };
     requestPermissions();
@@ -262,7 +265,7 @@ export default function VideoCallScreen() {
     setShowRecharge(false);
   }, []);
 
-  if (!isExpoGo && ZegoUIKitPrebuiltCall && userID && roomId) {
+  if (!isExpoGo && ZegoUIKitPrebuiltCall && userID && roomId && hasPermission) {
     return (
       <View style={{ flex: 1 }}>
         <ZegoUIKitPrebuiltCall

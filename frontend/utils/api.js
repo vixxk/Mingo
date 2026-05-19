@@ -444,7 +444,7 @@ export const chatAPI = {
     return apiRequest('/chat/conversations');
   },
   getOrCreateConversation: async (targetId) => {
-    return apiRequest('/chat/conversations/init', { method: 'POST', body: { targetId } });
+    return apiRequest('/chat/conversations/init', { method: 'POST', body: JSON.stringify({ targetId }) });
   },
   getMessages: async (conversationId) => {
     return apiRequest(`/chat/conversations/${conversationId}/messages`);

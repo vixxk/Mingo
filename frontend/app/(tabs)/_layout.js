@@ -186,9 +186,6 @@ export default function TabLayout() {
     };
     checkAuth();
     
-    return () => {
-      socketService.disconnect();
-    };
   }, []);
 
   const insets = useSafeAreaInsets();
