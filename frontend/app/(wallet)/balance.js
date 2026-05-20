@@ -79,6 +79,8 @@ export default function BalanceScreen() {
   const [diamonds, setDiamonds] = useState(0);
 
   const handleBuyCoins = async (item) => {
+    const previousBalance = balance;
+    setBalance((prev) => prev + item.coins);
     try {
       await walletAPI.purchaseCoins(item.id || item._id);
       const balRes = await walletAPI.getBalance();
@@ -88,6 +90,7 @@ export default function BalanceScreen() {
       }
       Alert.alert('Payment Successful', `Successfully added ${item.coins} coins to your balance!`);
     } catch (e) {
+      setBalance(previousBalance);
       console.log('Purchase error:', e);
       Alert.alert('Payment Failed', 'Please try again later.');
     }

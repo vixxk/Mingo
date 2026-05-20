@@ -12,17 +12,17 @@ const { redis, REDIS_KEYS } = require('./config/redis');
 let io;
 
 // Chat billing constants
-const CHAT_COINS_PER_SESSION = 10;    // 10 coins per 5-minute chat session
+const CHAT_COINS_PER_SESSION = 5;    // 5 coins per 5-minute chat session
 const CHAT_SESSION_DURATION = 5 * 60 * 1000; // 5 minutes in ms
-const CHAT_LISTENER_PAYOUT = 1.50;   // Listener gets ₹1.50 per 5-minute block
+const CHAT_LISTENER_PAYOUT = 2.50;   // Listener gets ₹2.50 per 5-minute block
 
 // Active chat session timers: { conversationId: timerRef }
 const chatSessionTimers = {};
 
 // ─── Call Billing ────────────────────────────────────────────
 // Rates per minute
-const AUDIO_COINS_PER_MIN = 10;  // 10 coins/min
-const VIDEO_COINS_PER_MIN = 30;  // 30 coins/min
+const AUDIO_COINS_PER_MIN = 5;  // 5 coins/min
+const VIDEO_COINS_PER_MIN = 15;  // 15 coins/min
 const AUDIO_PAYOUT_PER_MIN = 1.50; // ₹1.50/min listener payout
 const VIDEO_PAYOUT_PER_MIN = 4.00; // ₹4.00/min listener payout
 const CALL_BILLING_INTERVAL = 60 * 1000; // 1 minute
@@ -147,15 +147,23 @@ const initSocket = (server) => {
           console.log(`[Socket] Emitting receive_message (free) to room ${conversationId}`);
           io.to(conversationId).emit('receive_message', message);
 
-          // Also emit to recipient's personal room for reliability (not sender's to avoid duplication)
+          // Emit notification to recipient's personal room (for badge/notification ONLY, not message)
           if (recipientId) {
-            io.to(`user_${recipientId}`).emit('receive_message', message);
+            // Check if recipient is in the conversation room already
+            const recipientRoom = io.sockets.adapter.rooms.get(conversationId);
+            const recipientPersonalSockets = io.sockets.adapter.rooms.get(`user_${recipientId}`);
+            const isInConvRoom = recipientRoom && recipientPersonalSockets && 
+              [...recipientPersonalSockets].some(sid => recipientRoom.has(sid));
+
+            if (!isInConvRoom) {
+              // Only send message to personal room if they're NOT in the conversation room
+              io.to(`user_${recipientId}`).emit('receive_message', message);
+            }
 
             io.to(`user_${recipientId}`).emit('new_message_notification', {
               conversationId,
               senderName: sender.name || 'Mingo User',
               content: type === 'text' ? content : `Sent a ${type}`,
-              message
             });
           }
           return;
@@ -193,6 +201,31 @@ const initSocket = (server) => {
           }
         }
 
+        // --- BLOCK LISTENER REPLY AFTER SESSION ENDS ---
+        // If the listener is replying but the session has been explicitly ended
+        // (session exists but not active), don't allow messages
+        const isListenerSender = sender.role === 'LISTENER';
+        if (isListenerSender) {
+          const sessionData = conversation.chatSession;
+          // Session was previously active but has been ended
+          if (sessionData && sessionData.startTime && !sessionData.active) {
+            // Check if user also has no balance (prevent session restart)
+            const userParticipantId = conversation.participants.find(
+              (p) => p.toString() !== senderId
+            );
+            const userParticipant = userParticipantId ? await User.findById(userParticipantId) : null;
+            
+            if (!userParticipant || userParticipant.coins < CHAT_COINS_PER_SESSION) {
+              // Session ended and user can't afford restart — block listener
+              socket.emit('message_error', {
+                error: 'Session has ended. Waiting for user to recharge and send a new message.',
+                type: 'session_ended',
+              });
+              return;
+            }
+          }
+        }
+
         // Save and send the message
         console.log(`[Socket] Saving message in conv ${conversationId} from ${senderId} (${senderModel})`);
         const message = new Message({
@@ -225,16 +258,22 @@ const initSocket = (server) => {
         console.log(`[Socket] Emitting receive_message to room ${conversationId}`);
         io.to(conversationId).emit('receive_message', message);
 
-        // Also emit to recipient's personal room for reliability (not sender's to avoid duplication)
+        // Emit to recipient's personal room only if they're NOT in the conversation room
         if (recipientId) {
-          io.to(`user_${recipientId}`).emit('receive_message', message);
+          const recipientRoom = io.sockets.adapter.rooms.get(conversationId);
+          const recipientPersonalSockets = io.sockets.adapter.rooms.get(`user_${recipientId}`);
+          const isInConvRoom = recipientRoom && recipientPersonalSockets && 
+            [...recipientPersonalSockets].some(sid => recipientRoom.has(sid));
+
+          if (!isInConvRoom) {
+            io.to(`user_${recipientId}`).emit('receive_message', message);
+          }
 
           // Notify the recipient specifically (for global notifications/badges)
           io.to(`user_${recipientId}`).emit('new_message_notification', {
             conversationId,
             senderName: sender.name || 'Mingo User',
             content: type === 'text' ? content : `Sent a ${type}`,
-            message
           });
         }
 
@@ -571,23 +610,24 @@ const initSocket = (server) => {
         }
         
         // Auto-offline listener, end active call/chat sessions on disconnect (app closing)
+        const disconnectedUserId = socket.userId;
         (async () => {
           try {
             // 1. Auto-offline listener
-            const listener = await Listener.findOne({ userId: socket.userId });
+            const listener = await Listener.findOne({ userId: disconnectedUserId });
             if (listener) {
               const PresenceService = require('./services/presenceService');
-              await PresenceService.goOffline(socket.userId);
-              console.log(`Listener ${socket.userId} automatically set to offline on socket disconnect.`);
+              await PresenceService.goOffline(disconnectedUserId);
+              console.log(`Listener ${disconnectedUserId} automatically set to offline on socket disconnect.`);
             }
 
-            // 2. Auto-end active calls
+            // 2. Auto-end active calls (immediately)
             const activeCall = await Session.findOne({
-              $or: [{ userId: socket.userId }, { listenerId: socket.userId }],
+              $or: [{ userId: disconnectedUserId }, { listenerId: disconnectedUserId }],
               status: 'active'
             });
             if (activeCall) {
-              console.log(`[Socket] Auto-ending active call ${activeCall._id} on participant disconnect: ${socket.userId}`);
+              console.log(`[Socket] Auto-ending active call ${activeCall._id} on participant disconnect: ${disconnectedUserId}`);
               activeCall.status = 'completed';
               activeCall.endTime = new Date();
               await activeCall.save();
@@ -606,14 +646,61 @@ const initSocket = (server) => {
               await redis.del(REDIS_KEYS.LOCK(listenerIdStr));
             }
 
-            // 3. Auto-end active chat sessions
+            // 3. Auto-end active chat sessions after 1 minute grace period
             const activeChatConvs = await Conversation.find({
-              participants: socket.userId,
+              participants: disconnectedUserId,
               'chatSession.active': true
             });
-            for (const conv of activeChatConvs) {
-              console.log(`[Socket] Auto-ending active chat session for conv ${conv._id} on disconnect: ${socket.userId}`);
-              await endChatSession(conv._id.toString());
+            if (activeChatConvs.length > 0) {
+              console.log(`[Socket] User ${disconnectedUserId} disconnected with ${activeChatConvs.length} active chat(s). Starting 60s grace period...`);
+              
+              // Notify the other participant that user went offline
+              for (const conv of activeChatConvs) {
+                const otherParticipant = conv.participants.find(p => p.toString() !== disconnectedUserId.toString());
+                if (otherParticipant) {
+                  io.to(`user_${otherParticipant}`).emit('chat_user_offline', {
+                    conversationId: conv._id.toString(),
+                    userId: disconnectedUserId,
+                    message: 'User went offline. Session will end in 1 minute if they don\'t reconnect.',
+                  });
+                }
+              }
+
+              // Wait 60 seconds, then check if user reconnected
+              setTimeout(async () => {
+                try {
+                  // Check if user has reconnected (any socket in their personal room)
+                  const userRoom = io.sockets.adapter.rooms.get(`user_${disconnectedUserId}`);
+                  const isReconnected = userRoom && userRoom.size > 0;
+                  
+                  if (!isReconnected) {
+                    // User did NOT reconnect — end all their active chat sessions
+                    for (const conv of activeChatConvs) {
+                      const freshConv = await Conversation.findById(conv._id);
+                      if (freshConv && freshConv.chatSession && freshConv.chatSession.active) {
+                        console.log(`[Socket] Auto-ending chat session for conv ${conv._id} — user ${disconnectedUserId} offline for >1 min.`);
+                        await endChatSession(conv._id.toString());
+                        
+                        // Send system message
+                        const systemMsg = new Message({
+                          conversationId: conv._id,
+                          sender: null,
+                          senderModel: 'System',
+                          content: 'Session ended — user went offline.',
+                          type: 'system',
+                        });
+                        await systemMsg.save();
+                        await Conversation.findByIdAndUpdate(conv._id, { lastMessage: systemMsg._id });
+                        io.to(conv._id.toString()).emit('receive_message', systemMsg);
+                      }
+                    }
+                  } else {
+                    console.log(`[Socket] User ${disconnectedUserId} reconnected within 60s — chat session(s) preserved.`);
+                  }
+                } catch (e) {
+                  console.error('Error in chat disconnect grace period:', e.message);
+                }
+              }, 60000); // 60 second grace period
             }
           } catch (e) {
             console.error('Error on disconnect cleanup:', e.message);

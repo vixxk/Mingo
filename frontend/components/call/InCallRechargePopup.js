@@ -160,12 +160,9 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
                       {purchasing === pkg.id ? (
                         <ActivityIndicator size="small" color="#fff" />
                       ) : (
-                        <>
-                          <Text style={styles.originalPrice}>₹{pkg.originalPrice}</Text>
-                          <View style={styles.priceBtn}>
-                            <Text style={styles.priceText}>₹{pkg.price}</Text>
-                          </View>
-                        </>
+                        <View style={styles.priceBtn}>
+                          <Text style={styles.priceText}>₹{pkg.price}</Text>
+                        </View>
                       )}
                     </View>
                   </TouchableOpacity>

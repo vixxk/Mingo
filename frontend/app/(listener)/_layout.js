@@ -88,6 +88,13 @@ export default function ListenerLayout() {
   const [incomingCall, setIncomingCall] = useState(null);
   const unreadCount = useSSE();
 
+  const isChatOpenRef = React.useRef(false);
+
+  // Track whether listener is on a chat screen
+  useEffect(() => {
+    isChatOpenRef.current = segments && (segments.includes('(chat)') || segments.includes('chat'));
+  }, [segments]);
+
   useEffect(() => {
     const setupSocket = async () => {
       await socketService.connect();
@@ -104,8 +111,8 @@ export default function ListenerLayout() {
 
       socketService.on('new_message_notification', async (data) => {
         console.log('New message received:', data);
-        const isCurrentlyChatting = segments && (segments.includes('(chat)') || segments.includes('chat'));
-        if (Notifications && !isCurrentlyChatting) {
+        // Don't show notification if listener is on the chat screen
+        if (Notifications && !isChatOpenRef.current) {
           try {
             await Notifications.scheduleNotificationAsync({
               content: {
@@ -154,6 +161,7 @@ export default function ListenerLayout() {
     return () => {
       socketService.off('incoming_call');
       socketService.off('call_cancelled');
+      socketService.off('new_message_notification');
     };
   }, []);
 

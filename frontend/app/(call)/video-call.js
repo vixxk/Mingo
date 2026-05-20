@@ -90,6 +90,14 @@ export default function VideoCallScreen() {
   const [lowBalanceMessage, setLowBalanceMessage] = useState('');
   const [hasPermission, setHasPermission] = useState(null);
   const [isListener, setIsListener] = useState(false);
+
+  // Auto-dismiss safety popup after 3 seconds
+  useEffect(() => {
+    if (showSafety) {
+      const timer = setTimeout(() => setShowSafety(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [showSafety]);
   
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const giftAnim = useRef(new Animated.Value(0)).current;
@@ -136,6 +144,16 @@ export default function VideoCallScreen() {
     };
     loadUser();
   }, []);
+
+  const triggerGiftAnimation = useCallback((data) => {
+    setReceivedGift(data);
+    giftAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(giftAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+      Animated.delay(3000),
+      Animated.timing(giftAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
+    ]).start(() => setReceivedGift(null));
+  }, [giftAnim]);
 
   // Start call billing and listen for socket events
   useEffect(() => {
@@ -201,13 +219,7 @@ export default function VideoCallScreen() {
     };
 
     const handleGiftReceived = (data) => {
-      setReceivedGift(data);
-      giftAnim.setValue(0);
-      Animated.sequence([
-        Animated.timing(giftAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
-        Animated.delay(3000),
-        Animated.timing(giftAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
-      ]).start(() => setReceivedGift(null));
+      triggerGiftAnimation(data);
     };
 
     // Register listeners
@@ -387,7 +399,10 @@ export default function VideoCallScreen() {
           onClose={() => setShowGiftPopup(false)}
           receiverId={listenerId}
           onGiftSent={(gift) => {
-            // Optional local animation or callback here
+            triggerGiftAnimation({
+              isSentByMe: true,
+              gift: gift,
+            });
           }}
         />
       </View>
@@ -538,7 +553,12 @@ export default function VideoCallScreen() {
         visible={showGiftPopup}
         onClose={() => setShowGiftPopup(false)}
         receiverId={listenerId}
-        onGiftSent={(gift) => {}}
+        onGiftSent={(gift) => {
+          triggerGiftAnimation({
+            isSentByMe: true,
+            gift: gift,
+          });
+        }}
       />
 
       {/* Received Gift Animation/Overlay */}
@@ -550,8 +570,14 @@ export default function VideoCallScreen() {
           >
             <Text style={styles.giftNotifIcon}>{receivedGift.gift.icon}</Text>
             <View>
-              <Text style={styles.giftNotifTitle}>Received Gift!</Text>
-              <Text style={styles.giftNotifText}>{receivedGift.senderName} sent you {receivedGift.gift.name}</Text>
+              <Text style={styles.giftNotifTitle}>
+                {receivedGift.isSentByMe ? 'Gift Sent!' : 'Received Gift!'}
+              </Text>
+              <Text style={styles.giftNotifText}>
+                {receivedGift.isSentByMe 
+                  ? `You sent ${receivedGift.gift.name}`
+                  : `${receivedGift.senderName} sent you ${receivedGift.gift.name}`}
+              </Text>
             </View>
           </LinearGradient>
         </Animated.View>

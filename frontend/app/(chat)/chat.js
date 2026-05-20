@@ -11,7 +11,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { hp, wp, ms } from '../../utils/responsive';
-import { chatAPI, walletAPI, giftsAPI } from '../../utils/api';
+import { chatAPI, walletAPI, giftsAPI, listenersAPI } from '../../utils/api';
 import { socketService } from '../../utils/socket';
 import GiftPopup from '../../components/shared/GiftPopup';
 
@@ -114,10 +114,16 @@ export default function ChatScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const {
-    name = 'User', id: conversationId, avatarIndex = '0', gender = 'Female',
+    name: paramName = 'User', id: conversationId, avatarIndex: paramAvatarIndex = '0', gender: paramGender = 'Female',
+    listenerId: paramListenerId,
   } = useLocalSearchParams();
 
-  const avatarSource = getAvatarImage(gender, avatarIndex);
+  // Other user display info (will be resolved after loading)
+  const [otherName, setOtherName] = useState(paramName);
+  const [otherAvatarIndex, setOtherAvatarIndex] = useState(paramAvatarIndex);
+  const [otherGender, setOtherGender] = useState(paramGender);
+
+  const avatarSource = getAvatarImage(otherGender, otherAvatarIndex);
 
   const formatDuration = (secs) => {
     const m = Math.floor(secs / 60);
@@ -131,21 +137,17 @@ export default function ChatScreen() {
     }
   };
 
-  const startLocalCountdown = (startedAtTime, durationMs = 300000) => {
+  // Session elapsed timer - counts UP from 0 starting when listener first replies
+  const startElapsedTimer = (startedAtTime) => {
     if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
     
-    const calculateRemaining = () => {
-      const elapsed = Date.now() - new Date(startedAtTime).getTime();
-      const remainingSecs = Math.max(0, Math.floor((durationMs - elapsed) / 1000));
-      setSessionRemaining(remainingSecs);
-      
-      if (remainingSecs <= 0) {
-        clearInterval(sessionTimerRef.current);
-      }
+    const calculateElapsed = () => {
+      const elapsed = Math.max(0, Math.floor((Date.now() - new Date(startedAtTime).getTime()) / 1000));
+      setSessionRemaining(elapsed);
     };
     
-    calculateRemaining();
-    sessionTimerRef.current = setInterval(calculateRemaining, 1000);
+    calculateElapsed();
+    sessionTimerRef.current = setInterval(calculateElapsed, 1000);
   };
 
   const [messages, setMessages] = useState([]);
@@ -174,6 +176,16 @@ export default function ChatScreen() {
   useEffect(() => {
     realConversationIdRef.current = realConversationId;
   }, [realConversationId]);
+
+  const triggerGiftAnimation = useCallback((data) => {
+    setReceivedGift(data);
+    giftAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(giftAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+      Animated.delay(3000),
+      Animated.timing(giftAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
+    ]).start(() => setReceivedGift(null));
+  }, [giftAnim]);
 
   useEffect(() => {
     const init = async () => {
@@ -207,6 +219,29 @@ export default function ChatScreen() {
             const other = parts.find(p => p.toString() !== myId?.toString());
             if (other) {
               setOtherUserId(other.toString());
+              
+              // Fetch the other user's profile for display (name, avatar, gender)
+              try {
+                const myRole = (await AsyncStorage.getItem('userRole')) || 'USER';
+                if (myRole === 'USER') {
+                  // I'm user, other is listener → get listener's public profile
+                  const profileRes = await listenersAPI.getPublicProfile(other.toString());
+                  if (profileRes?.data) {
+                    setOtherName(profileRes.data.name || paramName);
+                    setOtherAvatarIndex(String(profileRes.data.avatarIndex ?? paramAvatarIndex));
+                    setOtherGender(profileRes.data.gender || paramGender);
+                  }
+                } else {
+                  // I'm listener, other is user → use response data or params
+                  if (response.data.otherUser) {
+                    setOtherName(response.data.otherUser.name || paramName);
+                    setOtherAvatarIndex(String(response.data.otherUser.avatarIndex ?? paramAvatarIndex));
+                    setOtherGender(response.data.otherUser.gender || paramGender);
+                  }
+                }
+              } catch (profileErr) {
+                console.log('Could not fetch other user profile:', profileErr);
+              }
             } else {
               setOtherUserId(conversationId);
             }
@@ -218,7 +253,7 @@ export default function ChatScreen() {
             const session = response.data.chatSession;
             if (session && session.active) {
               setSessionActive(true);
-              startLocalCountdown(session.lastDeductionTime || session.startTime);
+              startElapsedTimer(session.startTime);
             }
 
             const apiMessages = response.data.messages || [];
@@ -306,19 +341,16 @@ export default function ChatScreen() {
           }
         }
         
-        return [
-          ...prev,
-          {
-            id: messageId,
-            text: msg.content,
-            sent: isSent,
-            type: msg.type || 'text',
-            mediaUrl: msg.mediaUrl,
-            senderId: msgSenderId,
-            senderModel: msg.senderModel,
-            createdAt: msg.createdAt,
-          },
-        ];
+        return [...prev, {
+          id: messageId,
+          text: msg.content,
+          sent: isSent,
+          type: msg.type || 'text',
+          mediaUrl: msg.mediaUrl,
+          senderId: msgSenderId,
+          senderModel: msg.senderModel,
+          createdAt: msg.createdAt,
+        }];
       });
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     };
@@ -336,14 +368,12 @@ export default function ChatScreen() {
       console.log('[Chat] Session started:', data);
       setSessionActive(true);
       const session = data.chatSession;
-      startLocalCountdown(session.lastDeductionTime || session.startTime);
+      startElapsedTimer(session.startTime);
     };
 
     const handleSessionRenewed = (data) => {
       console.log('[Chat] Session renewed:', data);
-      setSessionActive(true);
-      const session = data.chatSession;
-      startLocalCountdown(session.lastDeductionTime || session.startTime);
+      // Session continues, timer keeps counting from the original start
     };
 
     const handleSessionEnded = () => {
@@ -355,13 +385,37 @@ export default function ChatScreen() {
 
     const handleGiftReceived = (data) => {
       console.log('[Chat] Gift received in chat:', data);
-      setReceivedGift(data);
-      giftAnim.setValue(0);
-      Animated.sequence([
-        Animated.timing(giftAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
-        Animated.delay(3000),
-        Animated.timing(giftAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
-      ]).start(() => setReceivedGift(null));
+      triggerGiftAnimation(data);
+    };
+
+    const handleChatUserOffline = (data) => {
+      console.log('[Chat] Other user went offline:', data);
+      // Show system message that user is offline
+      const offlineMsg = {
+        id: `offline_${Date.now()}`,
+        text: data.message || 'User went offline.',
+        sent: false,
+        type: 'system',
+        createdAt: new Date().toISOString(),
+      };
+      setMessages(prev => [...prev, offlineMsg]);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+    };
+
+    const handleMessageError = (data) => {
+      if (data.type === 'session_ended') {
+        // Session ended — disable input for listener
+        setChatBlocked(true);
+        const errorMsg = {
+          id: `error_${Date.now()}`,
+          text: data.error || 'Session has ended.',
+          sent: false,
+          type: 'system',
+          createdAt: new Date().toISOString(),
+        };
+        setMessages(prev => [...prev, errorMsg]);
+        setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+      }
     };
 
     socketService.on('receive_message', handleNewMessage);
@@ -373,6 +427,8 @@ export default function ChatScreen() {
     socketService.on('chat_session_renewed', handleSessionRenewed);
     socketService.on('chat_session_ended', handleSessionEnded);
     socketService.on('gift_received', handleGiftReceived);
+    socketService.on('chat_user_offline', handleChatUserOffline);
+    socketService.on('message_error', handleMessageError);
 
     return () => {
       socketService.off('receive_message', handleNewMessage);
@@ -384,6 +440,8 @@ export default function ChatScreen() {
       socketService.off('chat_session_renewed', handleSessionRenewed);
       socketService.off('chat_session_ended', handleSessionEnded);
       socketService.off('gift_received', handleGiftReceived);
+      socketService.off('chat_user_offline', handleChatUserOffline);
+      socketService.off('message_error', handleMessageError);
     };
   }, [currentUserId]);
 
@@ -484,10 +542,38 @@ export default function ChatScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.center, { paddingTop: insets.top }]}>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
         <StatusBar style="light" />
-        <ActivityIndicator size="large" color="#EC4899" />
-        <Text style={styles.loadingText}>Loading chat...</Text>
+        {/* Skeleton Header */}
+        <View style={styles.header}>
+          <View style={{ width: wp(5.5), height: wp(5.5), borderRadius: wp(1), backgroundColor: 'rgba(255,255,255,0.06)' }} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: wp(2) }}>
+            <View style={{ width: wp(10), height: wp(10), borderRadius: wp(5), backgroundColor: 'rgba(255,255,255,0.08)' }} />
+            <View style={{ flex: 1 }}>
+              <View style={{ width: wp(25), height: hp(1.8), borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.1)', marginBottom: hp(0.5) }} />
+              <View style={{ width: wp(15), height: hp(1.2), borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.06)' }} />
+            </View>
+          </View>
+          <View style={{ width: wp(18), height: hp(3.5), borderRadius: wp(5), backgroundColor: 'rgba(255,255,255,0.06)' }} />
+        </View>
+        {/* Skeleton Messages */}
+        <View style={{ paddingHorizontal: wp(4), paddingTop: hp(2), flex: 1 }}>
+          {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+            <View key={i} style={{ alignSelf: i % 2 === 0 ? 'flex-end' : 'flex-start', marginBottom: hp(1.5) }}>
+              <View style={{
+                width: wp(i % 3 === 0 ? 55 : i % 2 === 0 ? 40 : 65),
+                height: hp(i % 3 === 0 ? 6 : 4),
+                borderRadius: 18,
+                backgroundColor: i % 2 === 0 ? 'rgba(124, 58, 237, 0.12)' : 'rgba(255,255,255,0.05)',
+              }} />
+            </View>
+          ))}
+        </View>
+        {/* Skeleton Input Bar */}
+        <View style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, hp(1.2)) }]}>
+          <View style={{ flex: 1, height: hp(4.5), borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.06)' }} />
+          <View style={{ width: wp(9), height: wp(9), borderRadius: wp(4.5), backgroundColor: 'rgba(255,255,255,0.06)', marginLeft: wp(2) }} />
+        </View>
       </View>
     );
   }
@@ -510,10 +596,10 @@ export default function ChatScreen() {
           activeOpacity={0.7}
           disabled={userRole !== 'USER'}
           onPress={() => {
-            if (userRole === 'USER') {
+            if (userRole === 'USER' && otherUserId) {
               router.push({
-                pathname: '/(listener)/listener-profile',
-                params: { id: otherUserId || conversationId }
+                pathname: '/listener-profile/[id]',
+                params: { id: otherUserId }
               });
             }
           }}
@@ -521,7 +607,7 @@ export default function ChatScreen() {
         >
           <Image source={avatarSource} style={styles.headerAvatar} />
           <View style={styles.headerInfo}>
-            <Text style={styles.headerName} numberOfLines={1}>{name}</Text>
+            <Text style={styles.headerName} numberOfLines={1}>{otherName}</Text>
             <Text style={styles.headerStatus}>{isTyping ? 'Typing...' : 'Online'}</Text>
           </View>
         </TouchableOpacity>
@@ -530,8 +616,8 @@ export default function ChatScreen() {
         {sessionActive && (
           <View style={styles.sessionHeaderWrap}>
             <View style={styles.timerBadge}>
-              <Ionicons name="time" size={wp(3.5)} color="#EF4444" style={{ marginRight: wp(1) }} />
-              <Text style={styles.timerText}>{formatDuration(sessionRemaining)}</Text>
+              <Ionicons name="time" size={wp(3.5)} color="#22C55E" style={{ marginRight: wp(1) }} />
+              <Text style={[styles.timerText, { color: '#22C55E' }]}>{formatDuration(sessionRemaining)}</Text>
             </View>
             <TouchableOpacity
               style={styles.endSessionBtn}
@@ -659,13 +745,31 @@ export default function ChatScreen() {
         onClose={() => setShowGiftPopup(false)}
         receiverId={otherUserId || conversationId}
         onGiftSent={(gift) => {
-          if (realConversationId && currentUserId) {
+          if (realConversationId && currentUserId && gift) {
+            const giftMsg = `Sent a gift: ${gift.name || 'Gift'} ${gift.icon || '🎁'}`;
+            // Add optimistic message
+            const tempId = `temp_gift_${Date.now()}`;
+            setMessages((prev) => [...prev, {
+              id: tempId,
+              text: giftMsg,
+              sent: true,
+              type: 'text',
+              senderId: currentUserId,
+              senderModel: 'User',
+              createdAt: new Date().toISOString(),
+            }]);
+            setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
             socketService.emit('send_message', {
               conversationId: realConversationId,
               senderId: currentUserId,
               senderModel: 'User',
-              content: `Sent a gift: ${gift.name} ${gift.icon}`,
+              content: giftMsg,
               type: 'text',
+            });
+            
+            triggerGiftAnimation({
+              isSentByMe: true,
+              gift: gift,
             });
           }
         }}
@@ -681,7 +785,9 @@ export default function ChatScreen() {
             style={styles.giftNotificationContent}
           >
             <Text style={styles.giftNotificationText}>
-              {receivedGift.senderName || 'Someone'} sent you a gift!
+              {receivedGift.isSentByMe 
+                ? 'You sent a gift!' 
+                : `${receivedGift.senderName || 'Someone'} sent you a gift!`}
             </Text>
             <Text style={styles.giftNotificationIcon}>
               {receivedGift.gift?.icon || '🎁'}
