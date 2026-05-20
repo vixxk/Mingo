@@ -98,7 +98,7 @@ class ChatController {
 
       const messages = await Message.find({
         conversationId: conversation._id
-      }).sort({ createdAt: 1 });
+      }).sort({ createdAt: 1 }).populate('sender', '_id name username');
 
       await Conversation.findByIdAndUpdate(conversation._id, {
         [`unreadCount.${req.user.id}`]: 0
@@ -114,6 +114,7 @@ class ChatController {
       return ApiResponse.success(res, {
         conversationId: conversation._id,
         participants: conversation.participants,
+        chatSession: conversation.chatSession,
         messages
       }, 'Conversation initiated successfully');
     } catch (err) {

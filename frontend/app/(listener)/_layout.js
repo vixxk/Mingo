@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Tabs, useRouter, useSegments } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { View, StyleSheet, Platform, Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
@@ -156,17 +157,27 @@ export default function ListenerLayout() {
     };
   }, []);
 
-  const handleAcceptCall = () => {
+  const handleAcceptCall = async () => {
     if (!incomingCall) return;
     
     const { callerId, callerName, callType, callId, roomId, avatarIndex, gender } = incomingCall;
     
-    // Notify user we accepted
-    socketService.emit('call_accepted', { userId: callerId, sessionId: callId });
+    // Get listener's own userId
+    let myUserId = '';
+    try {
+      const userData = await AsyncStorage.getItem('user');
+      if (userData) {
+        const u = JSON.parse(userData);
+        myUserId = u._id || u.id || '';
+      }
+    } catch (e) {}
+    
+    // Notify caller we accepted
+    socketService.emit('call_accepted', { userId: callerId, sessionId: callId, roomId });
     
     setIncomingCall(null);
     
-    // Route to call screen
+    // Route to call screen — listenerId is the listener's own ID (us)
     const targetScreen = callType === 'video' ? '/(call)/video-call' : '/(call)/audio-call';
     router.push({
       pathname: targetScreen,
@@ -174,7 +185,8 @@ export default function ListenerLayout() {
         name: callerName,
         callId,
         roomId,
-        userId: callerId, // This is the user who called us
+        listenerId: myUserId, // Listener's own userId for gifting/endCall
+        userId: callerId,     // The user who called us
         avatarIndex,
         gender,
         callType,

@@ -178,42 +178,6 @@ export default function MessagesScreen() {
           </View>
         </View>
 
-        <View style={styles.quickActions}>
-          <TouchableOpacity 
-            onPress={() => router.push({
-              pathname: '/(call)/connecting',
-              params: {
-                name: item.name,
-                callType: 'audio',
-                callId: `call_${Date.now()}`,
-                roomId: `room_${Date.now()}`,
-                listenerId: item.id,
-                avatarIndex: item.avatarIndex,
-                gender: item.gender
-              }
-            })}
-            style={styles.quickActionBtn}
-          >
-            <Ionicons name="call-outline" size={20} color="#22C55E" />
-          </TouchableOpacity>
-          <TouchableOpacity 
-            onPress={() => router.push({
-              pathname: '/(call)/connecting',
-              params: {
-                name: item.name,
-                callType: 'video',
-                callId: `call_${Date.now()}`,
-                roomId: `room_${Date.now()}`,
-                listenerId: item.id,
-                avatarIndex: item.avatarIndex,
-                gender: item.gender
-              }
-            })}
-            style={styles.quickActionBtn}
-          >
-            <Ionicons name="videocam-outline" size={20} color="#3B82F6" />
-          </TouchableOpacity>
-        </View>
       </TouchableOpacity>
     );
   };

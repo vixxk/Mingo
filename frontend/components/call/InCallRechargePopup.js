@@ -8,7 +8,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
-import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ms, s, vs } from '../../utils/responsive';
 import { walletAPI } from '../../utils/api';
@@ -28,7 +28,14 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
 
   useEffect(() => {
     if (visible) {
-      loadPackages();
+      // Only load packages if we don't have them yet
+      if (packages.length === 0) {
+        loadPackages();
+      } else {
+        setLoading(false);
+      }
+      setPurchaseSuccess(false);
+      setPurchasing(null);
       Animated.parallel([
         Animated.timing(overlayAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
         Animated.spring(slideAnim, { toValue: 0, friction: 8, tension: 40, useNativeDriver: true }),
@@ -38,8 +45,6 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
         Animated.timing(overlayAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
         Animated.timing(slideAnim, { toValue: 600, duration: 200, useNativeDriver: true }),
       ]).start();
-      setPurchaseSuccess(false);
-      setPurchasing(null);
     }
   }, [visible]);
 
@@ -101,9 +106,10 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
             </View>
           ) : null}
 
-          <Text style={styles.title}>
-            <FontAwesome5 name="coins" size={18} color="#F59E0B" style={{ marginRight: 6 }} /> Quick Recharge
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: vs(4) }}>
+            <Text style={{ fontSize: 18, marginRight: 6 }}>🪙</Text>
+            <Text style={styles.title}>Quick Recharge</Text>
+          </View>
           <Text style={styles.subtitle}>
             Add coins instantly without leaving your call
           </Text>
@@ -140,7 +146,7 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
                   >
                     <View style={styles.packageLeft}>
                       <View style={styles.coinsRow}>
-                        <FontAwesome5 name="coins" size={14} color="#F59E0B" style={{ marginRight: 4 }} />
+                        <Text style={{ fontSize: 14, marginRight: 4 }}>🪙</Text>
                         <Text style={styles.packageCoins}>{pkg.coins}</Text>
                         <Text style={styles.packageCoinsLabel}>coins</Text>
                       </View>

@@ -275,6 +275,7 @@ export default function HomeScreen() {
   const [bestChoiceData, setBestChoiceData] = useState([]);
   const [peopleData, setPeopleData] = useState([]);
 
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {

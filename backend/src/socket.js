@@ -48,6 +48,19 @@ const initSocket = (server) => {
   io.on('connection', (socket) => {
     console.log('User connected to socket:', socket.id);
 
+    // Try to authenticate immediately from handshake auth token or query token
+    const handshakeToken = socket.handshake.auth?.token || socket.handshake.query?.token;
+    if (handshakeToken) {
+      try {
+        const decoded = jwt.verify(handshakeToken, config.jwt.secret);
+        socket.userId = decoded.userId;
+        socket.join(`user_${decoded.userId}`);
+        console.log(`Socket ${socket.id} automatically authenticated from handshake as ${decoded.userId}`);
+      } catch (err) {
+        console.error('Socket handshake auth error:', err.message);
+      }
+    }
+
     // Debug: Log all incoming events
     socket.onAny((eventName, ...args) => {
       console.log(`[Socket Debug] Event: ${eventName}, Data:`, JSON.stringify(args));
@@ -134,13 +147,10 @@ const initSocket = (server) => {
           console.log(`[Socket] Emitting receive_message (free) to room ${conversationId}`);
           io.to(conversationId).emit('receive_message', message);
 
-          // Also emit to participants' personal rooms for reliability
-          conversation.participants.forEach(p => {
-            io.to(`user_${p}`).emit('receive_message', message);
-          });
-
-          // Notify the recipient specifically
+          // Also emit to recipient's personal room for reliability (not sender's to avoid duplication)
           if (recipientId) {
+            io.to(`user_${recipientId}`).emit('receive_message', message);
+
             io.to(`user_${recipientId}`).emit('new_message_notification', {
               conversationId,
               senderName: sender.name || 'Mingo User',
@@ -215,14 +225,11 @@ const initSocket = (server) => {
         console.log(`[Socket] Emitting receive_message to room ${conversationId}`);
         io.to(conversationId).emit('receive_message', message);
 
-        // Also emit directly to participants' personal rooms for reliability
-        conversation.participants.forEach(p => {
-          console.log(`[Socket] Emitting receive_message to user room: user_${p}`);
-          io.to(`user_${p}`).emit('receive_message', message);
-        });
-
-        // Notify the recipient specifically (for global notifications/badges)
+        // Also emit to recipient's personal room for reliability (not sender's to avoid duplication)
         if (recipientId) {
+          io.to(`user_${recipientId}`).emit('receive_message', message);
+
+          // Notify the recipient specifically (for global notifications/badges)
           io.to(`user_${recipientId}`).emit('new_message_notification', {
             conversationId,
             senderName: sender.name || 'Mingo User',
@@ -292,15 +299,27 @@ const initSocket = (server) => {
                   });
                 }
 
-                // Notify user of balance update
-                io.to(`user_${userParticipantId}`).emit('balance_updated', {
-                  coins: userParticipant.coins,
-                  deducted: CHAT_COINS_PER_SESSION,
-                  reason: 'chat_session_start',
-                });
+                 // Notify user of balance update
+                 io.to(`user_${userParticipantId}`).emit('balance_updated', {
+                   coins: userParticipant.coins,
+                   deducted: CHAT_COINS_PER_SESSION,
+                   reason: 'chat_session_start',
+                 });
 
-                // Start a timer for the next 5-minute block
-                startChatSessionTimer(conversationId, userParticipantId.toString());
+                 // Emit chat_session_started to both participants
+                 io.to(conversationId).emit('chat_session_started', {
+                   conversationId,
+                   chatSession: conversation.chatSession,
+                 });
+                 conversation.participants.forEach(p => {
+                   io.to(`user_${p}`).emit('chat_session_started', {
+                     conversationId,
+                     chatSession: conversation.chatSession,
+                   });
+                 });
+ 
+                 // Start a timer for the next 5-minute block
+                 startChatSessionTimer(conversationId, userParticipantId.toString());
               }
             }
           }
@@ -334,8 +353,8 @@ const initSocket = (server) => {
     });
 
     socket.on('call_accepted', (data) => {
-      const { userId, sessionId } = data;
-      io.to(`user_${userId}`).emit('call_accepted', { sessionId });
+      const { userId, sessionId, roomId } = data;
+      io.to(`user_${userId}`).emit('call_accepted', { sessionId, roomId });
     });
 
     socket.on('call_rejected', async (data) => {
@@ -383,9 +402,36 @@ const initSocket = (server) => {
       }
     });
 
-    socket.on('call_ended', (data) => {
-      const { roomId } = data;
-      io.to(roomId).emit('call_ended', data);
+    socket.on('call_ended', async (data) => {
+      const { roomId, sessionId } = data;
+      // Broadcast to room
+      if (roomId) io.to(roomId).emit('call_ended', data);
+      
+      // Also try to end session properly if sessionId provided
+      if (sessionId) {
+        try {
+          const session = await Session.findById(sessionId);
+          if (session && session.status === 'active') {
+            session.status = 'completed';
+            session.endTime = new Date();
+            await session.save();
+            stopCallBillingTimer(sessionId);
+            if (session.roomId) stopCallBillingTimer(session.roomId);
+            
+            // Notify both user rooms
+            io.to(`user_${session.userId}`).emit('call_ended', { sessionId });
+            io.to(`user_${session.listenerId}`).emit('call_ended', { sessionId });
+            
+            // Reset listener busy status
+            await Listener.findOneAndUpdate({ userId: session.listenerId }, { isBusy: false });
+            io.emit('listener_status_changed', { userId: session.listenerId.toString(), isOnline: true, isBusy: false });
+            await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, session.listenerId.toString());
+            await redis.del(REDIS_KEYS.LOCK(session.listenerId.toString()));
+          }
+        } catch (err) {
+          console.error('[Socket] Error handling call_ended:', err.message);
+        }
+      }
     });
 
     // ─── Call Billing Events ──────────────────────────────────
@@ -524,17 +570,53 @@ const initSocket = (server) => {
           delete randomSearchTimeouts[socket.userId];
         }
         
-        // Auto-offline listener
+        // Auto-offline listener, end active call/chat sessions on disconnect (app closing)
         (async () => {
           try {
+            // 1. Auto-offline listener
             const listener = await Listener.findOne({ userId: socket.userId });
             if (listener) {
               const PresenceService = require('./services/presenceService');
               await PresenceService.goOffline(socket.userId);
               console.log(`Listener ${socket.userId} automatically set to offline on socket disconnect.`);
             }
+
+            // 2. Auto-end active calls
+            const activeCall = await Session.findOne({
+              $or: [{ userId: socket.userId }, { listenerId: socket.userId }],
+              status: 'active'
+            });
+            if (activeCall) {
+              console.log(`[Socket] Auto-ending active call ${activeCall._id} on participant disconnect: ${socket.userId}`);
+              activeCall.status = 'completed';
+              activeCall.endTime = new Date();
+              await activeCall.save();
+              stopCallBillingTimer(activeCall._id.toString());
+              stopCallBillingTimer(activeCall.roomId);
+
+              // Notify both participants
+              io.to(`user_${activeCall.userId}`).emit('call_ended', { sessionId: activeCall._id.toString() });
+              io.to(`user_${activeCall.listenerId}`).emit('call_ended', { sessionId: activeCall._id.toString() });
+              
+              // Reset listener busy status and release lock
+              const listenerIdStr = activeCall.listenerId.toString();
+              await Listener.findOneAndUpdate({ userId: listenerIdStr }, { isBusy: false });
+              io.emit('listener_status_changed', { userId: listenerIdStr, isOnline: false, isBusy: false });
+              await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, listenerIdStr);
+              await redis.del(REDIS_KEYS.LOCK(listenerIdStr));
+            }
+
+            // 3. Auto-end active chat sessions
+            const activeChatConvs = await Conversation.find({
+              participants: socket.userId,
+              'chatSession.active': true
+            });
+            for (const conv of activeChatConvs) {
+              console.log(`[Socket] Auto-ending active chat session for conv ${conv._id} on disconnect: ${socket.userId}`);
+              await endChatSession(conv._id.toString());
+            }
           } catch (e) {
-            console.error('Error setting listener offline on disconnect:', e.message);
+            console.error('Error on disconnect cleanup:', e.message);
           }
         })();
       }
@@ -635,6 +717,17 @@ function startChatSessionTimer(conversationId, userId) {
           deducted: CHAT_COINS_PER_SESSION,
           reason: 'chat_session_renewal',
         });
+
+        io.to(conversationId).emit('chat_session_renewed', {
+          conversationId,
+          chatSession: conversation.chatSession,
+        });
+        conversation.participants.forEach(p => {
+          io.to(`user_${p}`).emit('chat_session_renewed', {
+            conversationId,
+            chatSession: conversation.chatSession,
+          });
+        });
       }
     } catch (error) {
       console.error('Chat session timer error:', error);
@@ -652,9 +745,18 @@ async function endChatSession(conversationId) {
       delete chatSessionTimers[conversationId];
     }
 
-    await Conversation.findByIdAndUpdate(conversationId, {
-      'chatSession.active': false,
-    });
+    const conversation = await Conversation.findByIdAndUpdate(
+      conversationId,
+      { 'chatSession.active': false },
+      { new: true }
+    );
+
+    if (conversation && io) {
+      io.to(conversationId).emit('chat_session_ended', { conversationId });
+      conversation.participants.forEach(p => {
+        io.to(`user_${p}`).emit('chat_session_ended', { conversationId });
+      });
+    }
   } catch (error) {
     console.error('Error ending chat session:', error);
   }

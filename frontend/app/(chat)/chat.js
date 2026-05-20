@@ -2,15 +2,18 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Image, TouchableOpacity, ScrollView,
   TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Dimensions,
+  Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LinearGradient } from 'expo-linear-gradient';
 import { hp, wp, ms } from '../../utils/responsive';
-import { chatAPI, walletAPI } from '../../utils/api';
+import { chatAPI, walletAPI, giftsAPI } from '../../utils/api';
 import { socketService } from '../../utils/socket';
+import GiftPopup from '../../components/shared/GiftPopup';
 
 const getAvatarImage = (gender, index) => {
   const parsedIndex = parseInt(index, 10) || 0;
@@ -116,6 +119,35 @@ export default function ChatScreen() {
 
   const avatarSource = getAvatarImage(gender, avatarIndex);
 
+  const formatDuration = (secs) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  const handleEndSession = () => {
+    if (realConversationIdRef.current) {
+      socketService.emit('end_chat_session', { conversationId: realConversationIdRef.current });
+    }
+  };
+
+  const startLocalCountdown = (startedAtTime, durationMs = 300000) => {
+    if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
+    
+    const calculateRemaining = () => {
+      const elapsed = Date.now() - new Date(startedAtTime).getTime();
+      const remainingSecs = Math.max(0, Math.floor((durationMs - elapsed) / 1000));
+      setSessionRemaining(remainingSecs);
+      
+      if (remainingSecs <= 0) {
+        clearInterval(sessionTimerRef.current);
+      }
+    };
+    
+    calculateRemaining();
+    sessionTimerRef.current = setInterval(calculateRemaining, 1000);
+  };
+
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showStickers, setShowStickers] = useState(false);
@@ -128,6 +160,13 @@ export default function ChatScreen() {
   const [chatBlocked, setChatBlocked] = useState(false);
   const [realConversationId, setRealConversationId] = useState(conversationId);
   const [otherUserId, setOtherUserId] = useState(null);
+  const [showGiftPopup, setShowGiftPopup] = useState(false);
+  const [sessionActive, setSessionActive] = useState(false);
+  const [sessionRemaining, setSessionRemaining] = useState(0);
+  const [receivedGift, setReceivedGift] = useState(null);
+
+  const giftAnim = useRef(new Animated.Value(0)).current;
+  const sessionTimerRef = useRef(null);
   const scrollRef = useRef(null);
   const typingTimeout = useRef(null);
   const realConversationIdRef = useRef(conversationId);
@@ -175,12 +214,19 @@ export default function ChatScreen() {
             console.log('[Chat] Joining room:', actualConvId);
             socketService.joinRoom(actualConvId);
 
+            // Handle chat session from response
+            const session = response.data.chatSession;
+            if (session && session.active) {
+              setSessionActive(true);
+              startLocalCountdown(session.lastDeductionTime || session.startTime);
+            }
+
             const apiMessages = response.data.messages || [];
             const formatted = insertDateLabels(
               apiMessages.map((msg) => ({
                 id: msg._id,
                 text: msg.content,
-                sent: false,
+                sent: myId && String(msg.sender?._id || msg.sender) === String(myId),
                 type: msg.type || 'text',
                 mediaUrl: msg.mediaUrl,
                 senderId: msg.sender?._id || msg.sender,
@@ -199,7 +245,10 @@ export default function ChatScreen() {
       }
     };
     init();
-    return () => { if (realConversationIdRef.current) socketService.leaveRoom(realConversationIdRef.current); };
+    return () => { 
+      if (realConversationIdRef.current) socketService.leaveRoom(realConversationIdRef.current); 
+      if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
+    };
   }, [conversationId]);
 
   useEffect(() => {
@@ -283,11 +332,47 @@ export default function ChatScreen() {
       setChatBlocked(true);
     };
 
+    const handleSessionStarted = (data) => {
+      console.log('[Chat] Session started:', data);
+      setSessionActive(true);
+      const session = data.chatSession;
+      startLocalCountdown(session.lastDeductionTime || session.startTime);
+    };
+
+    const handleSessionRenewed = (data) => {
+      console.log('[Chat] Session renewed:', data);
+      setSessionActive(true);
+      const session = data.chatSession;
+      startLocalCountdown(session.lastDeductionTime || session.startTime);
+    };
+
+    const handleSessionEnded = () => {
+      console.log('[Chat] Session ended');
+      setSessionActive(false);
+      setSessionRemaining(0);
+      if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
+    };
+
+    const handleGiftReceived = (data) => {
+      console.log('[Chat] Gift received in chat:', data);
+      setReceivedGift(data);
+      giftAnim.setValue(0);
+      Animated.sequence([
+        Animated.timing(giftAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+        Animated.delay(3000),
+        Animated.timing(giftAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
+      ]).start(() => setReceivedGift(null));
+    };
+
     socketService.on('receive_message', handleNewMessage);
     socketService.on('user_typing', handleTyping);
     socketService.on('user_stop_typing', handleStopTyping);
     socketService.on('balance_updated', handleBalanceUpdate);
     socketService.on('insufficient_balance', handleInsufficientBalance);
+    socketService.on('chat_session_started', handleSessionStarted);
+    socketService.on('chat_session_renewed', handleSessionRenewed);
+    socketService.on('chat_session_ended', handleSessionEnded);
+    socketService.on('gift_received', handleGiftReceived);
 
     return () => {
       socketService.off('receive_message', handleNewMessage);
@@ -295,6 +380,10 @@ export default function ChatScreen() {
       socketService.off('user_stop_typing', handleStopTyping);
       socketService.off('balance_updated', handleBalanceUpdate);
       socketService.off('insufficient_balance', handleInsufficientBalance);
+      socketService.off('chat_session_started', handleSessionStarted);
+      socketService.off('chat_session_renewed', handleSessionRenewed);
+      socketService.off('chat_session_ended', handleSessionEnded);
+      socketService.off('gift_received', handleGiftReceived);
     };
   }, [currentUserId]);
 
@@ -416,61 +505,51 @@ export default function ChatScreen() {
         <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7}>
           <Ionicons name="chevron-back" size={wp(5.5)} color="#fff" />
         </TouchableOpacity>
-        <Image source={avatarSource} style={styles.headerAvatar} />
-        <View style={styles.headerInfo}>
-          <Text style={styles.headerName}>{name}</Text>
-          <Text style={styles.headerStatus}>{isTyping ? 'Typing...' : 'Online'}</Text>
-        </View>
-        {/* Call actions */}
-        <View style={styles.headerActions}>
-          <TouchableOpacity 
-            style={styles.headerActionBtn} 
-            activeOpacity={0.7}
-            onPress={() => router.push({
-              pathname: '/(call)/connecting',
-              params: {
-                name: name,
-                callType: 'audio',
-                callId: `call_${Date.now()}`,
-                roomId: `room_${Date.now()}`,
-                listenerId: userRole === 'USER' ? (otherUserId || conversationId) : currentUserId,
-                userId: userRole === 'LISTENER' ? (otherUserId || conversationId) : currentUserId,
-                avatarIndex: avatarIndex,
-                gender: gender,
-                role: userRole
-              }
-            })}
-          >
-            <Ionicons name="call" size={wp(5)} color="#22C55E" />
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.headerActionBtn} 
-            activeOpacity={0.7}
-            onPress={() => router.push({
-              pathname: '/(call)/connecting',
-              params: {
-                name: name,
-                callType: 'video',
-                callId: `call_${Date.now()}`,
-                roomId: `room_${Date.now()}`,
-                listenerId: userRole === 'USER' ? (otherUserId || conversationId) : currentUserId,
-                userId: userRole === 'LISTENER' ? (otherUserId || conversationId) : currentUserId,
-                avatarIndex: avatarIndex,
-                gender: gender,
-                role: userRole
-              }
-            })}
-          >
-            <Ionicons name="videocam" size={wp(5)} color="#3B82F6" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Coin badge */}
-        <TouchableOpacity style={styles.coinBadge} activeOpacity={0.7} onPress={() => router.push('/balance')}>
-          <Text style={styles.coinEmoji}>🪙</Text>
-          <Text style={styles.coinCount}>{coinBalance}</Text>
+        
+        <TouchableOpacity
+          activeOpacity={0.7}
+          disabled={userRole !== 'USER'}
+          onPress={() => {
+            if (userRole === 'USER') {
+              router.push({
+                pathname: '/(listener)/listener-profile',
+                params: { id: otherUserId || conversationId }
+              });
+            }
+          }}
+          style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: wp(2) }}
+        >
+          <Image source={avatarSource} style={styles.headerAvatar} />
+          <View style={styles.headerInfo}>
+            <Text style={styles.headerName} numberOfLines={1}>{name}</Text>
+            <Text style={styles.headerStatus}>{isTyping ? 'Typing...' : 'Online'}</Text>
+          </View>
         </TouchableOpacity>
+
+        {/* Timed Session Capsule */}
+        {sessionActive && (
+          <View style={styles.sessionHeaderWrap}>
+            <View style={styles.timerBadge}>
+              <Ionicons name="time" size={wp(3.5)} color="#EF4444" style={{ marginRight: wp(1) }} />
+              <Text style={styles.timerText}>{formatDuration(sessionRemaining)}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.endSessionBtn}
+              activeOpacity={0.7}
+              onPress={handleEndSession}
+            >
+              <Text style={styles.endSessionText}>End</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Coin badge (Only for users) */}
+        {userRole === 'USER' && (
+          <TouchableOpacity style={styles.coinBadge} activeOpacity={0.7} onPress={() => router.push('/balance')}>
+            <Text style={styles.coinEmoji}>🪙</Text>
+            <Text style={styles.coinCount}>{coinBalance}</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Messages */}
@@ -481,7 +560,22 @@ export default function ChatScreen() {
         showsVerticalScrollIndicator={false}
         onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
       >
-        {messages.length === 0 ? (
+        {loading ? (
+          <View style={{ paddingHorizontal: wp(4), paddingTop: hp(2) }}>
+            {/* Skeleton message bubbles */}
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <View key={i} style={{ alignSelf: i % 2 === 0 ? 'flex-end' : 'flex-start', marginBottom: hp(1.5) }}>
+                <View style={{
+                  width: wp(i % 3 === 0 ? 55 : i % 2 === 0 ? 45 : 65),
+                  height: hp(i % 3 === 0 ? 6 : 4.5),
+                  borderRadius: 18,
+                  backgroundColor: i % 2 === 0 ? 'rgba(59, 130, 246, 0.12)' : 'rgba(255,255,255,0.05)',
+                  opacity: 0.6,
+                }} />
+              </View>
+            ))}
+          </View>
+        ) : messages.length === 0 ? (
           <View style={styles.emptyChat}>
             <Ionicons name="chatbubbles-outline" size={wp(12)} color="#333" />
             <Text style={styles.emptyChatText}>Say hello! Your first message is free.</Text>
@@ -541,6 +635,11 @@ export default function ChatScreen() {
           editable={!chatBlocked}
         />
         <View style={styles.inputActions}>
+          {userRole === 'USER' && (
+            <TouchableOpacity activeOpacity={0.7} style={styles.inputAction} onPress={() => setShowGiftPopup(true)}>
+              <Ionicons name="gift-outline" size={wp(5.5)} color="#A855F7" />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity activeOpacity={0.7} style={styles.inputAction} onPress={handleSend}>
             <Ionicons name="send" size={wp(5.5)} color={chatBlocked ? '#4B5563' : '#EC4899'} />
           </TouchableOpacity>
@@ -554,6 +653,45 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
       </View>
+      {/* Gift Popup for sending gifts */}
+      <GiftPopup
+        visible={showGiftPopup}
+        onClose={() => setShowGiftPopup(false)}
+        receiverId={otherUserId || conversationId}
+        onGiftSent={(gift) => {
+          if (realConversationId && currentUserId) {
+            socketService.emit('send_message', {
+              conversationId: realConversationId,
+              senderId: currentUserId,
+              senderModel: 'User',
+              content: `Sent a gift: ${gift.name} ${gift.icon}`,
+              type: 'text',
+            });
+          }
+        }}
+      />
+
+      {/* Received Gift Animation/Overlay (especially for listeners) */}
+      {receivedGift && (
+        <Animated.View style={[styles.giftNotification, { opacity: giftAnim }]}>
+          <LinearGradient
+            colors={['rgba(59, 130, 246, 0.95)', 'rgba(236, 72, 153, 0.95)', 'rgba(245, 158, 11, 0.95)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.giftNotificationContent}
+          >
+            <Text style={styles.giftNotificationText}>
+              {receivedGift.senderName || 'Someone'} sent you a gift!
+            </Text>
+            <Text style={styles.giftNotificationIcon}>
+              {receivedGift.gift?.icon || '🎁'}
+            </Text>
+            <Text style={styles.giftNotificationName}>
+              {receivedGift.gift?.name || 'Gift'} x{receivedGift.gift?.count || 1}
+            </Text>
+          </LinearGradient>
+        </Animated.View>
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -653,4 +791,76 @@ const styles = StyleSheet.create({
   textInput: { flex: 1, fontSize: wp(3.6), color: '#fff', paddingVertical: hp(1), maxHeight: hp(12) },
   inputActions: { flexDirection: 'row', alignItems: 'center', gap: wp(1.5), paddingBottom: hp(0.7) },
   inputAction: { width: wp(9), height: wp(9), alignItems: 'center', justifyContent: 'center' },
+
+  // Timed chat session styles
+  sessionHeaderWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: wp(1.5),
+    marginRight: wp(1),
+  },
+  timerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    paddingHorizontal: wp(2.5),
+    paddingVertical: hp(0.5),
+    borderRadius: wp(4),
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  timerText: {
+    fontSize: wp(3),
+    color: '#EF4444',
+    fontWeight: '700',
+  },
+  endSessionBtn: {
+    backgroundColor: '#EF4444',
+    paddingHorizontal: wp(3),
+    paddingVertical: hp(0.6),
+    borderRadius: wp(3.5),
+  },
+  endSessionText: {
+    fontSize: wp(3),
+    color: '#fff',
+    fontWeight: '700',
+  },
+
+  // Received gift overlay styles
+  giftNotification: {
+    position: 'absolute',
+    top: hp(20),
+    left: wp(10),
+    right: wp(10),
+    zIndex: 9999,
+    borderRadius: 20,
+    overflow: 'hidden',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 15,
+  },
+  giftNotificationContent: {
+    padding: wp(5),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  giftNotificationText: {
+    color: '#fff',
+    fontSize: wp(3.8),
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: hp(1.5),
+  },
+  giftNotificationIcon: {
+    fontSize: wp(15),
+    marginVertical: hp(1),
+  },
+  giftNotificationName: {
+    color: '#fff',
+    fontSize: wp(4.5),
+    fontWeight: '800',
+    marginTop: hp(1),
+  },
 });

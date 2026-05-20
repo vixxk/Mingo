@@ -134,7 +134,7 @@ export default function TabLayout() {
     const { callerId, callerName, callType, callId, roomId, avatarIndex, gender } = incomingCall;
     
     // Notify caller we accepted
-    socketService.emit('call_accepted', { userId: callerId, sessionId: callId });
+    socketService.emit('call_accepted', { userId: callerId, sessionId: callId, roomId });
     
     setIncomingCall(null);
     
@@ -146,7 +146,7 @@ export default function TabLayout() {
         name: callerName,
         callId,
         roomId,
-        userId: callerId, 
+        listenerId: callerId, // The other participant
         avatarIndex,
         gender,
         callType,

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Image, Animated, Dimensions, 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { Camera } from 'expo-camera';
-import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
@@ -146,78 +146,85 @@ export default function VideoCallScreen() {
       if (callId && callId !== 'demo_zego_call' && callId !== 'test_call_id') {
         socketService.emit('start_call_billing', { sessionId: callId });
       }
-
-      // Real-time balance updates from server
-      socketService.on('balance_updated', (data) => {
-        if (data.reason === 'call_minute_charge' || data.reason === 'call_session_start') {
-          setCurrentCoins(data.coins);
-        }
-      });
-
-      // Low balance warning from server — show recharge popup
-      socketService.on('low_balance_warning', (data) => {
-        setLowBalanceMessage(data.message);
-        setShowRecharge(true);
-      });
-
-      const exitCallScreen = async () => {
-        if (callEndedRef.current) return;
-        callEndedRef.current = true;
-        clearInterval(intervalRef.current);
-        
-        let role = 'USER';
-        try {
-          const userData = await AsyncStorage.getItem('user');
-          if (userData) {
-            const u = JSON.parse(userData);
-            role = u.role || 'USER';
-          }
-        } catch (e) {}
-
-        if (role === 'LISTENER') {
-          router.replace('/(listener)');
-        } else {
-          router.replace({
-            pathname: '/(call)/call-feedback',
-            params: { name, sessionId: callId, listenerId, callType: 'video' },
-          });
-        }
-      };
-
-      // Server auto-ended the call due to 0 balance
-      socketService.on('call_auto_ended', async (data) => {
-        if (data.sessionId === callId) {
-          await exitCallScreen();
-        }
-      });
-
-      // Call ended by either participant
-      socketService.on('call_ended', async (data) => {
-        if (data.sessionId === callId) {
-          await exitCallScreen();
-        }
-      });
-
-      // Gifting listener
-      socketService.on('gift_received', (data) => {
-        setReceivedGift(data);
-        // Animate gift
-        giftAnim.setValue(0);
-        Animated.sequence([
-          Animated.timing(giftAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
-          Animated.delay(3000),
-          Animated.timing(giftAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
-        ]).start(() => setReceivedGift(null));
-      });
     };
+
+    const handleBalanceUpdate = (data) => {
+      if (data.reason === 'call_minute_charge' || data.reason === 'call_session_start') {
+        setCurrentCoins(data.coins);
+        // Clear low balance warning if balance is now healthy
+        if (data.coins >= 60) {
+          setLowBalanceMessage('');
+          setShowRecharge(false);
+        }
+      }
+    };
+
+    const handleLowBalance = (data) => {
+      setLowBalanceMessage(data.message);
+      setShowRecharge(true);
+    };
+
+    const exitCallScreen = async () => {
+      if (callEndedRef.current) return;
+      callEndedRef.current = true;
+      clearInterval(intervalRef.current);
+      
+      let role = 'USER';
+      try {
+        const userData = await AsyncStorage.getItem('user');
+        if (userData) {
+          const u = JSON.parse(userData);
+          role = u.role || 'USER';
+        }
+      } catch (e) {}
+
+      if (role === 'LISTENER') {
+        router.replace('/(listener)');
+      } else {
+        router.replace({
+          pathname: '/(call)/call-feedback',
+          params: { name, sessionId: callId, listenerId, callType: 'video' },
+        });
+      }
+    };
+
+    const handleAutoEnded = async (data) => {
+      if (data.sessionId === callId) {
+        await exitCallScreen();
+      }
+    };
+
+    const handleCallEnded = async (data) => {
+      if (data.sessionId === callId) {
+        await exitCallScreen();
+      }
+    };
+
+    const handleGiftReceived = (data) => {
+      setReceivedGift(data);
+      giftAnim.setValue(0);
+      Animated.sequence([
+        Animated.timing(giftAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+        Animated.delay(3000),
+        Animated.timing(giftAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
+      ]).start(() => setReceivedGift(null));
+    };
+
+    // Register listeners
+    socketService.on('balance_updated', handleBalanceUpdate);
+    socketService.on('low_balance_warning', handleLowBalance);
+    socketService.on('call_auto_ended', handleAutoEnded);
+    socketService.on('call_ended', handleCallEnded);
+    socketService.on('gift_received', handleGiftReceived);
 
     setupBilling();
 
     return () => {
-      socketService.off('balance_updated');
-      socketService.off('low_balance_warning');
-      socketService.off('call_auto_ended');
-      socketService.off('call_ended');
+      socketService.off('balance_updated', handleBalanceUpdate);
+      socketService.off('low_balance_warning', handleLowBalance);
+      socketService.off('call_auto_ended', handleAutoEnded);
+      socketService.off('call_ended', handleCallEnded);
+      socketService.off('gift_received', handleGiftReceived);
     };
   }, [callId]);
 
@@ -272,6 +279,8 @@ export default function VideoCallScreen() {
     try {
       if (callId && callId !== 'demo_zego_call' && callId !== 'test_call_id') {
         socketService.emit('stop_call_billing', { sessionId: callId });
+        // Also emit call_ended via socket as belt-and-suspenders
+        socketService.emit('call_ended', { sessionId: callId, roomId });
         await callAPI.endCall(callId);
       }
     } catch (error) {
@@ -286,7 +295,7 @@ export default function VideoCallScreen() {
         });
       }
     }
-  }, [callId, name, listenerId, isListener]);
+  }, [callId, name, listenerId, isListener, roomId]);
 
   const handleRechargeSuccess = useCallback(async () => {
     try {
@@ -327,35 +336,38 @@ export default function VideoCallScreen() {
           }}
         />
 
-        {/* Balance badge + Recharge button */}
-        <View style={styles.floatingTopRight}>
-          {currentCoins !== null && !isListener && (
-            <View style={styles.coinsBadge}>
-              <FontAwesome5 name="coins" size={12} color="#F59E0B" style={{ marginRight: 4 }} />
-              <Text style={styles.coinsBadgeText}>{currentCoins}</Text>
-            </View>
-          )}
-          {!isListener && (
-            <TouchableOpacity
-              style={styles.floatingRechargeBtn}
-              onPress={() => setShowRecharge(true)}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="wallet-outline" size={20} color="#fff" />
-              <Text style={styles.floatingRechargeText}>Recharge</Text>
-            </TouchableOpacity>
-          )}
+        {/* Floating overlay — uses pointerEvents='box-none' so only buttons intercept touches */}
+        <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+          {/* Balance badge + Recharge + Gift button */}
+          <View style={[styles.floatingTopRight, { zIndex: 9999, elevation: 9999 }]}>
+            {currentCoins !== null && !isListener && (
+              <View style={styles.coinsBadge}>
+                <Text style={{ fontSize: 12, marginRight: 4 }}>🪙</Text>
+                <Text style={styles.coinsBadgeText}>{currentCoins}</Text>
+              </View>
+            )}
+            {!isListener && (
+              <TouchableOpacity
+                style={styles.floatingRechargeBtn}
+                onPress={() => setShowRecharge(true)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="wallet-outline" size={20} color="#fff" />
+                <Text style={styles.floatingRechargeText}>Recharge</Text>
+              </TouchableOpacity>
+            )}
 
-          {!isListener && (
-            <TouchableOpacity
-              style={[styles.floatingRechargeBtn, { backgroundColor: 'rgba(168, 85, 247, 0.9)', shadowColor: '#A855F7' }]}
-              onPress={() => setShowGiftPopup(true)}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="gift-outline" size={20} color="#fff" />
-              <Text style={styles.floatingRechargeText}>Gift</Text>
-            </TouchableOpacity>
-          )}
+            {!isListener && (
+              <TouchableOpacity
+                style={[styles.floatingRechargeBtn, { backgroundColor: 'rgba(168, 85, 247, 0.9)', shadowColor: '#A855F7' }]}
+                onPress={() => setShowGiftPopup(true)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="gift-outline" size={20} color="#fff" />
+                <Text style={styles.floatingRechargeText}>Gift</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {showSafety && (
@@ -399,7 +411,7 @@ export default function VideoCallScreen() {
         <View style={styles.topBarRight}>
           {currentCoins !== null && !isListener && (
             <View style={styles.coinsBadgeInline}>
-              <FontAwesome5 name="coins" size={12} color="#F59E0B" style={{ marginRight: 4 }} />
+              <Text style={{ fontSize: 12, marginRight: 4 }}>🪙</Text>
               <Text style={styles.coinsBadgeInlineText}>{currentCoins}</Text>
             </View>
           )}

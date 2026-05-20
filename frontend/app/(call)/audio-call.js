@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Image, Animated, Dimensions, 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { Camera } from 'expo-camera';
-import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
@@ -144,78 +144,85 @@ export default function AudioCallScreen() {
       if (callId && callId !== 'demo_zego_call' && callId !== 'test_call_id') {
         socketService.emit('start_call_billing', { sessionId: callId });
       }
-
-      // Real-time balance updates from server
-      socketService.on('balance_updated', (data) => {
-        if (data.reason === 'call_minute_charge' || data.reason === 'call_session_start') {
-          setCurrentCoins(data.coins);
-        }
-      });
-
-      // Low balance warning from server — show recharge popup
-      socketService.on('low_balance_warning', (data) => {
-        setLowBalanceMessage(data.message);
-        setShowRecharge(true);
-      });
-
-      const exitCallScreen = async () => {
-        if (callEndedRef.current) return;
-        callEndedRef.current = true;
-        clearInterval(intervalRef.current);
-        
-        let role = 'USER';
-        try {
-          const userData = await AsyncStorage.getItem('user');
-          if (userData) {
-            const u = JSON.parse(userData);
-            role = u.role || 'USER';
-          }
-        } catch (e) {}
-
-        if (role === 'LISTENER') {
-          router.replace('/(listener)');
-        } else {
-          router.replace({
-            pathname: '/(call)/call-feedback',
-            params: { name, sessionId: callId, listenerId, callType: 'audio' },
-          });
-        }
-      };
-
-      // Server auto-ended the call due to 0 balance
-      socketService.on('call_auto_ended', async (data) => {
-        if (data.sessionId === callId) {
-          await exitCallScreen();
-        }
-      });
-
-      // Call ended by either participant
-      socketService.on('call_ended', async (data) => {
-        if (data.sessionId === callId) {
-          await exitCallScreen();
-        }
-      });
-
-      // Gifting listener
-      socketService.on('gift_received', (data) => {
-        setReceivedGift(data);
-        // Animate gift
-        giftAnim.setValue(0);
-        Animated.sequence([
-          Animated.timing(giftAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
-          Animated.delay(3000),
-          Animated.timing(giftAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
-        ]).start(() => setReceivedGift(null));
-      });
     };
+
+    const handleBalanceUpdate = (data) => {
+      if (data.reason === 'call_minute_charge' || data.reason === 'call_session_start') {
+        setCurrentCoins(data.coins);
+        // Clear low balance warning if balance is now healthy
+        if (data.coins >= 20) {
+          setLowBalanceMessage('');
+          setShowRecharge(false);
+        }
+      }
+    };
+
+    const handleLowBalance = (data) => {
+      setLowBalanceMessage(data.message);
+      setShowRecharge(true);
+    };
+
+    const exitCallScreen = async () => {
+      if (callEndedRef.current) return;
+      callEndedRef.current = true;
+      clearInterval(intervalRef.current);
+      
+      let role = 'USER';
+      try {
+        const userData = await AsyncStorage.getItem('user');
+        if (userData) {
+          const u = JSON.parse(userData);
+          role = u.role || 'USER';
+        }
+      } catch (e) {}
+
+      if (role === 'LISTENER') {
+        router.replace('/(listener)');
+      } else {
+        router.replace({
+          pathname: '/(call)/call-feedback',
+          params: { name, sessionId: callId, listenerId, callType: 'audio' },
+        });
+      }
+    };
+
+    const handleAutoEnded = async (data) => {
+      if (data.sessionId === callId) {
+        await exitCallScreen();
+      }
+    };
+
+    const handleCallEnded = async (data) => {
+      if (data.sessionId === callId) {
+        await exitCallScreen();
+      }
+    };
+
+    const handleGiftReceived = (data) => {
+      setReceivedGift(data);
+      giftAnim.setValue(0);
+      Animated.sequence([
+        Animated.timing(giftAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+        Animated.delay(3000),
+        Animated.timing(giftAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
+      ]).start(() => setReceivedGift(null));
+    };
+
+    // Register listeners
+    socketService.on('balance_updated', handleBalanceUpdate);
+    socketService.on('low_balance_warning', handleLowBalance);
+    socketService.on('call_auto_ended', handleAutoEnded);
+    socketService.on('call_ended', handleCallEnded);
+    socketService.on('gift_received', handleGiftReceived);
 
     setupBilling();
 
     return () => {
-      socketService.off('balance_updated');
-      socketService.off('low_balance_warning');
-      socketService.off('call_auto_ended');
-      socketService.off('call_ended');
+      socketService.off('balance_updated', handleBalanceUpdate);
+      socketService.off('low_balance_warning', handleLowBalance);
+      socketService.off('call_auto_ended', handleAutoEnded);
+      socketService.off('call_ended', handleCallEnded);
+      socketService.off('gift_received', handleGiftReceived);
     };
   }, [callId]);
 
@@ -271,6 +278,8 @@ export default function AudioCallScreen() {
       if (callId && callId !== 'demo_zego_call' && callId !== 'test_call_id') {
         // Stop billing timer on server
         socketService.emit('stop_call_billing', { sessionId: callId });
+        // Also emit call_ended via socket as belt-and-suspenders
+        socketService.emit('call_ended', { sessionId: callId, roomId });
         await callAPI.endCall(callId);
       }
     } catch (error) {
@@ -285,7 +294,7 @@ export default function AudioCallScreen() {
         });
       }
     }
-  }, [callId, name, listenerId, isListener]);
+  }, [callId, name, listenerId, isListener, roomId]);
 
   const handleRechargeSuccess = useCallback(async () => {
     // After successful in-call recharge, refresh balance
@@ -315,12 +324,16 @@ export default function AudioCallScreen() {
             onCallEnd: handleEndCall,
             onHangUp: handleEndCall,
             durationConfig: { isDurationVisible: true },
+            turnOnCameraWhenJoining: false,
+            turnOnMicrophoneWhenJoining: true,
+            useFrontFacingCamera: false,
             layout: {
               mode: 1, // Gallery mode to avoid floating PIP preview
             },
             audioVideoViewConfig: {
               showMicrophoneStateOnView: false,
               showCameraStateOnView: false,
+              useVideoViewAspectFill: false,
             },
           }}
         />
@@ -329,7 +342,7 @@ export default function AudioCallScreen() {
         <View style={styles.floatingTopRight}>
           {currentCoins !== null && !isListener && (
             <View style={styles.coinsBadge}>
-              <FontAwesome5 name="coins" size={12} color="#F59E0B" style={{ marginRight: 4 }} />
+              <Text style={{ fontSize: 12, marginRight: 4 }}>🪙</Text>
               <Text style={styles.coinsBadgeText}>{currentCoins}</Text>
             </View>
           )}
@@ -393,7 +406,7 @@ export default function AudioCallScreen() {
         {/* Balance indicator */}
         {currentCoins !== null && !isListener && (
           <View style={styles.balanceIndicator}>
-            <FontAwesome5 name="coins" size={13} color="#F59E0B" style={{ marginRight: 4 }} />
+            <Text style={{ fontSize: 13, marginRight: 4 }}>🪙</Text>
             <Text style={styles.balanceText}>{currentCoins} coins</Text>
           </View>
         )}
