@@ -155,42 +155,85 @@ export default function RecentCallsScreen() {
 
   const headerAnim = useRef(new Animated.Value(0)).current;
   const contentAnim = useRef(new Animated.Value(0)).current;
+  const shimmerAnim = useRef(new Animated.Value(0.3)).current;
+  const spinAnim = useRef(new Animated.Value(0)).current;
+
+  // Pulse shimmer animation loop
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerAnim, { toValue: 0.7, duration: 800, useNativeDriver: true }),
+        Animated.timing(shimmerAnim, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
 
   useEffect(() => {
     Animated.timing(headerAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
     Animated.timing(contentAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
   }, []);
 
+  const loadData = async (showLoadingState = false) => {
+    if (showLoadingState) setIsLoading(true);
+    try {
+      const res = await callAPI.getHistory(20, 0);
+      if (res?.data) {
+        setRecentCalls(res.data.map(call => ({
+          id: call._id,
+          userId: call.userId?._id || call.userId,
+          name: call.userId?.name || 'Unknown User',
+          gender: call.userId?.gender || 'Female',
+          avatarIndex: call.userId?.avatarIndex || '0',
+          duration: `${call.duration || 0} mins`,
+          type: call.type || 'audio',
+          time: call.createdAt
+        })));
+      }
+      
+      const balRes = await walletAPI.getBalance();
+      if (balRes?.data) setEarnings(balRes.data.coins || 0);
+
+    } catch (e) {
+      console.error('Failed to load recent calls:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    spinAnim.setValue(0);
+    Animated.timing(spinAnim, {
+      toValue: 1,
+      duration: 800,
+      useNativeDriver: true,
+    }).start();
+    await loadData(true);
+  };
+
   useFocusEffect(
     useCallback(() => {
-      const loadData = async () => {
-        try {
-          setIsLoading(true);
-          const res = await callAPI.getHistory(20, 0);
-          if (res?.data) {
-            setRecentCalls(res.data.map(call => ({
-              id: call._id,
-              userId: call.userId?._id || call.userId,
-              name: call.userId?.name || 'Unknown User',
-              gender: call.userId?.gender || 'Female',
-              avatarIndex: call.userId?.avatarIndex || '0',
-              duration: `${call.duration || 0} mins`,
-              type: call.type || 'audio',
-              time: call.createdAt
-            })));
-          }
-          
-          const balRes = await walletAPI.getBalance();
-          if (balRes?.data) setEarnings(balRes.data.coins || 0);
-
-        } catch (e) {
-          console.error('Failed to load recent calls:', e);
-        } finally {
-          setIsLoading(false);
-        }
-      };
-      loadData();
+      loadData(true);
     }, [])
+  );
+
+  const spin = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
+  const renderSkeletonItem = () => (
+    <View style={styles.skeletonItem}>
+      <Animated.View style={[styles.skeletonAvatar, { opacity: shimmerAnim }]} />
+      <View style={styles.skeletonDetails}>
+        <Animated.View style={[styles.skeletonName, { opacity: shimmerAnim }]} />
+        <Animated.View style={[styles.skeletonDuration, { opacity: shimmerAnim }]} />
+      </View>
+      <View style={styles.skeletonActions}>
+        <Animated.View style={[styles.skeletonActionBtn, { opacity: shimmerAnim }]} />
+        <Animated.View style={[styles.skeletonActionBtn, { opacity: shimmerAnim }]} />
+        <Animated.View style={[styles.skeletonActionBtn, { opacity: shimmerAnim }]} />
+      </View>
+    </View>
   );
 
   return (
@@ -198,7 +241,18 @@ export default function RecentCallsScreen() {
       <StatusBar style="light" />
 
       <Animated.View style={[styles.header, { opacity: headerAnim }]}>
-        <Text style={styles.headerTitle}>Recent Calls</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Text style={styles.headerTitle}>Recent Calls</Text>
+          <TouchableOpacity 
+            onPress={handleRefresh}
+            activeOpacity={0.7}
+            style={styles.refreshBtn}
+          >
+            <Animated.View style={{ transform: [{ rotate: spin }] }}>
+              <Ionicons name="refresh" size={20} color="#9CA3AF" />
+            </Animated.View>
+          </TouchableOpacity>
+        </View>
         <View style={styles.earningsBadge}>
           <Text style={styles.coinEmoji}>🪙</Text>
           <Text style={styles.earningsText}>₹{earnings}</Text>
@@ -206,7 +260,15 @@ export default function RecentCallsScreen() {
       </Animated.View>
 
       <Animated.View style={{ flex: 1, opacity: contentAnim }}>
-        {recentCalls.length === 0 ? (
+        {isLoading ? (
+          <FlatList
+            data={[1, 2, 3, 4, 5]}
+            keyExtractor={item => item.toString()}
+            renderItem={renderSkeletonItem}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+          />
+        ) : recentCalls.length === 0 ? (
           <EmptyState />
         ) : (
           <FlatList
@@ -239,6 +301,17 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#fff',
     fontFamily: 'Inter_900Black',
+  },
+  refreshBtn: {
+    width: wp(9),
+    height: wp(9),
+    borderRadius: wp(4.5),
+    backgroundColor: '#111',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#1F1F1F',
+    marginLeft: 10,
   },
   earningsBadge: {
     flexDirection: 'row',
@@ -339,5 +412,49 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     textAlign: 'center',
     lineHeight: wp(5.5),
+  },
+
+  // Skeleton Styles
+  skeletonItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#111',
+    padding: wp(3.5),
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#1F1F1F',
+  },
+  skeletonAvatar: {
+    width: wp(12),
+    height: wp(12),
+    borderRadius: wp(6),
+    backgroundColor: '#1F1F1F',
+  },
+  skeletonDetails: {
+    flex: 1,
+    marginLeft: wp(3.5),
+    gap: 6,
+  },
+  skeletonName: {
+    width: '50%',
+    height: hp(1.8),
+    borderRadius: 4,
+    backgroundColor: '#1F1F1F',
+  },
+  skeletonDuration: {
+    width: '30%',
+    height: hp(1.4),
+    borderRadius: 4,
+    backgroundColor: '#1F1F1F',
+  },
+  skeletonActions: {
+    flexDirection: 'row',
+    gap: wp(3),
+  },
+  skeletonActionBtn: {
+    width: wp(9),
+    height: wp(9),
+    borderRadius: wp(4.5),
+    backgroundColor: '#1F1F1F',
   },
 });

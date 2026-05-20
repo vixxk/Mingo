@@ -31,9 +31,6 @@ export default function SafetyPopup({ visible, onDismiss }) {
 
   return (
     <View style={styles.wrapper} pointerEvents="box-none">
-      <Animated.View style={[styles.overlay, { opacity: overlayAnim }]}>
-        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onDismiss} />
-      </Animated.View>
       <Animated.View style={[styles.container, { transform: [{ translateY: slideAnim }] }]}>
         <LinearGradient
           colors={['#4D7C0F', '#65A30D', '#3F6212']}

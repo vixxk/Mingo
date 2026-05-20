@@ -15,9 +15,8 @@ import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { wp, hp } from '../../utils/responsive';
-
-
 import { chatAPI } from '../../utils/api';
+import { socketService } from '../../utils/socket';
 import { useFocusEffect } from 'expo-router';
 
 const getAvatarImage = (gender, index) => {
@@ -54,16 +53,30 @@ export default function MessagesScreen() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [conversations, setConversations] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const filteredMessages = conversations.filter(msg => 
     msg.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Entrance animations
+  // Animation values
   const headerAnim = useRef(new Animated.Value(0)).current;
   const listAnim = useRef(new Animated.Value(0)).current;
   const listSlide = useRef(new Animated.Value(15)).current;
+  const shimmerAnim = useRef(new Animated.Value(0.3)).current;
+  const spinAnim = useRef(new Animated.Value(0)).current;
 
+  // Pulse shimmer animation loop
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerAnim, { toValue: 0.7, duration: 800, useNativeDriver: true }),
+        Animated.timing(shimmerAnim, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+
+  // Entrance animations
   useEffect(() => {
     Animated.sequence([
       Animated.timing(headerAnim, { toValue: 1, duration: 350, useNativeDriver: true }),
@@ -74,21 +87,55 @@ export default function MessagesScreen() {
     ]).start();
   }, []);
 
+  const loadConversations = async (showLoadingState = false) => {
+    if (showLoadingState) setIsLoading(true);
+    try {
+      const res = await chatAPI.getConversations();
+      if (res?.data) {
+        setConversations(res.data);
+      }
+    } catch (e) {
+      console.error('Error fetching conversations:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    spinAnim.setValue(0);
+    Animated.timing(spinAnim, {
+      toValue: 1,
+      duration: 800,
+      useNativeDriver: true,
+    }).start();
+    await loadConversations(true);
+  };
+
   useFocusEffect(
     React.useCallback(() => {
-      const loadConversations = async () => {
-        try {
-          const res = await chatAPI.getConversations();
-          if (res?.data) {
-            setConversations(res.data);
-          }
-        } catch (e) {
-          console.error('Error fetching conversations:', e);
-        }
+      const initSocketAndLoad = async () => {
+        await socketService.connect();
+        loadConversations(true);
       };
-      loadConversations();
+      initSocketAndLoad();
+
+      const handleNewMessage = (data) => {
+        console.log('Real-time message update in user messages list:', data);
+        loadConversations(false);
+      };
+
+      socketService.on('new_message_notification', handleNewMessage);
+
+      return () => {
+        socketService.off('new_message_notification', handleNewMessage);
+      };
     }, [])
   );
+
+  const spin = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
 
   const renderMessageItem = ({ item }) => {
     let timeStr = item.time;
@@ -171,16 +218,38 @@ export default function MessagesScreen() {
     );
   };
 
+  const renderSkeletonItem = () => (
+    <View style={styles.skeletonItem}>
+      <Animated.View style={[styles.skeletonAvatar, { opacity: shimmerAnim }]} />
+      <View style={styles.skeletonDetails}>
+        <View style={styles.nameRow}>
+          <Animated.View style={[styles.skeletonName, { opacity: shimmerAnim }]} />
+          <Animated.View style={[styles.skeletonTime, { opacity: shimmerAnim }]} />
+        </View>
+        <Animated.View style={[styles.skeletonText, { opacity: shimmerAnim }]} />
+      </View>
+    </View>
+  );
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar style="light" />
 
-      {}
+      {/* Header */}
       <Animated.View style={[styles.header, { opacity: headerAnim }]}>
         <Text style={styles.headerTitle}>Messages</Text>
+        <TouchableOpacity 
+          onPress={handleRefresh}
+          activeOpacity={0.7}
+          style={styles.refreshBtn}
+        >
+          <Animated.View style={{ transform: [{ rotate: spin }] }}>
+            <Ionicons name="refresh" size={22} color="#9CA3AF" />
+          </Animated.View>
+        </TouchableOpacity>
       </Animated.View>
 
-      {}
+      {/* Search Bar */}
       <Animated.View style={[styles.searchContainer, { opacity: headerAnim }]}>
         <Ionicons name="search" size={20} color="#6B7280" style={styles.searchIcon} />
         <TextInput 
@@ -192,21 +261,31 @@ export default function MessagesScreen() {
         />
       </Animated.View>
 
-      {}
+      {/* Conversations List / Skeletons */}
       <Animated.View style={{ flex: 1, opacity: listAnim, transform: [{ translateY: listSlide }] }}>
-      <FlatList
-        data={filteredMessages}
-        keyExtractor={item => item.id}
-        renderItem={renderMessageItem}
-        contentContainerStyle={styles.listContainer}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={() => (
-          <View style={styles.emptyContainer}>
-            <Ionicons name="chatbubble-outline" size={48} color="#374151" />
-            <Text style={styles.emptyText}>No messages found.</Text>
-          </View>
+        {isLoading ? (
+          <FlatList
+            data={[1, 2, 3, 4, 5]}
+            keyExtractor={item => item.toString()}
+            renderItem={renderSkeletonItem}
+            contentContainerStyle={styles.listContainer}
+            showsVerticalScrollIndicator={false}
+          />
+        ) : (
+          <FlatList
+            data={filteredMessages}
+            keyExtractor={item => item.id}
+            renderItem={renderMessageItem}
+            contentContainerStyle={styles.listContainer}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={() => (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="chatbubble-outline" size={48} color="#374151" />
+                <Text style={styles.emptyText}>No messages found.</Text>
+              </View>
+            )}
+          />
         )}
-      />
       </Animated.View>
     </View>
   );
@@ -229,6 +308,16 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#fff',
     fontFamily: 'Inter_900Black',
+  },
+  refreshBtn: {
+    width: wp(10),
+    height: wp(10),
+    borderRadius: wp(5),
+    backgroundColor: '#111827',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#1F2937',
   },
   searchContainer: {
     flexDirection: 'row',
@@ -366,5 +455,43 @@ const styles = StyleSheet.create({
     fontSize: wp(3.8),
     fontFamily: 'Inter_500Medium',
     marginTop: hp(1.5),
+  },
+  // Skeleton Styles
+  skeletonItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: hp(1.5),
+    borderBottomWidth: 1,
+    borderBottomColor: '#1F2937',
+  },
+  skeletonAvatar: {
+    width: wp(14),
+    height: wp(14),
+    borderRadius: wp(7),
+    backgroundColor: '#1F2937',
+    marginRight: wp(4),
+  },
+  skeletonDetails: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  skeletonName: {
+    width: '40%',
+    height: hp(2),
+    borderRadius: 4,
+    backgroundColor: '#1F2937',
+  },
+  skeletonTime: {
+    width: '15%',
+    height: hp(1.5),
+    borderRadius: 4,
+    backgroundColor: '#1F2937',
+  },
+  skeletonText: {
+    width: '75%',
+    height: hp(1.7),
+    borderRadius: 4,
+    backgroundColor: '#111827',
+    marginTop: hp(0.8),
   },
 });

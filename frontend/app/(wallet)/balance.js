@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Animated, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -80,14 +80,16 @@ export default function BalanceScreen() {
 
   const handleBuyCoins = async (item) => {
     try {
-      await walletAPI.purchaseCoins({ packageId: item.id || item._id, amount: item.price });
+      await walletAPI.purchaseCoins(item.id || item._id);
       const balRes = await walletAPI.getBalance();
       if (balRes?.data) {
         setBalance(balRes.data.coins);
         setDiamonds(balRes.data.diamonds || Math.floor(balRes.data.coins / 10));
       }
+      Alert.alert('Payment Successful', `Successfully added ${item.coins} coins to your balance!`);
     } catch (e) {
       console.log('Purchase error:', e);
+      Alert.alert('Payment Failed', 'Please try again later.');
     }
   };
 

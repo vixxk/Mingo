@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Image, Animated, Dimensions, 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { Camera } from 'expo-camera';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
@@ -297,6 +297,7 @@ export default function VideoCallScreen() {
     } catch (e) {
       console.log('Balance refresh failed after recharge', e);
     }
+    setLowBalanceMessage('');
     setShowRecharge(false);
   }, []);
 
@@ -319,6 +320,10 @@ export default function VideoCallScreen() {
             layout: {
               mode: 0, // PictureInPicture
             },
+            audioVideoViewConfig: {
+              showMicrophoneStateOnView: false,
+              showCameraStateOnView: false,
+            },
           }}
         />
 
@@ -326,7 +331,7 @@ export default function VideoCallScreen() {
         <View style={styles.floatingTopRight}>
           {currentCoins !== null && !isListener && (
             <View style={styles.coinsBadge}>
-              <Ionicons name="flash" size={14} color="#F59E0B" />
+              <FontAwesome5 name="coins" size={12} color="#F59E0B" style={{ marginRight: 4 }} />
               <Text style={styles.coinsBadgeText}>{currentCoins}</Text>
             </View>
           )}
@@ -394,7 +399,7 @@ export default function VideoCallScreen() {
         <View style={styles.topBarRight}>
           {currentCoins !== null && !isListener && (
             <View style={styles.coinsBadgeInline}>
-              <Ionicons name="flash" size={13} color="#F59E0B" />
+              <FontAwesome5 name="coins" size={12} color="#F59E0B" style={{ marginRight: 4 }} />
               <Text style={styles.coinsBadgeInlineText}>{currentCoins}</Text>
             </View>
           )}

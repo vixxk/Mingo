@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Image, Animated, Dimensions, 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { Camera } from 'expo-camera';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
@@ -297,6 +297,7 @@ export default function AudioCallScreen() {
     } catch (e) {
       console.log('Balance refresh failed after recharge', e);
     }
+    setLowBalanceMessage('');
     setShowRecharge(false);
   }, []);
 
@@ -314,6 +315,13 @@ export default function AudioCallScreen() {
             onCallEnd: handleEndCall,
             onHangUp: handleEndCall,
             durationConfig: { isDurationVisible: true },
+            layout: {
+              mode: 1, // Gallery mode to avoid floating PIP preview
+            },
+            audioVideoViewConfig: {
+              showMicrophoneStateOnView: false,
+              showCameraStateOnView: false,
+            },
           }}
         />
 
@@ -321,7 +329,7 @@ export default function AudioCallScreen() {
         <View style={styles.floatingTopRight}>
           {currentCoins !== null && !isListener && (
             <View style={styles.coinsBadge}>
-              <Ionicons name="flash" size={14} color="#F59E0B" />
+              <FontAwesome5 name="coins" size={12} color="#F59E0B" style={{ marginRight: 4 }} />
               <Text style={styles.coinsBadgeText}>{currentCoins}</Text>
             </View>
           )}
@@ -380,12 +388,12 @@ export default function AudioCallScreen() {
         style={StyleSheet.absoluteFill}
       />
 
-      {}
+      {/* Top Header section */}
       <View style={[styles.topSection, { paddingTop: insets.top + vs(40) }]}>
         {/* Balance indicator */}
         {currentCoins !== null && !isListener && (
           <View style={styles.balanceIndicator}>
-            <Ionicons name="flash" size={16} color="#F59E0B" />
+            <FontAwesome5 name="coins" size={13} color="#F59E0B" style={{ marginRight: 4 }} />
             <Text style={styles.balanceText}>{currentCoins} coins</Text>
           </View>
         )}

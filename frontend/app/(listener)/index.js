@@ -301,10 +301,6 @@ export default function ListenerHomeScreen() {
           />
         </View>
         <View style={styles.headerRight}>
-          <View style={styles.balanceBadge}>
-            <Text style={styles.coinEmoji}>🪙</Text>
-            <Text style={styles.balanceText}>₹{balance}</Text>
-          </View>
           <TouchableOpacity 
             activeOpacity={0.7} 
             onPress={() => router.push('/(listener)/listener-profile')}

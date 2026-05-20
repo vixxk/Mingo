@@ -42,8 +42,8 @@ class GiftService {
       }], { session });
 
       // 3. Credit receiver (Listener)
-      // Payout ratio: 50% of coin value converted to earnings
-      const payoutAmount = (totalCost * 0.5); 
+      // Payout ratio: 70% of coin value converted to earnings
+      const payoutAmount = (totalCost * 0.7); 
       
       const listener = await Listener.findOne({ userId: receiverId }).session(session);
       if (listener) {
@@ -85,20 +85,19 @@ class GiftService {
   }
 
   static async seedGifts() {
-    const existingCount = await Gift.countDocuments();
-    if (existingCount > 0) return;
+    await Gift.deleteMany({}); // Overwrite existing gifts to apply new prices
 
     const initialGifts = [
-      { name: 'Candy', icon: '🍬', price: 120, originalPrice: 160, animation: 'floating' },
-      { name: 'Gift Box', icon: '🎁', price: 120, originalPrice: 160, animation: 'zoom' },
-      { name: 'Wrapped Gift', icon: '💝', price: 120, originalPrice: 160, animation: 'shake' },
-      { name: 'Gold Coins', icon: '💰', price: 120, originalPrice: 160, animation: 'floating' },
-      { name: 'Candy Cane', icon: '🍭', price: 120, originalPrice: 160, animation: 'floating' },
-      { name: 'Heart', icon: '❤️', price: 120, originalPrice: 160, animation: 'zoom' },
+      { name: 'Heart', icon: '❤️', price: 10, originalPrice: 15, animation: 'zoom' },
+      { name: 'Candy Cane', icon: '🍭', price: 50, originalPrice: 70, animation: 'floating' },
+      { name: 'Candy', icon: '🍬', price: 100, originalPrice: 140, animation: 'floating' },
+      { name: 'Gift Box', icon: '🎁', price: 300, originalPrice: 400, animation: 'zoom' },
+      { name: 'Wrapped Gift', icon: '💝', price: 500, originalPrice: 700, animation: 'shake' },
+      { name: 'Gold Coins', icon: '💰', price: 1000, originalPrice: 1400, animation: 'floating' },
     ];
 
     await Gift.insertMany(initialGifts);
-    console.log('Initial gifts seeded successfully');
+    console.log('Gifts re-seeded successfully with varied prices');
   }
 }
 

@@ -8,7 +8,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ms, s, vs } from '../../utils/responsive';
 import { walletAPI } from '../../utils/api';
@@ -39,6 +39,7 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
         Animated.timing(slideAnim, { toValue: 600, duration: 200, useNativeDriver: true }),
       ]).start();
       setPurchaseSuccess(false);
+      setPurchasing(null);
     }
   }, [visible]);
 
@@ -62,6 +63,7 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
       // Notify parent that recharge was successful
       setTimeout(() => {
         if (onRechargeSuccess) onRechargeSuccess();
+        setPurchasing(null);
       }, 1200);
     } catch (e) {
       console.log('Purchase failed:', e);
@@ -100,7 +102,7 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
           ) : null}
 
           <Text style={styles.title}>
-            <Ionicons name="flash" size={20} color="#F59E0B" /> Quick Recharge
+            <FontAwesome5 name="coins" size={18} color="#F59E0B" style={{ marginRight: 6 }} /> Quick Recharge
           </Text>
           <Text style={styles.subtitle}>
             Add coins instantly without leaving your call
@@ -138,7 +140,7 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
                   >
                     <View style={styles.packageLeft}>
                       <View style={styles.coinsRow}>
-                        <Ionicons name="flash" size={16} color="#F59E0B" />
+                        <FontAwesome5 name="coins" size={14} color="#F59E0B" style={{ marginRight: 4 }} />
                         <Text style={styles.packageCoins}>{pkg.coins}</Text>
                         <Text style={styles.packageCoinsLabel}>coins</Text>
                       </View>

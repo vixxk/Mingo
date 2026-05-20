@@ -183,6 +183,20 @@ const EmptyState = ({ tab }) => {
   );
 };
 
+const SkeletonItem = ({ opacity }) => (
+  <View style={styles.skeletonItem}>
+    <Animated.View style={[styles.skeletonAvatar, { opacity }]} />
+    <View style={styles.skeletonDetails}>
+      <Animated.View style={[styles.skeletonName, { opacity }]} />
+      <Animated.View style={[styles.skeletonDuration, { opacity }]} />
+    </View>
+    <View style={styles.skeletonActions}>
+      <Animated.View style={[styles.skeletonActionBtn, { opacity }]} />
+      <Animated.View style={[styles.skeletonActionBtn, { opacity }]} />
+    </View>
+  </View>
+);
+
 export default function RecentCallsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -194,11 +208,22 @@ export default function RecentCallsScreen() {
   const headerAnim = useRef(new Animated.Value(0)).current;
   const contentAnim = useRef(new Animated.Value(0)).current;
   const contentSlide = useRef(new Animated.Value(15)).current;
+  const shimmerAnim = useRef(new Animated.Value(0.3)).current;
+  const spinAnim = useRef(new Animated.Value(0)).current;
 
   const [recentCalls, setRecentCalls] = useState([]);
   const [favourites, setFavourites] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [coinBalance, setCoinBalance] = useState(0);
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerAnim, { toValue: 0.7, duration: 800, useNativeDriver: true }),
+        Animated.timing(shimmerAnim, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
 
   useEffect(() => {
     Animated.sequence([
@@ -210,48 +235,59 @@ export default function RecentCallsScreen() {
     ]).start();
   }, []);
 
+  const loadData = async (showLoadingState = false) => {
+    if (showLoadingState) setIsLoading(true);
+    try {
+      const [callsRes, favsRes, balRes] = await Promise.all([
+        callAPI.getHistory(20, 0),
+        userAPI.getFavourites(),
+        walletAPI.getBalance()
+      ]);
+
+      if (callsRes?.data) {
+        setRecentCalls(callsRes.data.map(call => ({
+          id: call._id,
+          listenerId: call.listenerId?._id || call.listenerId,
+          name: call.listenerId?.name || 'Unknown',
+          gender: call.listenerId?.gender,
+          avatarIndex: call.listenerId?.avatarIndex,
+          duration: `${call.duration || 0} mins call`,
+        })));
+      }
+
+      if (favsRes?.data) {
+        setFavourites(favsRes.data.map(fav => ({
+          id: fav._id,
+          name: fav.name,
+          gender: fav.gender,
+          avatarIndex: fav.avatarIndex,
+          duration: 'Favourite Listener',
+        })));
+      }
+
+      if (balRes?.data) {
+        setCoinBalance(balRes.data.coins || 0);
+      }
+    } catch (e) {
+      console.error('Failed to load recent calls:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    spinAnim.setValue(0);
+    Animated.timing(spinAnim, {
+      toValue: 1,
+      duration: 800,
+      useNativeDriver: true,
+    }).start();
+    await loadData(true);
+  };
+
   useFocusEffect(
     useCallback(() => {
-      const loadData = async () => {
-        try {
-          setIsLoading(true);
-          const [callsRes, favsRes, balRes] = await Promise.all([
-            callAPI.getHistory(20, 0),
-            userAPI.getFavourites(),
-            walletAPI.getBalance()
-          ]);
-
-          if (callsRes?.data) {
-            setRecentCalls(callsRes.data.map(call => ({
-              id: call._id,
-              listenerId: call.listenerId?._id || call.listenerId,
-              name: call.listenerId?.name || 'Unknown',
-              gender: call.listenerId?.gender,
-              avatarIndex: call.listenerId?.avatarIndex,
-              duration: `${call.duration || 0} mins call`,
-            })));
-          }
-
-          if (favsRes?.data) {
-            setFavourites(favsRes.data.map(fav => ({
-              id: fav._id,
-              name: fav.name,
-              gender: fav.gender,
-              avatarIndex: fav.avatarIndex,
-              duration: 'Favourite Listener',
-            })));
-          }
-
-          if (balRes?.data) {
-            setCoinBalance(balRes.data.coins || 0);
-          }
-        } catch (e) {
-          console.error('Failed to load recent calls:', e);
-        } finally {
-          setIsLoading(false);
-        }
-      };
-      loadData();
+      loadData(true);
     }, [])
   );
 
@@ -273,6 +309,10 @@ export default function RecentCallsScreen() {
   };
 
   const data = activeTab === 'recent' ? recentCalls : favourites;
+  const spin = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -297,6 +337,15 @@ export default function RecentCallsScreen() {
           >
             <Text style={styles.coinEmoji}>🪙</Text>
             <Text style={styles.coinCount}>{coinBalance}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={handleRefresh}
+            activeOpacity={0.7}
+            style={styles.refreshBtn}
+          >
+            <Animated.View style={{ transform: [{ rotate: spin }] }}>
+              <Ionicons name="refresh" size={18} color="#9CA3AF" />
+            </Animated.View>
           </TouchableOpacity>
         </View>
         <TouchableOpacity 
@@ -342,7 +391,17 @@ export default function RecentCallsScreen() {
 
       {}
       <Animated.View style={{ flex: 1, opacity: contentAnim, transform: [{ translateY: contentSlide }] }}>
-      {data.length === 0 ? (
+      {isLoading ? (
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {[1, 2, 3, 4, 5].map((item) => (
+            <SkeletonItem key={item} opacity={shimmerAnim} />
+          ))}
+        </ScrollView>
+      ) : data.length === 0 ? (
         <EmptyState tab={activeTab} />
       ) : (
         <ScrollView
@@ -406,6 +465,17 @@ const styles = StyleSheet.create({
     fontSize: ms(13, 0.3),
     color: '#fff',
     fontFamily: 'Inter_700Bold',
+  },
+  refreshBtn: {
+    width: s(36),
+    height: s(36),
+    borderRadius: s(18),
+    backgroundColor: '#1A1A1A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#333',
+    marginLeft: s(4),
   },
   notificationBtn: {
     width: s(40),
@@ -554,5 +624,50 @@ const styles = StyleSheet.create({
     fontSize: ms(14, 0.3),
     fontFamily: 'Inter_600SemiBold',
     fontWeight: '600',
+  },
+
+  
+  skeletonItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: s(12),
+    paddingVertical: vs(12),
+    borderRadius: 16,
+    backgroundColor: '#111',
+    borderWidth: 1,
+    borderColor: '#1F1F1F',
+  },
+  skeletonAvatar: {
+    width: s(44),
+    height: s(44),
+    borderRadius: s(22),
+    backgroundColor: '#1F1F1F',
+  },
+  skeletonDetails: {
+    flex: 1,
+    marginLeft: s(12),
+    gap: 6,
+  },
+  skeletonName: {
+    width: '50%',
+    height: vs(16),
+    borderRadius: 4,
+    backgroundColor: '#1F1F1F',
+  },
+  skeletonDuration: {
+    width: '30%',
+    height: vs(12),
+    borderRadius: 4,
+    backgroundColor: '#1F1F1F',
+  },
+  skeletonActions: {
+    flexDirection: 'row',
+    gap: s(10),
+  },
+  skeletonActionBtn: {
+    width: s(36),
+    height: s(36),
+    borderRadius: s(18),
+    backgroundColor: '#1F1F1F',
   },
 });
