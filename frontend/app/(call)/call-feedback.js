@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ms, s, vs, SCREEN_HEIGHT } from '../../utils/responsive';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { ratingAPI } from '../../utils/api';
 
@@ -41,8 +42,18 @@ export default function CallFeedbackScreen() {
   };
 
   const handleSubmit = async () => {
+    let target = '/(tabs)';
+    try {
+      const userRole = await AsyncStorage.getItem('userRole');
+      if (userRole === 'LISTENER') {
+        target = '/(listener)';
+      }
+    } catch (e) {
+      console.log('Error checking role for redirect:', e);
+    }
+
     if (!sessionId) {
-      router.replace('/(tabs)');
+      router.replace(target);
       return;
     }
 
@@ -57,7 +68,7 @@ export default function CallFeedbackScreen() {
       console.log('Error submitting feedback:', e);
     } finally {
       setIsSubmitting(false);
-      router.replace('/(tabs)');
+      router.replace(target);
     }
   };
 

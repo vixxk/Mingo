@@ -78,9 +78,15 @@ export default function ConnectingScreen() {
   const [realRoomId, setRealRoomId] = React.useState(initialRoomId);
 
   const realCallIdRef = useRef(initialCallId);
+  const realRoomIdRef = useRef(initialRoomId);
+  
   useEffect(() => {
     realCallIdRef.current = realCallId;
   }, [realCallId]);
+
+  useEffect(() => {
+    realRoomIdRef.current = realRoomId;
+  }, [realRoomId]);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const dotsAnim = useRef(new Animated.Value(0)).current;
@@ -146,8 +152,8 @@ export default function ConnectingScreen() {
             pathname: targetScreen, 
             params: { 
               name, 
-              callId: data.sessionId || realCallId || initialCallId, 
-              roomId: data.roomId || realRoomId || initialRoomId, 
+              callId: data.sessionId || realCallIdRef.current || initialCallId, 
+              roomId: data.roomId || realRoomIdRef.current || initialRoomId, 
               listenerId, 
               avatarIndex, 
               gender, 

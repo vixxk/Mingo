@@ -177,9 +177,11 @@ class CallService {
 
     try {
       const { getIo } = require('../socket');
+      getIo().to(`user_${sessionUserIdStr}`).emit('call_ended', { sessionId });
+      getIo().to(`user_${sessionListenerIdStr}`).emit('call_ended', { sessionId });
       getIo().emit('listener_status_changed', { userId: sessionListenerIdStr, isOnline: true, isBusy: false });
     } catch (e) {
-      console.log('Socket error emitting status changed', e.message);
+      console.log('Socket error emitting call_ended/status changed', e.message);
     }
 
     await MatchingService.releaseLock(sessionListenerIdStr);

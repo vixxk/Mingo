@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Tabs, useRouter } from 'expo-router';
+import { Tabs, useRouter, useSegments } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { View, StyleSheet, Platform, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ import { ms, vs } from '../../utils/responsive';
 import { socketService } from '../../utils/socket';
 import { userAPI, callAPI } from '../../utils/api';
 import IncomingCallPopup from '../../components/shared/IncomingCallPopup';
+import { useSSE } from '../../utils/useSSE';
 
 // Conditional import for expo-notifications to avoid crash
 let Notifications = null;
@@ -81,8 +82,10 @@ async function registerForPushNotificationsAsync() {
 export default function ListenerLayout() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const segments = useSegments();
   
   const [incomingCall, setIncomingCall] = useState(null);
+  const unreadCount = useSSE();
 
   useEffect(() => {
     const setupSocket = async () => {
@@ -98,8 +101,23 @@ export default function ListenerLayout() {
         setIncomingCall(null);
       });
 
-      socketService.on('new_message_notification', (data) => {
+      socketService.on('new_message_notification', async (data) => {
         console.log('New message received:', data);
+        const isCurrentlyChatting = segments && (segments.includes('(chat)') || segments.includes('chat'));
+        if (Notifications && !isCurrentlyChatting) {
+          try {
+            await Notifications.scheduleNotificationAsync({
+              content: {
+                title: data.senderName || 'New Message',
+                body: data.content || 'You have a new message',
+                sound: true,
+              },
+              trigger: null,
+            });
+          } catch (err) {
+            console.log('Error showing notification:', err);
+          }
+        }
       });
 
       registerForPushNotificationsAsync().then(token => {
@@ -234,6 +252,7 @@ export default function ListenerLayout() {
                 color={color}
               />
             ),
+            tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
           }}
         />
         <Tabs.Screen

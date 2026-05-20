@@ -48,6 +48,13 @@ class ChatController {
         [`unreadCount.${req.user.id}`]: 0
       });
 
+      try {
+        const sseService = require('../services/sseService');
+        sseService.notifyUser(req.user.id);
+      } catch (sseErr) {
+        console.error('SSE notification error in getMessages:', sseErr);
+      }
+
       return ApiResponse.success(res, messages, 'Messages retrieved successfully');
     } catch (err) {
       next(err);
@@ -97,6 +104,13 @@ class ChatController {
         [`unreadCount.${req.user.id}`]: 0
       });
 
+      try {
+        const sseService = require('../services/sseService');
+        sseService.notifyUser(req.user.id);
+      } catch (sseErr) {
+        console.error('SSE notification error in initiateConversation:', sseErr);
+      }
+
       return ApiResponse.success(res, {
         conversationId: conversation._id,
         participants: conversation.participants,
@@ -104,6 +118,37 @@ class ChatController {
       }, 'Conversation initiated successfully');
     } catch (err) {
       next(err);
+    }
+  }
+
+  static async sseUnreadCount(req, res, next) {
+    try {
+      const userId = req.user.id;
+      
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders();
+      
+      const sseService = require('../services/sseService');
+      sseService.addClient(userId, res);
+      
+      await sseService.sendUnreadCount(userId, res);
+      
+      const keepAlive = setInterval(() => {
+        res.write(': keep-alive\n\n');
+      }, 30000);
+      
+      req.on('close', () => {
+        clearInterval(keepAlive);
+        sseService.removeClient(userId, res);
+        res.end();
+      });
+    } catch (err) {
+      console.error('SSE endpoint error:', err);
+      if (!res.headersSent) {
+        next(err);
+      }
     }
   }
 }

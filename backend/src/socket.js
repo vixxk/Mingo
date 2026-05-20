@@ -114,7 +114,23 @@ const initSocket = (server) => {
             mediaUrl
           });
           await message.save();
-          await Conversation.findByIdAndUpdate(conversationId, { lastMessage: message._id });
+
+          const recipientId = conversation.participants.find(p => p.toString() !== senderId.toString());
+          if (recipientId) {
+            await Conversation.findByIdAndUpdate(conversationId, { 
+              lastMessage: message._id,
+              $inc: { [`unreadCount.${recipientId}`]: 1 }
+            });
+            try {
+              const sseService = require('./services/sseService');
+              sseService.notifyUser(recipientId);
+            } catch (sseErr) {
+              console.error('SSE notify error in FREE send_message:', sseErr);
+            }
+          } else {
+            await Conversation.findByIdAndUpdate(conversationId, { lastMessage: message._id });
+          }
+
           console.log(`[Socket] Emitting receive_message (free) to room ${conversationId}`);
           io.to(conversationId).emit('receive_message', message);
 
@@ -124,7 +140,6 @@ const initSocket = (server) => {
           });
 
           // Notify the recipient specifically
-          const recipientId = conversation.participants.find(p => p.toString() !== senderId.toString());
           if (recipientId) {
             io.to(`user_${recipientId}`).emit('new_message_notification', {
               conversationId,
@@ -179,7 +194,22 @@ const initSocket = (server) => {
           mediaUrl
         });
         await message.save();
-        await Conversation.findByIdAndUpdate(conversationId, { lastMessage: message._id });
+
+        const recipientId = conversation.participants.find(p => p.toString() !== senderId.toString());
+        if (recipientId) {
+          await Conversation.findByIdAndUpdate(conversationId, { 
+            lastMessage: message._id,
+            $inc: { [`unreadCount.${recipientId}`]: 1 }
+          });
+          try {
+            const sseService = require('./services/sseService');
+            sseService.notifyUser(recipientId);
+          } catch (sseErr) {
+            console.error('SSE notify error in send_message:', sseErr);
+          }
+        } else {
+          await Conversation.findByIdAndUpdate(conversationId, { lastMessage: message._id });
+        }
         
         // Emit to the conversation room (for people already in the chat)
         console.log(`[Socket] Emitting receive_message to room ${conversationId}`);
@@ -192,7 +222,6 @@ const initSocket = (server) => {
         });
 
         // Notify the recipient specifically (for global notifications/badges)
-        const recipientId = conversation.participants.find(p => p.toString() !== senderId.toString());
         if (recipientId) {
           io.to(`user_${recipientId}`).emit('new_message_notification', {
             conversationId,

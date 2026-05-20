@@ -23,7 +23,7 @@ let ZegoUIKitPrebuiltCall, ONE_ON_ONE_VIDEO_CALL_CONFIG;
 try {
   if (!isExpoGo) {
     const zegoModule = require('@zegocloud/zego-uikit-prebuilt-call-rn');
-    ZegoUIKitPrebuiltCall = zegoModule.default || zegoModule.ZegoUIKitPrebuiltCall;
+    ZegoUIKitPrebuiltCall = zegoModule.ZegoUIKitPrebuiltCall;
     ONE_ON_ONE_VIDEO_CALL_CONFIG =
       zegoModule.ONE_ON_ONE_VIDEO_CALL_CONFIG || zegoModule.ZegoMenuBarButtonName;
   } else {
@@ -89,6 +89,7 @@ export default function VideoCallScreen() {
   const [currentCoins, setCurrentCoins] = useState(null);
   const [lowBalanceMessage, setLowBalanceMessage] = useState('');
   const [hasPermission, setHasPermission] = useState(null);
+  const [isListener, setIsListener] = useState(false);
   
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const giftAnim = useRef(new Animated.Value(0)).current;
@@ -121,13 +122,16 @@ export default function VideoCallScreen() {
           const user = JSON.parse(userData);
           setUserID(user._id || user.id || `user_${Date.now()}`);
           setUserName(user.name || user.username || 'User');
+          setIsListener(user.role === 'LISTENER');
         } else {
           setUserID(`user_${Date.now()}`);
           setUserName('User');
+          setIsListener(false);
         }
       } catch {
         setUserID(`user_${Date.now()}`);
         setUserName('User');
+        setIsListener(false);
       }
     };
     loadUser();
@@ -156,15 +160,41 @@ export default function VideoCallScreen() {
         setShowRecharge(true);
       });
 
-      // Server auto-ended the call due to 0 balance
-      socketService.on('call_auto_ended', (data) => {
-        if (data.sessionId === callId && !callEndedRef.current) {
-          callEndedRef.current = true;
-          clearInterval(intervalRef.current);
+      const exitCallScreen = async () => {
+        if (callEndedRef.current) return;
+        callEndedRef.current = true;
+        clearInterval(intervalRef.current);
+        
+        let role = 'USER';
+        try {
+          const userData = await AsyncStorage.getItem('user');
+          if (userData) {
+            const u = JSON.parse(userData);
+            role = u.role || 'USER';
+          }
+        } catch (e) {}
+
+        if (role === 'LISTENER') {
+          router.replace('/(listener)');
+        } else {
           router.replace({
             pathname: '/(call)/call-feedback',
             params: { name, sessionId: callId, listenerId, callType: 'video' },
           });
+        }
+      };
+
+      // Server auto-ended the call due to 0 balance
+      socketService.on('call_auto_ended', async (data) => {
+        if (data.sessionId === callId) {
+          await exitCallScreen();
+        }
+      });
+
+      // Call ended by either participant
+      socketService.on('call_ended', async (data) => {
+        if (data.sessionId === callId) {
+          await exitCallScreen();
         }
       });
 
@@ -187,6 +217,7 @@ export default function VideoCallScreen() {
       socketService.off('balance_updated');
       socketService.off('low_balance_warning');
       socketService.off('call_auto_ended');
+      socketService.off('call_ended');
     };
   }, [callId]);
 
@@ -246,12 +277,16 @@ export default function VideoCallScreen() {
     } catch (error) {
       console.log('Failed to end call on backend:', error);
     } finally {
-      router.replace({
-        pathname: '/(call)/call-feedback',
-        params: { name, sessionId: callId, listenerId, callType: 'video' },
-      });
+      if (isListener) {
+        router.replace('/(listener)');
+      } else {
+        router.replace({
+          pathname: '/(call)/call-feedback',
+          params: { name, sessionId: callId, listenerId, callType: 'video' },
+        });
+      }
     }
-  }, [callId, name, listenerId]);
+  }, [callId, name, listenerId, isListener]);
 
   const handleRechargeSuccess = useCallback(async () => {
     try {
@@ -281,34 +316,41 @@ export default function VideoCallScreen() {
             durationConfig: { isDurationVisible: true },
             turnOnCameraWhenJoining: true,
             turnOnMicrophoneWhenJoining: true,
+            layout: {
+              mode: 0, // PictureInPicture
+            },
           }}
         />
 
         {/* Balance badge + Recharge button */}
         <View style={styles.floatingTopRight}>
-          {currentCoins !== null && (
+          {currentCoins !== null && !isListener && (
             <View style={styles.coinsBadge}>
               <Ionicons name="flash" size={14} color="#F59E0B" />
               <Text style={styles.coinsBadgeText}>{currentCoins}</Text>
             </View>
           )}
-          <TouchableOpacity
-            style={styles.floatingRechargeBtn}
-            onPress={() => setShowRecharge(true)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="wallet-outline" size={20} color="#fff" />
-            <Text style={styles.floatingRechargeText}>Recharge</Text>
-          </TouchableOpacity>
+          {!isListener && (
+            <TouchableOpacity
+              style={styles.floatingRechargeBtn}
+              onPress={() => setShowRecharge(true)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="wallet-outline" size={20} color="#fff" />
+              <Text style={styles.floatingRechargeText}>Recharge</Text>
+            </TouchableOpacity>
+          )}
 
-          <TouchableOpacity
-            style={[styles.floatingRechargeBtn, { backgroundColor: 'rgba(168, 85, 247, 0.9)', shadowColor: '#A855F7' }]}
-            onPress={() => setShowGiftPopup(true)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="gift-outline" size={20} color="#fff" />
-            <Text style={styles.floatingRechargeText}>Gift</Text>
-          </TouchableOpacity>
+          {!isListener && (
+            <TouchableOpacity
+              style={[styles.floatingRechargeBtn, { backgroundColor: 'rgba(168, 85, 247, 0.9)', shadowColor: '#A855F7' }]}
+              onPress={() => setShowGiftPopup(true)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="gift-outline" size={20} color="#fff" />
+              <Text style={styles.floatingRechargeText}>Gift</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {showSafety && (
@@ -322,6 +364,14 @@ export default function VideoCallScreen() {
           onClose={() => setShowRecharge(false)}
           onRechargeSuccess={handleRechargeSuccess}
           lowBalanceMessage={lowBalanceMessage}
+        />
+        <GiftPopup
+          visible={showGiftPopup}
+          onClose={() => setShowGiftPopup(false)}
+          receiverId={listenerId}
+          onGiftSent={(gift) => {
+            // Optional local animation or callback here
+          }}
         />
       </View>
     );
@@ -342,7 +392,7 @@ export default function VideoCallScreen() {
           <Text style={styles.durationBadgeText}>{formatDuration(callDuration)}</Text>
         </View>
         <View style={styles.topBarRight}>
-          {currentCoins !== null && (
+          {currentCoins !== null && !isListener && (
             <View style={styles.coinsBadgeInline}>
               <Ionicons name="flash" size={13} color="#F59E0B" />
               <Text style={styles.coinsBadgeInlineText}>{currentCoins}</Text>
@@ -430,23 +480,27 @@ export default function VideoCallScreen() {
           />
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.controlBtn}
-          onPress={() => setShowGiftPopup(true)}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="gift-outline" size={24} color="#A855F7" />
-          <Text style={[styles.controlLabel, { color: '#A855F7' }]}>Gift</Text>
-        </TouchableOpacity>
+        {!isListener && (
+          <TouchableOpacity
+            style={styles.controlBtn}
+            onPress={() => setShowGiftPopup(true)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="gift-outline" size={24} color="#A855F7" />
+            <Text style={[styles.controlLabel, { color: '#A855F7' }]}>Gift</Text>
+          </TouchableOpacity>
+        )}
 
-        <TouchableOpacity
-          style={styles.controlBtn}
-          onPress={() => setShowRecharge(true)}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="wallet-outline" size={24} color="#EC4899" />
-          <Text style={[styles.controlLabel, { color: '#EC4899' }]}>Coins</Text>
-        </TouchableOpacity>
+        {!isListener && (
+          <TouchableOpacity
+            style={styles.controlBtn}
+            onPress={() => setShowRecharge(true)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="wallet-outline" size={24} color="#EC4899" />
+            <Text style={[styles.controlLabel, { color: '#EC4899' }]}>Coins</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {showSafety && (
@@ -607,7 +661,7 @@ const styles = StyleSheet.create({
 
   selfPreview: {
     position: 'absolute',
-    top: SH * 0.12,
+    bottom: vs(120),
     right: s(16),
     zIndex: 10,
   },
