@@ -138,10 +138,10 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
               ) : (
                 packages.slice(0, 4).map((pkg) => (
                   <TouchableOpacity
-                    key={pkg.id}
-                    style={[styles.packageCard, purchasing === pkg.id && styles.packageCardActive]}
+                    key={pkg._id || pkg.id}
+                    style={[styles.packageCard, purchasing === (pkg._id || pkg.id) && styles.packageCardActive]}
                     activeOpacity={0.75}
-                    onPress={() => handlePurchase(pkg.id)}
+                    onPress={() => handlePurchase(pkg._id || pkg.id)}
                     disabled={purchasing !== null}
                   >
                     <View style={styles.packageLeft}>
@@ -157,7 +157,7 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
                       )}
                     </View>
                     <View style={styles.packageRight}>
-                      {purchasing === pkg.id ? (
+                      {purchasing === (pkg._id || pkg.id) ? (
                         <ActivityIndicator size="small" color="#fff" />
                       ) : (
                         <View style={styles.priceBtn}>

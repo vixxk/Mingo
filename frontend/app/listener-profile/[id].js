@@ -7,6 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRef, useEffect, useState } from 'react';
 import { listenersAPI, userAPI } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BlurView } from 'expo-blur';
+import SkeletonProfile from '../../components/SkeletonProfile';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
@@ -49,13 +51,13 @@ export default function ListenerProfileScreen() {
   const [selectedImage, setSelectedImage] = useState(null);
   const [viewerVisible, setViewerVisible] = useState(false);
 
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
-  const avatarScale = useRef(new Animated.Value(0.7)).current;
-  const headerOpacity = useRef(new Animated.Value(0)).current;
-  const statsAnim = useRef(new Animated.Value(0)).current;
-  const actionsAnim = useRef(new Animated.Value(0)).current;
-  const coverOpacity = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const avatarScale = useRef(new Animated.Value(1)).current;
+  const headerOpacity = useRef(new Animated.Value(1)).current;
+  const statsAnim = useRef(new Animated.Value(1)).current;
+  const actionsAnim = useRef(new Animated.Value(1)).current;
+  const coverOpacity = useRef(new Animated.Value(1)).current;
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -86,7 +88,7 @@ export default function ListenerProfileScreen() {
         } catch (_) {}
       }
 
-      runEntryAnimation();
+      // No entry animation needed
     } catch (err) {
       console.error('Failed to fetch listener profile:', err);
     } finally {
@@ -98,23 +100,6 @@ export default function ListenerProfileScreen() {
   const onRefresh = () => {
     setRefreshing(true);
     fetchProfile(true);
-  };
-
-  const runEntryAnimation = () => {
-    Animated.parallel([
-      Animated.timing(coverOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
-      Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-      Animated.spring(avatarScale, { toValue: 1, friction: 5, tension: 60, useNativeDriver: true }),
-    ]).start(() => {
-      Animated.stagger(120, [
-        Animated.parallel([
-          Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
-          Animated.spring(slideAnim, { toValue: 0, friction: 8, tension: 60, useNativeDriver: true }),
-        ]),
-        Animated.timing(statsAnim, { toValue: 1, duration: 350, useNativeDriver: true }),
-        Animated.timing(actionsAnim, { toValue: 1, duration: 350, useNativeDriver: true }),
-      ]).start();
-    });
   };
 
   const handleToggleFavourite = async () => {
@@ -188,6 +173,10 @@ export default function ListenerProfileScreen() {
   const galleryImages = pub.galleryImages || [];
   const hookline = pub.hookline || '';
   const aboutMe = pub.aboutMe || '';
+
+  if (loading && !refreshing) {
+    return <SkeletonProfile />;
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>

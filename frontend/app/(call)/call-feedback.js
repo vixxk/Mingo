@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { ActivityIndicator } from 'react-native';
 import { ms, s, vs, SCREEN_HEIGHT } from '../../utils/responsive';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -149,11 +150,16 @@ export default function CallFeedbackScreen() {
 
           {}
           <TouchableOpacity
-            style={styles.submitBtn}
+            style={[styles.submitBtn, isSubmitting && { opacity: 0.7 }]}
             activeOpacity={0.85}
             onPress={handleSubmit}
+            disabled={isSubmitting}
           >
-            <Text style={styles.submitText}>Submit Feedback</Text>
+            {isSubmitting ? (
+              <ActivityIndicator size="small" color="#000" />
+            ) : (
+              <Text style={styles.submitText}>Submit Feedback</Text>
+            )}
           </TouchableOpacity>
 
           <View style={{ height: vs(40) }} />

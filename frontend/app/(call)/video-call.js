@@ -10,7 +10,8 @@ import Constants from 'expo-constants';
 
 import SafetyPopup from '../../components/call/SafetyPopup';
 import InCallRechargePopup from '../../components/call/InCallRechargePopup';
-import GiftPopup from '../../components/shared/GiftPopup';
+import GiftPopup from '../../components/call/InCallGiftPopup';
+import GiftAnimationOverlay from '../../components/call/GiftAnimationOverlay';
 import { callAPI, walletAPI } from '../../utils/api';
 import { socketService } from '../../utils/socket';
 import { ZEGO_APP_ID, ZEGO_APP_SIGN } from '../../utils/zegoConfig';
@@ -100,7 +101,6 @@ export default function VideoCallScreen() {
   }, [showSafety]);
   
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const giftAnim = useRef(new Animated.Value(0)).current;
   const intervalRef = useRef(null);
   const callEndedRef = useRef(false);
 
@@ -147,13 +147,8 @@ export default function VideoCallScreen() {
 
   const triggerGiftAnimation = useCallback((data) => {
     setReceivedGift(data);
-    giftAnim.setValue(0);
-    Animated.sequence([
-      Animated.timing(giftAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
-      Animated.delay(3000),
-      Animated.timing(giftAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
-    ]).start(() => setReceivedGift(null));
-  }, [giftAnim]);
+    // GiftAnimationOverlay unmounts itself via onComplete
+  }, []);
 
   // Start call billing and listen for socket events
   useEffect(() => {
@@ -405,6 +400,14 @@ export default function VideoCallScreen() {
             });
           }}
         />
+        {/* Received Gift Full Screen Animation */}
+        {receivedGift && (
+          <GiftAnimationOverlay
+            giftName={receivedGift.gift.name}
+            senderName={receivedGift.isSentByMe ? 'You' : receivedGift.senderName || 'Someone'}
+            onComplete={() => setReceivedGift(null)}
+          />
+        )}
       </View>
     );
   }
@@ -417,7 +420,6 @@ export default function VideoCallScreen() {
         style={StyleSheet.absoluteFill}
       />
 
-      {}
       <View style={[styles.topBar, { paddingTop: insets.top + vs(8) }]}>
         <View style={styles.durationBadge}>
           <View style={styles.liveDot} />
@@ -440,7 +442,6 @@ export default function VideoCallScreen() {
         </View>
       </View>
 
-      {}
       <View style={styles.videoArea}>
         <Animated.View style={[styles.avatarContainer, { transform: [{ scale: pulseAnim }] }]}>
           <Image
@@ -455,7 +456,6 @@ export default function VideoCallScreen() {
         </View>
       </View>
 
-      {}
       <View style={styles.selfPreview}>
         <View style={styles.selfCamera}>
           <Ionicons
@@ -466,7 +466,6 @@ export default function VideoCallScreen() {
         </View>
       </View>
 
-      {}
       <View
         style={[
           styles.controlsSection,
@@ -561,26 +560,13 @@ export default function VideoCallScreen() {
         }}
       />
 
-      {/* Received Gift Animation/Overlay */}
+      {/* Received Gift Full Screen Animation */}
       {receivedGift && (
-        <Animated.View style={[styles.giftNotification, { opacity: giftAnim }]}>
-          <LinearGradient
-            colors={['#A855F7', '#6366F1']}
-            style={styles.giftNotifContent}
-          >
-            <Text style={styles.giftNotifIcon}>{receivedGift.gift.icon}</Text>
-            <View>
-              <Text style={styles.giftNotifTitle}>
-                {receivedGift.isSentByMe ? 'Gift Sent!' : 'Received Gift!'}
-              </Text>
-              <Text style={styles.giftNotifText}>
-                {receivedGift.isSentByMe 
-                  ? `You sent ${receivedGift.gift.name}`
-                  : `${receivedGift.senderName} sent you ${receivedGift.gift.name}`}
-              </Text>
-            </View>
-          </LinearGradient>
-        </Animated.View>
+        <GiftAnimationOverlay
+          giftName={receivedGift.gift.name}
+          senderName={receivedGift.isSentByMe ? 'You' : receivedGift.senderName || 'Someone'}
+          onComplete={() => setReceivedGift(null)}
+        />
       )}
     </View>
   );

@@ -8,6 +8,7 @@ const Session = require('./models/sessionModel');
 const jwt = require('jsonwebtoken');
 const config = require('./config/env');
 const { redis, REDIS_KEYS } = require('./config/redis');
+const PushService = require('./services/pushService');
 
 let io;
 
@@ -18,6 +19,7 @@ const CHAT_LISTENER_PAYOUT = 2.50;   // Listener gets ₹2.50 per 5-minute block
 
 // Active chat session timers: { conversationId: timerRef }
 const chatSessionTimers = {};
+const chatSessionOfflineCheckers = {};
 
 // ─── Call Billing ────────────────────────────────────────────
 // Rates per minute
@@ -155,15 +157,16 @@ const initSocket = (server) => {
             const isInConvRoom = recipientRoom && recipientPersonalSockets && 
               [...recipientPersonalSockets].some(sid => recipientRoom.has(sid));
 
+            // Only send message to personal room if they're NOT in the conversation room
             if (!isInConvRoom) {
-              // Only send message to personal room if they're NOT in the conversation room
               io.to(`user_${recipientId}`).emit('receive_message', message);
             }
 
-            io.to(`user_${recipientId}`).emit('new_message_notification', {
-              conversationId,
-              senderName: sender.name || 'Mingo User',
-              content: type === 'text' ? content : `Sent a ${type}`,
+            // Send push notification
+            PushService.sendPushNotification(recipientId, {
+              title: sender.name || 'Mingo',
+              body: type === 'text' ? content : `Sent a ${type}`,
+              data: { url: `/(chat)/chat?conversationId=${conversationId}` },
             });
           }
           return;
@@ -269,11 +272,11 @@ const initSocket = (server) => {
             io.to(`user_${recipientId}`).emit('receive_message', message);
           }
 
-          // Notify the recipient specifically (for global notifications/badges)
-          io.to(`user_${recipientId}`).emit('new_message_notification', {
-            conversationId,
-            senderName: sender.name || 'Mingo User',
-            content: type === 'text' ? content : `Sent a ${type}`,
+          // Send push notification
+          PushService.sendPushNotification(recipientId, {
+            title: sender.name || 'Mingo',
+            body: type === 'text' ? content : `Sent a ${type}`,
+            data: { url: `/(chat)/chat?conversationId=${conversationId}` },
           });
         }
 
@@ -719,6 +722,31 @@ function startChatSessionTimer(conversationId, userId) {
   if (chatSessionTimers[conversationId]) {
     clearInterval(chatSessionTimers[conversationId]);
   }
+  if (chatSessionOfflineCheckers[conversationId]) {
+    clearInterval(chatSessionOfflineCheckers[conversationId]);
+  }
+
+  // Check user offline every 60 seconds
+  chatSessionOfflineCheckers[conversationId] = setInterval(() => {
+    if (!io) return;
+    const userSockets = io.sockets.adapter.rooms.get(`user_${userId}`);
+    if (!userSockets || userSockets.size === 0) {
+      console.log(`[Socket] User ${userId} is offline. Auto-ending chat session ${conversationId}.`);
+      endChatSession(conversationId);
+      
+      Conversation.findById(conversationId).then(conversation => {
+        if (conversation) {
+          const listenerId = conversation.participants.find(p => p.toString() !== userId.toString());
+          if (listenerId) {
+             io.to(`user_${listenerId}`).emit('chat_user_offline', { 
+               conversationId,
+               message: 'User went offline. Chat session ended automatically.'
+             });
+          }
+        }
+      }).catch(err => console.error('Error in offline check:', err));
+    }
+  }, 60000);
 
   chatSessionTimers[conversationId] = setInterval(async () => {
     try {
@@ -830,6 +858,10 @@ async function endChatSession(conversationId) {
     if (chatSessionTimers[conversationId]) {
       clearInterval(chatSessionTimers[conversationId]);
       delete chatSessionTimers[conversationId];
+    }
+    if (chatSessionOfflineCheckers[conversationId]) {
+      clearInterval(chatSessionOfflineCheckers[conversationId]);
+      delete chatSessionOfflineCheckers[conversationId];
     }
 
     const conversation = await Conversation.findByIdAndUpdate(

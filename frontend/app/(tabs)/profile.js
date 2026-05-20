@@ -18,6 +18,7 @@ import { ms, s, vs } from '../../utils/responsive';
 import { authAPI } from '../../utils/api';
 import RaiseIssuePopup from '../../components/shared/RaiseIssuePopup';
 import LogoutPopup from '../../components/shared/LogoutPopup';
+import SkeletonProfile from '../../components/SkeletonProfile';
 
 const MENU_ITEMS = [
   { id: '1', label: 'Wallet', icon: 'wallet-outline', route: '/balance' },
@@ -47,7 +48,8 @@ export default function ProfileScreen() {
   const [userAvatar, setUserAvatar] = useState(require('../../images/user_avatar.png'));
   const [showIssuePopup, setShowIssuePopup] = useState(false);
   const [showLogoutPopup, setShowLogoutPopup] = useState(false);
-  const [username, setUsername] = useState('Userid1234');
+  const [username, setUsername] = useState('');
+  const [loading, setLoading] = useState(true);
 
   
   const profileCardAnim = useRef(new Animated.Value(0)).current;
@@ -81,6 +83,7 @@ export default function ProfileScreen() {
     useCallback(() => {
       const loadProfile = async () => {
         try {
+          setLoading(true);
           // Fetch fresh data from API
           const res = await authAPI.me();
           let userObj = null;
@@ -142,8 +145,9 @@ export default function ProfileScreen() {
               }
             }
           }
-        } catch (e) {
           console.error('Error loading profile:', e);
+        } finally {
+          setLoading(false);
         }
       };
       loadProfile();
@@ -175,6 +179,10 @@ export default function ProfileScreen() {
       setShowLogoutPopup(false);
     }
   };
+
+  if (loading) {
+    return <SkeletonProfile />;
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>

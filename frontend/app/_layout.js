@@ -1,4 +1,5 @@
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
+import { useEffect } from 'react';
 import { ThemeProvider, DarkTheme } from '@react-navigation/native';
 import { 
   useFonts, 
@@ -13,8 +14,10 @@ import {
   PlayfairDisplay_400Regular_Italic 
 } from '@expo-google-fonts/playfair-display';
 import { View, ActivityIndicator } from 'react-native';
+import { addNotificationResponseReceivedListener } from '../utils/notifications';
 
 export default function RootLayout() {
+  const router = useRouter();
   const [loaded] = useFonts({
     Inter_900Black,
     Inter_700Bold,
@@ -32,6 +35,23 @@ export default function RootLayout() {
       </View>
     );
   }
+
+  useEffect(() => {
+    const subscription = addNotificationResponseReceivedListener((response) => {
+      try {
+        const url = response.notification.request.content.data.url;
+        if (url) {
+          router.push(url);
+        }
+      } catch (err) {
+        console.error('Error handling notification tap:', err);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   const CustomDarkTheme = {
     ...DarkTheme,

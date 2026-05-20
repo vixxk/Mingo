@@ -13,7 +13,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { hp, wp, ms } from '../../utils/responsive';
 import { chatAPI, walletAPI, giftsAPI, listenersAPI } from '../../utils/api';
 import { socketService } from '../../utils/socket';
-import GiftPopup from '../../components/shared/GiftPopup';
+import GiftPopup from '../../components/call/InCallGiftPopup';
+import GiftAnimationOverlay from '../../components/call/GiftAnimationOverlay';
 
 const getAvatarImage = (gender, index) => {
   const parsedIndex = parseInt(index, 10) || 0;
@@ -179,13 +180,7 @@ export default function ChatScreen() {
 
   const triggerGiftAnimation = useCallback((data) => {
     setReceivedGift(data);
-    giftAnim.setValue(0);
-    Animated.sequence([
-      Animated.timing(giftAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
-      Animated.delay(3000),
-      Animated.timing(giftAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
-    ]).start(() => setReceivedGift(null));
-  }, [giftAnim]);
+  }, []);
 
   useEffect(() => {
     const init = async () => {
@@ -775,28 +770,13 @@ export default function ChatScreen() {
         }}
       />
 
-      {/* Received Gift Animation/Overlay (especially for listeners) */}
+      {/* Received Gift Animation/Overlay */}
       {receivedGift && (
-        <Animated.View style={[styles.giftNotification, { opacity: giftAnim }]}>
-          <LinearGradient
-            colors={['rgba(59, 130, 246, 0.95)', 'rgba(236, 72, 153, 0.95)', 'rgba(245, 158, 11, 0.95)']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.giftNotificationContent}
-          >
-            <Text style={styles.giftNotificationText}>
-              {receivedGift.isSentByMe 
-                ? 'You sent a gift!' 
-                : `${receivedGift.senderName || 'Someone'} sent you a gift!`}
-            </Text>
-            <Text style={styles.giftNotificationIcon}>
-              {receivedGift.gift?.icon || '🎁'}
-            </Text>
-            <Text style={styles.giftNotificationName}>
-              {receivedGift.gift?.name || 'Gift'} x{receivedGift.gift?.count || 1}
-            </Text>
-          </LinearGradient>
-        </Animated.View>
+        <GiftAnimationOverlay
+          giftName={receivedGift.gift.name}
+          senderName={receivedGift.isSentByMe ? 'You' : receivedGift.senderName || 'Someone'}
+          onComplete={() => setReceivedGift(null)}
+        />
       )}
     </KeyboardAvoidingView>
   );

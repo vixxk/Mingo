@@ -105,27 +105,8 @@ export default function ListenerLayout() {
       });
 
       socketService.on('call_cancelled', (data) => {
-        console.log('Call cancelled by caller:', data);
+        console.log('Call cancelled by user:', data);
         setIncomingCall(null);
-      });
-
-      socketService.on('new_message_notification', async (data) => {
-        console.log('New message received:', data);
-        // Don't show notification if listener is on the chat screen
-        if (Notifications && !isChatOpenRef.current) {
-          try {
-            await Notifications.scheduleNotificationAsync({
-              content: {
-                title: data.senderName || 'New Message',
-                body: data.content || 'You have a new message',
-                sound: true,
-              },
-              trigger: null,
-            });
-          } catch (err) {
-            console.log('Error showing notification:', err);
-          }
-        }
       });
 
       registerForPushNotificationsAsync().then(token => {
@@ -161,7 +142,6 @@ export default function ListenerLayout() {
     return () => {
       socketService.off('incoming_call');
       socketService.off('call_cancelled');
-      socketService.off('new_message_notification');
     };
   }, []);
 
