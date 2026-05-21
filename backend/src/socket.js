@@ -13,9 +13,9 @@ const PushService = require('./services/pushService');
 let io;
 
 // Chat billing constants
-const CHAT_COINS_PER_SESSION = 5;    // 5 coins per 5-minute chat session
+const CHAT_COINS_PER_SESSION = 10;    // 10 coins per 5-minute chat session (10 Coins / 5 mins)
 const CHAT_SESSION_DURATION = 5 * 60 * 1000; // 5 minutes in ms
-const CHAT_LISTENER_PAYOUT = 2.50;   // Listener gets ₹2.50 per 5-minute block
+const CHAT_LISTENER_PAYOUT = 2.50;   // Listener gets ₹2.50 per 5-minute block (Rs. 0.50/min)
 
 // Active chat session timers: { conversationId: timerRef }
 const chatSessionTimers = {};
@@ -23,10 +23,10 @@ const chatSessionOfflineCheckers = {};
 
 // ─── Call Billing ────────────────────────────────────────────
 // Rates per minute
-const AUDIO_COINS_PER_MIN = 5;  // 5 coins/min
-const VIDEO_COINS_PER_MIN = 15;  // 15 coins/min
-const AUDIO_PAYOUT_PER_MIN = 1.50; // ₹1.50/min listener payout
-const VIDEO_PAYOUT_PER_MIN = 4.00; // ₹4.00/min listener payout
+const AUDIO_COINS_PER_MIN = 10;  // 10 coins/min (from user screenshot)
+const VIDEO_COINS_PER_MIN = 40;  // 40 coins/min (from user screenshot)
+const AUDIO_PAYOUT_PER_MIN = 1.50; // ₹1.50/min listener payout (from listener screenshot)
+const VIDEO_PAYOUT_PER_MIN = 4.00; // ₹4.00/min listener payout (from listener screenshot)
 const CALL_BILLING_INTERVAL = 60 * 1000; // 1 minute
 const LOW_BALANCE_THRESHOLD = 10; // Warn when below this many coins remaining
 
@@ -157,17 +157,17 @@ const initSocket = (server) => {
             const isInConvRoom = recipientRoom && recipientPersonalSockets && 
               [...recipientPersonalSockets].some(sid => recipientRoom.has(sid));
 
-            // Only send message to personal room if they're NOT in the conversation room
+            // Only send message to personal room and push notification if they're NOT in the conversation room
             if (!isInConvRoom) {
               io.to(`user_${recipientId}`).emit('receive_message', message);
+              
+              // Send push notification
+              PushService.sendPushNotification(recipientId, {
+                title: sender.name || 'Mingo',
+                body: type === 'text' ? content : `Sent a ${type}`,
+                data: { url: `/(chat)/chat?conversationId=${conversationId}` },
+              });
             }
-
-            // Send push notification
-            PushService.sendPushNotification(recipientId, {
-              title: sender.name || 'Mingo',
-              body: type === 'text' ? content : `Sent a ${type}`,
-              data: { url: `/(chat)/chat?conversationId=${conversationId}` },
-            });
           }
           return;
         }
@@ -205,23 +205,19 @@ const initSocket = (server) => {
         }
 
         // --- BLOCK LISTENER REPLY AFTER SESSION ENDS ---
-        // If the listener is replying but the session has been explicitly ended
-        // (session exists but not active), don't allow messages
+        // If the listener is replying but the session is not active, block the message
+        // unless the user has sent a new message to restart/initiate.
         const isListenerSender = sender.role === 'LISTENER';
         if (isListenerSender) {
           const sessionData = conversation.chatSession;
-          // Session was previously active but has been ended
-          if (sessionData && sessionData.startTime && !sessionData.active) {
-            // Check if user also has no balance (prevent session restart)
-            const userParticipantId = conversation.participants.find(
-              (p) => p.toString() !== senderId
-            );
-            const userParticipant = userParticipantId ? await User.findById(userParticipantId) : null;
+          if (sessionData && !sessionData.active) {
+            // Find the last message in the conversation
+            const lastMsg = conversation.lastMessage ? await Message.findById(conversation.lastMessage) : null;
             
-            if (!userParticipant || userParticipant.coins < CHAT_COINS_PER_SESSION) {
-              // Session ended and user can't afford restart — block listener
+            // If the last message is not from the User, block the listener from sending messages
+            if (!lastMsg || lastMsg.senderModel !== 'User') {
               socket.emit('message_error', {
-                error: 'Session has ended. Waiting for user to recharge and send a new message.',
+                error: 'Session has ended. Waiting for user to send a new message.',
                 type: 'session_ended',
               });
               return;
@@ -261,7 +257,7 @@ const initSocket = (server) => {
         console.log(`[Socket] Emitting receive_message to room ${conversationId}`);
         io.to(conversationId).emit('receive_message', message);
 
-        // Emit to recipient's personal room only if they're NOT in the conversation room
+        // Emit to recipient's personal room and push notification only if they're NOT in the conversation room
         if (recipientId) {
           const recipientRoom = io.sockets.adapter.rooms.get(conversationId);
           const recipientPersonalSockets = io.sockets.adapter.rooms.get(`user_${recipientId}`);
@@ -270,14 +266,14 @@ const initSocket = (server) => {
 
           if (!isInConvRoom) {
             io.to(`user_${recipientId}`).emit('receive_message', message);
+            
+            // Send push notification
+            PushService.sendPushNotification(recipientId, {
+              title: sender.name || 'Mingo',
+              body: type === 'text' ? content : `Sent a ${type}`,
+              data: { url: `/(chat)/chat?conversationId=${conversationId}` },
+            });
           }
-
-          // Send push notification
-          PushService.sendPushNotification(recipientId, {
-            title: sender.name || 'Mingo',
-            body: type === 'text' ? content : `Sent a ${type}`,
-            data: { url: `/(chat)/chat?conversationId=${conversationId}` },
-          });
         }
 
         // --- TIMED SESSION START ---
@@ -327,6 +323,8 @@ const initSocket = (server) => {
                 if (listenerProfile) {
                   listenerProfile.earnings += CHAT_LISTENER_PAYOUT;
                   listenerProfile.todayEarnings += CHAT_LISTENER_PAYOUT;
+                  listenerProfile.totalChats = (listenerProfile.totalChats || 0) + 1;
+                  listenerProfile.todayChats = (listenerProfile.todayChats || 0) + 1;
                   await listenerProfile.save();
 
                   // Record transaction for listener
@@ -424,16 +422,23 @@ const initSocket = (server) => {
     });
 
     socket.on('call_cancelled', async (data) => {
-      const { userId, sessionId } = data;
+      let { userId, sessionId } = data;
       console.log(`[Socket] call_cancelled received from caller. Listener: ${userId}, Session: ${sessionId}`);
-      if (userId) {
-        io.to(`user_${userId}`).emit('call_cancelled', { sessionId });
-      }
+      
       try {
+        let session = null;
         if (sessionId) {
-          await Session.findByIdAndUpdate(sessionId, { status: 'cancelled' });
+          session = await Session.findByIdAndUpdate(sessionId, { status: 'cancelled' }, { new: true });
         }
+        
+        // Extract listener's user ID from the active session if missing from data
+        if (!userId && session) {
+          userId = session.listenerId?.toString();
+        }
+
         if (userId) {
+          io.to(`user_${userId}`).emit('call_cancelled', { sessionId });
+          
           await Listener.findOneAndUpdate({ userId: userId }, { isBusy: false });
           io.emit('listener_status_changed', { userId: userId, isOnline: true, isBusy: false });
           await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, userId.toString());

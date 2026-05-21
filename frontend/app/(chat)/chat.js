@@ -13,7 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { hp, wp, ms } from '../../utils/responsive';
 import { chatAPI, walletAPI, giftsAPI, listenersAPI } from '../../utils/api';
 import { socketService } from '../../utils/socket';
-import GiftPopup from '../../components/call/InCallGiftPopup';
+import GiftPopup from '../../components/shared/GiftPopup';
 import GiftAnimationOverlay from '../../components/call/GiftAnimationOverlay';
 
 const getAvatarImage = (gender, index) => {

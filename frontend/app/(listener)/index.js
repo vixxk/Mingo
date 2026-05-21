@@ -141,9 +141,20 @@ export default function ListenerHomeScreen() {
   const [userAvatar, setUserAvatar] = useState(require('../../images/user_avatar.png'));
   const [showConfirm, setShowConfirm] = useState(false);
   const [showCantGoOnline, setShowCantGoOnline] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const shimmerAnim = useRef(new Animated.Value(0.3)).current;
+
+  // Pulse shimmer animation loop
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerAnim, { toValue: 0.7, duration: 800, useNativeDriver: true }),
+        Animated.timing(shimmerAnim, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
 
   useEffect(() => {
     if (isOnline) {
@@ -166,15 +177,15 @@ export default function ListenerHomeScreen() {
     }
   }, [isOnline]);
 
-
-
   const [earnings, setEarnings] = useState(0);
   const [totalCalls, setTotalCalls] = useState({ audio: 0, video: 0 });
+  const [totalChats, setTotalChats] = useState(0);
   const [balance, setBalance] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
       const loadListenerData = async () => {
+        setIsLoading(true);
         try {
           // Refresh Avatar/Profile first
           const gender = await AsyncStorage.getItem('userGender');
@@ -217,6 +228,7 @@ export default function ListenerHomeScreen() {
               setEarnings(profileRes.data.earnings || 0);
               const sessions = profileRes.data.totalSessions || 0;
               setTotalCalls({ audio: profileRes.data.audioCalls || 0, video: profileRes.data.videoCalls || 0 });
+              setTotalChats(profileRes.data.todayChats || 0);
               setIsOnline(profileRes.data.isOnline);
               setAudioEnabled(profileRes.data.audioEnabled !== false);
               setVideoEnabled(profileRes.data.videoEnabled === true);
@@ -229,6 +241,8 @@ export default function ListenerHomeScreen() {
 
         } catch (e) {
           console.error('Error fetching listener data:', e);
+        } finally {
+          setIsLoading(false);
         }
       };
       loadListenerData();
@@ -267,6 +281,63 @@ export default function ListenerHomeScreen() {
     }
   };
 
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <StatusBar style="light" />
+        
+        {/* Header Skeleton */}
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Animated.View style={[styles.skeletonLogo, { opacity: shimmerAnim }]} />
+          </View>
+          <View style={styles.headerRight}>
+            <Animated.View style={[styles.skeletonAvatar, { opacity: shimmerAnim }]} />
+          </View>
+        </View>
+
+        {/* Status Banner Skeleton */}
+        <Animated.View style={[styles.skeletonBanner, { opacity: shimmerAnim }]} />
+
+        <View style={styles.scrollContent}>
+          {/* Mingo Mode Card Skeleton */}
+          <View style={styles.skeletonCard}>
+            <Animated.View style={[styles.skeletonTitle, { opacity: shimmerAnim }]} />
+            <View style={styles.skeletonToggleRow}>
+              <Animated.View style={[styles.skeletonToggleLeft, { opacity: shimmerAnim }]} />
+              <Animated.View style={[styles.skeletonToggleRight, { opacity: shimmerAnim }]} />
+            </View>
+            <View style={styles.cardDivider} />
+            <View style={styles.skeletonToggleRow}>
+              <Animated.View style={[styles.skeletonToggleLeft, { opacity: shimmerAnim }]} />
+              <Animated.View style={[styles.skeletonToggleRight, { opacity: shimmerAnim }]} />
+            </View>
+            <View style={styles.cardDivider} />
+            <View style={styles.skeletonToggleRow}>
+              <Animated.View style={[styles.skeletonToggleLeft, { opacity: shimmerAnim }]} />
+              <Animated.View style={[styles.skeletonToggleRight, { opacity: shimmerAnim }]} />
+            </View>
+          </View>
+
+          {/* Go Online Card Skeleton */}
+          <Animated.View style={[styles.skeletonOnlineCard, { opacity: shimmerAnim }]} />
+
+          {/* Today's Earnings Card Skeleton */}
+          <View style={styles.skeletonCard}>
+            <Animated.View style={[styles.skeletonTitle, { opacity: shimmerAnim }]} />
+            <View style={{ gap: 12 }}>
+              <Animated.View style={[styles.skeletonEarningRow, { opacity: shimmerAnim }]} />
+              <View style={styles.cardDivider} />
+              <Animated.View style={[styles.skeletonEarningRow, { width: '80%', opacity: shimmerAnim }]} />
+              <View style={styles.cardDivider} />
+              <Animated.View style={[styles.skeletonEarningRow, { width: '60%', opacity: shimmerAnim }]} />
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -474,6 +545,13 @@ export default function ListenerHomeScreen() {
           <View style={styles.earningsRow}>
             <Text style={styles.earningsLabel}>Total Calls</Text>
             <Text style={styles.earningsCallsValue}>{String(totalCalls.audio).padStart(2, '0')} Audio  •  {String(totalCalls.video).padStart(2, '0')} Video</Text>
+          </View>
+
+          <View style={styles.cardDivider} />
+
+          <View style={styles.earningsRow}>
+            <Text style={styles.earningsLabel}>Total Chats</Text>
+            <Text style={styles.earningsCallsValue}>{String(totalChats).padStart(2, '0')} Chats</Text>
           </View>
         </View>
       </ScrollView>
@@ -897,5 +975,73 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 4,
+  },
+  skeletonLogo: {
+    width: s(100),
+    height: vs(32),
+    backgroundColor: '#1F1F1F',
+    borderRadius: 8,
+  },
+  skeletonAvatar: {
+    width: s(36),
+    height: s(36),
+    borderRadius: s(18),
+    backgroundColor: '#1F1F1F',
+  },
+  skeletonBanner: {
+    marginHorizontal: s(16),
+    marginTop: vs(8),
+    marginBottom: vs(4),
+    height: vs(60),
+    borderRadius: 16,
+    backgroundColor: '#141414',
+    borderWidth: 1,
+    borderColor: '#1F1F1F',
+  },
+  skeletonCard: {
+    backgroundColor: '#141414',
+    borderRadius: 18,
+    paddingHorizontal: s(18),
+    paddingVertical: vs(18),
+    borderWidth: 1,
+    borderColor: '#1F1F1F',
+  },
+  skeletonTitle: {
+    width: '40%',
+    height: vs(20),
+    backgroundColor: '#1F1F1F',
+    borderRadius: 6,
+    marginBottom: vs(16),
+  },
+  skeletonToggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    height: vs(24),
+  },
+  skeletonToggleLeft: {
+    width: '30%',
+    height: vs(16),
+    backgroundColor: '#1F1F1F',
+    borderRadius: 4,
+  },
+  skeletonToggleRight: {
+    width: s(40),
+    height: vs(20),
+    backgroundColor: '#1F1F1F',
+    borderRadius: 10,
+  },
+  skeletonOnlineCard: {
+    height: vs(80),
+    borderRadius: 24,
+    backgroundColor: '#141414',
+    borderWidth: 1,
+    borderColor: '#1F1F1F',
+  },
+  skeletonEarningRow: {
+    width: '60%',
+    height: vs(16),
+    backgroundColor: '#1F1F1F',
+    borderRadius: 4,
   },
 });

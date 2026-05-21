@@ -485,8 +485,8 @@ export default function HomeScreen() {
   
   const [showInsufficientBalance, setShowInsufficientBalance] = useState(false);
   const handleCallPress = (listener, callType = 'audio') => {
-    // Minimum: audio=5 coins/min, video=15 coins/min
-    const minCoins = callType === 'video' ? 15 : 5;
+    // Minimum: audio=10 coins/min, video=40 coins/min
+    const minCoins = callType === 'video' ? 40 : 10;
     
     if (coinBalance < minCoins) {
       setShowInsufficientBalance(true);

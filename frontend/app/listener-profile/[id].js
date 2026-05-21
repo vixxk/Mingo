@@ -7,7 +7,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRef, useEffect, useState } from 'react';
 import { listenersAPI, userAPI } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BlurView } from 'expo-blur';
 import SkeletonProfile from '../../components/SkeletonProfile';
 
 const { width: SW, height: SH } = Dimensions.get('window');

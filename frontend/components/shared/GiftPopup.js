@@ -96,8 +96,8 @@ const GiftPopup = ({ visible, onClose, receiverId, onGiftSent }) => {
       });
       
       if (res.success) {
-        setBalance(res.remainingCoins);
-        if (onGiftSent) onGiftSent(res.gift);
+        setBalance(res.data.remainingCoins);
+        if (onGiftSent) onGiftSent(res.data.gift);
         onClose();
       }
     } catch (error) {

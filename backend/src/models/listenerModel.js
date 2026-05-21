@@ -122,6 +122,10 @@ const listenerSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    totalChats: {
+      type: Number,
+      default: 0,
+    },
     todayEarnings: {
       type: Number,
       default: 0,
@@ -131,6 +135,10 @@ const listenerSchema = new mongoose.Schema(
       default: 0,
     },
     todayVideoCalls: {
+      type: Number,
+      default: 0,
+    },
+    todayChats: {
       type: Number,
       default: 0,
     },

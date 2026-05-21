@@ -10,7 +10,7 @@ import Constants from 'expo-constants';
 
 import SafetyPopup from '../../components/call/SafetyPopup';
 import InCallRechargePopup from '../../components/call/InCallRechargePopup';
-import GiftPopup from '../../components/call/InCallGiftPopup';
+import GiftPopup from '../../components/shared/GiftPopup';
 import GiftAnimationOverlay from '../../components/call/GiftAnimationOverlay';
 import { callAPI, walletAPI } from '../../utils/api';
 import { socketService } from '../../utils/socket';

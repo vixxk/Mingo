@@ -84,6 +84,8 @@ class ListenerController {
         chatEnabled: listener.chatEnabled,
         audioCalls: listener.audioCalls,
         videoCalls: listener.videoCalls,
+        totalChats: listener.totalChats || 0,
+        todayChats: listener.todayChats || 0,
         gradientColors: listener.gradientColors,
         publicProfile: listener.publicProfile,
         draftProfile: listener.draftProfile,

@@ -3,11 +3,9 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
-  Modal,
   Image,
   Animated,
-  Easing,
+  TouchableOpacity,
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -46,7 +44,7 @@ const getAvatarImage = (gender, index) => {
 };
 
 const IncomingCallPopup = ({ visible, callerName, callType, avatarIndex, gender, onAccept, onReject }) => {
-  const slideAnim = useRef(new Animated.Value(-150)).current;
+  const slideAnim = useRef(new Animated.Value(-200)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -65,71 +63,69 @@ const IncomingCallPopup = ({ visible, callerName, callType, avatarIndex, gender,
         ])
       ).start();
     } else {
-      slideAnim.setValue(-150);
+      Animated.timing(slideAnim, {
+        toValue: -200,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
     }
   }, [visible]);
 
   if (!visible) return null;
 
   return (
-    <Modal transparent visible={visible} animationType="none">
-      <View style={styles.overlay}>
-        <Animated.View style={[styles.container, { transform: [{ translateY: slideAnim }] }]}>
-          <LinearGradient
-            colors={['#1F1F1F', '#141414']}
-            style={styles.gradient}
-          >
-            <View style={styles.content}>
-              <View style={styles.left}>
-                <Animated.View style={[styles.avatarRing, { transform: [{ scale: pulseAnim }] }]}>
-                  <Image
-                    source={getAvatarImage(gender, avatarIndex)}
-                    style={styles.avatar}
-                  />
-                </Animated.View>
-                <View style={styles.info}>
-                  <Text style={styles.callType}>
-                    Incoming {callType === 'video' ? 'Video' : 'Audio'} Call
-                  </Text>
-                  <Text style={styles.name}>{callerName}</Text>
-                </View>
-              </View>
-
-              <View style={styles.actions}>
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.rejectBtn]}
-                  onPress={onReject}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="close" size={24} color="#fff" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.acceptBtn]}
-                  onPress={onAccept}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name={callType === 'video' ? "videocam" : "call"} size={24} color="#fff" />
-                </TouchableOpacity>
-              </View>
+    <Animated.View style={[styles.container, { transform: [{ translateY: slideAnim }] }]}>
+      <LinearGradient
+        colors={['#1F1F1F', '#141414']}
+        style={styles.gradient}
+      >
+        <View style={styles.content}>
+          <View style={styles.left}>
+            <Animated.View style={[styles.avatarRing, { transform: [{ scale: pulseAnim }] }]}>
+              <Image
+                source={getAvatarImage(gender, avatarIndex)}
+                style={styles.avatar}
+              />
+            </Animated.View>
+            <View style={styles.info}>
+              <Text style={styles.callType}>
+                Incoming {callType === 'video' ? 'Video' : 'Audio'} Call
+              </Text>
+              <Text style={styles.name}>{callerName}</Text>
             </View>
-          </LinearGradient>
-        </Animated.View>
-      </View>
-    </Modal>
+          </View>
+
+          <View style={styles.actions}>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.rejectBtn]}
+              onPress={onReject}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="close" size={24} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.acceptBtn]}
+              onPress={onAccept}
+              activeOpacity={0.8}
+            >
+              <Ionicons name={callType === 'video' ? "videocam" : "call"} size={24} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </LinearGradient>
+    </Animated.View>
   );
 };
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'transparent',
-    paddingHorizontal: s(16),
-    paddingTop: vs(90),
-  },
   container: {
-    width: '100%',
+    position: 'absolute',
+    top: vs(60),
+    left: s(16),
+    right: s(16),
     borderRadius: 24,
     overflow: 'hidden',
+    zIndex: 99999,
     elevation: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },

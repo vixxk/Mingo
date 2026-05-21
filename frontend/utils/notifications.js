@@ -1,10 +1,8 @@
 import * as Device from 'expo-device';
-
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
-
-const Notifications = {
+let Notifications = {
   setNotificationHandler: () => {},
   AndroidImportance: { MAX: 4 },
   setNotificationChannelAsync: async () => {},
@@ -15,6 +13,14 @@ const Notifications = {
   addNotificationResponseReceivedListener: () => ({ remove: () => {} }),
 };
 
+try {
+  const RealNotifications = require('expo-notifications');
+  if (RealNotifications) {
+    Notifications = RealNotifications;
+  }
+} catch (e) {
+  console.warn('Failed to load real expo-notifications, using mock:', e.message);
+}
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -28,15 +34,19 @@ export async function registerForPushNotificationsAsync() {
   let token;
 
   if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('default', {
-      name: 'default',
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#A855F7',
-    });
+    try {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#A855F7',
+      });
+    } catch (e) {
+      console.log('Error setting notification channel:', e);
+    }
   }
 
-  if (Device.isDevice) {
+  if (Device.isDevice || Constants.appOwnership === 'expo') {
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
     if (existingStatus !== 'granted') {
@@ -49,23 +59,13 @@ export async function registerForPushNotificationsAsync() {
     }
 
     try {
-      
-      
-      
-      
       const projectId =
-        Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
+        Constants?.expoConfig?.extra?.eas?.projectId ?? '29226353-1b41-4785-8ac5-74ded0cd7328';
         
-      if (!projectId) {
-         console.warn('Project ID not found. Ensure EAS is configured.');
-      }
-
-      
-      
       token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-      console.log('Push Token:', token);
+      console.log('Real Push Token:', token);
     } catch (e) {
-      console.error('Error fetching push token', e);
+      console.error('Error fetching real push token:', e);
     }
   } else {
     console.warn('Must use physical device for Push Notifications');

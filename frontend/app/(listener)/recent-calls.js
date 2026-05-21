@@ -241,22 +241,16 @@ export default function RecentCallsScreen() {
       <StatusBar style="light" />
 
       <Animated.View style={[styles.header, { opacity: headerAnim }]}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Text style={styles.headerTitle}>Recent Calls</Text>
-          <TouchableOpacity 
-            onPress={handleRefresh}
-            activeOpacity={0.7}
-            style={styles.refreshBtn}
-          >
-            <Animated.View style={{ transform: [{ rotate: spin }] }}>
-              <Ionicons name="refresh" size={20} color="#9CA3AF" />
-            </Animated.View>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.earningsBadge}>
-          <Text style={styles.coinEmoji}>🪙</Text>
-          <Text style={styles.earningsText}>₹{earnings}</Text>
-        </View>
+        <Text style={styles.headerTitle}>Recent Calls</Text>
+        <TouchableOpacity 
+          onPress={handleRefresh}
+          activeOpacity={0.7}
+          style={styles.refreshBtn}
+        >
+          <Animated.View style={{ transform: [{ rotate: spin }] }}>
+            <Ionicons name="refresh" size={20} color="#9CA3AF" />
+          </Animated.View>
+        </TouchableOpacity>
       </Animated.View>
 
       <Animated.View style={{ flex: 1, opacity: contentAnim }}>

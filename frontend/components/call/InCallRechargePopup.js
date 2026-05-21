@@ -13,27 +13,26 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ms, s, vs } from '../../utils/responsive';
 import { walletAPI } from '../../utils/api';
 
-/**
- * InCallRechargePopup — Bottom sheet that lets users purchase coins
- * directly during an active call WITHOUT navigating away.
- * Shows coin packages, processes purchase inline, and calls onRechargeSuccess.
- */
+const DEFAULT_PACKAGES = [
+  { id: '1', coins: 40,   originalPrice: 38,  price: 19,  discount: 50, tag: 'Starter Offer' },
+  { id: '2', coins: 100,  originalPrice: 98,  price: 49,  discount: 50, tag: 'Flat 50% Off' },
+  { id: '3', coins: 220,  originalPrice: 198, price: 99,  discount: 50, tag: 'Most Popular' },
+  { id: '4', coins: 350,  originalPrice: 373, price: 149, discount: 60, tag: 'Flat 60% Off' },
+  { id: '5', coins: 850,  originalPrice: 873, price: 349, discount: 60, tag: 'Best Value' },
+  { id: '6', coins: 1500, originalPrice: 1198, price: 599, discount: 50, tag: 'Super Saver' },
+  { id: '7', coins: 3000, originalPrice: 2497, price: 999, discount: 60, tag: 'Limited Offer' },
+];
+
 export default function InCallRechargePopup({ visible, onClose, onRechargeSuccess, lowBalanceMessage }) {
   const slideAnim = useRef(new Animated.Value(600)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
-  const [packages, setPackages] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [packages, setPackages] = useState(DEFAULT_PACKAGES);
+  const [loading, setLoading] = useState(false);
   const [purchasing, setPurchasing] = useState(null); // packageId being purchased
   const [purchaseSuccess, setPurchaseSuccess] = useState(false);
 
   useEffect(() => {
     if (visible) {
-      // Only load packages if we don't have them yet
-      if (packages.length === 0) {
-        loadPackages();
-      } else {
-        setLoading(false);
-      }
       setPurchaseSuccess(false);
       setPurchasing(null);
       Animated.parallel([
@@ -49,15 +48,8 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
   }, [visible]);
 
   const loadPackages = useCallback(async () => {
-    try {
-      setLoading(true);
-      const res = await walletAPI.getPackages();
-      setPackages(res.data?.packages || []);
-    } catch (e) {
-      console.log('Failed to load packages:', e);
-    } finally {
-      setLoading(false);
-    }
+    // Already loaded static DEFAULT_PACKAGES
+    setLoading(false);
   }, []);
 
   const handlePurchase = useCallback(async (packageId) => {
@@ -136,7 +128,7 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
                   <Text style={styles.loadingText}>Loading packages...</Text>
                 </View>
               ) : (
-                packages.slice(0, 4).map((pkg) => (
+                packages.map((pkg) => (
                   <TouchableOpacity
                     key={pkg._id || pkg.id}
                     style={[styles.packageCard, purchasing === (pkg._id || pkg.id) && styles.packageCardActive]}

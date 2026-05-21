@@ -28,14 +28,6 @@ export default function RootLayout() {
     'Playfair-Bold-Italic': PlayfairDisplay_700Bold_Italic,
   });
 
-  if (!loaded) {
-    return (
-      <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#9333EA" />
-      </View>
-    );
-  }
-
   useEffect(() => {
     const subscription = addNotificationResponseReceivedListener((response) => {
       try {
@@ -52,6 +44,14 @@ export default function RootLayout() {
       subscription.remove();
     };
   }, []);
+
+  if (!loaded) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#9333EA" />
+      </View>
+    );
+  }
 
   const CustomDarkTheme = {
     ...DarkTheme,
