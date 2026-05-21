@@ -177,11 +177,11 @@ export default function AdminSessions() {
               <View style={styles.sessionHeader}>
                 <View style={styles.callTypeBadge}>
                   <Ionicons
-                    name={sess.callType === 'video' ? 'videocam' : 'call'}
+                    name={sess.callType === 'video' ? 'videocam' : (sess.callType === 'chat' ? 'chatbubbles' : 'call')}
                     size={14}
-                    color={sess.callType === 'video' ? '#3B82F6' : '#10B981'}
+                    color={sess.callType === 'video' ? '#3B82F6' : (sess.callType === 'chat' ? '#A855F7' : '#10B981')}
                   />
-                  <Text style={[styles.callTypeText, { color: sess.callType === 'video' ? '#3B82F6' : '#10B981' }]}>
+                  <Text style={[styles.callTypeText, { color: sess.callType === 'video' ? '#3B82F6' : (sess.callType === 'chat' ? '#A855F7' : '#10B981') }]}>
                     {sess.callType}
                   </Text>
                 </View>
@@ -208,17 +208,26 @@ export default function AdminSessions() {
                     <Text style={styles.statValue}>{sess.duration || 0} min</Text>
                   </View>
                   <View style={styles.statItem}>
-                    <Text style={styles.statLabel}>Coins</Text>
+                    <Text style={styles.statLabel}>Coins Spent</Text>
                     <Text style={styles.statValue}>{sess.coinsDeducted || 0}</Text>
                   </View>
                   <View style={styles.statItem}>
-                    <Text style={styles.statLabel}>Earnings</Text>
-                    <Text style={styles.statValue}>₹{(sess.listenerEarnings || 0).toFixed(1)}</Text>
+                    <Text style={styles.statLabel}>Gifts Sent</Text>
+                    <Text style={styles.statValue}>{sess.giftsWorth || 0} 🪙</Text>
+                  </View>
+                </View>
+
+                <View style={[styles.statsGrid, { marginTop: hp(0.8), borderTopWidth: 1, borderTopColor: '#1A1A1A', paddingTop: hp(1.2) }]}>
+                  <View style={styles.statItem}>
+                    <Text style={[styles.statLabel, { color: '#10B981', fontFamily: 'Inter_700Bold' }]}>Call/Chat Earnings</Text>
+                    <Text style={[styles.statValue, { color: '#10B981', fontSize: ms(15) }]}>
+                      ₹{(sess.listenerEarnings || 0).toFixed(2)}
+                    </Text>
                   </View>
                   <View style={styles.statItem}>
-                    <Text style={styles.statLabel}>Profit</Text>
-                    <Text style={[styles.statValue, { color: '#10B981' }]}>
-                      ₹{(sess.platformProfit || 0).toFixed(1)}
+                    <Text style={[styles.statLabel, { color: '#F472B6', fontFamily: 'Inter_700Bold' }]}>Gift Earnings</Text>
+                    <Text style={[styles.statValue, { color: '#F472B6', fontSize: ms(15) }]}>
+                      ₹{(sess.giftEarnings || 0).toFixed(2)}
                     </Text>
                   </View>
                 </View>

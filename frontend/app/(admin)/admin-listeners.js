@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput,
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useLocalSearchParams, useFocusEffect, useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { Linking } from 'react-native';
 import { ms, s, vs, wp, hp } from '../../utils/responsive';
@@ -74,6 +74,7 @@ const IntroVideo = ({ url }) => {
 
 export default function AdminListenersScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { initialFilter } = useLocalSearchParams();
   const [listeners, setListeners] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');

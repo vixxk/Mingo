@@ -183,64 +183,91 @@ export default function LoginScreen() {
     <View style={styles.container}>
       <StatusBar style="light" />
 
-      {}
+      {/* Success Sent OTP Popup */}
       <Modal visible={showSuccessPopup} transparent animationType="fade" statusBarTranslucent>
         <View style={styles.modalOverlay}>
-          <Animated.View style={styles.modalContent}>
-            <View style={[styles.modalIconContainer, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
-              <Ionicons name="checkmark" size={32} color="#10B981" />
+          <LinearGradient
+            colors={['#10B981', 'rgba(16, 185, 129, 0.1)']}
+            style={styles.modalBorder}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <View style={styles.modalContent}>
+              <View style={[styles.modalIconOuter, { borderColor: 'rgba(16, 185, 129, 0.2)' }]}>
+                <LinearGradient
+                  colors={['#10B981', '#059669']}
+                  style={styles.modalIconGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <Ionicons name="paper-plane" size={26} color="#fff" />
+                </LinearGradient>
+              </View>
+              <Text style={styles.modalTitle}>OTP Sent!</Text>
+              <Text style={styles.modalText}>Please check your messages for the verification code.</Text>
             </View>
-            <Text style={styles.modalTitle}>OTP Sent!</Text>
-            <Text style={styles.modalText}>Please check your messages for the 6-digit code.</Text>
-          </Animated.View>
+          </LinearGradient>
         </View>
       </Modal>
 
-      {}
+      {/* Welcome Back Popup */}
       <Modal visible={showWelcomePopup} transparent animationType="fade" statusBarTranslucent>
         <View style={styles.modalOverlay}>
-          <Animated.View style={styles.modalContent}>
-            <View style={[styles.modalIconContainer, { backgroundColor: 'rgba(59, 130, 246, 0.15)' }]}>
-              <Text style={{fontSize: 32}}>👋</Text>
-            </View>
-            <Text style={styles.modalTitle}>Welcome Back!</Text>
-            <Text style={styles.modalText}>Hey {userName}, great to see you again!</Text>
-            <TouchableOpacity 
-              activeOpacity={0.8}
-              onPress={async () => {
-                setShowWelcomePopup(false);
-                
-                
-                const userStr = await AsyncStorage.getItem('user');
-                let role = 'USER';
-                if (userStr) {
-                  try {
-                    const user = JSON.parse(userStr);
-                    if (user.role) role = user.role;
-                  } catch(e) {}
-                }
-                
-                if (role === 'ADMIN') {
-                  router.replace('/(admin)');
-                } else if (role === 'LISTENER') {
-                  router.replace('/(listener)');
-                } else {
-                  router.replace('/(tabs)');
-                }
-              }}
-              style={{ width: '100%', marginTop: vs(20) }}
-            >
-              <LinearGradient
-                colors={['#3B82F6', '#2563EB']}
-                style={styles.modalButton}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
+          <LinearGradient
+            colors={['#8B5CF6', '#EC4899', '#3B82F6']}
+            style={styles.modalBorder}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <View style={styles.modalContent}>
+              <View style={[styles.modalIconOuter, { borderColor: 'rgba(139, 92, 246, 0.2)' }]}>
+                <LinearGradient
+                  colors={['#8B5CF6', '#EC4899']}
+                  style={styles.modalIconGradientWelcome}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <Text style={{ fontSize: 28 }}>👋</Text>
+                </LinearGradient>
+              </View>
+              <Text style={styles.modalTitle}>Welcome Back!</Text>
+              <Text style={styles.modalText}>Hey {userName}, great to see you again!</Text>
+              <TouchableOpacity 
+                activeOpacity={0.8}
+                onPress={async () => {
+                  setShowWelcomePopup(false);
+                  
+                  const userStr = await AsyncStorage.getItem('user');
+                  let role = 'USER';
+                  if (userStr) {
+                    try {
+                      const user = JSON.parse(userStr);
+                      if (user.role) role = user.role;
+                    } catch(e) {}
+                  }
+                  
+                  if (role === 'ADMIN') {
+                    router.replace('/(admin)');
+                  } else if (role === 'LISTENER') {
+                    router.replace('/(listener)');
+                  } else {
+                    router.replace('/(tabs)');
+                  }
+                }}
+                style={{ width: '100%', marginTop: vs(20) }}
               >
-                <Text style={styles.modalButtonText}>Continue</Text>
-                <Ionicons name="arrow-forward" size={16} color="#fff" />
-              </LinearGradient>
-            </TouchableOpacity>
-          </Animated.View>
+                <LinearGradient
+                  colors={['#3B82F6', '#EC4899', '#F59E0B']}
+                  style={styles.modalButton}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  <Text style={styles.modalButtonText}>Continue</Text>
+                  <Ionicons name="arrow-forward" size={16} color="#fff" />
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </LinearGradient>
         </View>
       </Modal>
       
@@ -679,22 +706,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: s(20),
   },
-  modalContent: {
-    backgroundColor: '#141414',
+  modalBorder: {
     borderRadius: 24,
+    padding: 1.5,
+    width: '100%',
+  },
+  modalContent: {
+    backgroundColor: '#0F0E11',
+    borderRadius: 22.5,
     padding: s(24),
     width: '100%',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#1F1F1F',
   },
-  modalIconContainer: {
-    width: s(64),
-    height: s(64),
-    borderRadius: s(32),
-    justifyContent: 'center',
+  modalIconOuter: {
+    width: s(72),
+    height: s(72),
+    borderRadius: s(36),
+    borderWidth: 1,
     alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: vs(16),
+  },
+  modalIconGradient: {
+    width: s(60),
+    height: s(60),
+    borderRadius: s(30),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalIconGradientWelcome: {
+    width: s(60),
+    height: s(60),
+    borderRadius: s(30),
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalTitle: {
     fontSize: ms(20),
@@ -704,17 +749,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   modalText: {
-    fontSize: ms(14),
+    fontSize: ms(13),
     color: '#9CA3AF',
     textAlign: 'center',
     fontFamily: 'Inter_400Regular',
-    lineHeight: ms(20),
+    lineHeight: ms(18),
   },
   modalButton: {
     flexDirection: 'row',
     width: '100%',
     paddingVertical: vs(14),
-    borderRadius: 16,
+    borderRadius: 30,
     alignItems: 'center',
     justifyContent: 'center',
     gap: s(8),

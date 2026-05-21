@@ -127,8 +127,7 @@ export default function BalanceScreen() {
           }
           const pkgRes = await walletAPI.getPackages();
           if (pkgRes?.data?.packages && pkgRes.data.packages.length > 0) {
-             // For consistency with specific design we might not override default data in this mode
-             // setPackages(pkgRes.data.packages); 
+             setPackages(pkgRes.data.packages); 
           }
         } catch (e) {
           console.log('Wallet fetch error:', e);

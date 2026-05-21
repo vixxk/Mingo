@@ -150,6 +150,16 @@ export default function GiftAnimationOverlay({ giftName, giftIcon, giftPrice, se
     // Reset all animation values
     animations.forEach(anim => anim.setValue(0));
 
+    // Track completion
+    let animsDone = false;
+    let timerDone = false;
+
+    const tryComplete = () => {
+      if (animsDone && timerDone && onComplete) {
+        onComplete();
+      }
+    };
+
     // Map the active animations to start timed sequences
     const anims = animations.slice(0, particleCount).map((anim, index) => {
       const config = particleConfigs[index];
@@ -165,8 +175,17 @@ export default function GiftAnimationOverlay({ giftName, giftIcon, giftPrice, se
     });
 
     Animated.parallel(anims).start(() => {
-      if (onComplete) onComplete();
+      animsDone = true;
+      tryComplete();
     });
+
+    // Minimum display time: ensure the overlay stays visible for at least 5 seconds
+    const minTimer = setTimeout(() => {
+      timerDone = true;
+      tryComplete();
+    }, Math.max(duration, 5000));
+
+    return () => clearTimeout(minTimer);
   }, [particleCount, duration, onComplete, particleConfigs, animations]);
 
   return (

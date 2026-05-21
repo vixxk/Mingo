@@ -30,6 +30,7 @@ const conversationSchema = new mongoose.Schema(
       lastDeductionTime: { type: Date, default: null },
       // Total coins deducted in this session
       totalCoinsDeducted: { type: Number, default: 0 },
+      sessionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Session', default: null },
     },
   },
   {

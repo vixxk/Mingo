@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   ScrollView,
   SafeAreaView,
   RefreshControl,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,7 +19,22 @@ import { ms, s, vs, hp, wp } from '../../utils/responsive';
 import { walletAPI } from '../../utils/api';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const TABS = ['All', 'Payments', 'Sessions', 'Free Coins'];
+const TABS = ['All', 'Gifts', 'Sessions'];
+
+const SkeletonTransactionItem = ({ opacity }) => (
+  <View style={styles.transactionCard}>
+    <View style={styles.cardHeader}>
+      <Animated.View style={[styles.skeletonHeader, { opacity }]} />
+    </View>
+    <View style={styles.cardBody}>
+      <View style={styles.infoSection}>
+        <Animated.View style={[styles.skeletonTitle, { opacity }]} />
+        <Animated.View style={[styles.skeletonSubtitle, { opacity }]} />
+      </View>
+      <Animated.View style={[styles.skeletonAmount, { opacity }]} />
+    </View>
+  </View>
+);
 
 export default function TransactionsScreen() {
   const router = useRouter();
@@ -30,6 +46,17 @@ export default function TransactionsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+
+  const shimmerAnim = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerAnim, { toValue: 0.7, duration: 800, useNativeDriver: true }),
+        Animated.timing(shimmerAnim, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
 
   const loadData = useCallback(async (pageNum = 1, isRefreshing = false) => {
     try {
@@ -81,7 +108,7 @@ export default function TransactionsScreen() {
   };
 
   const renderTransactionItem = ({ item }) => {
-    const isCredit = item.coins > 0;
+    const isCredit = item.coins > 0 || item.amount > 0;
     const date = formatDate(item.createdAt);
     
     let title = item.description || 'Transaction';
@@ -96,10 +123,33 @@ export default function TransactionsScreen() {
         duration = ` •  ${item.metadata.sessionId.duration.toString().padStart(2, '0')} m`;
       }
     } else if (item.type === 'purchase') {
-      title = `Wallet recharge ₹${item.amount}`;
-      subtitle = 'Download Invoice';
+      title = `Wallet Recharge (Success)`;
+      subtitle = `Paid ₹${item.amount} for ${item.coins} Coins • ID: ${item._id.toString().slice(-8)}`;
     } else if (item.type === 'gift_send') {
-      title = `Gift sent: ${item.description.split(': ')[1] || 'Gift'}`;
+      title = `Gift Sent: ${item.description.replace('Sent gift: ', '')}`;
+      const recipientName = item.metadata?.sessionId?.listenerId?.name;
+      if (recipientName) {
+        subtitle = `Sent to ${recipientName} during session`;
+      } else {
+        subtitle = `Transaction ID: ${item._id.toString().slice(-8)}`;
+      }
+    } else if (item.type === 'gift_receive') {
+      title = `Gift Received: ${item.description.replace('Received gift: ', '')}`;
+      const senderName = item.metadata?.sessionId?.userId?.name;
+      if (senderName) {
+        subtitle = `Received from ${senderName} during session`;
+      } else {
+        subtitle = `Transaction ID: ${item._id.toString().slice(-8)}`;
+      }
+    } else if (item.type === 'call_credit') {
+      title = `Session Earnings (Success)`;
+      subtitle = `${item.description} • ID: ${item._id.toString().slice(-8)}`;
+    } else if (item.type === 'signup_bonus') {
+      title = `Signup Bonus (Free Coins)`;
+      subtitle = `Received ${item.coins} Coins • ID: ${item._id.toString().slice(-8)}`;
+    } else if (item.type === 'refund') {
+      title = `Coins Refunded`;
+      subtitle = `Credited ${item.coins} Coins • ID: ${item._id.toString().slice(-8)}`;
     }
 
     return (
@@ -118,11 +168,17 @@ export default function TransactionsScreen() {
           
           <View style={styles.amountSection}>
             <Text style={[styles.amountText, { color: isCredit ? '#22C55E' : '#EF4444' }]}>
-              {isCredit ? '+' : ''}{item.coins}
+              {item.coins !== 0 ? (
+                `${item.coins > 0 ? '+' : ''}${item.coins}`
+              ) : (
+                `+₹${item.amount.toFixed(2)}`
+              )}
             </Text>
-            <View style={styles.coinIconContainer}>
-              <Text style={{ fontSize: ms(12) }}>🪙</Text>
-            </View>
+            {item.coins !== 0 && (
+              <View style={styles.coinIconContainer}>
+                <Text style={{ fontSize: ms(12) }}>🪙</Text>
+              </View>
+            )}
           </View>
         </View>
       </View>
@@ -164,9 +220,13 @@ export default function TransactionsScreen() {
       </View>
 
       {loading && page === 1 ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator color="#A855F7" size="large" />
-        </View>
+        <FlatList
+          data={[1, 2, 3, 4, 5]}
+          keyExtractor={(item) => item.toString()}
+          renderItem={() => <SkeletonTransactionItem opacity={shimmerAnim} />}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+        />
       ) : (
         <FlatList
           data={transactions}
@@ -328,5 +388,31 @@ const styles = StyleSheet.create({
     color: '#4B5563',
     fontSize: ms(16),
     fontFamily: 'Inter_400Regular',
+  },
+  skeletonHeader: {
+    width: s(80),
+    height: vs(12),
+    borderRadius: 6,
+    backgroundColor: '#1F2937',
+    marginBottom: vs(4),
+  },
+  skeletonTitle: {
+    width: '70%',
+    height: vs(16),
+    borderRadius: 8,
+    backgroundColor: '#1F2937',
+    marginBottom: vs(8),
+  },
+  skeletonSubtitle: {
+    width: '45%',
+    height: vs(12),
+    borderRadius: 6,
+    backgroundColor: '#111827',
+  },
+  skeletonAmount: {
+    width: s(60),
+    height: vs(24),
+    borderRadius: 12,
+    backgroundColor: '#1F2937',
   },
 });

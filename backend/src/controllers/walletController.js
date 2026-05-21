@@ -52,7 +52,10 @@ class WalletController {
       const isFirstPurchaseEligible = user.isFirstSignup && user.signupTimestamp &&
         (Date.now() - new Date(user.signupTimestamp).getTime()) < 6 * 3600 * 1000;
 
-      const dbPackages = await WalletController._getPackages();
+      const SystemSettings = require('../models/SystemSettings');
+      const settings = await SystemSettings.getSettings();
+      const count = settings.activePackagesCount || 7;
+      const dbPackages = (await WalletController._getPackages()).slice(0, count);
       const packages = dbPackages.map(pkg => {
         // pkg is a Mongoose subdoc, convert to object
         const p = pkg.toObject ? pkg.toObject() : pkg;
@@ -80,7 +83,11 @@ class WalletController {
       const { packageId } = req.body;
       let dbPackages = [];
       try {
-        dbPackages = await WalletController._getPackages() || [];
+        const SystemSettings = require('../models/SystemSettings');
+        const settings = await SystemSettings.getSettings();
+        const count = settings.activePackagesCount || 7;
+        const allDbPackages = await WalletController._getPackages() || [];
+        dbPackages = allDbPackages.slice(0, count);
       } catch (e) {
         console.log('Error fetching DB packages:', e);
       }
@@ -157,14 +164,16 @@ class WalletController {
       const query = { userId: req.user.id };
       
       // Filter by tab if type is provided
-      if (type === 'Payments') query.type = 'purchase';
-      else if (type === 'Sessions') query.type = { $in: ['call_debit', 'gift_send'] };
-      else if (type === 'FreeCoins') query.type = 'signup_bonus';
+      if (type === 'Gifts') query.type = { $in: ['gift_send', 'gift_receive'] };
+      else if (type === 'Sessions') query.type = { $in: ['call_debit', 'call_credit'] };
 
       const transactions = await Transaction.find(query)
         .populate({
           path: 'metadata.sessionId',
-          populate: { path: 'listenerId', select: 'name username' }
+          populate: [
+            { path: 'listenerId', select: 'name username' },
+            { path: 'userId', select: 'name username' }
+          ]
         })
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)

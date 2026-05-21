@@ -6,21 +6,29 @@ let Notifications = {
   setNotificationHandler: () => {},
   AndroidImportance: { MAX: 4 },
   setNotificationChannelAsync: async () => {},
-  getPermissionsAsync: async () => ({ status: 'granted' }),
-  requestPermissionsAsync: async () => ({ status: 'granted' }),
+  getPermissionsAsync: async () => ({ status: 'granted', granted: true }),
+  requestPermissionsAsync: async () => ({ status: 'granted', granted: true }),
   getExpoPushTokenAsync: async () => ({ data: 'expo-go-mock-token' }),
   addNotificationReceivedListener: () => ({ remove: () => {} }),
   addNotificationResponseReceivedListener: () => ({ remove: () => {} }),
 };
 
+const isExpoGo = Constants.appOwnership === 'expo';
+
 try {
-  const RealNotifications = require('expo-notifications');
-  if (RealNotifications) {
-    Notifications = RealNotifications;
+  if (!isExpoGo) {
+    const RealNotifications = require('expo-notifications');
+    if (RealNotifications) {
+      Notifications = RealNotifications;
+    }
+  } else {
+    console.log('[Notifications] Running in Expo Go, bypassing expo-notifications native import to avoid SDK 53 crash.');
   }
 } catch (e) {
   console.warn('Failed to load real expo-notifications, using mock:', e.message);
 }
+
+export { Notifications };
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({

@@ -135,6 +135,49 @@ class CallService {
       };
     }
 
+    const hasStarted = session.lastDeductionTime !== null;
+
+    if (!hasStarted) {
+      // Call never connected or billing never started! Mark as cancelled.
+      session.status = 'cancelled';
+      session.endTime = new Date();
+      session.duration = 0;
+      session.coinsDeducted = 0;
+      session.listenerEarnings = 0;
+      session.zegoCost = 0;
+      session.infraCost = 0;
+      session.platformProfit = 0;
+      await session.save();
+
+      // Mark listener as not busy in DB
+      await Listener.findOneAndUpdate({ userId: sessionListenerIdStr }, { isBusy: false });
+
+      try {
+        const { getIo } = require('../socket');
+        getIo().to(`user_${sessionUserIdStr}`).emit('call_ended', { sessionId });
+        getIo().to(`user_${sessionListenerIdStr}`).emit('call_ended', { sessionId });
+        getIo().emit('listener_status_changed', { userId: sessionListenerIdStr, isOnline: true, isBusy: false });
+      } catch (e) {
+        console.log('Socket error emitting call_ended/status changed', e.message);
+      }
+
+      await MatchingService.releaseLock(sessionListenerIdStr);
+      await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, sessionListenerIdStr);
+      await redis.set(REDIS_KEYS.ONLINE(sessionListenerIdStr), '1', 'EX', 30);
+      await PresenceService._updateScore(session.listenerId);
+
+      return {
+        sessionId: session._id,
+        roomId: session.roomId,
+        callType: session.callType,
+        startTime: session.startTime,
+        endTime: session.endTime,
+        duration: 0,
+        coinsDeducted: 0,
+        status: 'cancelled',
+      };
+    }
+
     // Stop the real-time billing timer
     try {
       const { stopCallBillingTimer } = require('../socket');

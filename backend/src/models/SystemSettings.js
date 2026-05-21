@@ -28,6 +28,10 @@ const systemSettingsSchema = new mongoose.Schema(
       type: Number,
       default: 500,
     },
+    activePackagesCount: {
+      type: Number,
+      default: 7,
+    },
     maintenanceMode: {
       type: Boolean,
       default: false,
@@ -48,18 +52,26 @@ const systemSettingsSchema = new mongoose.Schema(
 // Ensure only one settings document exists
 systemSettingsSchema.statics.getSettings = async function () {
   let settings = await this.findOne();
+  const defaults = [
+    { id: '1', coins: 40,   originalPrice: 38, price: 19,  discount: 50, tag: 'Starter Offer' },
+    { id: '2', coins: 100,  originalPrice: 98, price: 49,  discount: 50, tag: 'Flat 50% Off' },
+    { id: '3', coins: 220,  originalPrice: 198, price: 99,  discount: 50, tag: 'Most Popular' },
+    { id: '4', coins: 350,  originalPrice: 373, price: 149, discount: 60, tag: 'Flat 60% Off' },
+    { id: '5', coins: 850,  originalPrice: 873, price: 349, discount: 60, tag: 'Best Value' },
+    { id: '6', coins: 1500, originalPrice: 1198, price: 599, discount: 50, tag: 'Super Saver' },
+    { id: '7', coins: 3000, originalPrice: 2497, price: 999, discount: 60, tag: 'Limited Offer' },
+  ];
   if (!settings) {
     settings = await this.create({
-      coinPricing: [
-        { id: '1', coins: 40,   originalPrice: 38, price: 19,  discount: 50, tag: 'Starter Offer' },
-        { id: '2', coins: 100,  originalPrice: 98, price: 49,  discount: 50, tag: 'Flat 50% Off' },
-        { id: '3', coins: 220,  originalPrice: 198, price: 99,  discount: 50, tag: 'Most Popular' },
-        { id: '4', coins: 350,  originalPrice: 373, price: 149, discount: 60, tag: 'Flat 60% Off' },
-        { id: '5', coins: 850,  originalPrice: 873, price: 349, discount: 60, tag: 'Best Value' },
-        { id: '6', coins: 1500, originalPrice: 1198, price: 599, discount: 50, tag: 'Super Saver' },
-        { id: '7', coins: 3000, originalPrice: 2497, price: 999, discount: 60, tag: 'Limited Offer' },
-      ],
+      coinPricing: defaults,
+      activePackagesCount: 7,
     });
+  } else if (!settings.coinPricing || settings.coinPricing.length < 7) {
+    settings.coinPricing = defaults;
+    if (!settings.activePackagesCount || settings.activePackagesCount < 7) {
+      settings.activePackagesCount = 7;
+    }
+    await settings.save();
   }
   return settings;
 };

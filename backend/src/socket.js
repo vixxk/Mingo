@@ -49,6 +49,7 @@ const initSocket = (server) => {
 
   io.on('connection', (socket) => {
     console.log('User connected to socket:', socket.id);
+    socket.connectTime = Date.now();
 
     // Try to authenticate immediately from handshake auth token or query token
     const handshakeToken = socket.handshake.auth?.token || socket.handshake.query?.token;
@@ -58,6 +59,10 @@ const initSocket = (server) => {
         socket.userId = decoded.userId;
         socket.join(`user_${decoded.userId}`);
         console.log(`Socket ${socket.id} automatically authenticated from handshake as ${decoded.userId}`);
+        if (!socket.appOpened) {
+          socket.appOpened = true;
+          User.findByIdAndUpdate(decoded.userId, { $inc: { appOpens: 1 } }).catch(err => console.error('handshake appOpen inc error:', err));
+        }
       } catch (err) {
         console.error('Socket handshake auth error:', err.message);
       }
@@ -74,6 +79,10 @@ const initSocket = (server) => {
         socket.userId = decoded.userId;
         socket.join(`user_${decoded.userId}`);
         console.log(`Socket ${socket.id} authenticated as ${decoded.userId}`);
+        if (!socket.appOpened) {
+          socket.appOpened = true;
+          User.findByIdAndUpdate(decoded.userId, { $inc: { appOpens: 1 } }).catch(err => console.error('authenticate appOpen inc error:', err));
+        }
       } catch (err) {
         console.error('Socket auth error:', err.message);
       }
@@ -136,14 +145,32 @@ const initSocket = (server) => {
           await message.save();
 
           const recipientId = conversation.participants.find(p => p.toString() !== senderId.toString());
-          if (recipientId) {
-            await Conversation.findByIdAndUpdate(conversationId, { 
-              lastMessage: message._id,
-              $inc: { [`unreadCount.${recipientId}`]: 1 }
-            });
+          const recipientIdStr = recipientId ? recipientId.toString() : null;
+          
+          // Check if recipient is in the conversation room
+          let isRecipientInConvRoom = false;
+          if (recipientIdStr) {
+            const recipientRoom = io.sockets.adapter.rooms.get(conversationId);
+            const recipientPersonalSockets = io.sockets.adapter.rooms.get(`user_${recipientIdStr}`);
+            isRecipientInConvRoom = recipientRoom && recipientPersonalSockets && 
+              [...recipientPersonalSockets].some(sid => recipientRoom.has(sid));
+          }
+
+          if (recipientIdStr) {
+            if (isRecipientInConvRoom) {
+              await Conversation.findByIdAndUpdate(conversationId, { 
+                lastMessage: message._id,
+                [`unreadCount.${recipientIdStr}`]: 0
+              });
+            } else {
+              await Conversation.findByIdAndUpdate(conversationId, { 
+                lastMessage: message._id,
+                $inc: { [`unreadCount.${recipientIdStr}`]: 1 }
+              });
+            }
             try {
               const sseService = require('./services/sseService');
-              sseService.notifyUser(recipientId);
+              sseService.notifyUser(recipientIdStr);
             } catch (sseErr) {
               console.error('SSE notify error in FREE send_message:', sseErr);
             }
@@ -155,24 +182,19 @@ const initSocket = (server) => {
           io.to(conversationId).emit('receive_message', message);
 
           // Emit notification to recipient's personal room (for badge/notification ONLY, not message)
-          if (recipientId) {
-            // Check if recipient is in the conversation room already
-            const recipientRoom = io.sockets.adapter.rooms.get(conversationId);
-            const recipientPersonalSockets = io.sockets.adapter.rooms.get(`user_${recipientId}`);
-            const isInConvRoom = recipientRoom && recipientPersonalSockets && 
-              [...recipientPersonalSockets].some(sid => recipientRoom.has(sid));
-
-            // Only send message to personal room and push notification if they're NOT in the conversation room
-            if (!isInConvRoom) {
-              io.to(`user_${recipientId}`).emit('receive_message', message);
-              
-              // Send push notification
-              PushService.sendPushNotification(recipientId, {
-                title: sender.name || 'Mingo',
-                body: type === 'text' ? content : `Sent a ${type}`,
-                data: { url: `/(chat)/chat?conversationId=${conversationId}` },
-              });
-            }
+          if (recipientIdStr && !isRecipientInConvRoom) {
+            io.to(`user_${recipientIdStr}`).emit('receive_message', message);
+            
+            // Send push notification
+            PushService.sendPushNotification(recipientIdStr, {
+              title: sender.name || 'Mingo',
+              body: type === 'text' ? content : `Sent a ${type}`,
+              data: { 
+                url: `/chat?id=${conversationId}`,
+                conversationId: conversationId.toString(),
+                type: 'chat_message',
+              },
+            });
           }
           return;
         }
@@ -243,14 +265,34 @@ const initSocket = (server) => {
         await message.save();
 
         const recipientId = conversation.participants.find(p => p.toString() !== senderId.toString());
-        if (recipientId) {
-          await Conversation.findByIdAndUpdate(conversationId, { 
-            lastMessage: message._id,
-            $inc: { [`unreadCount.${recipientId}`]: 1 }
-          });
+        const recipientIdStr = recipientId ? recipientId.toString() : null;
+        
+        // Determine if recipient is currently in the conversation room
+        let isRecipientInConvRoom = false;
+        if (recipientIdStr) {
+          const recipientRoom = io.sockets.adapter.rooms.get(conversationId);
+          const recipientPersonalSockets = io.sockets.adapter.rooms.get(`user_${recipientIdStr}`);
+          isRecipientInConvRoom = recipientRoom && recipientPersonalSockets && 
+            [...recipientPersonalSockets].some(sid => recipientRoom.has(sid));
+        }
+
+        if (recipientIdStr) {
+          if (isRecipientInConvRoom) {
+            // Recipient is already in the chat — just update lastMessage, don't increment unread
+            await Conversation.findByIdAndUpdate(conversationId, { 
+              lastMessage: message._id,
+              [`unreadCount.${recipientIdStr}`]: 0
+            });
+          } else {
+            // Recipient is NOT in the chat — increment unread count
+            await Conversation.findByIdAndUpdate(conversationId, { 
+              lastMessage: message._id,
+              $inc: { [`unreadCount.${recipientIdStr}`]: 1 }
+            });
+          }
           try {
             const sseService = require('./services/sseService');
-            sseService.notifyUser(recipientId);
+            sseService.notifyUser(recipientIdStr);
           } catch (sseErr) {
             console.error('SSE notify error in send_message:', sseErr);
           }
@@ -263,22 +305,19 @@ const initSocket = (server) => {
         io.to(conversationId).emit('receive_message', message);
 
         // Emit to recipient's personal room and push notification only if they're NOT in the conversation room
-        if (recipientId) {
-          const recipientRoom = io.sockets.adapter.rooms.get(conversationId);
-          const recipientPersonalSockets = io.sockets.adapter.rooms.get(`user_${recipientId}`);
-          const isInConvRoom = recipientRoom && recipientPersonalSockets && 
-            [...recipientPersonalSockets].some(sid => recipientRoom.has(sid));
-
-          if (!isInConvRoom) {
-            io.to(`user_${recipientId}`).emit('receive_message', message);
-            
-            // Send push notification
-            PushService.sendPushNotification(recipientId, {
-              title: sender.name || 'Mingo',
-              body: type === 'text' ? content : `Sent a ${type}`,
-              data: { url: `/(chat)/chat?conversationId=${conversationId}` },
-            });
-          }
+        if (recipientIdStr && !isRecipientInConvRoom) {
+          io.to(`user_${recipientIdStr}`).emit('receive_message', message);
+          
+          // Send push notification
+          PushService.sendPushNotification(recipientIdStr, {
+            title: sender.name || 'Mingo',
+            body: type === 'text' ? content : `Sent a ${type}`,
+            data: { 
+              url: `/chat?id=${conversationId}`,
+              conversationId: conversationId.toString(),
+              type: 'chat_message',
+            },
+          });
         }
 
         // --- TIMED SESSION START ---
@@ -314,12 +353,31 @@ const initSocket = (server) => {
                 });
 
                 // Mark session active
+                const Session = require('./models/sessionModel');
+                const { v4: uuidv4 } = require('uuid');
+                let chatSessionDoc = null;
+                try {
+                  chatSessionDoc = await Session.create({
+                    userId: userParticipantId,
+                    listenerId: senderId,
+                    roomId: `chat_${uuidv4()}`,
+                    callType: 'chat',
+                    startTime: new Date(),
+                    status: 'active',
+                    coinsDeducted: CHAT_COINS_PER_SESSION,
+                    listenerEarnings: CHAT_LISTENER_PAYOUT,
+                  });
+                } catch (sessErr) {
+                  console.error('Error creating chat Session document:', sessErr);
+                }
+
                 conversation.chatSession = {
                   active: true,
                   startedBy: userParticipantId,
                   startTime: new Date(),
                   lastDeductionTime: new Date(),
                   totalCoinsDeducted: CHAT_COINS_PER_SESSION,
+                  sessionId: chatSessionDoc ? chatSessionDoc._id : null,
                 };
                 await conversation.save();
 
@@ -330,6 +388,7 @@ const initSocket = (server) => {
                   listenerProfile.todayEarnings += CHAT_LISTENER_PAYOUT;
                   listenerProfile.totalChats = (listenerProfile.totalChats || 0) + 1;
                   listenerProfile.todayChats = (listenerProfile.todayChats || 0) + 1;
+                  listenerProfile.totalSessions = (listenerProfile.totalSessions || 0) + 1;
                   await listenerProfile.save();
 
                   // Record transaction for listener
@@ -615,6 +674,13 @@ const initSocket = (server) => {
     socket.on('disconnect', () => {
       console.log('User disconnected:', socket.id);
       if (socket.userId) {
+        if (socket.connectTime) {
+          const durationSeconds = Math.floor((Date.now() - socket.connectTime) / 1000);
+          if (durationSeconds > 0) {
+            User.findByIdAndUpdate(socket.userId, { $inc: { totalTimeSpent: durationSeconds } })
+              .catch(err => console.error('Failed to update totalTimeSpent:', err.message));
+          }
+        }
         randomUsers.delete(socket.userId);
         randomListeners.delete(socket.userId);
         if (randomSearchTimeouts[socket.userId]) {
@@ -813,6 +879,20 @@ function startChatSessionTimer(conversationId, userId) {
       conversation.chatSession.totalCoinsDeducted += CHAT_COINS_PER_SESSION;
       await conversation.save();
 
+      if (conversation.chatSession.sessionId) {
+        try {
+          const Session = require('./models/sessionModel');
+          await Session.findByIdAndUpdate(conversation.chatSession.sessionId, {
+            $inc: {
+              coinsDeducted: CHAT_COINS_PER_SESSION,
+              listenerEarnings: CHAT_LISTENER_PAYOUT
+            }
+          });
+        } catch (sessUpdErr) {
+          console.error('Error updating chat session doc on renewal:', sessUpdErr);
+        }
+      }
+
       // Credit listener
       // We need to find the listener in this conversation
       const listenerId = conversation.participants.find(p => p.toString() !== userId.toString());
@@ -872,6 +952,25 @@ async function endChatSession(conversationId) {
     if (chatSessionOfflineCheckers[conversationId]) {
       clearInterval(chatSessionOfflineCheckers[conversationId]);
       delete chatSessionOfflineCheckers[conversationId];
+    }
+
+    const conversationBefore = await Conversation.findById(conversationId);
+    if (conversationBefore && conversationBefore.chatSession && conversationBefore.chatSession.sessionId) {
+      try {
+        const Session = require('./models/sessionModel');
+        const endTime = new Date();
+        const startTime = conversationBefore.chatSession.startTime || conversationBefore.createdAt;
+        const durationMs = endTime - startTime;
+        const durationMinutes = Math.ceil(durationMs / 60000);
+
+        await Session.findByIdAndUpdate(conversationBefore.chatSession.sessionId, {
+          status: 'completed',
+          endTime,
+          duration: durationMinutes
+        });
+      } catch (sessEndErr) {
+        console.error('Error ending chat Session document:', sessEndErr);
+      }
     }
 
     const conversation = await Conversation.findByIdAndUpdate(

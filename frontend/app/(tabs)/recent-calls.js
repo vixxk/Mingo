@@ -16,9 +16,10 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, SCREEN_WIDTH } from '../../utils/responsive';
-import { callAPI, userAPI, walletAPI } from '../../utils/api';
+import { callAPI, userAPI, walletAPI, listenersAPI } from '../../utils/api';
 import FavouriteListenerPopup from '../../components/shared/FavouriteListenerPopup';
 import NotificationsPopup from '../../components/shared/NotificationsPopup';
+import StatusPopup from '../../components/shared/StatusPopup';
 import { useFocusEffect } from 'expo-router';
 
 
@@ -52,9 +53,10 @@ const getAvatarImage = (gender, index) => {
   }
 };
 
-const CallItem = ({ item }) => {
+const CallItem = ({ item, onShowOfflinePopup }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const router = useRouter();
+  const [calling, setCalling] = useState(false);
 
   const handlePressIn = () => {
     Animated.spring(scaleAnim, { toValue: 0.97, friction: 8, tension: 100, useNativeDriver: true }).start();
@@ -63,12 +65,29 @@ const CallItem = ({ item }) => {
     Animated.spring(scaleAnim, { toValue: 1, friction: 5, tension: 80, useNativeDriver: true }).start();
   };
 
-  const handleAudioCall = () => {
+  const handleCall = async (type) => {
+    if (calling) return;
+    setCalling(true);
+    try {
+      const targetId = item.listenerId || item.id;
+      if (targetId) {
+        const profileRes = await listenersAPI.getPublicProfile(targetId);
+        if (profileRes?.data && !profileRes.data.isOnline) {
+          onShowOfflinePopup(item.name);
+          setCalling(false);
+          return;
+        }
+      }
+    } catch (e) {
+      console.log('Error checking listener online status:', e);
+    }
+    setCalling(false);
+
     router.push({
       pathname: '/(call)/connecting',
       params: {
         name: item.name,
-        callType: 'audio',
+        callType: type,
         callId: `call_${Date.now()}`,
         roomId: `room_${Date.now()}`,
         listenerId: item.listenerId || item.id, // item.id is fallback for favourites
@@ -78,22 +97,11 @@ const CallItem = ({ item }) => {
     });
   };
 
-  const handleVideoCall = () => {
-    router.push({
-      pathname: '/(call)/connecting',
-      params: {
-        name: item.name,
-        callType: 'video',
-        callId: `call_${Date.now()}`,
-        roomId: `room_${Date.now()}`,
-        listenerId: item.listenerId || item.id, // item.id is fallback for favourites
-        avatarIndex: item.avatarIndex || '0',
-        gender: item.gender || 'Female'
-      }
-    });
-  };
+  const handleAudioCall = () => handleCall('audio');
+  const handleVideoCall = () => handleCall('video');
 
   const handleProfilePress = () => {
+    if (calling) return;
     const targetId = item.listenerId || item.id;
     if (targetId) {
       router.push(`/listener-profile/${targetId}`);
@@ -107,6 +115,7 @@ const CallItem = ({ item }) => {
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         onPress={handleProfilePress}
+        disabled={calling}
       >
         <LinearGradient
           colors={item.gradientColors || ['#4B5563', '#6B7280']}
@@ -120,10 +129,20 @@ const CallItem = ({ item }) => {
             <Text style={styles.callDuration}>{item.duration}</Text>
           </View>
           <View style={styles.callActions}>
-            <TouchableOpacity style={styles.callActionBtn} activeOpacity={0.7} onPress={handleAudioCall}>
+            <TouchableOpacity 
+              style={[styles.callActionBtn, calling && { opacity: 0.5 }]} 
+              activeOpacity={0.7} 
+              onPress={handleAudioCall}
+              disabled={calling}
+            >
               <Ionicons name="call" size={18} color="#22C55E" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.callActionBtn} activeOpacity={0.7} onPress={handleVideoCall}>
+            <TouchableOpacity 
+              style={[styles.callActionBtn, calling && { opacity: 0.5 }]} 
+              activeOpacity={0.7} 
+              onPress={handleVideoCall}
+              disabled={calling}
+            >
               <Ionicons name="videocam" size={18} color="#22C55E" />
             </TouchableOpacity>
           </View>
@@ -203,6 +222,10 @@ export default function RecentCallsScreen() {
   const [activeTab, setActiveTab] = useState('recent'); 
   const [showFavPopup, setShowFavPopup] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [statusPopupVisible, setStatusPopupVisible] = useState(false);
+  const [statusPopupTitle, setStatusPopupTitle] = useState('');
+  const [statusPopupMessage, setStatusPopupMessage] = useState('');
+  const [statusPopupType, setStatusPopupType] = useState('info');
 
   
   const headerAnim = useRef(new Animated.Value(0)).current;
@@ -327,7 +350,7 @@ export default function RecentCallsScreen() {
           style={styles.refreshBtn}
         >
           <Animated.View style={{ transform: [{ rotate: spin }] }}>
-            <Ionicons name="refresh" size={20} color="#9CA3AF" />
+            <Ionicons name="refresh" size={22} color="#9CA3AF" />
           </Animated.View>
         </TouchableOpacity>
       </Animated.View>
@@ -385,7 +408,16 @@ export default function RecentCallsScreen() {
           showsVerticalScrollIndicator={false}
         >
           {data.map((item) => (
-            <CallItem key={item.id} item={item} />
+            <CallItem 
+              key={item.id} 
+              item={item} 
+              onShowOfflinePopup={(name) => {
+                setStatusPopupTitle('Listener Offline');
+                setStatusPopupMessage(`${name} is currently offline. You can call them once they are back online.`);
+                setStatusPopupType('error');
+                setStatusPopupVisible(true);
+              }}
+            />
           ))}
         </ScrollView>
       )}
@@ -394,6 +426,13 @@ export default function RecentCallsScreen() {
       {}
       <FavouriteListenerPopup visible={showFavPopup} onGotIt={handleFavGotIt} />
       <NotificationsPopup visible={showNotifications} onClose={() => setShowNotifications(false)} />
+      <StatusPopup
+        visible={statusPopupVisible}
+        type={statusPopupType}
+        title={statusPopupTitle}
+        message={statusPopupMessage}
+        onClose={() => setStatusPopupVisible(false)}
+      />
     </View>
   );
 }
@@ -426,6 +465,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
+    borderColor: '#1F2937',
   },
 
   

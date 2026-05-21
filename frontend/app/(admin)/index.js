@@ -117,10 +117,25 @@ export default function AdminDashboard() {
     label: item._id.split('-').slice(1).join('/'),
   }));
 
+  const maxRevenueVal = Math.max(...revenueData.map(d => d.value), 0);
+  const chartMaxValue = maxRevenueVal === 0 ? 100 : Math.ceil(maxRevenueVal * 1.25);
+
+  // Calculate analytics insights for the revenue trend
+  const revenueValues = revenueData.map(d => d.value);
+  const maxDayRevenue = revenueValues.length > 0 ? Math.max(...revenueValues) : 0;
+  const avgDayRevenue = revenueValues.length > 0 ? (revenueValues.reduce((a, b) => a + b, 0) / revenueValues.length) : 0;
+  const activeDaysCount = revenueValues.filter(v => v > 0).length;
+
   const userGrowthData = (stats.charts?.dailyRegistrations || []).map(item => ({
     value: item.count,
     label: item._id.split('-').slice(1).join('/'),
   }));
+
+  // Calculate analytics insights for user registrations
+  const registrationValues = userGrowthData.map(d => d.value);
+  const maxDayRegistrations = registrationValues.length > 0 ? Math.max(...registrationValues) : 0;
+  const avgDayRegistrations = registrationValues.length > 0 ? (registrationValues.reduce((a, b) => a + b, 0) / registrationValues.length) : 0;
+  const totalRegistrations = registrationValues.reduce((a, b) => a + b, 0);
 
   if (loading && !refreshing) {
     return (
@@ -199,7 +214,7 @@ export default function AdminDashboard() {
             value={stats.totalCalls}
             icon="call"
             gradient={['#3B2A10', '#1F1508']}
-            subtitle={`${stats.activeChats} active chats`}
+            subtitle={`${stats.activeChats} active now`}
             onPress={() => router.push('/(admin)/admin-sessions')}
           />
         </View>
@@ -223,67 +238,161 @@ export default function AdminDashboard() {
         </View>
 
         {/* Charts Section */}
-        <View style={styles.chartContainer}>
-          <Text style={styles.chartTitle}>Revenue Trend (₹)</Text>
+        {/* Creative Redesigned Revenue Trends Section */}
+        <View style={styles.premiumChartCard}>
+          {/* Card Header with Trend Indicator and Quick Stats */}
+          <View style={styles.chartHeaderRow}>
+            <View>
+              <View style={styles.chartTitleWithIcon}>
+                <Ionicons name="trending-up" size={ms(16)} color="#10B981" style={{ marginRight: wp(1.5) }} />
+                <Text style={styles.premiumChartTitle}>Revenue Analysis</Text>
+              </View>
+              <Text style={styles.chartSubtitle}>Daily earnings trends over the past week</Text>
+            </View>
+            <View style={styles.trendBadge}>
+              <Ionicons name="caret-up" size={ms(12)} color="#10B981" />
+              <Text style={styles.trendBadgeText}>Active</Text>
+            </View>
+          </View>
+
           {revenueData.length > 0 ? (
-            <LineChart
-              areaChart
-              data={revenueData}
-              color="#10B981"
-              thickness={3}
-              dataPointsColor="#10B981"
-              noOfSections={3}
-              yAxisTextStyle={{ color: '#6B7280', fontSize: ms(10) }}
-              xAxisLabelTextStyle={{ color: '#6B7280', fontSize: ms(9) }}
-              startFillColor="rgba(16, 185, 129, 0.3)"
-              endFillColor="rgba(16, 185, 129, 0.01)"
-              startOpacity={0.8}
-              endOpacity={0.1}
-              initialSpacing={s(10)}
-              hideRules
-              curved
-              width={SCREEN_WIDTH - s(80)}
-              height={vs(120)}
-              spacing={s(45)}
-              pointerConfig={{
-                pointerStripColor: '#10B981',
-                pointerStripWidth: 2,
-                pointerColor: '#10B981',
-                radius: 4,
-                pointerLabelComponent: items => (
-                  <View style={styles.chartTooltip}>
-                    <Text style={styles.tooltipText}>₹{items[0].value}</Text>
-                  </View>
-                ),
-              }}
-            />
+            <View style={styles.chartWrapper}>
+              <LineChart
+                areaChart
+                data={revenueData}
+                color="#10B981"
+                thickness={3}
+                dataPointsColor="#10B981"
+                dataPointsRadius={4}
+                noOfSections={3}
+                maxValue={chartMaxValue}
+                yAxisLabelWidth={s(35)}
+                yAxisTextStyle={{ color: '#4B5563', fontSize: ms(9), fontFamily: 'Inter_500Medium' }}
+                xAxisLabelTextStyle={{ color: '#4B5563', fontSize: ms(8), fontFamily: 'Inter_500Medium' }}
+                startFillColor="rgba(16, 185, 129, 0.24)"
+                endFillColor="rgba(16, 185, 129, 0.0)"
+                startOpacity={0.8}
+                endOpacity={0.0}
+                initialSpacing={wp(3)}
+                rulesType="dashed"
+                rulesColor="#1C1C1E"
+                xAxisColor="#1C1C1E"
+                yAxisColor="#1C1C1E"
+                curved
+                width={wp(68)}
+                height={hp(16)}
+                spacing={wp(10.2)}
+                pointerConfig={{
+                  pointerStripColor: 'rgba(16, 185, 129, 0.3)',
+                  pointerStripWidth: 1.5,
+                  pointerColor: '#10B981',
+                  radius: 5,
+                  pointerLabelWidth: s(105),
+                  pointerLabelHeight: vs(45),
+                  activatePointersOnLongPress: false,
+                  autoAdjustPointerLabelPosition: true,
+                  pointerLabelComponent: items => {
+                    if (!items || items.length === 0) return null;
+                    return (
+                      <View style={styles.premiumChartTooltip}>
+                        <Text style={styles.premiumTooltipLabel}>{items[0].label || 'Date'}</Text>
+                        <Text style={styles.premiumTooltipVal}>₹{Number(items[0].value || 0).toFixed(2)}</Text>
+                      </View>
+                    );
+                  },
+                }}
+              />
+            </View>
           ) : (
-            <View style={styles.emptyChart}><Text style={styles.emptyChartText}>No data available</Text></View>
+            <View style={styles.emptyChart}>
+              <Ionicons name="stats-chart" size={ms(32)} color="#1C1C1E" />
+              <Text style={styles.emptyChartText}>No transactional activity logged</Text>
+            </View>
           )}
+
+          {/* Quick Insights Sub-Bar */}
+          <View style={styles.chartInsightsRow}>
+            <View style={styles.insightItem}>
+              <Text style={styles.insightLabel}>PEAK REVENUE</Text>
+              <Text style={[styles.insightValue, { color: '#fff' }]}>₹{maxDayRevenue.toFixed(1)}</Text>
+            </View>
+            <View style={styles.insightDivider} />
+            <View style={styles.insightItem}>
+              <Text style={styles.insightLabel}>DAILY AVERAGE</Text>
+              <Text style={[styles.insightValue, { color: '#10B981' }]}>₹{avgDayRevenue.toFixed(1)}</Text>
+            </View>
+            <View style={styles.insightDivider} />
+            <View style={styles.insightItem}>
+              <Text style={styles.insightLabel}>ACTIVE DAYS</Text>
+              <Text style={[styles.insightValue, { color: '#A855F7' }]}>{activeDaysCount} Days</Text>
+            </View>
+          </View>
         </View>
 
-        <View style={styles.chartContainer}>
-          <Text style={styles.chartTitle}>Daily Registrations</Text>
+        {/* Creative Redesigned Daily Registrations Section */}
+        <View style={styles.premiumChartCard}>
+          {/* Card Header with Trend Indicator and Quick Stats */}
+          <View style={styles.chartHeaderRow}>
+            <View>
+              <View style={styles.chartTitleWithIcon}>
+                <Ionicons name="people" size={ms(16)} color="#A855F7" style={{ marginRight: wp(1.5) }} />
+                <Text style={styles.premiumChartTitle}>Registration Analysis</Text>
+              </View>
+              <Text style={styles.chartSubtitle}>New user signups over the past week</Text>
+            </View>
+            <View style={[styles.trendBadge, { borderColor: 'rgba(168, 85, 247, 0.15)', backgroundColor: 'rgba(168, 85, 247, 0.08)' }]}>
+              <Ionicons name="caret-up" size={ms(12)} color="#A855F7" />
+              <Text style={[styles.trendBadgeText, { color: '#A855F7' }]}>Growth</Text>
+            </View>
+          </View>
+
           {userGrowthData.length > 0 ? (
-            <BarChart
-              data={userGrowthData}
-              barWidth={s(18)}
-              noOfSections={3}
-              barBorderRadius={6}
-              frontColor="#A855F7"
-              gradientColor="#6D28D9"
-              showGradient
-              yAxisTextStyle={{ color: '#6B7280', fontSize: ms(10) }}
-              xAxisLabelTextStyle={{ color: '#6B7280', fontSize: ms(9) }}
-              initialSpacing={s(10)}
-              hideRules
-              width={SCREEN_WIDTH - s(80)}
-              height={vs(120)}
-              spacing={s(20)}
-            />
+            <View style={styles.chartWrapper}>
+              <BarChart
+                data={userGrowthData}
+                barWidth={wp(4.2)}
+                noOfSections={3}
+                barBorderRadius={6}
+                frontColor="#A855F7"
+                gradientColor="#6D28D9"
+                showGradient
+                yAxisLabelWidth={s(35)}
+                yAxisTextStyle={{ color: '#4B5563', fontSize: ms(9), fontFamily: 'Inter_500Medium' }}
+                xAxisLabelTextStyle={{ color: '#4B5563', fontSize: ms(8), fontFamily: 'Inter_500Medium' }}
+                initialSpacing={wp(3)}
+                rulesType="dashed"
+                rulesColor="#1C1C1E"
+                xAxisColor="#1C1C1E"
+                yAxisColor="#1C1C1E"
+                width={wp(68)}
+                height={hp(16)}
+                spacing={wp(4.8)}
+              />
+            </View>
           ) : (
-            <View style={styles.emptyChart}><Text style={styles.emptyChartText}>No data available</Text></View>
+            <View style={styles.emptyChart}>
+              <Ionicons name="stats-chart" size={ms(32)} color="#1C1C1E" />
+              <Text style={styles.emptyChartText}>No signup data available</Text>
+            </View>
           )}
+
+          {/* Quick Insights Sub-Bar */}
+          <View style={styles.chartInsightsRow}>
+            <View style={styles.insightItem}>
+              <Text style={styles.insightLabel}>PEAK SIGNUPS</Text>
+              <Text style={[styles.insightValue, { color: '#fff' }]}>{maxDayRegistrations} Users</Text>
+            </View>
+            <View style={styles.insightDivider} />
+            <View style={styles.insightItem}>
+              <Text style={styles.insightLabel}>DAILY AVERAGE</Text>
+              <Text style={[styles.insightValue, { color: '#A855F7' }]}>{avgDayRegistrations.toFixed(1)} / Day</Text>
+            </View>
+            <View style={styles.insightDivider} />
+            <View style={styles.insightItem}>
+              <Text style={styles.insightLabel}>TOTAL ACQUIRED</Text>
+              <Text style={[styles.insightValue, { color: '#10B981' }]}>{totalRegistrations} Users</Text>
+            </View>
+          </View>
         </View>
 
         {/* Quick Management */}
@@ -468,16 +577,19 @@ const styles = StyleSheet.create({
     fontSize: ms(10),
   },
   chartTooltip: {
-    backgroundColor: '#1F1F1F',
-    paddingHorizontal: s(8),
-    paddingVertical: vs(4),
-    borderRadius: 8,
+    backgroundColor: '#111',
+    paddingHorizontal: s(10),
+    paddingVertical: vs(6),
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#333',
+    borderColor: '#10B981',
+    minWidth: s(80),
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   tooltipText: {
-    color: '#fff',
-    fontSize: ms(10),
+    color: '#10B981',
+    fontSize: ms(12),
     fontFamily: 'Inter_700Bold',
   },
   chartContainer: {
@@ -586,5 +698,119 @@ const styles = StyleSheet.create({
     color: '#4B5563',
     fontSize: ms(13),
     marginTop: hp(1),
+  },
+
+  // Premium Redesigned Revenue Trends Layout Styles
+  premiumChartCard: {
+    backgroundColor: '#070708',
+    borderRadius: 24,
+    padding: wp(5),
+    marginBottom: hp(2.2),
+    borderWidth: 1.2,
+    borderColor: '#151518',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  chartHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: hp(2),
+  },
+  chartTitleWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  premiumChartTitle: {
+    color: '#fff',
+    fontSize: ms(15),
+    fontFamily: 'Inter_700Bold',
+  },
+  chartSubtitle: {
+    color: '#6B7280',
+    fontSize: ms(10),
+    fontFamily: 'Inter_400Regular',
+    marginTop: 2,
+  },
+  trendBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+    paddingHorizontal: wp(2.5),
+    paddingVertical: hp(0.4),
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.15)',
+    gap: 4,
+  },
+  trendBadgeText: {
+    color: '#10B981',
+    fontSize: ms(10),
+    fontFamily: 'Inter_700Bold',
+  },
+  chartWrapper: {
+    marginTop: hp(1),
+    marginBottom: hp(2),
+  },
+  premiumChartTooltip: {
+    backgroundColor: '#111115',
+    borderRadius: 10,
+    paddingHorizontal: s(12),
+    paddingVertical: vs(6),
+    borderWidth: 1.5,
+    borderColor: '#10B981',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.6,
+    shadowRadius: 5,
+    elevation: 6,
+  },
+  premiumTooltipLabel: {
+    color: '#9CA3AF',
+    fontSize: ms(9),
+    fontFamily: 'Inter_500Medium',
+  },
+  premiumTooltipVal: {
+    color: '#10B981',
+    fontSize: ms(12),
+    fontFamily: 'Inter_900Black',
+    marginTop: 1,
+  },
+  chartInsightsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#0D0D10',
+    borderRadius: 16,
+    paddingVertical: hp(1.5),
+    paddingHorizontal: wp(3),
+    borderWidth: 1,
+    borderColor: '#151518',
+    marginTop: hp(1),
+  },
+  insightItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  insightLabel: {
+    color: '#4B5563',
+    fontSize: ms(8),
+    fontFamily: 'Inter_700Bold',
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
+  insightValue: {
+    fontSize: ms(13),
+    fontFamily: 'Inter_800ExtraBold',
+  },
+  insightDivider: {
+    width: 1,
+    height: hp(3),
+    backgroundColor: '#1A1A22',
   },
 });

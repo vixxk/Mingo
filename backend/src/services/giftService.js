@@ -10,7 +10,7 @@ class GiftService {
     return await Gift.find({ isActive: true }).sort({ price: 1 });
   }
 
-  static async sendGift({ senderId, receiverId, giftId, count = 1 }) {
+  static async sendGift({ senderId, receiverId, giftId, count = 1, sessionId }) {
     const session = await mongoose.startSession();
     session.startTransaction();
 
@@ -38,12 +38,12 @@ class GiftService {
         coins: -totalCost,
         description: `Sent gift: ${gift.name} x${count}`,
         status: 'completed',
-        metadata: { giftId, receiverId, count }
+        metadata: { giftId, receiverId, count, sessionId }
       }], { session });
 
       // 3. Credit receiver (Listener)
-      // Payout ratio: 70% of coin value converted to earnings
-      const payoutAmount = (totalCost * 0.7); 
+      // Payout ratio: 70% of coin value converted to INR (1 coin = ₹0.25)
+      const payoutAmount = totalCost * 0.70 * 0.25; 
       
       const listener = await Listener.findOne({ userId: receiverId }).session(session);
       if (listener) {
@@ -59,7 +59,7 @@ class GiftService {
           coins: 0,
           description: `Received gift: ${gift.name} x${count}`,
           status: 'completed',
-          metadata: { giftId, senderId, count }
+          metadata: { giftId, senderId, count, sessionId }
         }], { session });
       }
 

@@ -18,7 +18,7 @@ import { giftsAPI, walletAPI } from '../../utils/api';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-const GiftPopup = ({ visible, onClose, receiverId, onGiftSent }) => {
+const GiftPopup = ({ visible, onClose, receiverId, sessionId, onGiftSent }) => {
   const [gifts, setGifts] = useState([]);
   const [balance, setBalance] = useState(0);
   const [selectedGift, setSelectedGift] = useState(null);
@@ -92,12 +92,13 @@ const GiftPopup = ({ visible, onClose, receiverId, onGiftSent }) => {
       const res = await giftsAPI.send({
         receiverId,
         giftId: selectedGift._id,
-        count: multiplier
+        count: multiplier,
+        sessionId
       });
       
       if (res.success) {
         setBalance(res.data.remainingCoins);
-        if (onGiftSent) onGiftSent(res.data.gift);
+        if (onGiftSent) onGiftSent({ ...res.data.gift, remainingCoins: res.data.remainingCoins });
         onClose();
       }
     } catch (error) {

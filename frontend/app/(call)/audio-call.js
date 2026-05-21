@@ -160,7 +160,8 @@ export default function AudioCallScreen() {
     };
 
     const handleBalanceUpdate = (data) => {
-      if (data.reason === 'call_minute_charge' || data.reason === 'call_session_start') {
+      // Update coins for any balance change (call billing, gift send, etc.)
+      if (data.coins !== undefined) {
         setCurrentCoins(data.coins);
         // Clear low balance warning if balance is now healthy
         if (data.coins >= 20) {
@@ -392,7 +393,14 @@ export default function AudioCallScreen() {
           visible={showGiftPopup}
           onClose={() => setShowGiftPopup(false)}
           receiverId={listenerId}
+          sessionId={callId}
           onGiftSent={(gift) => {
+            // Update balance immediately from gift response
+            if (gift.remainingCoins !== undefined) {
+              setCurrentCoins(gift.remainingCoins);
+            } else if (gift.price) {
+              setCurrentCoins(prev => prev !== null ? Math.max(0, prev - gift.price) : prev);
+            }
             triggerGiftAnimation({
               isSentByMe: true,
               gift: gift,
@@ -525,7 +533,14 @@ export default function AudioCallScreen() {
         visible={showGiftPopup}
         onClose={() => setShowGiftPopup(false)}
         receiverId={listenerId}
+        sessionId={callId}
         onGiftSent={(gift) => {
+          // Update balance immediately from gift response
+          if (gift.remainingCoins !== undefined) {
+            setCurrentCoins(gift.remainingCoins);
+          } else if (gift.price) {
+            setCurrentCoins(prev => prev !== null ? Math.max(0, prev - gift.price) : prev);
+          }
           triggerGiftAnimation({
             isSentByMe: true,
             gift: gift,

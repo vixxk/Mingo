@@ -70,7 +70,7 @@ export default function AdminUsersScreen() {
       setLoading(true);
       const params = { limit: 100 };
       if (statusFilter === 'active') params.status = 'active';
-      if (statusFilter === 'inactive') params.status = 'banned';
+      if (statusFilter === 'inactive') params.status = 'inactive';
       
       const res = await adminAPI.getUsers(params);
       if (res?.data) {
@@ -82,7 +82,7 @@ export default function AdminUsersScreen() {
           phone: u.phone || 'Unknown',
           language: u.language || 'English',
           avatar: getAvatarImage(u.gender, u.avatarIndex),
-          status: u.isBanned ? 'inactive' : 'active',
+          status: u.isOnline ? 'active' : 'inactive',
           totalCalls: u.totalCalls || 0,
           coins: u.coins || 0
         }));

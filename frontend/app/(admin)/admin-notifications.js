@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -61,6 +62,19 @@ export default function AdminNotifications() {
   const [campaigns, setCampaigns] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
 
+  // Custom premium modal popup state
+  const [popupVisible, setPopupVisible] = useState(false);
+  const [popupType, setPopupType] = useState('success');
+  const [popupTitle, setPopupTitle] = useState('');
+  const [popupMessage, setPopupMessage] = useState('');
+
+  const triggerPopup = (type, popupTitleText, popupMsgText) => {
+    setPopupType(type);
+    setPopupTitle(popupTitleText);
+    setPopupMessage(popupMsgText);
+    setPopupVisible(true);
+  };
+
   const loadHistory = async () => {
     try {
       const res = await adminAPI.getCampaigns();
@@ -104,21 +118,28 @@ export default function AdminNotifications() {
   };
 
   const handleSend = async () => {
-    if (!title || !message) { Alert.alert('Error', 'Please fill all fields'); return; }
+    if (!title || !message) {
+      triggerPopup('error', 'Incomplete Fields', 'Please fill in both a title and message body for your campaign.');
+      return;
+    }
     try {
       setSending(true);
       const payload = { title, body: message, target, notificationMethod };
       if (target === 'specific') {
-        if (selectedUsers.length === 0) { Alert.alert('Error', 'Select at least one user'); setSending(false); return; }
+        if (selectedUsers.length === 0) {
+          triggerPopup('error', 'No Selection', 'Please select at least one specific user to target.');
+          setSending(false);
+          return;
+        }
         payload.userIds = selectedUsers.map(u => u.id || u._id);
       }
       await adminAPI.sendPushNotification(payload);
-      Alert.alert('Success', `Campaign "${title}" sent!`);
+      triggerPopup('success', 'Campaign Launched!', `Your push campaign "${title}" has been broadcasted successfully.`);
       setTitle(''); setMessage(''); setSelectedUsers([]); setTarget('all'); setNotificationMethod('both');
       setSending(false);
       loadHistory();
     } catch (e) {
-      Alert.alert('Error', e?.message || 'Failed to send');
+      triggerPopup('error', 'Launch Failed', e?.message || 'Failed to dispatch the push campaign.');
       setSending(false);
     }
   };
@@ -158,9 +179,6 @@ export default function AdminNotifications() {
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Push Campaigns</Text>
           <Text style={styles.headerSub}>Send notifications to your users</Text>
-        </View>
-        <View style={styles.headerIcon}>
-          <Ionicons name="megaphone" size={wp(5)} color="#A855F7" />
         </View>
       </View>
 
@@ -318,6 +336,46 @@ export default function AdminNotifications() {
 
         <View style={{ height: hp(5) }} />
       </ScrollView>
+
+      {/* Custom premium campaign dispatch success/error popup modal */}
+      <Modal
+        visible={popupVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setPopupVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <LinearGradient
+              colors={popupType === 'success' ? ['#A855F7', '#7C3AED'] : ['#EF4444', '#B91C1C']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.modalHeaderGrad}
+            >
+              <View style={styles.modalIconCircle}>
+                <Ionicons
+                  name={popupType === 'success' ? 'checkmark-done-circle' : 'alert-circle'}
+                  size={wp(10)}
+                  color="#fff"
+                />
+              </View>
+            </LinearGradient>
+
+            <View style={styles.modalBody}>
+              <Text style={styles.modalTitle}>{popupTitle}</Text>
+              <Text style={styles.modalMsg}>{popupMessage}</Text>
+
+              <TouchableOpacity
+                onPress={() => setPopupVisible(false)}
+                activeOpacity={0.8}
+                style={styles.modalBtn}
+              >
+                <Text style={styles.modalBtnText}>Dismiss</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -621,5 +679,74 @@ const styles = StyleSheet.create({
     fontSize: ms(12),
     fontFamily: 'Inter_400Regular',
     marginTop: hp(0.5),
+  },
+
+  // Custom Premium Modal Popups
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: wp(6),
+  },
+  modalContainer: {
+    width: '100%',
+    maxWidth: wp(80),
+    backgroundColor: '#0D0D0D',
+    borderRadius: wp(5),
+    borderWidth: 1,
+    borderColor: '#1A1A1A',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.7,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  modalHeaderGrad: {
+    height: hp(12),
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalIconCircle: {
+    width: wp(16),
+    height: wp(16),
+    borderRadius: wp(8),
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalBody: {
+    padding: wp(5),
+    alignItems: 'center',
+  },
+  modalTitle: {
+    color: '#fff',
+    fontSize: ms(16),
+    fontFamily: 'Inter_700Bold',
+    textAlign: 'center',
+    marginBottom: hp(1),
+  },
+  modalMsg: {
+    color: '#9CA3AF',
+    fontSize: ms(12),
+    fontFamily: 'Inter_400Regular',
+    textAlign: 'center',
+    lineHeight: ms(17),
+    marginBottom: hp(3),
+  },
+  modalBtn: {
+    width: '100%',
+    backgroundColor: '#141414',
+    paddingVertical: hp(1.5),
+    borderRadius: wp(3),
+    borderWidth: 1,
+    borderColor: '#242424',
+    alignItems: 'center',
+  },
+  modalBtnText: {
+    color: '#A855F7',
+    fontSize: ms(13),
+    fontFamily: 'Inter_700Bold',
   },
 });

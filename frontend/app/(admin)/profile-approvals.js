@@ -135,10 +135,17 @@ export default function ProfileApprovalsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [approvals, setApprovals] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [processing, setProcessing] = useState(null);
   const [filter, setFilter] = useState('pending');
+
+  const filteredApprovals = approvals.filter((req) => {
+    const name = (req.name || req.displayName || '').toLowerCase();
+    const query = searchQuery.toLowerCase();
+    return name.includes(query);
+  });
 
   // Reject modal
   const [rejectModal, setRejectModal] = useState({ visible: false, id: null });
@@ -243,6 +250,18 @@ export default function ProfileApprovalsScreen() {
         <Text style={styles.headerTitle}>Profile Approvals</Text>
       </View>
 
+      {/* Search Bar */}
+      <View style={styles.searchBox}>
+        <Ionicons name="search" size={18} color="#6B7280" />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search approvals..."
+          placeholderTextColor="#4B5563"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+      </View>
+
       {/* Filter Tabs */}
       <View style={styles.filterContainer}>
         <View style={styles.filterWrapper}>
@@ -280,15 +299,15 @@ export default function ProfileApprovalsScreen() {
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A855F7" colors={['#A855F7']} />}
       >
-        {approvals.length === 0 ? (
+        {filteredApprovals.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="checkmark-done-circle-outline" size={64} color="#22C55E" />
             <Text style={styles.emptyText}>
-              {filter === 'pending' ? 'No pending profile approvals.' : `No ${filter} profile changes.`}
+              {searchQuery ? 'No matching profile approvals.' : (filter === 'pending' ? 'No pending profile approvals.' : `No ${filter} profile changes.`)}
             </Text>
           </View>
         ) : (
-          approvals.map((req) => {
+          filteredApprovals.map((req) => {
             const cur = req.currentProfile || {};
             const draft = req.draftProfile || {};
             const statusColor = req.profileStatus === 'approved' ? '#22C55E' : req.profileStatus === 'rejected' ? '#EF4444' : '#F59E0B';
@@ -674,5 +693,24 @@ const styles = StyleSheet.create({
   fullImage: {
     width: wp(100),
     height: hp(80),
+  },
+  searchBox: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: '#111', 
+    marginHorizontal: s(16), 
+    paddingHorizontal: s(14), 
+    height: SH * 0.055, 
+    borderRadius: 16, 
+    borderWidth: 1, 
+    borderColor: '#1F1F1F', 
+    gap: s(8),
+    marginBottom: hp(0.5)
+  },
+  searchInput: { 
+    flex: 1, 
+    color: '#fff', 
+    fontSize: ms(14, 0.3), 
+    fontFamily: 'Inter_400Regular' 
   },
 });

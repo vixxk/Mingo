@@ -77,6 +77,14 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    appOpens: {
+      type: Number,
+      default: 0,
+    },
+    totalTimeSpent: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,

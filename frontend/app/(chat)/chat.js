@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Image, TouchableOpacity, ScrollView,
   TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Dimensions,
-  Animated,
+  Animated, Modal, Pressable, AppState,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -75,56 +75,77 @@ const GiftMessageBubble = ({ item }) => {
   const giftIcon = item.mediaUrl || '🎁';
   const price = getGiftPriceByName(giftName);
 
-  // Define themed colors for the gift bubble
+  // Define themed colors and properties for the gift bubble
   let borderColors = ['#8B5CF6', '#EC4899']; // Default fuchsia/purple
+  let bgColors = ['#0F0F1A', '#151522']; // Default
   let badgeText = 'Premium Surprise';
   let badgeBg = 'rgba(139, 92, 246, 0.15)';
   let textColor = '#C084FC';
+  let borderWidth = 1.5;
+  let glowOpacity = 0.15;
 
   if (price >= 1000) {
-    borderColors = ['#F59E0B', '#FFAE00']; // Gold
+    borderColors = ['#FBBF24', '#F59E0B']; // Gold
+    bgColors = ['#2E220F', '#181107'];
     badgeText = '👑 Legendary Royal Gift';
-    badgeBg = 'rgba(245, 158, 11, 0.15)';
-    textColor = '#F59E0B';
+    badgeBg = 'rgba(245, 158, 11, 0.2)';
+    textColor = '#FBBF24';
+    borderWidth = 2.5;
+    glowOpacity = 0.35;
   } else if (price >= 500) {
-    borderColors = ['#EC4899', '#F43F5E']; // Pink/Rose
+    borderColors = ['#F472B6', '#EC4899']; // Pink/Rose
+    bgColors = ['#2E101A', '#18080E'];
     badgeText = '💝 Luxury Heart Gift';
-    badgeBg = 'rgba(236, 72, 153, 0.15)';
+    badgeBg = 'rgba(236, 72, 153, 0.2)';
     textColor = '#F472B6';
+    borderWidth = 2.0;
+    glowOpacity = 0.3;
   } else if (price >= 300) {
-    borderColors = ['#8B5CF6', '#D946EF']; // Purple/Magenta
+    borderColors = ['#A78BFA', '#8B5CF6']; // Purple/Magenta
+    bgColors = ['#1D0E35', '#0E071D'];
     badgeText = '🎁 Special Gift Box';
-    badgeBg = 'rgba(217, 70, 239, 0.15)';
-    textColor = '#E879F9';
+    badgeBg = 'rgba(139, 92, 246, 0.2)';
+    textColor = '#C084FC';
+    borderWidth = 1.8;
+    glowOpacity = 0.25;
   } else if (price >= 100) {
-    borderColors = ['#06B6D4', '#3B82F6']; // Cyan/Blue
+    borderColors = ['#22D3EE', '#06B6D4']; // Cyan/Blue
+    bgColors = ['#062330', '#031119'];
     badgeText = '🍬 Delicious Gift';
-    badgeBg = 'rgba(6, 182, 212, 0.15)';
+    badgeBg = 'rgba(6, 182, 212, 0.2)';
     textColor = '#22D3EE';
+    borderWidth = 1.5;
+    glowOpacity = 0.2;
   } else if (price >= 50) {
-    borderColors = ['#F43F5E', '#EC4899']; // Candy Pink
+    borderColors = ['#FB7185', '#F43F5E']; // Candy Pink
+    bgColors = ['#2A0E18', '#16070B'];
     badgeText = '🍭 Sweet Treat';
-    badgeBg = 'rgba(244, 63, 94, 0.15)';
+    badgeBg = 'rgba(244, 63, 94, 0.2)';
     textColor = '#FB7185';
+    borderWidth = 1.2;
+    glowOpacity = 0.18;
   } else {
-    borderColors = ['#EF4444', '#F43F5E']; // Red
+    borderColors = ['#F87171', '#EF4444']; // Red
+    bgColors = ['#250E0E', '#140707'];
     badgeText = '❤️ Sweet Heart';
-    badgeBg = 'rgba(239, 68, 68, 0.15)';
+    badgeBg = 'rgba(239, 68, 68, 0.2)';
     textColor = '#F87171';
+    borderWidth = 1.0;
+    glowOpacity = 0.15;
   }
 
   return (
     <View style={[styles.bubbleRow, isSentByMe ? styles.bubbleRowSent : styles.bubbleRowReceived]}>
       <View style={[styles.giftBubbleContainer, isSentByMe ? styles.giftBubbleSent : styles.giftBubbleReceived]}>
         <LinearGradient
-          colors={['#0F0F1A', '#151522']}
+          colors={bgColors}
           style={styles.giftBubbleGradient}
         >
           {/* Border glowing gradient effect */}
-          <View style={[styles.giftBubbleInner, { borderColor: borderColors[0] }]}>
+          <View style={[styles.giftBubbleInner, { borderColor: borderColors[0], borderWidth }]}>
             {/* Glowing Icon Badge */}
             <View style={styles.giftIconWrapper}>
-              <View style={[styles.giftIconGlow, { backgroundColor: borderColors[0] }]} />
+              <View style={[styles.giftIconGlow, { backgroundColor: borderColors[0], opacity: glowOpacity }]} />
               <Text style={styles.giftBubbleIcon}>{giftIcon}</Text>
             </View>
 
@@ -135,6 +156,9 @@ const GiftMessageBubble = ({ item }) => {
               </Text>
               <Text style={[styles.giftBubbleName, { color: textColor }]}>
                 {giftName}
+              </Text>
+              <Text style={[styles.giftValueText, { color: textColor }]}>
+                🪙 {price} Coins
               </Text>
               <View style={[styles.giftBadge, { backgroundColor: badgeBg }]}>
                 <Text style={[styles.giftBadgeText, { color: textColor }]}>{badgeText}</Text>
@@ -264,7 +288,9 @@ export default function ChatScreen() {
   const [showGiftPopup, setShowGiftPopup] = useState(false);
   const [sessionActive, setSessionActive] = useState(false);
   const [sessionRemaining, setSessionRemaining] = useState(0);
+  const [activeSessionId, setActiveSessionId] = useState(null);
   const [receivedGift, setReceivedGift] = useState(null);
+  const [showCostPopup, setShowCostPopup] = useState(false);
 
   const giftAnim = useRef(new Animated.Value(0)).current;
   const sessionTimerRef = useRef(null);
@@ -275,6 +301,26 @@ export default function ChatScreen() {
   useEffect(() => {
     realConversationIdRef.current = realConversationId;
   }, [realConversationId]);
+
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState) => {
+      if (realConversationIdRef.current) {
+        if (nextAppState === 'active') {
+          console.log('[Chat] App returned to foreground, rejoining room:', realConversationIdRef.current);
+          socketService.joinRoom(realConversationIdRef.current);
+        } else if (nextAppState.match(/inactive|background/)) {
+          console.log('[Chat] App went to background, leaving room:', realConversationIdRef.current);
+          socketService.leaveRoom(realConversationIdRef.current);
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   const triggerGiftAnimation = useCallback((data) => {
     setReceivedGift(data);
@@ -346,6 +392,7 @@ export default function ChatScreen() {
             const session = response.data.chatSession;
             if (session && session.active) {
               setSessionActive(true);
+              setActiveSessionId(session.sessionId);
               startElapsedTimer(session.startTime);
             }
 
@@ -508,6 +555,7 @@ export default function ChatScreen() {
       console.log('[Chat] Session started:', data);
       setSessionActive(true);
       const session = data.chatSession;
+      if (session?.sessionId) setActiveSessionId(session.sessionId);
       startElapsedTimer(session.startTime);
     };
 
@@ -520,6 +568,7 @@ export default function ChatScreen() {
       console.log('[Chat] Session ended');
       setSessionActive(false);
       setSessionRemaining(0);
+      setActiveSessionId(null);
       if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
     };
 
@@ -755,10 +804,14 @@ export default function ChatScreen() {
         {/* Timed Session Capsule */}
         {sessionActive && (
           <View style={styles.sessionHeaderWrap}>
-            <View style={styles.timerBadge}>
+            <TouchableOpacity
+              style={styles.timerBadge}
+              activeOpacity={0.7}
+              onPress={() => { if (userRole === 'USER') setShowCostPopup(true); }}
+            >
               <Ionicons name="time" size={wp(3.5)} color="#22C55E" style={{ marginRight: wp(1) }} />
               <Text style={[styles.timerText, { color: '#22C55E' }]}>{formatDuration(sessionRemaining)}</Text>
-            </View>
+            </TouchableOpacity>
             <TouchableOpacity
               style={styles.endSessionBtn}
               activeOpacity={0.7}
@@ -884,11 +937,19 @@ export default function ChatScreen() {
         visible={showGiftPopup}
         onClose={() => setShowGiftPopup(false)}
         receiverId={otherUserId || conversationId}
+        sessionId={activeSessionId}
         onGiftSent={(gift) => {
           if (realConversationId && currentUserId && gift) {
             const giftName = gift.name || 'Gift';
             const giftIcon = gift.icon || '🎁';
             const giftMsg = `Sent a gift: ${giftName}`;
+            
+            // Update coin balance immediately from gift response
+            if (gift.remainingCoins !== undefined) {
+              setCoinBalance(gift.remainingCoins);
+            } else if (gift.price) {
+              setCoinBalance(prev => Math.max(0, prev - gift.price));
+            }
             
             // Add optimistic message with gift type
             const tempId = `temp_gift_${Date.now()}`;
@@ -931,6 +992,34 @@ export default function ChatScreen() {
           onComplete={() => setReceivedGift(null)}
         />
       )}
+
+      {/* Session Cost Info Popup */}
+      <Modal transparent visible={showCostPopup} animationType="fade" statusBarTranslucent>
+        <View style={styles.costPopupOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowCostPopup(false)} />
+          <View style={styles.costPopupCard}>
+            <View style={styles.costPopupIconWrap}>
+              <Ionicons name="time" size={wp(8)} color="#22C55E" />
+            </View>
+            <Text style={styles.costPopupTitle}>Session Cost</Text>
+            <Text style={styles.costPopupDesc}>
+              This chat session costs{' '}
+              <Text style={{ color: '#F59E0B', fontWeight: '800' }}>2 coins/min</Text>
+              {' '}(10 coins per 5 minutes).
+            </Text>
+            <Text style={styles.costPopupBalance}>
+              Your balance: <Text style={{ color: '#22C55E', fontWeight: '800' }}>🪙 {coinBalance}</Text>
+            </Text>
+            <TouchableOpacity
+              style={styles.costPopupBtn}
+              activeOpacity={0.8}
+              onPress={() => setShowCostPopup(false)}
+            >
+              <Text style={styles.costPopupBtnText}>Got it</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -1104,7 +1193,7 @@ const styles = StyleSheet.create({
   },
   // Premium Gift Message Bubble Styles
   giftBubbleContainer: {
-    maxWidth: wp(75),
+    width: wp(65),
     borderRadius: wp(5),
     overflow: 'hidden',
     shadowColor: '#000',
@@ -1121,17 +1210,18 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: wp(1),
   },
   giftBubbleGradient: {
-    padding: wp(0.8),
+    padding: wp(1.5),
+    borderRadius: wp(4.2),
   },
   giftBubbleInner: {
     borderWidth: 1.5,
-    borderRadius: wp(4.2),
-    paddingHorizontal: wp(3),
-    paddingVertical: hp(1.2),
+    borderRadius: wp(3.5),
+    paddingHorizontal: wp(3.5),
+    paddingVertical: hp(1.5),
     flexDirection: 'row',
     alignItems: 'center',
     gap: wp(3.5),
-    backgroundColor: 'rgba(15, 15, 26, 0.92)',
+    minHeight: hp(8),
   },
   giftIconWrapper: {
     position: 'relative',
@@ -1164,6 +1254,12 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontFamily: 'Inter_900Black',
   },
+  giftValueText: {
+    fontSize: wp(3.0),
+    fontFamily: 'Inter_600SemiBold',
+    marginTop: hp(0.1),
+    opacity: 0.9,
+  },
   giftBadge: {
     alignSelf: 'flex-start',
     paddingHorizontal: wp(2),
@@ -1183,5 +1279,64 @@ const styles = StyleSheet.create({
     marginTop: hp(0.4),
     marginRight: wp(3),
     marginBottom: hp(0.6),
+  },
+
+  // Cost Popup Styles
+  costPopupOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: wp(8),
+  },
+  costPopupCard: {
+    backgroundColor: '#141414',
+    borderRadius: wp(5),
+    padding: wp(6),
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    width: '100%',
+    maxWidth: wp(85),
+  },
+  costPopupIconWrap: {
+    width: wp(16),
+    height: wp(16),
+    borderRadius: wp(8),
+    backgroundColor: 'rgba(34, 197, 94, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: hp(1.5),
+    borderWidth: 1,
+    borderColor: 'rgba(34, 197, 94, 0.25)',
+  },
+  costPopupTitle: {
+    fontSize: wp(5),
+    color: '#fff',
+    fontWeight: '800',
+    marginBottom: hp(1),
+  },
+  costPopupDesc: {
+    fontSize: wp(3.5),
+    color: 'rgba(255,255,255,0.7)',
+    textAlign: 'center',
+    lineHeight: wp(5.5),
+    marginBottom: hp(1),
+  },
+  costPopupBalance: {
+    fontSize: wp(3.5),
+    color: 'rgba(255,255,255,0.6)',
+    marginBottom: hp(2),
+  },
+  costPopupBtn: {
+    backgroundColor: '#22C55E',
+    borderRadius: wp(3),
+    paddingHorizontal: wp(8),
+    paddingVertical: hp(1.2),
+  },
+  costPopupBtnText: {
+    color: '#fff',
+    fontSize: wp(3.5),
+    fontWeight: '700',
   },
 });

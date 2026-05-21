@@ -14,14 +14,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { authAPI } from '../../utils/api';
+import { authAPI, listenerAPI } from '../../utils/api';
+import { socketService } from '../../utils/socket';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs } from '../../utils/responsive';
 import RaiseIssuePopup from '../../components/shared/RaiseIssuePopup';
 import LogoutPopup from '../../components/shared/LogoutPopup';
 
 const MENU_ITEMS = [
-  { id: '2', label: 'Transactions', icon: 'receipt-outline', route: '/payment-failed' },
+  { id: '2', label: 'Transactions', icon: 'receipt-outline', route: '/transactions' },
   { id: '3', label: 'Language Settings', icon: 'globe-outline', route: '/language?fromSettings=true' },
   { id: '5', label: 'Help & Support', icon: 'headset-outline', route: '/help-support' },
   { id: '7', label: 'Raise an Issue', icon: 'flag-outline', action: 'issue' },
@@ -193,7 +194,15 @@ export default function ListenerProfileScreen() {
 
   const confirmLogout = async () => {
     try {
-      await AsyncStorage.multiRemove(['userToken', 'user', 'listenerStatus', 'isAdmin']);
+      // Set listener offline before logging out
+      try {
+        await listenerAPI.goOffline();
+      } catch (e) {
+        console.log('Go offline on logout error (non-critical):', e);
+      }
+      // Disconnect socket so backend detects disconnect
+      socketService.disconnect();
+      await AsyncStorage.multiRemove(['userToken', 'token', 'user', 'listenerStatus', 'isAdmin']);
       setShowLogoutPopup(false);
       router.replace('/welcome');
     } catch (e) {

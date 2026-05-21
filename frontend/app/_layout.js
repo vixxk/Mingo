@@ -31,9 +31,17 @@ export default function RootLayout() {
   useEffect(() => {
     const subscription = addNotificationResponseReceivedListener((response) => {
       try {
-        const url = response.notification.request.content.data.url;
-        if (url) {
-          router.push(url);
+        const data = response.notification.request.content.data;
+        console.log('[RootLayout] Notification tapped, data:', JSON.stringify(data));
+        
+        if (data?.conversationId) {
+          // Chat message notification — navigate to the chat screen
+          router.push({
+            pathname: '/chat',
+            params: { id: data.conversationId },
+          });
+        } else if (data?.url) {
+          router.push(data.url);
         }
       } catch (err) {
         console.error('Error handling notification tap:', err);

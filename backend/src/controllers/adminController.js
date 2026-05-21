@@ -24,6 +24,50 @@ class AdminController {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
+      // Self-healing database role sync: Set role to 'USER' for any users whose listener application is rejected or pending
+      const dirtyListeners = await Listener.find({ status: { $in: ['rejected', 'pending'] } }).select('userId');
+      if (dirtyListeners.length > 0) {
+        const dirtyUserIds = dirtyListeners.map(l => l.userId).filter(Boolean);
+        await User.updateMany(
+          { _id: { $in: dirtyUserIds }, role: 'LISTENER' },
+          { role: 'USER' }
+        );
+      }
+
+      // Get all listener user IDs to exclude them from user stats
+      const allListenerUserIds = await Listener.find().distinct('userId');
+
+      // Query total counts using join-based aggregations to completely filter out banned users or role mismatches
+      const approvedListenersCountPromise = Listener.aggregate([
+        { $match: { status: 'approved' } },
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'userId',
+            foreignField: '_id',
+            as: 'user'
+          }
+        },
+        { $unwind: '$user' },
+        { $match: { 'user.isBanned': false, 'user.role': 'LISTENER' } },
+        { $count: 'count' }
+      ]).then(resArr => resArr[0]?.count || 0);
+
+      const onlineApprovedListenersCountPromise = Listener.aggregate([
+        { $match: { isOnline: true, status: 'approved' } },
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'userId',
+            foreignField: '_id',
+            as: 'user'
+          }
+        },
+        { $unwind: '$user' },
+        { $match: { 'user.isBanned': false, 'user.role': 'LISTENER' } },
+        { $count: 'count' }
+      ]).then(resArr => resArr[0]?.count || 0);
+
       const [
         totalUsers,
         totalListeners,
@@ -38,18 +82,18 @@ class AdminController {
         pendingPayoutsCount,
         activeChats
       ] = await Promise.all([
-        User.countDocuments({ role: 'USER' }),
-        Listener.countDocuments(),
+        User.countDocuments({ role: 'USER', _id: { $nin: allListenerUserIds } }),
+        approvedListenersCountPromise,
         Listener.countDocuments({ 
           $or: [
-            { isApproved: false },
-            { hasPendingChanges: true }
+            { status: 'pending' },
+            { profileStatus: 'pending' }
           ]
         }),
-        Listener.countDocuments({ isOnline: true }),
+        onlineApprovedListenersCountPromise,
         Session.countDocuments({ status: 'completed' }),
         MemberReport.countDocuments({ status: 'pending' }),
-        User.countDocuments({ updatedAt: { $gte: today } }),
+        User.countDocuments({ role: 'USER', _id: { $nin: allListenerUserIds }, updatedAt: { $gte: today } }),
         Transaction.aggregate([
           { $match: { type: 'purchase', status: 'completed', createdAt: { $gte: today } } },
           { $group: { _id: null, total: { $sum: '$coins' } } }
@@ -119,7 +163,8 @@ class AdminController {
       const dailyRegistrationsRaw = await User.aggregate([
         { 
           $match: { 
-            role: { $in: ['USER', 'LISTENER'] },
+            role: 'USER',
+            _id: { $nin: allListenerUserIds },
             createdAt: { $gte: startDate } 
           } 
         },
@@ -162,6 +207,7 @@ class AdminController {
   static async getUsers(req, res, next) {
     try {
       const { search, status, page = 1, limit = 50 } = req.query;
+      const allListenerUserIds = await Listener.find().distinct('userId');
       const filter = { role: 'USER' };
 
       if (search) {
@@ -171,8 +217,30 @@ class AdminController {
           { phone: { $regex: search, $options: 'i' } },
         ];
       }
-      if (status === 'banned') filter.isBanned = true;
-      if (status === 'active') filter.isBanned = false;
+
+      const io = req.app.get('io');
+      const onlineUserIds = [];
+      if (io) {
+        for (const [roomName, room] of io.sockets.adapter.rooms.entries()) {
+          if (roomName.startsWith('user_') && room.size > 0) {
+            const userIdStr = roomName.replace('user_', '');
+            onlineUserIds.push(userIdStr);
+          }
+        }
+      }
+
+      if (status === 'active') {
+        filter._id = { $in: onlineUserIds, $nin: allListenerUserIds };
+      } else if (status === 'inactive') {
+        const excludeIds = [...new Set([...onlineUserIds.map(id => id.toString()), ...allListenerUserIds.map(id => id.toString())])];
+        filter._id = { $nin: excludeIds };
+      } else {
+        filter._id = { $nin: allListenerUserIds };
+      }
+
+      if (status === 'banned') {
+        filter.isBanned = true;
+      }
 
       const users = await User.find(filter)
         .select('-__v')
@@ -184,9 +252,20 @@ class AdminController {
 
       const enrichedUsers = await Promise.all(users.map(async (user) => {
         const callCount = await Session.countDocuments({ userId: user._id, status: 'completed' });
+        const userRoom = io ? io.sockets.adapter.rooms.get(`user_${user._id.toString()}`) : null;
+        const isOnline = !!(userRoom && userRoom.size > 0);
+
+        const seconds = user.totalTimeSpent || 0;
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const formattedTimeSpent = `${hours}h ${minutes}m`;
+
         return {
           ...user.toObject(),
           totalCalls: callCount,
+          isOnline,
+          appOpens: user.appOpens || 0,
+          totalTimeSpent: formattedTimeSpent
         };
       }));
 
@@ -288,6 +367,7 @@ class AdminController {
       await listener.save();
 
       if (listener.userId) {
+        await User.findByIdAndUpdate(listener.userId, { role: 'USER' });
         const user = await User.findById(listener.userId);
         if (user && user.pushToken) {
           const reason = req.body.reason || 'Your listener application was not approved at this time.';
@@ -550,7 +630,8 @@ class AdminController {
         'minWithdrawalLimit', 
         'maintenanceMode',
         'otpSettings',
-        'notifications'
+        'notifications',
+        'activePackagesCount'
       ];
 
       allowedUpdates.forEach(key => {
@@ -830,26 +911,50 @@ class AdminController {
 
       const total = await Session.countDocuments(filter);
 
-      const result = sessions.map(s => ({
-        id: s._id,
-        userId: s.userId?._id,
-        userName: s.userId?.name || 'Unknown',
-        userPhone: s.userId?.phone,
-        listenerId: s.listenerId?._id,
-        listenerName: s.listenerId?.name || 'Unknown',
-        listenerPhone: s.listenerId?.phone,
-        callType: s.callType,
-        status: s.status,
-        roomId: s.roomId,
-        startTime: s.startTime,
-        endTime: s.endTime,
-        duration: s.duration,
-        coinsDeducted: s.coinsDeducted,
-        listenerEarnings: s.listenerEarnings,
-        platformProfit: s.platformProfit,
-        rating: s.rating,
-        feedback: s.feedback,
-        createdAt: s.createdAt,
+      const Transaction = require('../models/transactionModel');
+      const result = await Promise.all(sessions.map(async (s) => {
+        const startTime = s.startTime;
+        const endTime = s.endTime || new Date();
+
+        // Query gift_send transactions between caller and listener during session time
+        let giftsWorth = 0;
+        try {
+          const giftTx = await Transaction.find({
+            userId: s.userId?._id,
+            type: 'gift_send',
+            'metadata.receiverId': s.listenerId?._id,
+            createdAt: { $gte: startTime, $lte: endTime }
+          });
+          giftsWorth = giftTx.reduce((acc, tx) => acc + Math.abs(tx.coins), 0);
+        } catch (e) {
+          console.error('Error fetching session gift transactions:', e);
+        }
+
+        // Listener gets 70% of gift worth (converted to rupees, where 1 coin = ₹0.25)
+        const giftEarnings = giftsWorth * 0.70 * 0.25;
+
+        return {
+          id: s._id,
+          userId: s.userId?._id,
+          userName: s.userId?.name || 'Unknown',
+          userPhone: s.userId?.phone,
+          listenerId: s.listenerId?._id,
+          listenerName: s.listenerId?.name || 'Unknown',
+          listenerPhone: s.listenerId?.phone,
+          callType: s.callType,
+          status: s.status,
+          roomId: s.roomId,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          duration: s.duration,
+          coinsDeducted: s.coinsDeducted || 0, // Coins spent by user
+          giftsWorth: giftsWorth, // Gifts worth in coins
+          giftEarnings: giftEarnings, // Gift earnings in Rupees (separated!)
+          listenerEarnings: s.listenerEarnings || 0, // Pure call/chat earnings (separated!)
+          rating: s.rating,
+          feedback: s.feedback,
+          createdAt: s.createdAt,
+        };
       }));
 
       return ApiResponse.success(res, {

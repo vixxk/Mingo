@@ -13,12 +13,13 @@ class GiftController {
 
   static async sendGift(req, res, next) {
     try {
-      const { receiverId, giftId, count } = req.body;
+      const { receiverId, giftId, count, sessionId } = req.body;
       const result = await GiftService.sendGift({
         senderId: req.user.id,
         receiverId,
         giftId,
-        count: count || 1
+        count: count || 1,
+        sessionId
       });
 
       // Emit socket event for real-time update

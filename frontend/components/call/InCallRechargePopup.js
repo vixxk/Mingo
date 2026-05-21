@@ -31,10 +31,25 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
   const [purchasing, setPurchasing] = useState(null); // packageId being purchased
   const [purchaseSuccess, setPurchaseSuccess] = useState(false);
 
+  const loadPackages = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await walletAPI.getPackages();
+      if (res?.data?.packages && res.data.packages.length > 0) {
+        setPackages(res.data.packages);
+      }
+    } catch (e) {
+      console.log('Failed to load packages in call popup:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (visible) {
       setPurchaseSuccess(false);
       setPurchasing(null);
+      loadPackages();
       Animated.parallel([
         Animated.timing(overlayAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
         Animated.spring(slideAnim, { toValue: 0, friction: 8, tension: 40, useNativeDriver: true }),
@@ -45,12 +60,7 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
         Animated.timing(slideAnim, { toValue: 600, duration: 200, useNativeDriver: true }),
       ]).start();
     }
-  }, [visible]);
-
-  const loadPackages = useCallback(async () => {
-    // Already loaded static DEFAULT_PACKAGES
-    setLoading(false);
-  }, []);
+  }, [visible, loadPackages]);
 
   const handlePurchase = useCallback(async (packageId) => {
     try {

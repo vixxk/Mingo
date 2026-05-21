@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Animated, Image, TouchableOpacity, Linking, AppState } from 'react-native';
+import { View, Text, StyleSheet, Animated, Image, TouchableOpacity, Linking, AppState, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -8,12 +8,7 @@ import { Camera } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import { ms, s, vs, SCREEN_WIDTH, SCREEN_HEIGHT } from '../utils/responsive';
 
-let Notifications = null;
-try {
-  Notifications = require('expo-notifications');
-} catch (e) {
-  console.warn('Failed to load expo-notifications:', e);
-}
+import { Notifications } from '../utils/notifications';
 
 export default function SplashScreenPage() {
   const router = useRouter();
@@ -72,6 +67,15 @@ export default function SplashScreenPage() {
         checkAuthAndRedirect();
       } else {
         setShowPermissionScreen(true);
+        // Show user-friendly feedback alert
+        Alert.alert(
+          "Permissions Required",
+          "Camera, Microphone, and Notification permissions are required to use Mingo. Please enable them in system settings.",
+          [
+            { text: "Open Settings", onPress: handleOpenSettings },
+            { text: "Cancel", style: "cancel" }
+          ]
+        );
       }
     } catch (e) {
       console.error('Error requesting permissions:', e);

@@ -11,73 +11,7 @@ import { socketService } from '../../utils/socket';
 import IncomingCallPopup from '../../components/shared/IncomingCallPopup';
 import { useSSE } from '../../utils/useSSE';
 
-// Conditional import for expo-notifications to avoid crash
-let Notifications = null;
-const isExpoGo = Constants.appOwnership === 'expo';
-
-try {
-  Notifications = require('expo-notifications');
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-    }),
-  });
-} catch (e) {
-  console.warn('Failed to load expo-notifications:', e);
-}
-
-async function registerForPushNotificationsAsync() {
-  if (!Notifications) {
-    console.log('expo-notifications is not loaded');
-    return null;
-  }
-
-  let token;
-
-  if (Platform.OS === 'android') {
-    try {
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'default',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#FF231F7C',
-      });
-    } catch (e) {
-      console.log('Error setting notification channel:', e);
-    }
-  }
-
-  if (Device.isDevice || isExpoGo) {
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-    if (finalStatus !== 'granted') {
-      console.log('Failed to get push token for push notification!');
-      return;
-    }
-    try {
-      token = (await Notifications.getExpoPushTokenAsync({
-        projectId: Constants.expoConfig?.extra?.eas?.projectId || '7b1c82be-73cc-4927-abce-4b034867a82a'
-      })).data;
-    } catch (e) {
-      console.log('Error getting expo push token, trying device token...', e);
-      try {
-        token = (await Notifications.getDevicePushTokenAsync()).data;
-      } catch (err) {
-        console.log('Error getting device push token', err);
-      }
-    }
-  } else {
-    console.log('Must use physical device for Push Notifications');
-  }
-
-  return token;
-}
+import { registerForPushNotificationsAsync } from '../../utils/notifications';
 
 export default function TabLayout() {
   const router = useRouter();

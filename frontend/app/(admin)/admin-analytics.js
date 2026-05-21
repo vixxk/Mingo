@@ -66,10 +66,16 @@ export default function AdminAnalytics() {
     label: item._id.split('-').slice(1).join('/'),
   }));
 
+  const maxRevenueVal = Math.max(...revenueData.map(d => d.value), 0);
+  const chartMaxValue = maxRevenueVal < 100 ? 100 : undefined;
+
   const userGrowthData = (stats.charts?.dailyRegistrations || []).map(item => ({
     value: item.count,
     label: item._id.split('-').slice(1).join('/'),
   }));
+
+  const maxUserVal = Math.max(...userGrowthData.map(d => d.value), 0);
+  const userChartMaxValue = maxUserVal < 12 ? 12 : undefined;
 
   const totalPeople = (stats.totalUsers || 0) + (stats.totalListeners || 0);
 
@@ -179,6 +185,8 @@ export default function AdminAnalytics() {
             thickness={3}
             dataPointsColor="#10B981"
             noOfSections={4}
+            maxValue={chartMaxValue}
+            yAxisLabelWidth={s(35)}
             yAxisTextStyle={{ color: '#6B7280', fontSize: ms(10) }}
             xAxisLabelTextStyle={{ color: '#6B7280', fontSize: ms(10) }}
             width={SCREEN_WIDTH - s(80)}
@@ -198,6 +206,8 @@ export default function AdminAnalytics() {
             data={userGrowthData}
             barWidth={s(25)}
             noOfSections={4}
+            maxValue={userChartMaxValue}
+            yAxisLabelWidth={s(35)}
             barBorderRadius={6}
             frontColor="#A855F7"
             yAxisTextStyle={{ color: '#6B7280', fontSize: ms(10) }}

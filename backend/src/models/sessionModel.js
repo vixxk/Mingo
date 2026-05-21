@@ -19,7 +19,7 @@ const sessionSchema = new mongoose.Schema(
     },
     callType: {
       type: String,
-      enum: ['audio', 'video'],
+      enum: ['audio', 'video', 'chat'],
       default: 'audio',
     },
     startTime: {

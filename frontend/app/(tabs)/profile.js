@@ -16,13 +16,14 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs } from '../../utils/responsive';
 import { authAPI } from '../../utils/api';
+import { socketService } from '../../utils/socket';
 import RaiseIssuePopup from '../../components/shared/RaiseIssuePopup';
 import LogoutPopup from '../../components/shared/LogoutPopup';
 import SkeletonProfile from '../../components/SkeletonProfile';
 
 const MENU_ITEMS = [
   { id: '1', label: 'Wallet', icon: 'wallet-outline', route: '/balance' },
-  { id: '2', label: 'Transactions', icon: 'receipt-outline', route: '/payment-failed' },
+  { id: '2', label: 'Transactions', icon: 'receipt-outline', route: '/transactions' },
   { id: '3', label: 'Language Settings', icon: 'globe-outline', route: '/language?fromSettings=true' },
   { id: '4', label: 'Become a Listener', icon: 'star-outline', route: '/listener' },
   { id: '5', label: 'Help & Support', icon: 'help-circle-outline', route: '/help-support' },
@@ -145,6 +146,7 @@ export default function ProfileScreen() {
               }
             }
           }
+        } catch (e) {
           console.error('Error loading profile:', e);
         } finally {
           setLoading(false);
@@ -170,6 +172,8 @@ export default function ProfileScreen() {
 
   const confirmLogout = async () => {
     try {
+      // Disconnect socket
+      socketService.disconnect();
       await authAPI.logout();
       await AsyncStorage.multiRemove(['userToken', 'token', 'user', 'listenerStatus', 'isAdmin']);
       setShowLogoutPopup(false);
