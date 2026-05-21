@@ -18,8 +18,8 @@ class CallService {
     if (!user) throw new AppError('User not found', 404);
     if (user.isBanned) throw new AppError('Your account is suspended', 403);
 
-    // Minimum 1 minute cost: audio=10 coins/min, video=30 coins/min
-    const minCoins = callType === 'video' ? 30 : 10;
+    // Minimum 1 minute cost: audio=10 coins/min, video=40 coins/min
+    const minCoins = callType === 'video' ? 40 : 10;
     if (user.coins < minCoins) {
       throw new AppError('Insufficient coins. Please recharge.', 402);
     }

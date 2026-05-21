@@ -62,7 +62,7 @@ async function registerForPushNotificationsAsync() {
     }
     try {
       token = (await Notifications.getExpoPushTokenAsync({
-        projectId: Constants.expoConfig?.extra?.eas?.projectId || '29226353-1b41-4785-8ac5-74ded0cd7328'
+        projectId: Constants.expoConfig?.extra?.eas?.projectId || '7b1c82be-73cc-4927-abce-4b034867a82a'
       })).data;
     } catch (e) {
       console.log('Error getting expo push token, trying device token...', e);

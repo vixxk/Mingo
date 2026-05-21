@@ -22,6 +22,9 @@ class PushService {
         title: message.title,
         body: message.body,
         data: message.data || {},
+        channelId: 'default',
+        priority: 'high',
+        badge: 1,
       };
 
       await axios.post(expoPushEndpoint, payload, {

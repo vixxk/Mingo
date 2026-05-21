@@ -56,6 +56,101 @@ const formatDateLabel = (dateStr) => {
   });
 };
 
+const getGiftPriceByName = (name) => {
+  if (!name) return 10;
+  const n = name.toLowerCase();
+  if (n.includes('heart')) return 10;
+  if (n.includes('cane')) return 50;
+  if (n.includes('candy')) return 100;
+  if (n.includes('box')) return 300;
+  if (n.includes('wrapped') || n.includes('present')) return 500;
+  if (n.includes('coin') || n.includes('gold')) return 1000;
+  return 10;
+};
+
+// Premium themed message bubble for gift messages
+const GiftMessageBubble = ({ item }) => {
+  const isSentByMe = item.sent;
+  const giftName = item.text ? item.text.replace('Sent a gift: ', '') : 'Gift';
+  const giftIcon = item.mediaUrl || '🎁';
+  const price = getGiftPriceByName(giftName);
+
+  // Define themed colors for the gift bubble
+  let borderColors = ['#8B5CF6', '#EC4899']; // Default fuchsia/purple
+  let badgeText = 'Premium Surprise';
+  let badgeBg = 'rgba(139, 92, 246, 0.15)';
+  let textColor = '#C084FC';
+
+  if (price >= 1000) {
+    borderColors = ['#F59E0B', '#FFAE00']; // Gold
+    badgeText = '👑 Legendary Royal Gift';
+    badgeBg = 'rgba(245, 158, 11, 0.15)';
+    textColor = '#F59E0B';
+  } else if (price >= 500) {
+    borderColors = ['#EC4899', '#F43F5E']; // Pink/Rose
+    badgeText = '💝 Luxury Heart Gift';
+    badgeBg = 'rgba(236, 72, 153, 0.15)';
+    textColor = '#F472B6';
+  } else if (price >= 300) {
+    borderColors = ['#8B5CF6', '#D946EF']; // Purple/Magenta
+    badgeText = '🎁 Special Gift Box';
+    badgeBg = 'rgba(217, 70, 239, 0.15)';
+    textColor = '#E879F9';
+  } else if (price >= 100) {
+    borderColors = ['#06B6D4', '#3B82F6']; // Cyan/Blue
+    badgeText = '🍬 Delicious Gift';
+    badgeBg = 'rgba(6, 182, 212, 0.15)';
+    textColor = '#22D3EE';
+  } else if (price >= 50) {
+    borderColors = ['#F43F5E', '#EC4899']; // Candy Pink
+    badgeText = '🍭 Sweet Treat';
+    badgeBg = 'rgba(244, 63, 94, 0.15)';
+    textColor = '#FB7185';
+  } else {
+    borderColors = ['#EF4444', '#F43F5E']; // Red
+    badgeText = '❤️ Sweet Heart';
+    badgeBg = 'rgba(239, 68, 68, 0.15)';
+    textColor = '#F87171';
+  }
+
+  return (
+    <View style={[styles.bubbleRow, isSentByMe ? styles.bubbleRowSent : styles.bubbleRowReceived]}>
+      <View style={[styles.giftBubbleContainer, isSentByMe ? styles.giftBubbleSent : styles.giftBubbleReceived]}>
+        <LinearGradient
+          colors={['#0F0F1A', '#151522']}
+          style={styles.giftBubbleGradient}
+        >
+          {/* Border glowing gradient effect */}
+          <View style={[styles.giftBubbleInner, { borderColor: borderColors[0] }]}>
+            {/* Glowing Icon Badge */}
+            <View style={styles.giftIconWrapper}>
+              <View style={[styles.giftIconGlow, { backgroundColor: borderColors[0] }]} />
+              <Text style={styles.giftBubbleIcon}>{giftIcon}</Text>
+            </View>
+
+            {/* Content Details */}
+            <View style={styles.giftDetails}>
+              <Text style={styles.giftBubbleTitle}>
+                {isSentByMe ? 'You sent a gift!' : 'Received a gift!'}
+              </Text>
+              <Text style={[styles.giftBubbleName, { color: textColor }]}>
+                {giftName}
+              </Text>
+              <View style={[styles.giftBadge, { backgroundColor: badgeBg }]}>
+                <Text style={[styles.giftBadgeText, { color: textColor }]}>{badgeText}</Text>
+              </View>
+            </View>
+          </View>
+          
+          <Text style={styles.giftTimeStamp}>
+            {item.createdAt ? new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+          </Text>
+        </LinearGradient>
+      </View>
+    </View>
+  );
+};
+
 // System message bubble (recharge prompt)
 const SystemBubble = ({ item }) => (
   <View style={styles.systemBubbleRow}>
@@ -72,6 +167,9 @@ const MessageBubble = ({ item }) => {
   }
   if (item.type === 'system') {
     return <SystemBubble item={item} />;
+  }
+  if (item.type === 'gift') {
+    return <GiftMessageBubble item={item} />;
   }
 
   const isMedia = item.type === 'image' || item.type === 'sticker';
@@ -253,16 +351,34 @@ export default function ChatScreen() {
 
             const apiMessages = response.data.messages || [];
             const formatted = insertDateLabels(
-              apiMessages.map((msg) => ({
-                id: msg._id,
-                text: msg.content,
-                sent: myId && String(msg.sender?._id || msg.sender) === String(myId),
-                type: msg.type || 'text',
-                mediaUrl: msg.mediaUrl,
-                senderId: msg.sender?._id || msg.sender,
-                senderModel: msg.senderModel,
-                createdAt: msg.createdAt,
-              }))
+              apiMessages.map((msg) => {
+                let type = msg.type || 'text';
+                let content = msg.content;
+                let mediaUrl = msg.mediaUrl;
+
+                if (type === 'text' && content && content.startsWith('Sent a gift:')) {
+                  type = 'gift';
+                  const parts = content.split(' ');
+                  const lastPart = parts[parts.length - 1];
+                  if (lastPart && lastPart.length <= 4) {
+                    mediaUrl = lastPart;
+                    content = content.substring(0, content.lastIndexOf(' '));
+                  } else {
+                    mediaUrl = '🎁';
+                  }
+                }
+
+                return {
+                  id: msg._id,
+                  text: content,
+                  sent: myId && String(msg.sender?._id || msg.sender) === String(myId),
+                  type: type,
+                  mediaUrl: mediaUrl,
+                  senderId: msg.sender?._id || msg.sender,
+                  senderModel: msg.senderModel,
+                  createdAt: msg.createdAt,
+                };
+              })
             );
             setMessages(formatted);
           }
@@ -303,12 +419,41 @@ export default function ChatScreen() {
       }
 
       const isSystem = msg.senderModel === 'System' || msg.type === 'system';
-      
       const msgSenderId = (msg.sender?._id || msg.sender || '').toString();
       const myId = (currentUserId || '').toString();
-      
       const isSent = !isSystem && msgSenderId === myId;
-      
+
+      let type = msg.type || 'text';
+      let content = msg.content;
+      let mediaUrl = msg.mediaUrl;
+
+      // Map legacy/incoming text gifts to 'gift' type dynamically
+      if (type === 'text' && content && content.startsWith('Sent a gift:')) {
+        type = 'gift';
+        const parts = content.split(' ');
+        const lastPart = parts[parts.length - 1];
+        if (lastPart && lastPart.length <= 4) {
+          mediaUrl = lastPart;
+          content = content.substring(0, content.lastIndexOf(' '));
+        } else {
+          mediaUrl = '🎁';
+        }
+      }
+
+      // If it's a gift received from the other user, trigger full-screen gift animation overlay
+      if (type === 'gift' && !isSent) {
+        const giftName = content.replace('Sent a gift: ', '');
+        triggerGiftAnimation({
+          isSentByMe: false,
+          senderName: otherName || 'Someone',
+          gift: {
+            name: giftName,
+            icon: mediaUrl || '🎁',
+            price: getGiftPriceByName(giftName),
+          }
+        });
+      }
+
       setMessages((prev) => {
         const messageId = (msg._id || Math.random()).toString();
         if (prev.some(m => m.id?.toString() === messageId)) return prev;
@@ -317,17 +462,17 @@ export default function ChatScreen() {
         if (isSent) {
           const optimisticIndex = prev.findIndex(m => 
             String(m.id).startsWith('temp_') && 
-            m.text === msg.content && 
+            m.text === content && 
             m.senderId === msgSenderId
           );
           if (optimisticIndex !== -1) {
             const updated = [...prev];
             updated[optimisticIndex] = {
               id: messageId,
-              text: msg.content,
+              text: content,
               sent: true,
-              type: msg.type || 'text',
-              mediaUrl: msg.mediaUrl,
+              type: type,
+              mediaUrl: mediaUrl,
               senderId: msgSenderId,
               senderModel: msg.senderModel,
               createdAt: msg.createdAt,
@@ -338,10 +483,10 @@ export default function ChatScreen() {
         
         return [...prev, {
           id: messageId,
-          text: msg.content,
+          text: content,
           sent: isSent,
-          type: msg.type || 'text',
-          mediaUrl: msg.mediaUrl,
+          type: type,
+          mediaUrl: mediaUrl,
           senderId: msgSenderId,
           senderModel: msg.senderModel,
           createdAt: msg.createdAt,
@@ -741,25 +886,31 @@ export default function ChatScreen() {
         receiverId={otherUserId || conversationId}
         onGiftSent={(gift) => {
           if (realConversationId && currentUserId && gift) {
-            const giftMsg = `Sent a gift: ${gift.name || 'Gift'} ${gift.icon || '🎁'}`;
-            // Add optimistic message
+            const giftName = gift.name || 'Gift';
+            const giftIcon = gift.icon || '🎁';
+            const giftMsg = `Sent a gift: ${giftName}`;
+            
+            // Add optimistic message with gift type
             const tempId = `temp_gift_${Date.now()}`;
             setMessages((prev) => [...prev, {
               id: tempId,
               text: giftMsg,
               sent: true,
-              type: 'text',
+              type: 'gift',
+              mediaUrl: giftIcon,
               senderId: currentUserId,
               senderModel: 'User',
               createdAt: new Date().toISOString(),
             }]);
             setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+            
             socketService.emit('send_message', {
               conversationId: realConversationId,
               senderId: currentUserId,
               senderModel: 'User',
               content: giftMsg,
-              type: 'text',
+              type: 'gift',
+              mediaUrl: giftIcon,
             });
             
             triggerGiftAnimation({
@@ -774,7 +925,9 @@ export default function ChatScreen() {
       {receivedGift && (
         <GiftAnimationOverlay
           giftName={receivedGift.gift.name}
-          senderName={receivedGift.isSentByMe ? 'You' : receivedGift.senderName || 'Someone'}
+          giftIcon={receivedGift.gift.icon}
+          giftPrice={receivedGift.gift.price}
+          senderName={receivedGift.isSentByMe ? 'You' : receivedGift.senderName || otherName || 'Someone'}
           onComplete={() => setReceivedGift(null)}
         />
       )}
@@ -948,5 +1101,87 @@ const styles = StyleSheet.create({
     fontSize: wp(4.5),
     fontWeight: '800',
     marginTop: hp(1),
+  },
+  // Premium Gift Message Bubble Styles
+  giftBubbleContainer: {
+    maxWidth: wp(75),
+    borderRadius: wp(5),
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 8,
+    marginVertical: hp(0.5),
+  },
+  giftBubbleSent: {
+    borderBottomRightRadius: wp(1),
+  },
+  giftBubbleReceived: {
+    borderBottomLeftRadius: wp(1),
+  },
+  giftBubbleGradient: {
+    padding: wp(0.8),
+  },
+  giftBubbleInner: {
+    borderWidth: 1.5,
+    borderRadius: wp(4.2),
+    paddingHorizontal: wp(3),
+    paddingVertical: hp(1.2),
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: wp(3.5),
+    backgroundColor: 'rgba(15, 15, 26, 0.92)',
+  },
+  giftIconWrapper: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: wp(12),
+    height: wp(12),
+  },
+  giftIconGlow: {
+    position: 'absolute',
+    width: wp(10),
+    height: wp(10),
+    borderRadius: wp(5),
+    opacity: 0.15,
+  },
+  giftBubbleIcon: {
+    fontSize: wp(8),
+  },
+  giftDetails: {
+    flex: 1,
+    gap: hp(0.3),
+  },
+  giftBubbleTitle: {
+    fontSize: wp(2.8),
+    color: '#9CA3AF',
+    fontFamily: 'Inter_500Medium',
+  },
+  giftBubbleName: {
+    fontSize: wp(4.0),
+    fontWeight: '800',
+    fontFamily: 'Inter_900Black',
+  },
+  giftBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: wp(2),
+    paddingVertical: hp(0.3),
+    borderRadius: wp(3),
+    marginTop: hp(0.3),
+  },
+  giftBadgeText: {
+    fontSize: wp(2.2),
+    fontWeight: '700',
+    fontFamily: 'Inter_700Bold',
+  },
+  giftTimeStamp: {
+    fontSize: wp(2.2),
+    color: 'rgba(255,255,255,0.4)',
+    textAlign: 'right',
+    marginTop: hp(0.4),
+    marginRight: wp(3),
+    marginBottom: hp(0.6),
   },
 });

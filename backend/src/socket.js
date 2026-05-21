@@ -25,7 +25,7 @@ const chatSessionOfflineCheckers = {};
 // Rates per minute
 const AUDIO_COINS_PER_MIN = 10;  // 10 coins/min (from user screenshot)
 const VIDEO_COINS_PER_MIN = 40;  // 40 coins/min (from user screenshot)
-const AUDIO_PAYOUT_PER_MIN = 1.50; // ₹1.50/min listener payout (from listener screenshot)
+const AUDIO_PAYOUT_PER_MIN = 1.00; // ₹1.00/min listener payout
 const VIDEO_PAYOUT_PER_MIN = 4.00; // ₹4.00/min listener payout (from listener screenshot)
 const CALL_BILLING_INTERVAL = 60 * 1000; // 1 minute
 const LOW_BALANCE_THRESHOLD = 10; // Warn when below this many coins remaining
@@ -82,6 +82,11 @@ const initSocket = (server) => {
     socket.on('join_conversation', (conversationId) => {
       socket.join(conversationId);
       console.log(`Socket ${socket.id} joined conversation ${conversationId}`);
+    });
+
+    socket.on('leave_conversation', (conversationId) => {
+      socket.leave(conversationId);
+      console.log(`Socket ${socket.id} left conversation ${conversationId}`);
     });
 
     socket.on('send_message', async (data) => {

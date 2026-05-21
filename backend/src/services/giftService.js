@@ -73,6 +73,7 @@ class GiftService {
           id: gift._id,
           name: gift.name,
           icon: gift.icon,
+          price: gift.price,
           animation: gift.animation,
           count
         }

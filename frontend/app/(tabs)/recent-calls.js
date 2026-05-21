@@ -320,40 +320,15 @@ export default function RecentCallsScreen() {
 
       {}
       <Animated.View style={[styles.header, { opacity: headerAnim }]}>
-        <View style={styles.headerLeft}>
-          <TouchableOpacity 
-            activeOpacity={0.7} 
-            onPress={() => router.push('/profile')}
-          >
-            <Image
-              source={require('../../images/user_avatar.png')}
-              style={styles.avatar}
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.coinBadge}
-            activeOpacity={0.7}
-            onPress={() => router.push('/balance')}
-          >
-            <Text style={styles.coinEmoji}>🪙</Text>
-            <Text style={styles.coinCount}>{coinBalance}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            onPress={handleRefresh}
-            activeOpacity={0.7}
-            style={styles.refreshBtn}
-          >
-            <Animated.View style={{ transform: [{ rotate: spin }] }}>
-              <Ionicons name="refresh" size={18} color="#9CA3AF" />
-            </Animated.View>
-          </TouchableOpacity>
-        </View>
+        <Text style={styles.headerTitle}>Recent Calls</Text>
         <TouchableOpacity 
-          style={styles.notificationBtn} 
+          onPress={handleRefresh}
           activeOpacity={0.7}
-          onPress={() => setShowNotifications(true)}
+          style={styles.refreshBtn}
         >
-          <Ionicons name="notifications-outline" size={24} color="#fff" />
+          <Animated.View style={{ transform: [{ rotate: spin }] }}>
+            <Ionicons name="refresh" size={20} color="#9CA3AF" />
+          </Animated.View>
         </TouchableOpacity>
       </Animated.View>
 
@@ -434,55 +409,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: s(16),
-    paddingVertical: vs(10),
+    paddingHorizontal: s(20),
+    paddingVertical: vs(12),
   },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: s(8),
+  headerTitle: {
+    fontSize: ms(28, 0.3),
+    fontWeight: '900',
+    color: '#fff',
+    fontFamily: 'Inter_900Black',
   },
-  avatar: {
+  refreshBtn: {
     width: s(40),
     height: s(40),
     borderRadius: s(20),
-    borderWidth: 2,
-    borderColor: '#333',
-  },
-  coinBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1A1A1A',
-    borderRadius: 20,
-    paddingHorizontal: s(10),
-    paddingVertical: vs(4),
-    gap: 4,
-  },
-  coinEmoji: {
-    fontSize: ms(14, 0.3),
-  },
-  coinCount: {
-    fontSize: ms(13, 0.3),
-    color: '#fff',
-    fontFamily: 'Inter_700Bold',
-  },
-  refreshBtn: {
-    width: s(36),
-    height: s(36),
-    borderRadius: s(18),
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#111827',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#333',
-    marginLeft: s(4),
-  },
-  notificationBtn: {
-    width: s(40),
-    height: s(40),
-    borderRadius: s(20),
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 
   

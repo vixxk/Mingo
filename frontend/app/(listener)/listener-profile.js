@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   ScrollView,
   Alert,
   RefreshControl,
+  Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -49,6 +50,24 @@ export default function ListenerProfileScreen() {
   const [username, setUsername] = useState('Listener');
   const [joinDate, setJoinDate] = useState('Member');
   const [refreshing, setRefreshing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const shimmerAnim = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    let animLoop;
+    if (isLoading) {
+      animLoop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(shimmerAnim, { toValue: 0.7, duration: 800, useNativeDriver: true }),
+          Animated.timing(shimmerAnim, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+        ])
+      );
+      animLoop.start();
+    }
+    return () => {
+      if (animLoop) animLoop.stop();
+    };
+  }, [isLoading]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -99,6 +118,7 @@ export default function ListenerProfileScreen() {
   useFocusEffect(
     useCallback(() => {
       const loadProfile = async () => {
+        setIsLoading(true);
         try {
           // 1. Fetch fresh data from API
           const res = await authAPI.me();
@@ -151,6 +171,8 @@ export default function ListenerProfileScreen() {
           }
         } catch (e) {
           console.error('Error loading profile:', e);
+        } finally {
+          setIsLoading(false);
         }
       };
       loadProfile();
@@ -179,6 +201,40 @@ export default function ListenerProfileScreen() {
       setShowLogoutPopup(false);
     }
   };
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <StatusBar style="light" />
+        <View style={styles.scrollContent}>
+          {/* Skeleton Profile Card */}
+          <View style={styles.profileCard}>
+            <Animated.View style={[styles.skeletonAvatar, { opacity: shimmerAnim }]} />
+            <Animated.View style={[styles.skeletonName, { opacity: shimmerAnim }]} />
+            <Animated.View style={[styles.skeletonDate, { opacity: shimmerAnim }]} />
+          </View>
+
+          {/* Skeleton Menu Card */}
+          <View style={styles.menuCard}>
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <View key={i} style={styles.skeletonRowContainer}>
+                <Animated.View style={[styles.skeletonIcon, { opacity: shimmerAnim }]} />
+                <Animated.View style={[styles.skeletonLine, { opacity: shimmerAnim }]} />
+              </View>
+            ))}
+          </View>
+
+          {/* Skeleton Logout Card */}
+          <View style={styles.logoutCard}>
+            <View style={styles.skeletonRowContainer}>
+              <Animated.View style={[styles.skeletonIcon, { opacity: shimmerAnim }]} />
+              <Animated.View style={[styles.skeletonLine, { width: '40%', opacity: shimmerAnim }]} />
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -354,5 +410,48 @@ const styles = StyleSheet.create({
     paddingVertical: vs(2),
     borderWidth: 1,
     borderColor: '#1F1F1F',
+  },
+  skeletonAvatar: {
+    width: s(72),
+    height: s(72),
+    borderRadius: s(36),
+    backgroundColor: '#1F2937',
+    alignSelf: 'center',
+    marginBottom: vs(16),
+  },
+  skeletonName: {
+    width: s(120),
+    height: vs(18),
+    borderRadius: 9,
+    backgroundColor: '#1F2937',
+    alignSelf: 'center',
+    marginBottom: vs(8),
+  },
+  skeletonDate: {
+    width: s(160),
+    height: vs(12),
+    borderRadius: 6,
+    backgroundColor: '#1F2937',
+    alignSelf: 'center',
+    marginBottom: vs(16),
+  },
+  skeletonRowContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: vs(15),
+    paddingHorizontal: s(18),
+    gap: s(14),
+  },
+  skeletonIcon: {
+    width: s(24),
+    height: s(24),
+    borderRadius: s(6),
+    backgroundColor: '#1F2937',
+  },
+  skeletonLine: {
+    flex: 1,
+    height: vs(16),
+    borderRadius: 8,
+    backgroundColor: '#1F2937',
   },
 });

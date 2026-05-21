@@ -404,6 +404,8 @@ export default function VideoCallScreen() {
         {receivedGift && (
           <GiftAnimationOverlay
             giftName={receivedGift.gift.name}
+            giftIcon={receivedGift.gift.icon}
+            giftPrice={receivedGift.gift.price}
             senderName={receivedGift.isSentByMe ? 'You' : receivedGift.senderName || 'Someone'}
             onComplete={() => setReceivedGift(null)}
           />
@@ -564,6 +566,8 @@ export default function VideoCallScreen() {
       {receivedGift && (
         <GiftAnimationOverlay
           giftName={receivedGift.gift.name}
+          giftIcon={receivedGift.gift.icon}
+          giftPrice={receivedGift.gift.price}
           senderName={receivedGift.isSentByMe ? 'You' : receivedGift.senderName || 'Someone'}
           onComplete={() => setReceivedGift(null)}
         />

@@ -187,7 +187,20 @@ export default function ListenerHomeScreen() {
       const loadListenerData = async () => {
         setIsLoading(true);
         try {
-          // Refresh Avatar/Profile first
+          // Refresh Avatar/Profile first from authAPI.me()
+          try {
+            const meRes = await authAPI.me();
+            if (meRes?.data) {
+              const u = meRes.data;
+              await AsyncStorage.setItem('user', JSON.stringify(u));
+              if (u.gender) await AsyncStorage.setItem('userGender', u.gender);
+              if (u.avatarIndex !== undefined) await AsyncStorage.setItem('userAvatarIndex', u.avatarIndex.toString());
+              if (u.name) await AsyncStorage.setItem('userName', u.name);
+            }
+          } catch (meErr) {
+            console.log('Error refreshing auth inside listener index:', meErr);
+          }
+
           const gender = await AsyncStorage.getItem('userGender');
           const avatarIndex = await AsyncStorage.getItem('userAvatarIndex');
           if (gender && avatarIndex) {

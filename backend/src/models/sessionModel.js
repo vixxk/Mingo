@@ -96,8 +96,8 @@ sessionSchema.statics.endSession = async function (sessionId) {
   const isVideo = session.callType === 'video';
   
   // Section A - Rates per minute
-  const coinsPerMinute = isVideo ? 30 : 10; // 30 coins = ₹15, 10 coins = ₹5
-  const payoutRate = isVideo ? 4.00 : 1.50;
+  const coinsPerMinute = isVideo ? 40 : 10; // 40 coins = ₹20, 10 coins = ₹5
+  const payoutRate = isVideo ? 4.00 : 1.00;
   const zegoRate = isVideo ? 0.20 : 0.06;
   const infraRate = isVideo ? 0.15 : 0.09;
 
@@ -107,7 +107,7 @@ sessionSchema.statics.endSession = async function (sessionId) {
   const infraCost = durationMinutes * infraRate;
   
   // Selling Price (in ₹)
-  const sellingPrice = isVideo ? 15.00 : 5.00;
+  const sellingPrice = isVideo ? 20.00 : 5.00;
   const totalRevenue = durationMinutes * sellingPrice;
   const platformProfit = totalRevenue - (listenerEarnings + zegoCost + infraCost);
 

@@ -60,7 +60,7 @@ export async function registerForPushNotificationsAsync() {
 
     try {
       const projectId =
-        Constants?.expoConfig?.extra?.eas?.projectId ?? '29226353-1b41-4785-8ac5-74ded0cd7328';
+        Constants?.expoConfig?.extra?.eas?.projectId ?? '7b1c82be-73cc-4927-abce-4b034867a82a';
         
       token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
       console.log('Real Push Token:', token);
