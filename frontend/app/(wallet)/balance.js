@@ -7,6 +7,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { hp, wp } from '../../utils/responsive';
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { walletAPI } from '../../utils/api';
+import StatusPopup from '../../components/shared/StatusPopup';
 
 const DEFAULT_PACKAGES = [
   { id: '1', coins: 40,   originalPrice: 38,  price: 19,  discount: 50, tag: 'Starter Offer' },
@@ -77,6 +78,13 @@ export default function BalanceScreen() {
   const [packages, setPackages] = useState(DEFAULT_PACKAGES);
   const [balance, setBalance] = useState(0);
   const [diamonds, setDiamonds] = useState(0);
+  const [popup, setPopup] = useState({
+    visible: false,
+    type: 'success',
+    title: '',
+    message: '',
+    onClose: null,
+  });
 
   const handleBuyCoins = async (item) => {
     const previousBalance = balance;
@@ -88,11 +96,23 @@ export default function BalanceScreen() {
         setBalance(balRes.data.coins);
         setDiamonds(balRes.data.diamonds || Math.floor(balRes.data.coins / 10));
       }
-      Alert.alert('Payment Successful', `Successfully added ${item.coins} coins to your balance!`);
+      setPopup({
+        visible: true,
+        type: 'success',
+        title: 'Payment Successful',
+        message: `Successfully added ${item.coins} coins to your balance!`,
+        onClose: () => setPopup((prev) => ({ ...prev, visible: false })),
+      });
     } catch (e) {
       setBalance(previousBalance);
       console.log('Purchase error:', e);
-      Alert.alert('Payment Failed', 'Please try again later.');
+      setPopup({
+        visible: true,
+        type: 'error',
+        title: 'Payment Failed',
+        message: 'Please try again later.',
+        onClose: () => setPopup((prev) => ({ ...prev, visible: false })),
+      });
     }
   };
 
@@ -177,6 +197,14 @@ export default function BalanceScreen() {
         </Animated.View>
         <View style={{ height: hp(5) }} />
       </ScrollView>
+
+      <StatusPopup
+        visible={popup.visible}
+        type={popup.type}
+        title={popup.title}
+        message={popup.message}
+        onClose={popup.onClose}
+      />
     </View>
   );
 }

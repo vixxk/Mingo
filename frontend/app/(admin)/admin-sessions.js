@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -52,11 +53,22 @@ export default function AdminSessions() {
   const [filter, setFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
-  const loadSessions = useCallback(async (p = 1, statusFilter = filter) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 400);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
+  const loadSessions = useCallback(async (p = 1, statusFilter = filter, searchVal = debouncedSearch) => {
     try {
       if (p === 1) setLoading(true);
       const params = { page: p, limit: 20 };
       if (statusFilter !== 'all') params.status = statusFilter;
+      if (searchVal.trim() !== '') params.search = searchVal.trim();
       const res = await adminAPI.getSessions(params);
       const data = res.data;
       setSessions(prev => p === 1 ? data.sessions : [...prev, ...data.sessions]);
@@ -68,17 +80,16 @@ export default function AdminSessions() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [filter]);
+  }, [filter, debouncedSearch]);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadSessions(1, filter);
-    }, [filter, loadSessions])
-  );
+  useEffect(() => {
+    loadSessions(1, filter, debouncedSearch);
+  }, [filter, debouncedSearch, loadSessions]);
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    loadSessions(1, filter);
-  }, [filter]);
+    loadSessions(1, filter, debouncedSearch);
+  }, [filter, debouncedSearch, loadSessions]);
 
   if (loading && sessions.length === 0) {
     return (
@@ -100,6 +111,18 @@ export default function AdminSessions() {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Call Sessions</Text>
         <Text style={styles.headerCount}>{total}</Text>
+      </View>
+
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <Ionicons name="search" size={18} color="#6B7280" />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search sessions by name..."
+          placeholderTextColor="#4B5563"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
       </View>
 
       {/* Filter Tabs */}
@@ -444,5 +467,25 @@ const styles = StyleSheet.create({
     color: '#A855F7',
     fontSize: ms(13),
     fontFamily: 'Inter_600SemiBold',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#111',
+    marginHorizontal: wp(4),
+    paddingHorizontal: wp(4),
+    height: hp(5.5),
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#1F1F1F',
+    gap: s(8),
+    marginBottom: hp(1),
+    marginTop: hp(1.5),
+  },
+  searchInput: {
+    flex: 1,
+    color: '#fff',
+    fontSize: ms(14, 0.3),
+    fontFamily: 'Inter_400Regular',
   },
 });

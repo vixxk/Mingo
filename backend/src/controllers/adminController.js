@@ -6,6 +6,7 @@ const ActivityLog = require('../models/ActivityLog');
 const MemberReport = require('../models/MemberReport');
 const Transaction = require('../models/transactionModel');
 const NotificationCampaign = require('../models/NotificationCampaign');
+const PayoutRequest = require('../models/PayoutRequest');
 const ApiResponse = require('../utils/apiResponse');
 const AppError = require('../utils/appError');
 const Notification = require('../models/Notification');
@@ -48,7 +49,7 @@ class AdminController {
         Listener.countDocuments({ isOnline: true }),
         Session.countDocuments({ status: 'completed' }),
         MemberReport.countDocuments({ status: 'pending' }),
-        User.countDocuments({ lastActive: { $gte: today } }),
+        User.countDocuments({ updatedAt: { $gte: today } }),
         Transaction.aggregate([
           { $match: { type: 'purchase', status: 'completed', createdAt: { $gte: today } } },
           { $group: { _id: null, total: { $sum: '$coins' } } }
@@ -57,11 +58,11 @@ class AdminController {
           { $match: { status: 'completed', createdAt: { $gte: today } } },
           { $group: { _id: null, total: { $sum: '$listenerEarnings' } } }
         ]),
-        Session.aggregate([
+        PayoutRequest.aggregate([
           { $match: { status: 'pending' } }, 
           { $group: { _id: null, total: { $sum: '$amount' } } }
         ]),
-        Payout.countDocuments({ status: 'pending' }),
+        PayoutRequest.countDocuments({ status: 'pending' }),
         Session.countDocuments({ status: 'active' })
       ]);
 
@@ -803,6 +804,22 @@ class AdminController {
 
       if (status && status !== 'all') filter.status = status;
       if (callType && callType !== 'all') filter.callType = callType;
+
+      if (search) {
+        const matchingUsers = await User.find({
+          $or: [
+            { name: { $regex: search, $options: 'i' } },
+            { username: { $regex: search, $options: 'i' } },
+            { phone: { $regex: search, $options: 'i' } }
+          ]
+        }).select('_id');
+        const userIds = matchingUsers.map(u => u._id);
+        
+        filter.$or = [
+          { userId: { $in: userIds } },
+          { listenerId: { $in: userIds } }
+        ];
+      }
 
       const sessions = await Session.find(filter)
         .populate('userId', 'name username phone avatarIndex gender')

@@ -65,10 +65,14 @@ export default function AdminUsersScreen() {
     inactive: { icon: 'ban', color: '#EF4444', bg: 'rgba(239,68,68,0.1)' },
   };
 
-  const loadUsers = async () => {
+  const loadUsers = async (statusFilter = filter) => {
     try {
       setLoading(true);
-      const res = await adminAPI.getUsers({ limit: 100 });
+      const params = { limit: 100 };
+      if (statusFilter === 'active') params.status = 'active';
+      if (statusFilter === 'inactive') params.status = 'banned';
+      
+      const res = await adminAPI.getUsers(params);
       if (res?.data) {
         const usersList = res.data.users || (Array.isArray(res.data) ? res.data : []);
         const formatted = usersList.map(u => ({
@@ -91,11 +95,9 @@ export default function AdminUsersScreen() {
     }
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      loadUsers();
-    }, [])
-  );
+  useEffect(() => {
+    loadUsers(filter);
+  }, [filter]);
 
   const handleBanUser = (userId, isCurrentlyBanned) => {
     Alert.alert(
@@ -109,9 +111,9 @@ export default function AdminUsersScreen() {
           onPress: async () => {
             try {
               await adminAPI.toggleBanUser(userId);
-              setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: isCurrentlyBanned ? 'active' : 'inactive' } : u));
               setShowDetail(false);
               setSelectedUser(null);
+              loadUsers(filter);
             } catch(e) {
               Alert.alert('Error', 'Failed to update user status');
             }

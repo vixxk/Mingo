@@ -17,6 +17,7 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, SCREEN_WIDTH } from '../../utils/responsive';
 import { userAPI, authAPI } from '../../utils/api';
+import StatusPopup from '../../components/shared/StatusPopup';
 
 const MALE_AVATARS = [
   require('../../images/male_avatar_1_1776972918440.png'),
@@ -59,6 +60,13 @@ export default function EditProfileScreen() {
   const [gender, setGender] = useState('Male');
 
   const [isLoading, setIsLoading] = useState(true);
+  const [popup, setPopup] = useState({
+    visible: false,
+    type: 'success',
+    title: '',
+    message: '',
+    onClose: null,
+  });
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -128,7 +136,13 @@ export default function EditProfileScreen() {
 
   const handleSave = async () => {
     if (username.length < 4) {
-      Alert.alert('Error', 'Username must be at least 4 characters.');
+      setPopup({
+        visible: true,
+        type: 'error',
+        title: 'Error',
+        message: 'Username must be at least 4 characters.',
+        onClose: () => setPopup((prev) => ({ ...prev, visible: false })),
+      });
       return;
     }
 
@@ -161,12 +175,26 @@ export default function EditProfileScreen() {
         await AsyncStorage.setItem('userAvatarIndex', selectedAvatar);
         await AsyncStorage.setItem('userName', username);
         
-        Alert.alert('Success', 'Profile updated successfully');
-        router.back();
+        setPopup({
+          visible: true,
+          type: 'success',
+          title: 'Profile Updated',
+          message: 'Profile updated successfully!',
+          onClose: () => {
+            setPopup((prev) => ({ ...prev, visible: false }));
+            router.back();
+          },
+        });
       }
     } catch (e) {
       console.error('Save error:', e);
-      Alert.alert('Error', e.message || 'Failed to save profile to database. Please check your connection.');
+      setPopup({
+        visible: true,
+        type: 'error',
+        title: 'Error',
+        message: e.message || 'Failed to save profile to database. Please check your connection.',
+        onClose: () => setPopup((prev) => ({ ...prev, visible: false })),
+      });
     } finally {
       setIsSaving(false);
     }
@@ -309,6 +337,14 @@ export default function EditProfileScreen() {
 
         <View style={{ height: vs(40) }} />
       </ScrollView>
+
+      <StatusPopup
+        visible={popup.visible}
+        type={popup.type}
+        title={popup.title}
+        message={popup.message}
+        onClose={popup.onClose}
+      />
     </View>
   );
 }

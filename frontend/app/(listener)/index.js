@@ -11,6 +11,7 @@ import {
   Modal,
   Pressable,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +24,25 @@ import { useFocusEffect, useRouter } from 'expo-router';
 
 
 const ConfirmationModal = ({ visible, isOnline, onConfirm, onCancel }) => {
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!visible) {
+      setLoading(false);
+    }
+  }, [visible]);
+
+  const handleConfirm = async () => {
+    setLoading(true);
+    try {
+      await onConfirm();
+    } catch (err) {
+      console.log(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Modal
       transparent
@@ -30,13 +50,14 @@ const ConfirmationModal = ({ visible, isOnline, onConfirm, onCancel }) => {
       animationType="fade"
       statusBarTranslucent
     >
-      <Pressable style={styles.modalOverlay} onPress={onCancel}>
+      <Pressable style={styles.modalOverlay} onPress={loading ? null : onCancel}>
         <View style={styles.modalContent}>
           {}
           <TouchableOpacity 
             style={styles.closeBtn} 
             activeOpacity={0.7} 
             onPress={onCancel}
+            disabled={loading}
           >
             <Ionicons name="close" size={24} color="rgba(255,255,255,0.6)" />
           </TouchableOpacity>
@@ -63,18 +84,24 @@ const ConfirmationModal = ({ visible, isOnline, onConfirm, onCancel }) => {
               style={styles.modalCancelBtn} 
               onPress={onCancel}
               activeOpacity={0.7}
+              disabled={loading}
             >
               <Text style={styles.modalCancelText}>Cancel</Text>
             </TouchableOpacity>
             
             <TouchableOpacity 
               style={[styles.modalConfirmBtn, isOnline ? styles.modalConfirmOffline : styles.modalConfirmOnline]} 
-              onPress={onConfirm}
+              onPress={handleConfirm}
               activeOpacity={0.8}
+              disabled={loading}
             >
-              <Text style={styles.modalConfirmText}>
-                {isOnline ? 'Confirm Offline' : 'Confirm Online'}
-              </Text>
+              {loading ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.modalConfirmText}>
+                  {isOnline ? 'Confirm Offline' : 'Confirm Online'}
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>
