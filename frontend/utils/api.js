@@ -443,8 +443,8 @@ export const chatAPI = {
   getConversations: async () => {
     return apiRequest('/chat/conversations');
   },
-  getOrCreateConversation: async (targetId) => {
-    return apiRequest('/chat/conversations/init', { method: 'POST', body: JSON.stringify({ targetId }) });
+  getOrCreateConversation: async (targetId, sessionId) => {
+    return apiRequest('/chat/conversations/init', { method: 'POST', body: JSON.stringify({ targetId, sessionId }) });
   },
   getMessages: async (conversationId) => {
     return apiRequest(`/chat/conversations/${conversationId}/messages`);

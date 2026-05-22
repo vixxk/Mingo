@@ -148,7 +148,17 @@ export default function MessagesScreen() {
       <TouchableOpacity 
         style={styles.messageItem} 
         activeOpacity={0.7}
-        onPress={() => router.push({ pathname: '/chat', params: { id: item.id, name: item.name, avatarIndex: item.avatarIndex?.toString() || '0', gender: item.gender || 'Female' } })}
+        onPress={() => router.push({
+          pathname: '/chat',
+          params: {
+            id: item.id,
+            name: item.name,
+            avatarIndex: item.avatarIndex?.toString() || '0',
+            gender: item.gender || 'Female',
+            sessionId: item.sessionId || '',
+            sessionStatus: item.sessionStatus || 'none'
+          }
+        })}
       >
         <View style={styles.avatarContainer}>
           <Image source={item.image || getAvatarImage(item.gender, item.avatarIndex)} style={styles.avatar} />
@@ -157,7 +167,19 @@ export default function MessagesScreen() {
         
         <View style={styles.messageDetails}>
           <View style={styles.nameRow}>
-            <Text style={styles.nameText} numberOfLines={1}>{item.name}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 6 }}>
+              <Text style={styles.nameText} numberOfLines={1}>{item.name}</Text>
+              {item.sessionStatus === 'active' && (
+                <View style={[styles.statusBadge, { backgroundColor: 'rgba(34, 197, 94, 0.15)' }]}>
+                  <Text style={[styles.statusBadgeText, { color: '#22C55E' }]}>Active</Text>
+                </View>
+              )}
+              {item.sessionStatus === 'completed' && (
+                <View style={[styles.statusBadge, { backgroundColor: 'rgba(156, 163, 175, 0.15)' }]}>
+                  <Text style={[styles.statusBadgeText, { color: '#9CA3AF' }]}>Ended • {item.duration || 0}m</Text>
+                </View>
+              )}
+            </View>
             <Text style={[styles.timeText, item.unread > 0 && styles.timeTextUnread]}>{timeStr}</Text>
           </View>
           <View style={styles.messageRow}>
@@ -457,5 +479,17 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: '#111827',
     marginTop: hp(0.8),
+  },
+  statusBadge: {
+    paddingHorizontal: wp(1.5),
+    paddingVertical: hp(0.2),
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusBadgeText: {
+    fontSize: wp(2.5),
+    fontWeight: '700',
+    fontFamily: 'Inter_700Bold',
   },
 });

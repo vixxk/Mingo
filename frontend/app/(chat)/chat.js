@@ -239,6 +239,8 @@ export default function ChatScreen() {
   const {
     name: paramName = 'User', id: conversationId, avatarIndex: paramAvatarIndex = '0', gender: paramGender = 'Female',
     listenerId: paramListenerId,
+    sessionId,
+    sessionStatus
   } = useLocalSearchParams();
 
   // Other user display info (will be resolved after loading)
@@ -348,7 +350,7 @@ export default function ChatScreen() {
 
         if (conversationId) {
           console.log('[Chat] Initiating conversation for ID:', conversationId);
-          const response = await chatAPI.getOrCreateConversation(conversationId);
+          const response = await chatAPI.getOrCreateConversation(conversationId, sessionId);
           
           if (response?.data) {
             const actualConvId = response.data.conversationId;
@@ -901,37 +903,45 @@ export default function ChatScreen() {
       )}
 
       {/* Input bar */}
-      <View style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, hp(1.2)) }]}>
-        <TextInput
-          style={styles.textInput}
-          placeholder={chatBlocked ? 'Recharge to continue...' : 'Enter your message...'}
-          placeholderTextColor="#6B7280"
-          value={message}
-          onChangeText={handleTextChange}
-          onSubmitEditing={handleSend}
-          blurOnSubmit={false}
-          multiline
-          editable={!chatBlocked}
-        />
-        <View style={styles.inputActions}>
-          {userRole === 'USER' && (
-            <TouchableOpacity activeOpacity={0.7} style={styles.inputAction} onPress={() => setShowGiftPopup(true)}>
-              <Ionicons name="gift-outline" size={wp(5.5)} color="#A855F7" />
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity activeOpacity={0.7} style={styles.inputAction} onPress={handleSend}>
-            <Ionicons name="send" size={wp(5.5)} color={chatBlocked ? '#4B5563' : '#EC4899'} />
-          </TouchableOpacity>
-          <TouchableOpacity activeOpacity={0.7} style={styles.inputAction}
-            onPress={() => { setShowEmojis(!showEmojis); setShowStickers(false); }}>
-            <Ionicons name="happy-outline" size={wp(5.5)} color={showEmojis ? '#EC4899' : '#9CA3AF'} />
-          </TouchableOpacity>
-          <TouchableOpacity activeOpacity={0.7} style={styles.inputAction}
-            onPress={() => { setShowStickers(!showStickers); setShowEmojis(false); }}>
-            <Ionicons name="star-outline" size={wp(5.5)} color={showStickers ? '#EC4899' : '#9CA3AF'} />
-          </TouchableOpacity>
+      {sessionStatus === 'completed' ? (
+        <View style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, hp(1.2)), justifyContent: 'center', alignItems: 'center' }]}>
+          <Text style={{ color: '#9CA3AF', fontSize: wp(3.5), fontFamily: 'Inter_500Medium', fontStyle: 'italic' }}>
+            This chat session has ended.
+          </Text>
         </View>
-      </View>
+      ) : (
+        <View style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, hp(1.2)) }]}>
+          <TextInput
+            style={styles.textInput}
+            placeholder={chatBlocked ? 'Recharge to continue...' : 'Enter your message...'}
+            placeholderTextColor="#6B7280"
+            value={message}
+            onChangeText={handleTextChange}
+            onSubmitEditing={handleSend}
+            blurOnSubmit={false}
+            multiline
+            editable={!chatBlocked}
+          />
+          <View style={styles.inputActions}>
+            {userRole === 'USER' && (
+              <TouchableOpacity activeOpacity={0.7} style={styles.inputAction} onPress={() => setShowGiftPopup(true)}>
+                <Ionicons name="gift-outline" size={wp(5.5)} color="#A855F7" />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity activeOpacity={0.7} style={styles.inputAction} onPress={handleSend}>
+              <Ionicons name="send" size={wp(5.5)} color={chatBlocked ? '#4B5563' : '#EC4899'} />
+            </TouchableOpacity>
+            <TouchableOpacity activeOpacity={0.7} style={styles.inputAction}
+              onPress={() => { setShowEmojis(!showEmojis); setShowStickers(false); }}>
+              <Ionicons name="happy-outline" size={wp(5.5)} color={showEmojis ? '#EC4899' : '#9CA3AF'} />
+            </TouchableOpacity>
+            <TouchableOpacity activeOpacity={0.7} style={styles.inputAction}
+              onPress={() => { setShowStickers(!showStickers); setShowEmojis(false); }}>
+              <Ionicons name="star-outline" size={wp(5.5)} color={showStickers ? '#EC4899' : '#9CA3AF'} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
       {/* Gift Popup for sending gifts */}
       <GiftPopup
         visible={showGiftPopup}

@@ -47,9 +47,16 @@ const getAvatarImage = (gender, index) => {
   }
 };
 
+const formatCallTime = (dateStr) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const dateOptions = { day: '2-digit', month: 'short' };
+  const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: true };
+  return `${d.toLocaleDateString('en-US', dateOptions)}, ${d.toLocaleTimeString('en-US', timeOptions)}`;
+};
+
 const CallItem = ({ item }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const router = useRouter();
 
   const handlePressIn = () => {
     Animated.spring(scaleAnim, { toValue: 0.97, friction: 8, tension: 100, useNativeDriver: true }).start();
@@ -58,73 +65,80 @@ const CallItem = ({ item }) => {
     Animated.spring(scaleAnim, { toValue: 1, friction: 5, tension: 80, useNativeDriver: true }).start();
   };
 
-  const handleAudioCall = () => {
-    router.push({
-      pathname: '/(call)/connecting',
-      params: {
-        name: item.name,
-        callType: 'audio',
-        callId: `call_${Date.now()}`,
-        roomId: `room_${Date.now()}`,
-        userId: item.userId,
-        avatarIndex: item.avatarIndex || '0',
-        gender: item.gender || 'Female'
-      }
-    });
+  const getStatusStyle = (status) => {
+    switch (status) {
+      case 'completed':
+        return { bg: 'rgba(34, 197, 94, 0.15)', text: '#22C55E' };
+      case 'missed':
+        return { bg: 'rgba(239, 68, 68, 0.15)', text: '#EF4444' };
+      case 'cancelled':
+        return { bg: 'rgba(156, 163, 175, 0.15)', text: '#9CA3AF' };
+      default:
+        return { bg: 'rgba(59, 130, 246, 0.15)', text: '#3B82F6' };
+    }
   };
 
-  const handleVideoCall = () => {
-    router.push({
-      pathname: '/(call)/connecting',
-      params: {
-        name: item.name,
-        callType: 'video',
-        callId: `call_${Date.now()}`,
-        roomId: `room_${Date.now()}`,
-        userId: item.userId,
-        avatarIndex: item.avatarIndex || '0',
-        gender: item.gender || 'Female'
-      }
-    });
-  };
-
-  const handleChat = () => {
-    router.push({
-      pathname: '/(chat)/chat',
-      params: {
-        name: item.name,
-        id: item.userId,
-        avatarIndex: item.avatarIndex || '0',
-        gender: item.gender || 'Female'
-      }
-    });
-  };
+  const statusStyle = getStatusStyle(item.status);
 
   return (
     <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-      <TouchableOpacity
-        activeOpacity={0.9}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        style={styles.callItem}
-      >
-        <Image source={getAvatarImage(item.gender, item.avatarIndex)} style={styles.callAvatar} />
-        <View style={styles.callInfo}>
-          <Text style={styles.callName}>{item.name}</Text>
-          <Text style={styles.callDuration}>{item.duration} • {item.type}</Text>
+      <View style={styles.callItem}>
+        <View style={styles.callMainRow}>
+          <Image source={getAvatarImage(item.gender, item.avatarIndex)} style={styles.callAvatar} />
+          <View style={styles.callInfo}>
+            <View style={styles.nameTimeRow}>
+              <Text style={styles.callName} numberOfLines={1}>{item.name}</Text>
+              <Text style={styles.callTimeText}>{formatCallTime(item.time)}</Text>
+            </View>
+            <View style={styles.typeDurationRow}>
+              <Ionicons 
+                name={item.type === 'video' ? 'videocam' : item.type === 'chat' ? 'chatbubble' : 'call'} 
+                size={s(12)} 
+                color="#9CA3AF" 
+                style={{ marginRight: wp(1) }} 
+              />
+              <Text style={styles.callDuration}>{item.duration} • {item.type}</Text>
+            </View>
+          </View>
         </View>
-        <View style={styles.callActions}>
-          <TouchableOpacity style={styles.callActionBtn} activeOpacity={0.7} onPress={handleAudioCall}>
-            <Ionicons name="call" size={18} color="#22C55E" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.callActionBtn} activeOpacity={0.7} onPress={handleVideoCall}>
-            <Ionicons name="videocam" size={18} color="#3B82F6" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.callActionBtn} activeOpacity={0.7} onPress={handleChat}>
-            <Ionicons name="chatbubble" size={18} color="#EC4899" />
-          </TouchableOpacity>
+
+        {/* Extra Session Information Section */}
+        <View style={styles.sessionMetaSection}>
+          <View style={styles.metaRow}>
+            {/* Earnings Badge */}
+            <View style={[styles.metaBadge, { backgroundColor: 'rgba(34, 197, 94, 0.15)' }]}>
+              <Text style={[styles.metaBadgeText, { color: '#22C55E' }]}>+ ₹{(item.earnings || 0).toFixed(2)}</Text>
+            </View>
+
+            {/* Coins Deducted Badge */}
+            <View style={[styles.metaBadge, { backgroundColor: 'rgba(245, 158, 11, 0.15)' }]}>
+              <Text style={[styles.metaBadgeText, { color: '#F59E0B' }]}>🪙 {item.coinsDeducted || 0} Coins</Text>
+            </View>
+
+            {/* Status Badge */}
+            <View style={[styles.metaBadge, { backgroundColor: statusStyle.bg }]}>
+              <Text style={[styles.metaBadgeText, { color: statusStyle.text }]}>
+                {(item.status || 'active').toUpperCase()}
+              </Text>
+            </View>
+          </View>
+
+          {/* Rating and Feedback */}
+          {item.rating && (
+            <View style={styles.ratingSection}>
+              <View style={styles.ratingRow}>
+                <Ionicons name="star" size={s(12)} color="#FBBF24" style={{ marginRight: wp(1) }} />
+                <Text style={styles.ratingText}>{item.rating}.0 / 5.0</Text>
+              </View>
+              {item.feedback && (
+                <Text style={styles.feedbackText}>
+                  "{item.feedback}"
+                </Text>
+              )}
+            </View>
+          )}
         </View>
-      </TouchableOpacity>
+      </View>
     </Animated.View>
   );
 };
@@ -186,7 +200,12 @@ export default function RecentCallsScreen() {
           avatarIndex: call.userId?.avatarIndex || '0',
           duration: `${call.duration || 0} mins`,
           type: call.type || 'audio',
-          time: call.createdAt
+          time: call.createdAt,
+          earnings: call.listenerEarnings || 0,
+          coinsDeducted: call.coinsDeducted || 0,
+          rating: call.rating,
+          feedback: call.feedback,
+          status: call.status
         })));
       }
       
@@ -227,11 +246,6 @@ export default function RecentCallsScreen() {
       <View style={styles.skeletonDetails}>
         <Animated.View style={[styles.skeletonName, { opacity: shimmerAnim }]} />
         <Animated.View style={[styles.skeletonDuration, { opacity: shimmerAnim }]} />
-      </View>
-      <View style={styles.skeletonActions}>
-        <Animated.View style={[styles.skeletonActionBtn, { opacity: shimmerAnim }]} />
-        <Animated.View style={[styles.skeletonActionBtn, { opacity: shimmerAnim }]} />
-        <Animated.View style={[styles.skeletonActionBtn, { opacity: shimmerAnim }]} />
       </View>
     </View>
   );
@@ -333,13 +347,16 @@ const styles = StyleSheet.create({
     gap: hp(1.5),
   },
   callItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'column',
     backgroundColor: '#111',
     padding: wp(3.5),
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#1F1F1F',
+  },
+  callMainRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   callAvatar: {
     width: wp(12),
@@ -352,6 +369,22 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: wp(3.5),
   },
+  nameTimeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flex: 1,
+  },
+  callTimeText: {
+    fontSize: wp(3.0),
+    color: '#6B7280',
+    fontFamily: 'Inter_400Regular',
+  },
+  typeDurationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+  },
   callName: {
     fontSize: wp(4),
     fontWeight: '700',
@@ -362,6 +395,51 @@ const styles = StyleSheet.create({
     fontSize: wp(3.2),
     color: '#9CA3AF',
     fontFamily: 'Inter_400Regular',
+  },
+  sessionMetaSection: {
+    marginTop: hp(1.2),
+    paddingTop: hp(1.2),
+    borderTopWidth: 1,
+    borderTopColor: '#1A1A1A',
+    gap: hp(1.2),
+  },
+  metaRow: {
+    flexDirection: 'row',
+    gap: wp(2),
+    flexWrap: 'wrap',
+  },
+  metaBadge: {
+    paddingHorizontal: wp(2.5),
+    paddingVertical: hp(0.4),
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  metaBadgeText: {
+    fontSize: wp(2.8),
+    fontWeight: '700',
+    fontFamily: 'Inter_700Bold',
+  },
+  ratingSection: {
+    backgroundColor: 'rgba(255,255,255,0.02)',
+    padding: wp(2.5),
+    borderRadius: 8,
+    gap: 4,
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  ratingText: {
+    fontSize: wp(3.2),
+    color: '#FBBF24',
+    fontFamily: 'Inter_700Bold',
+  },
+  feedbackText: {
+    fontSize: wp(3.2),
+    color: '#9CA3AF',
+    fontFamily: 'Inter_400Regular',
+    fontStyle: 'italic',
     marginTop: 2,
   },
   callActions: {

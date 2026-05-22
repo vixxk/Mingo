@@ -92,11 +92,11 @@ class WalletController {
         console.log('Error fetching DB packages:', e);
       }
       
-      let pkg = dbPackages.find(p => p.id === packageId);
+      let pkg = dbPackages.find(p => p.id === packageId || (p._id && p._id.toString() === packageId));
       
       // Fallback 1: Search static local packages
       if (!pkg) {
-        pkg = COIN_PACKAGES.find(p => p.id === packageId);
+        pkg = COIN_PACKAGES.find(p => p.id === packageId || (p._id && p._id.toString() === packageId));
       }
       
       // Fallback 2: Mock package if still not found

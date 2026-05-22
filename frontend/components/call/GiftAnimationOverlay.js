@@ -30,6 +30,12 @@ const getGiftPrice = (name) => {
 };
 
 export default function GiftAnimationOverlay({ giftName, giftIcon, giftPrice, senderName, onComplete }) {
+  // Use a stable ref for onComplete to prevent parent ticks from resetting the animation
+  const onCompleteRef = useRef(onComplete);
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
+
   const price = giftPrice !== undefined ? parseInt(giftPrice, 10) : getGiftPrice(giftName);
   const icon = giftIcon || getGiftIcon(giftName);
 
@@ -155,8 +161,8 @@ export default function GiftAnimationOverlay({ giftName, giftIcon, giftPrice, se
     let timerDone = false;
 
     const tryComplete = () => {
-      if (animsDone && timerDone && onComplete) {
-        onComplete();
+      if (animsDone && timerDone && onCompleteRef.current) {
+        onCompleteRef.current();
       }
     };
 
@@ -186,10 +192,10 @@ export default function GiftAnimationOverlay({ giftName, giftIcon, giftPrice, se
     }, Math.max(duration, 5000));
 
     return () => clearTimeout(minTimer);
-  }, [particleCount, duration, onComplete, particleConfigs, animations]);
+  }, [particleCount, duration, particleConfigs, animations]);
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+    <View style={[StyleSheet.absoluteFill, { zIndex: 99999, elevation: 99999 }]} pointerEvents="none">
       {/* Background Deep Ambient Vignette */}
       <LinearGradient
         colors={['rgba(0,0,0,0.85)', 'rgba(10,5,20,0.6)', 'rgba(0,0,0,0.9)']}

@@ -34,8 +34,8 @@ class CallService {
       const listenerIdStr = matchedListenerId.toString();
 
       const listenerProfile = await Listener.findOne({ userId: listenerIdStr });
-      if (!listenerProfile || listenerProfile.status !== 'approved') {
-        throw new AppError('Listener is not available', 400);
+      if (!listenerProfile || listenerProfile.status !== 'approved' || !listenerProfile.isOnline) {
+        throw new AppError('Listener is offline', 400);
       }
 
       const acquired = await redis.set(

@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, hp, wp } from '../../utils/responsive';
 import { walletAPI } from '../../utils/api';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -39,6 +40,7 @@ const SkeletonTransactionItem = ({ opacity }) => (
 export default function TransactionsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const [userRole, setUserRole] = useState('USER');
   const [activeTab, setActiveTab] = useState('All');
   const [transactions, setTransactions] = useState([]);
   const [balance, setBalance] = useState(0);
@@ -48,6 +50,18 @@ export default function TransactionsScreen() {
   const [hasMore, setHasMore] = useState(true);
 
   const shimmerAnim = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    const fetchRole = async () => {
+      try {
+        const role = await AsyncStorage.getItem('userRole');
+        if (role) setUserRole(role);
+      } catch (err) {
+        console.log('Error fetching userRole in transactions page:', err);
+      }
+    };
+    fetchRole();
+  }, []);
 
   useEffect(() => {
     Animated.loop(
@@ -196,10 +210,12 @@ export default function TransactionsScreen() {
           <Ionicons name="chevron-back" size={28} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Transactions</Text>
-        <View style={styles.balanceBadge}>
-          <Text style={{ fontSize: 14 }}>🪙</Text>
-          <Text style={styles.balanceText}>{balance}</Text>
-        </View>
+        {userRole !== 'LISTENER' && (
+          <View style={styles.balanceBadge}>
+            <Text style={{ fontSize: 14 }}>🪙</Text>
+            <Text style={styles.balanceText}>{balance}</Text>
+          </View>
+        )}
       </View>
 
       {}

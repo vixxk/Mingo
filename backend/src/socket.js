@@ -365,7 +365,7 @@ const initSocket = (server) => {
                     startTime: new Date(),
                     status: 'active',
                     coinsDeducted: CHAT_COINS_PER_SESSION,
-                    listenerEarnings: CHAT_LISTENER_PAYOUT,
+                    listenerEarnings: 0,
                   });
                 } catch (sessErr) {
                   console.error('Error creating chat Session document:', sessErr);
@@ -381,26 +381,13 @@ const initSocket = (server) => {
                 };
                 await conversation.save();
 
-                // Credit listener (the sender of this reply)
+                // Increment listener's chat/session counters, but do NOT credit earnings yet
                 const listenerProfile = await Listener.findOne({ userId: senderId });
                 if (listenerProfile) {
-                  listenerProfile.earnings += CHAT_LISTENER_PAYOUT;
-                  listenerProfile.todayEarnings += CHAT_LISTENER_PAYOUT;
                   listenerProfile.totalChats = (listenerProfile.totalChats || 0) + 1;
                   listenerProfile.todayChats = (listenerProfile.todayChats || 0) + 1;
                   listenerProfile.totalSessions = (listenerProfile.totalSessions || 0) + 1;
                   await listenerProfile.save();
-
-                  // Record transaction for listener
-                  await Transaction.create({
-                    userId: senderId,
-                    type: 'call_credit',
-                    amount: CHAT_LISTENER_PAYOUT,
-                    coins: 0,
-                    description: 'Chat session earnings - 5 min block',
-                    status: 'completed',
-                    metadata: { conversationId },
-                  });
                 }
 
                  // Notify user of balance update
@@ -885,34 +872,10 @@ function startChatSessionTimer(conversationId, userId) {
           await Session.findByIdAndUpdate(conversation.chatSession.sessionId, {
             $inc: {
               coinsDeducted: CHAT_COINS_PER_SESSION,
-              listenerEarnings: CHAT_LISTENER_PAYOUT
             }
           });
         } catch (sessUpdErr) {
           console.error('Error updating chat session doc on renewal:', sessUpdErr);
-        }
-      }
-
-      // Credit listener
-      // We need to find the listener in this conversation
-      const listenerId = conversation.participants.find(p => p.toString() !== userId.toString());
-      if (listenerId) {
-        const listenerProfile = await Listener.findOne({ userId: listenerId });
-        if (listenerProfile) {
-          listenerProfile.earnings += CHAT_LISTENER_PAYOUT;
-          listenerProfile.todayEarnings += CHAT_LISTENER_PAYOUT;
-          await listenerProfile.save();
-
-          // Record transaction for listener
-          await Transaction.create({
-            userId: listenerId,
-            type: 'call_credit',
-            amount: CHAT_LISTENER_PAYOUT,
-            coins: 0,
-            description: 'Chat session renewal earnings - 5 min block',
-            status: 'completed',
-            metadata: { conversationId },
-          });
         }
       }
 
@@ -962,12 +925,52 @@ async function endChatSession(conversationId) {
         const startTime = conversationBefore.chatSession.startTime || conversationBefore.createdAt;
         const durationMs = endTime - startTime;
         const durationMinutes = Math.ceil(durationMs / 60000);
+        const payoutAmount = durationMinutes * 0.5;
+
+        const coinsDeductedObj = conversationBefore.chatSession.totalCoinsDeducted || CHAT_COINS_PER_SESSION;
+        const revenue = coinsDeductedObj * 0.5; // 1 coin = Rs 0.50
+        const platformProfit = revenue - payoutAmount;
 
         await Session.findByIdAndUpdate(conversationBefore.chatSession.sessionId, {
           status: 'completed',
           endTime,
-          duration: durationMinutes
+          duration: durationMinutes,
+          coinsDeducted: coinsDeductedObj,
+          listenerEarnings: payoutAmount,
+          platformProfit: platformProfit
         });
+
+        // Find which participant is the listener
+        let listenerId = conversationBefore.participants.find(p => p.toString() !== conversationBefore.chatSession.startedBy?.toString());
+        if (!listenerId) {
+          for (const pId of conversationBefore.participants) {
+            const isL = await Listener.exists({ userId: pId });
+            if (isL) {
+              listenerId = pId;
+              break;
+            }
+          }
+        }
+
+        if (listenerId) {
+          const listenerProfile = await Listener.findOne({ userId: listenerId });
+          if (listenerProfile) {
+            listenerProfile.earnings += payoutAmount;
+            listenerProfile.todayEarnings += payoutAmount;
+            await listenerProfile.save();
+
+            // Record transaction for listener
+            await Transaction.create({
+              userId: listenerId,
+              type: 'call_credit',
+              amount: payoutAmount,
+              coins: 0,
+              description: `Chat session earnings - ${durationMinutes} min`,
+              status: 'completed',
+              metadata: { conversationId, sessionId: conversationBefore.chatSession.sessionId },
+            });
+          }
+        }
       } catch (sessEndErr) {
         console.error('Error ending chat Session document:', sessEndErr);
       }
