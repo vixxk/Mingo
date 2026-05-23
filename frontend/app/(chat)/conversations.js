@@ -17,6 +17,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { ms, s, vs, SCREEN_WIDTH } from '../../utils/responsive';
 import { chatAPI } from '../../utils/api';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const { height: SH } = Dimensions.get('window');
 
@@ -71,9 +72,18 @@ const ConversationItem = ({ item, onPress }) => (
     activeOpacity={0.6}
     onPress={() => onPress(item)}
   >
-    <Image source={getAvatarImage(item.gender, item.avatarIndex)} style={styles.convAvatar} />
+    {item.isAdmin ? (
+      <LinearGradient
+        colors={['#1F1A0A', '#0F0B03']}
+        style={[styles.convAvatar, { alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#D4AF37' }]}
+      >
+        <Ionicons name="shield-checkmark" size={24} color="#D4AF37" />
+      </LinearGradient>
+    ) : (
+      <Image source={getAvatarImage(item.gender, item.avatarIndex)} style={styles.convAvatar} />
+    )}
     <View style={styles.convInfo}>
-      <Text style={styles.convName}>{item.name}</Text>
+      <Text style={[styles.convName, item.isAdmin && { color: '#D4AF37' }]}>{item.name}</Text>
       <Text style={styles.convPreview} numberOfLines={1}>
         {item.lastMessage || 'Started a conversation'}
       </Text>
@@ -89,6 +99,7 @@ const ConversationItem = ({ item, onPress }) => (
       )}
     </View>
   </TouchableOpacity>
+
 );
 
 export default function ConversationsScreen() {

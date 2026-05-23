@@ -163,14 +163,25 @@ export default function MessagesScreen() {
         })}
       >
         <View style={styles.avatarContainer}>
-          <Image source={item.image || getAvatarImage(item.gender, item.avatarIndex)} style={styles.avatar} />
-          {item.isOnline && <View style={styles.onlineIndicator} />}
+          {item.isAdmin ? (
+            <LinearGradient
+              colors={['#1F1A0A', '#0F0B03']}
+              style={[styles.avatar, { alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#D4AF37' }]}
+            >
+              <Ionicons name="shield-checkmark" size={24} color="#D4AF37" />
+            </LinearGradient>
+          ) : (
+            <Image source={item.image || getAvatarImage(item.gender, item.avatarIndex)} style={styles.avatar} />
+          )}
+          {item.isOnline && !item.isAdmin && <View style={styles.onlineIndicator} />}
         </View>
         
         <View style={styles.messageDetails}>
           <View style={styles.nameRow}>
             <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 6, marginRight: 10 }}>
-              <Text style={styles.nameText} numberOfLines={1}>{item.name}</Text>
+              <Text style={[styles.nameText, item.isAdmin && { color: '#D4AF37' }]} numberOfLines={1}>
+                {item.name}
+              </Text>
               {item.sessionStatus === 'active' && (
                 <View style={[styles.statusBadge, { backgroundColor: 'rgba(34, 197, 94, 0.15)' }]}>
                   <Text style={[styles.statusBadgeText, { color: '#22C55E' }]}>Active</Text>

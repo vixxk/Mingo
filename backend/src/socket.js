@@ -260,7 +260,8 @@ const initSocket = (server) => {
           senderModel: senderModel || (isUserRole ? 'User' : 'Listener'),
           content,
           type: type || 'text',
-          mediaUrl
+          mediaUrl,
+          giftCount: data.giftCount || 1
         });
         await message.save();
 

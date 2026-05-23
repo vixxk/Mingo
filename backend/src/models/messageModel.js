@@ -30,6 +30,10 @@ const messageSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    giftCount: {
+      type: Number,
+      default: 1,
+    },
     isRead: {
       type: Boolean,
       default: false,

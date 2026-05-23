@@ -29,7 +29,7 @@ const getGiftPrice = (name) => {
   return 10;
 };
 
-export default function GiftAnimationOverlay({ giftName, giftIcon, giftPrice, senderName, receiverName, isSentByMe, onComplete }) {
+export default function GiftAnimationOverlay({ giftName, giftIcon, giftPrice, giftCount = 1, senderName, receiverName, isSentByMe, onComplete }) {
   // Use a stable ref for onComplete to prevent parent ticks from resetting the animation
   const onCompleteRef = useRef(onComplete);
   useEffect(() => {
@@ -42,15 +42,18 @@ export default function GiftAnimationOverlay({ giftName, giftIcon, giftPrice, se
   const isMe = isSentByMe || senderName === 'You';
   const targetName = receiverName || 'Listener';
 
-  // Decide how many particles based on price tier (higher price = more spectacular)
+  // Decide how many particles based on price tier * giftCount multiplier
   const particleCount = useMemo(() => {
-    if (price >= 1000) return 85;
-    if (price >= 500) return 65;
-    if (price >= 300) return 45;
-    if (price >= 100) return 32;
-    if (price >= 50) return 22;
-    return 14;
-  }, [price]);
+    let baseCount = 14;
+    if (price >= 1000) baseCount = 85;
+    else if (price >= 500) baseCount = 65;
+    else if (price >= 300) baseCount = 45;
+    else if (price >= 100) baseCount = 32;
+    else if (price >= 50) baseCount = 22;
+    
+    // Scale count by 50% for multiple gifts, up to maximum preallocated 100 particles
+    return Math.min(100, Math.round(baseCount * (giftCount > 1 ? 1.5 : 1)));
+  }, [price, giftCount]);
 
   // Decide animation duration based on price (between 5.0 and 7.0 seconds)
   const duration = useMemo(() => {
@@ -64,12 +67,16 @@ export default function GiftAnimationOverlay({ giftName, giftIcon, giftPrice, se
 
   // Premium design config based on price tier
   const tierConfig = useMemo(() => {
+    const qtyLabel = giftCount > 1 ? ` ${giftCount}X` : '';
+    const qtyText = giftCount > 1 ? `Received ${giftCount}X gifts` : 'Received a gift';
+    const sentQtyText = giftCount > 1 ? `Sent ${giftCount}X gifts` : 'Sent a gift';
+
     if (price >= 1000) {
       return {
-        title: 'JACKPOT! 👑',
+        title: `JACKPOT! 👑${qtyLabel}`,
         subText: isMe
-          ? `You showered ${targetName} with Gold Coins!`
-          : `${senderName} showered you with Gold Coins!`,
+          ? `${sentQtyText}: Showered ${targetName} with Gold Coins!`
+          : `${qtyText}: Showered you with Gold Coins!`,
         colors: ['#F59E0B', '#10B981', '#3B82F6'], // Amber-emerald-blue gradient
         emojis: ['💰', '🪙', '✨', '⭐', '💎'],
         titleColor: '#FFD700',
@@ -78,10 +85,10 @@ export default function GiftAnimationOverlay({ giftName, giftIcon, giftPrice, se
     }
     if (price >= 500) {
       return {
-        title: 'LUXURY PRESENT! 💝',
+        title: `LUXURY PRESENT! 💝${qtyLabel}`,
         subText: isMe
-          ? `You sent a premium gift to ${targetName}!`
-          : `${senderName} sent you a premium gift!`,
+          ? `${sentQtyText}: Premium gift sent to ${targetName}!`
+          : `${qtyText}: Premium gift received!`,
         colors: ['#EC4899', '#EF4444', '#F43F5E'], // Rose-red gradient
         emojis: ['💝', '💖', '✨', '🌹', '❤️'],
         titleColor: '#FF2E93',
@@ -90,10 +97,10 @@ export default function GiftAnimationOverlay({ giftName, giftIcon, giftPrice, se
     }
     if (price >= 300) {
       return {
-        title: 'MEGA SURPRISE! 🎁',
+        title: `MEGA SURPRISE! 🎁${qtyLabel}`,
         subText: isMe
-          ? `You sent a special surprise to ${targetName}!`
-          : `${senderName} sent you a special surprise!`,
+          ? `${sentQtyText}: Special surprise sent to ${targetName}!`
+          : `${qtyText}: Special surprise received!`,
         colors: ['#8B5CF6', '#EC4899', '#D946EF'], // Violet-fuchsia gradient
         emojis: ['🎁', '🎉', '✨', '🌟', '💝'],
         titleColor: '#D946EF',
@@ -102,10 +109,10 @@ export default function GiftAnimationOverlay({ giftName, giftIcon, giftPrice, se
     }
     if (price >= 100) {
       return {
-        title: 'DELICIOUS CANDY! 🍬',
+        title: `DELICIOUS CANDY! 🍬${qtyLabel}`,
         subText: isMe
-          ? `You sent sweet wishes to ${targetName}!`
-          : `${senderName} sent you sweet wishes!`,
+          ? `${sentQtyText}: Sweet wishes sent to ${targetName}!`
+          : `${qtyText}: Sweet wishes received!`,
         colors: ['#06B6D4', '#3B82F6', '#8B5CF6'], // Cyan-blue gradient
         emojis: ['🍬', '✨', '🍭', '💖'],
         titleColor: '#06B6D4',
@@ -114,10 +121,10 @@ export default function GiftAnimationOverlay({ giftName, giftIcon, giftPrice, se
     }
     if (price >= 50) {
       return {
-        title: 'SWEET TREAT! 🍭',
+        title: `SWEET TREAT! 🍭${qtyLabel}`,
         subText: isMe
-          ? `You sent a tasty treat to ${targetName}!`
-          : `${senderName} sent you a tasty treat!`,
+          ? `${sentQtyText}: Tasty treat sent to ${targetName}!`
+          : `${qtyText}: Tasty treat received!`,
         colors: ['#F43F5E', '#EC4899'],
         emojis: ['🍭', '✨', '🍬'],
         titleColor: '#EC4899',
@@ -126,16 +133,16 @@ export default function GiftAnimationOverlay({ giftName, giftIcon, giftPrice, se
     }
     // Default tier (Heart, etc.)
     return {
-      title: 'SWEETHEART! ❤️',
+      title: `SWEETHEART! ❤️${qtyLabel}`,
       subText: isMe
-        ? `You sent a lovely heart to ${targetName}!`
-        : `${senderName} sent you a lovely heart!`,
+        ? `${sentQtyText}: Lovely heart sent to ${targetName}!`
+        : `${qtyText}: Lovely heart received!`,
       colors: ['#EF4444', '#F43F5E'],
       emojis: ['❤️', '💖', '✨'],
       titleColor: '#EF4444',
       textGradient: ['#FFEBEB', '#EF4444'],
     };
-  }, [price, senderName, targetName, isMe]);
+  }, [price, senderName, targetName, isMe, giftCount]);
 
   // Max 100 particles pre-allocated to prevent React hooks reallocation issues
   const animations = useRef(

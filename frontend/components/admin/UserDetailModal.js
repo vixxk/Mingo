@@ -16,14 +16,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ms, s, vs, wp, hp } from '../../utils/responsive';
 import { adminAPI } from '../../utils/api';
+import ToastNotification from '../shared/ToastNotification';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const UserDetailModal = ({ visible, user, onClose, onDelete, onBan }) => {
-  if (!user) return null;
-
-  const isBanned = user.isBanned || false;
-
   // Interests State
   const [localInterests, setLocalInterests] = useState([]);
   const [isEditingInterests, setIsEditingInterests] = useState(false);
@@ -34,6 +31,9 @@ const UserDetailModal = ({ visible, user, onClose, onDelete, onBan }) => {
   const [isMessaging, setIsMessaging] = useState(false);
   const [messageText, setMessageText] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
+
+  // Toast State
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
 
   // Custom Confirmation Dialog State
   const [confirmAction, setConfirmAction] = useState(null); // { type: 'ban' | 'delete', title: string, desc: string, onConfirm: () => void }
@@ -47,16 +47,20 @@ const UserDetailModal = ({ visible, user, onClose, onDelete, onBan }) => {
     }
   }, [user]);
 
+  if (!user) return null;
+
+  const isBanned = user.isBanned || false;
+
   const handleSaveInterests = async () => {
     try {
       setSavingInterests(true);
       await adminAPI.updateUserInterests(user.id, localInterests);
       user.interests = localInterests; // Update parent reference
       setIsEditingInterests(false);
-      Alert.alert('Success', 'Interests updated successfully');
+      setToast({ visible: true, message: 'Interests updated successfully', type: 'success' });
     } catch (e) {
       console.log('Failed to save interests:', e);
-      Alert.alert('Error', 'Failed to save interests');
+      setToast({ visible: true, message: 'Failed to save interests', type: 'error' });
     } finally {
       setSavingInterests(false);
     }
@@ -83,10 +87,10 @@ const UserDetailModal = ({ visible, user, onClose, onDelete, onBan }) => {
       await adminAPI.sendAdminMessage(user.id, trimmed);
       setMessageText('');
       setIsMessaging(false);
-      Alert.alert('Success', 'Message sent successfully');
+      setToast({ visible: true, message: 'Message sent successfully', type: 'success' });
     } catch (e) {
       console.log('Failed to send message:', e);
-      Alert.alert('Error', 'Failed to send message');
+      setToast({ visible: true, message: 'Failed to send message', type: 'error' });
     } finally {
       setSendingMessage(false);
     }
@@ -260,91 +264,102 @@ const UserDetailModal = ({ visible, user, onClose, onDelete, onBan }) => {
 
             <View style={{ height: SCREEN_HEIGHT * 0.04 }} />
           </ScrollView>
-
-          {/* MESSAGE OVERLAY (100% consistent styling using screen width/height percentages) */}
-          {isMessaging && (
-            <View style={styles.overlayContainer}>
-              <View style={styles.dialogBox}>
-                <Text style={styles.dialogTitle}>Send Message</Text>
-                <Text style={styles.dialogDesc}>Send a support message directly to {user.name}.</Text>
-
-                <TextInput
-                  style={styles.dialogInput}
-                  placeholder="Type your message here..."
-                  placeholderTextColor="#4B5563"
-                  multiline
-                  numberOfLines={4}
-                  value={messageText}
-                  onChangeText={setMessageText}
-                />
-
-                <View style={styles.dialogButtons}>
-                  <TouchableOpacity
-                    style={styles.dialogBtnCancel}
-                    onPress={() => { setIsMessaging(false); setMessageText(''); }}
-                    disabled={sendingMessage}
-                  >
-                    <Text style={styles.dialogBtnCancelText}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.dialogBtnConfirm}
-                    onPress={handleSendMessage}
-                    disabled={sendingMessage || !messageText.trim()}
-                  >
-                    <LinearGradient
-                      colors={['#A855F7', '#7C3AED']}
-                      style={styles.gradientBtn}
-                    >
-                      {sendingMessage ? (
-                        <ActivityIndicator size="small" color="#fff" />
-                      ) : (
-                        <Text style={styles.dialogBtnConfirmText}>Send</Text>
-                      )}
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          )}
-
-          {/* CUSTOM CONFIRMATION DIALOG (Theme matched and consistent on all screen sizes) */}
-          {confirmAction && (
-            <View style={styles.overlayContainer}>
-              <View style={styles.dialogBox}>
-                <View style={[styles.confirmIconContainer, { backgroundColor: confirmAction.type === 'delete' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(168, 85, 247, 0.1)' }]}>
-                  <Ionicons
-                    name={confirmAction.type === 'delete' ? 'trash' : 'ban'}
-                    size={28}
-                    color={confirmAction.type === 'delete' ? '#EF4444' : '#A855F7'}
-                  />
-                </View>
-                <Text style={styles.dialogTitle}>{confirmAction.title}</Text>
-                <Text style={styles.dialogDesc}>{confirmAction.desc}</Text>
-
-                <View style={styles.dialogButtons}>
-                  <TouchableOpacity
-                    style={styles.dialogBtnCancel}
-                    onPress={() => setConfirmAction(null)}
-                  >
-                    <Text style={styles.dialogBtnCancelText}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.dialogBtnConfirm}
-                    onPress={confirmAction.onConfirm}
-                  >
-                    <LinearGradient
-                      colors={confirmAction.type === 'delete' ? ['#EF4444', '#DC2626'] : ['#A855F7', '#7C3AED']}
-                      style={styles.gradientBtn}
-                    >
-                      <Text style={styles.dialogBtnConfirmText}>Confirm</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          )}
-
         </View>
+
+        {/* MESSAGE OVERLAY (100% consistent styling using screen width/height percentages) */}
+        {isMessaging && (
+          <View style={styles.overlayContainer}>
+            <View style={styles.dialogBox}>
+              <View style={[styles.confirmIconContainer, { backgroundColor: 'rgba(168, 85, 247, 0.1)' }]}>
+                <Ionicons name="chatbubble" size={28} color="#A855F7" />
+              </View>
+              <Text style={styles.dialogTitle}>Send Message</Text>
+              <Text style={styles.dialogDesc}>Send a support message directly to {user.name}.</Text>
+
+              <TextInput
+                style={styles.dialogInput}
+                placeholder="Type your message here..."
+                placeholderTextColor="#4B5563"
+                multiline
+                numberOfLines={4}
+                value={messageText}
+                onChangeText={setMessageText}
+              />
+
+              <View style={styles.dialogButtons}>
+                <TouchableOpacity
+                  style={styles.dialogBtnCancel}
+                  onPress={() => { setIsMessaging(false); setMessageText(''); }}
+                  disabled={sendingMessage}
+                >
+                  <Text style={styles.dialogBtnCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.dialogBtnConfirm}
+                  onPress={handleSendMessage}
+                  disabled={sendingMessage || !messageText.trim()}
+                >
+                  <LinearGradient
+                    colors={['#A855F7', '#7C3AED']}
+                    style={styles.gradientBtn}
+                  >
+                    {sendingMessage ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={styles.dialogBtnConfirmText}>Send</Text>
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* CUSTOM CONFIRMATION DIALOG (Theme matched and consistent on all screen sizes) */}
+        {confirmAction && (
+          <View style={styles.overlayContainer}>
+            <View style={styles.dialogBox}>
+              <View style={[styles.confirmIconContainer, { backgroundColor: confirmAction.type === 'delete' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(168, 85, 247, 0.1)' }]}>
+                <Ionicons
+                  name={confirmAction.type === 'delete' ? 'trash' : 'ban'}
+                  size={28}
+                  color={confirmAction.type === 'delete' ? '#EF4444' : '#A855F7'}
+                />
+              </View>
+              <Text style={styles.dialogTitle}>{confirmAction.title}</Text>
+              <Text style={styles.dialogDesc}>{confirmAction.desc}</Text>
+
+              <View style={styles.dialogButtons}>
+                <TouchableOpacity
+                  style={styles.dialogBtnCancel}
+                  onPress={() => setConfirmAction(null)}
+                >
+                  <Text style={styles.dialogBtnCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.dialogBtnConfirm}
+                  onPress={confirmAction.onConfirm}
+                >
+                  <LinearGradient
+                    colors={confirmAction.type === 'delete' ? ['#EF4444', '#DC2626'] : ['#A855F7', '#7C3AED']}
+                    style={styles.gradientBtn}
+                  >
+                    <Text style={styles.dialogBtnConfirmText}>Confirm</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* Toast Notification */}
+        <ToastNotification
+          visible={toast.visible}
+          message={toast.message}
+          type={toast.type}
+          onDismiss={() => setToast(prev => ({ ...prev, visible: false }))}
+        />
+
       </View>
     </Modal>
   );
@@ -588,8 +603,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 100,
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
   },
   dialogBox: {
     width: wp(82),
@@ -664,7 +677,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   gradientBtn: {
-    flex: 1,
+    width: '100%',
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
   },

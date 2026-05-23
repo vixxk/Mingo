@@ -223,6 +223,7 @@ class WalletController {
       // Filter by tab if type is provided
       if (type === 'Gifts') query.type = { $in: ['gift_send', 'gift_receive'] };
       else if (type === 'Sessions') query.type = { $in: ['call_debit', 'call_credit'] };
+      else if (type === 'Recharges') query.type = 'purchase';
 
       const transactions = await Transaction.find(query)
         .populate({

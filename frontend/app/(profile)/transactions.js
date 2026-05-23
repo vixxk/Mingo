@@ -20,7 +20,7 @@ import { ms, s, vs, hp, wp } from '../../utils/responsive';
 import { walletAPI } from '../../utils/api';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const TABS = ['All', 'Gifts', 'Sessions'];
+const TABS = ['All', 'Recharges', 'Gifts', 'Sessions'];
 
 const SkeletonTransactionItem = ({ opacity }) => (
   <View style={styles.transactionCard}>

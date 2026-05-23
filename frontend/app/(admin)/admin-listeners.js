@@ -10,6 +10,7 @@ import { Linking } from 'react-native';
 import { ms, s, vs, wp, hp } from '../../utils/responsive';
 import { adminAPI } from '../../utils/api';
 import { AdminPageSkeleton } from '../../components/admin/Skeleton';
+import ToastNotification from '../../components/shared/ToastNotification';
 
 const { height: SH } = Dimensions.get('window');
 
@@ -89,6 +90,9 @@ export default function AdminListenersScreen() {
   const [messageText, setMessageText] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
 
+  // Toast State
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
+
   // Custom Confirmation Dialog State
   const [confirmAction, setConfirmAction] = useState(null); // { type: string, title: string, desc: string, onConfirm: () => void }
 
@@ -166,9 +170,9 @@ export default function AdminListenersScreen() {
           await adminAPI.approveListener(id);
           updateListenerState(id, { status: 'approved' });
           setConfirmAction(null);
-          Alert.alert('Success', 'Listener has been approved.');
+          setToast({ visible: true, message: 'Listener approved successfully', type: 'success' });
         } catch (e) {
-          Alert.alert('Error', 'Failed to approve listener');
+          setToast({ visible: true, message: 'Failed to approve listener', type: 'error' });
         }
       }
     });
@@ -184,9 +188,9 @@ export default function AdminListenersScreen() {
           await adminAPI.rejectListener(id);
           updateListenerState(id, { status: 'rejected' });
           setConfirmAction(null);
-          Alert.alert('Success', 'Listener has been rejected.');
+          setToast({ visible: true, message: 'Listener rejected successfully', type: 'success' });
         } catch (e) {
-          Alert.alert('Error', 'Failed to reject listener');
+          setToast({ visible: true, message: 'Failed to reject listener', type: 'error' });
         }
       }
     });
@@ -215,9 +219,9 @@ export default function AdminListenersScreen() {
             setSelectedListener(prev => ({ ...prev, isBanned: !isCurrentlyBanned }));
           }
           setConfirmAction(null);
-          Alert.alert('Success', `User ${isCurrentlyBanned ? 'unbanned' : 'banned'} successfully.`);
+          setToast({ visible: true, message: `User ${isCurrentlyBanned ? 'unbanned' : 'banned'} successfully`, type: 'success' });
         } catch(e) {
-          Alert.alert('Error', 'Failed to update user status');
+          setToast({ visible: true, message: 'Failed to update user status', type: 'error' });
         }
       }
     });
@@ -235,9 +239,9 @@ export default function AdminListenersScreen() {
           setShowDetail(false);
           setSelectedListener(null);
           setConfirmAction(null);
-          Alert.alert('Success', 'Listener deleted successfully.');
+          setToast({ visible: true, message: 'Listener deleted successfully', type: 'success' });
         } catch(e) {
-          Alert.alert('Error', 'Failed to delete listener');
+          setToast({ visible: true, message: 'Failed to delete listener', type: 'error' });
         }
       }
     });
@@ -247,15 +251,20 @@ export default function AdminListenersScreen() {
     const trimmed = messageText.trim();
     if (!trimmed || !selectedListener) return;
 
+    if (!selectedListener.userId) {
+      setToast({ visible: true, message: 'Listener has no associated user account', type: 'error' });
+      return;
+    }
+
     try {
       setSendingMessage(true);
       await adminAPI.sendAdminMessage(selectedListener.userId, trimmed);
       setMessageText('');
       setIsMessaging(false);
-      Alert.alert('Success', 'Message sent successfully');
+      setToast({ visible: true, message: 'Message sent successfully', type: 'success' });
     } catch (e) {
       console.log('Failed to send message:', e);
-      Alert.alert('Error', 'Failed to send message');
+      setToast({ visible: true, message: 'Failed to send message', type: 'error' });
     } finally {
       setSendingMessage(false);
     }
@@ -394,90 +403,101 @@ export default function AdminListenersScreen() {
               </ScrollView>
             )}
 
-            {/* MESSAGE OVERLAY */}
-            {isMessaging && selectedListener && (
-              <View style={st.overlayContainer}>
-                <View style={st.dialogBox}>
-                  <Text style={st.dialogTitle}>Send Message</Text>
-                  <Text style={st.dialogDesc}>Send a support message directly to {selectedListener.name}.</Text>
-
-                  <TextInput
-                    style={st.dialogInput}
-                    placeholder="Type your message here..."
-                    placeholderTextColor="#4B5563"
-                    multiline
-                    numberOfLines={4}
-                    value={messageText}
-                    onChangeText={setMessageText}
-                  />
-
-                  <View style={st.dialogButtons}>
-                    <TouchableOpacity
-                      style={st.dialogBtnCancel}
-                      onPress={() => { setIsMessaging(false); setMessageText(''); }}
-                      disabled={sendingMessage}
-                    >
-                      <Text style={st.dialogBtnCancelText}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={st.dialogBtnConfirm}
-                      onPress={handleSendMessage}
-                      disabled={sendingMessage || !messageText.trim()}
-                    >
-                      <LinearGradient
-                        colors={['#A855F7', '#7C3AED']}
-                        style={st.gradientBtn}
-                      >
-                        {sendingMessage ? (
-                          <ActivityIndicator size="small" color="#fff" />
-                        ) : (
-                          <Text style={st.dialogBtnConfirmText}>Send</Text>
-                        )}
-                      </LinearGradient>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
-            )}
-
-            {/* CUSTOM CONFIRMATION DIALOG */}
-            {confirmAction && (
-              <View style={st.overlayContainer}>
-                <View style={st.dialogBox}>
-                  <View style={[st.confirmIconContainer, { backgroundColor: confirmAction.type === 'delete' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(168, 85, 247, 0.1)' }]}>
-                    <Ionicons
-                      name={confirmAction.type === 'delete' ? 'trash' : 'ban'}
-                      size={28}
-                      color={confirmAction.type === 'delete' ? '#EF4444' : '#A855F7'}
-                    />
-                  </View>
-                  <Text style={st.dialogTitle}>{confirmAction.title}</Text>
-                  <Text style={st.dialogDesc}>{confirmAction.desc}</Text>
-
-                  <View style={st.dialogButtons}>
-                    <TouchableOpacity
-                      style={st.dialogBtnCancel}
-                      onPress={() => setConfirmAction(null)}
-                    >
-                      <Text style={st.dialogBtnCancelText}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={st.dialogBtnConfirm}
-                      onPress={confirmAction.onConfirm}
-                    >
-                      <LinearGradient
-                        colors={confirmAction.type === 'delete' ? ['#EF4444', '#DC2626'] : ['#A855F7', '#7C3AED']}
-                        style={st.gradientBtn}
-                      >
-                        <Text style={st.dialogBtnConfirmText}>Confirm</Text>
-                      </LinearGradient>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
-            )}
-
           </View>
+
+          {/* MESSAGE OVERLAY */}
+          {isMessaging && selectedListener && (
+            <View style={st.overlayContainer}>
+              <View style={st.dialogBox}>
+                <View style={[st.confirmIconContainer, { backgroundColor: 'rgba(168, 85, 247, 0.1)' }]}>
+                  <Ionicons name="chatbubble" size={28} color="#A855F7" />
+                </View>
+                <Text style={st.dialogTitle}>Send Message</Text>
+                <Text style={st.dialogDesc}>Send a support message directly to {selectedListener.name}.</Text>
+
+                <TextInput
+                  style={st.dialogInput}
+                  placeholder="Type your message here..."
+                  placeholderTextColor="#4B5563"
+                  multiline
+                  numberOfLines={4}
+                  value={messageText}
+                  onChangeText={setMessageText}
+                />
+
+                <View style={st.dialogButtons}>
+                  <TouchableOpacity
+                    style={st.dialogBtnCancel}
+                    onPress={() => { setIsMessaging(false); setMessageText(''); }}
+                    disabled={sendingMessage}
+                  >
+                    <Text style={st.dialogBtnCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={st.dialogBtnConfirm}
+                    onPress={handleSendMessage}
+                    disabled={sendingMessage || !messageText.trim()}
+                  >
+                    <LinearGradient
+                      colors={['#A855F7', '#7C3AED']}
+                      style={st.gradientBtn}
+                    >
+                      {sendingMessage ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={st.dialogBtnConfirmText}>Send</Text>
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* CUSTOM CONFIRMATION DIALOG */}
+          {confirmAction && (
+            <View style={st.overlayContainer}>
+              <View style={st.dialogBox}>
+                <View style={[st.confirmIconContainer, { backgroundColor: confirmAction.type === 'delete' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(168, 85, 247, 0.1)' }]}>
+                  <Ionicons
+                    name={confirmAction.type === 'delete' ? 'trash' : 'ban'}
+                    size={28}
+                    color={confirmAction.type === 'delete' ? '#EF4444' : '#A855F7'}
+                  />
+                </View>
+                <Text style={st.dialogTitle}>{confirmAction.title}</Text>
+                <Text style={st.dialogDesc}>{confirmAction.desc}</Text>
+
+                <View style={st.dialogButtons}>
+                  <TouchableOpacity
+                    style={st.dialogBtnCancel}
+                    onPress={() => setConfirmAction(null)}
+                  >
+                    <Text style={st.dialogBtnCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={st.dialogBtnConfirm}
+                    onPress={confirmAction.onConfirm}
+                  >
+                    <LinearGradient
+                      colors={confirmAction.type === 'delete' ? ['#EF4444', '#DC2626'] : ['#A855F7', '#7C3AED']}
+                      style={st.gradientBtn}
+                    >
+                      <Text style={st.dialogBtnConfirmText}>Confirm</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          )}
+          {/* Toast Notification inside Modal */}
+          <ToastNotification
+            visible={toast.visible}
+            message={toast.message}
+            type={toast.type}
+            onDismiss={() => setToast(prev => ({ ...prev, visible: false }))}
+          />
+
         </View>
       </Modal>
 
@@ -564,6 +584,14 @@ export default function AdminListenersScreen() {
           ))
         )}
       </ScrollView>
+
+      {/* Toast Notification */}
+      <ToastNotification
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+        onDismiss={() => setToast(prev => ({ ...prev, visible: false }))}
+      />
     </View>
   );
 }
@@ -692,8 +720,6 @@ const st = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 100,
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
   },
   dialogBox: {
     width: wp(82),
@@ -768,7 +794,8 @@ const st = StyleSheet.create({
     overflow: 'hidden',
   },
   gradientBtn: {
-    flex: 1,
+    width: '100%',
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
   },

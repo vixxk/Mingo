@@ -15,8 +15,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { ms, s, vs } from '../../utils/responsive';
+import { ms, s, vs, wp, hp } from '../../utils/responsive';
+import { LinearGradient } from 'expo-linear-gradient';
 import { adminAPI } from '../../utils/api';
+import ToastNotification from '../../components/shared/ToastNotification';
 import { AdminPageSkeleton } from '../../components/admin/Skeleton';
 
 const { height: SH } = Dimensions.get('window');
@@ -57,6 +59,8 @@ export default function BannedMembersScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [unbanning, setUnbanning] = useState(null);
+  const [confirmAction, setConfirmAction] = useState(null);
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
 
   const fetchBannedMembers = useCallback(async () => {
     try {
@@ -65,7 +69,7 @@ export default function BannedMembersScreen() {
       setMembers(data);
     } catch (error) {
       console.error('Failed to load banned members:', error);
-      Alert.alert('Error', 'Failed to load banned members.');
+      setToast({ visible: true, message: 'Failed to load banned members', type: 'error' });
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -83,25 +87,28 @@ export default function BannedMembersScreen() {
     fetchBannedMembers();
   }, [fetchBannedMembers]);
 
-  const handleUnban = async (id) => {
-    Alert.alert('Unban Member', 'Are you sure you want to unban this member?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Unban',
-        onPress: async () => {
-          setUnbanning(id);
-          try {
-            await adminAPI.toggleBanUser(id);
-            setMembers((prev) => prev.filter((m) => (m._id || m.id) !== id));
-          } catch (error) {
-            console.error('Failed to unban:', error);
-            Alert.alert('Error', 'Failed to unban member.');
-          } finally {
-            setUnbanning(null);
-          }
-        },
-      },
-    ]);
+  const triggerUnbanConfirm = (member) => {
+    setConfirmAction({
+      memberId: member._id || member.id,
+      name: member.name || member.username,
+      title: 'Unban Member',
+      desc: `Are you sure you want to unban ${member.name || member.username}? They will be able to log back in immediately.`,
+      onConfirm: async () => {
+        const id = member._id || member.id;
+        setConfirmAction(null);
+        setUnbanning(id);
+        try {
+          await adminAPI.toggleBanUser(id);
+          setMembers((prev) => prev.filter((m) => (m._id || m.id) !== id));
+          setToast({ visible: true, message: 'Member unbanned successfully', type: 'success' });
+        } catch (error) {
+          console.error('Failed to unban:', error);
+          setToast({ visible: true, message: 'Failed to unban member', type: 'error' });
+        } finally {
+          setUnbanning(null);
+        }
+      }
+    });
   };
 
   if (loading) {
@@ -170,7 +177,7 @@ export default function BannedMembersScreen() {
                 <TouchableOpacity
                   style={st.unbanBtn}
                   activeOpacity={0.7}
-                  onPress={() => handleUnban(memberId)}
+                  onPress={() => triggerUnbanConfirm(member)}
                   disabled={unbanning === memberId}
                 >
                   {unbanning === memberId ? (
@@ -184,6 +191,47 @@ export default function BannedMembersScreen() {
           })
         )}
       </ScrollView>
+
+      {/* CUSTOM CONFIRMATION DIALOG */}
+      {confirmAction && (
+        <View style={st.overlayContainer}>
+          <View style={st.dialogBox}>
+            <View style={[st.confirmIconContainer, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
+              <Ionicons name="checkmark-circle" size={28} color="#10B981" />
+            </View>
+            <Text style={st.dialogTitle}>{confirmAction.title}</Text>
+            <Text style={st.dialogDesc}>{confirmAction.desc}</Text>
+
+            <View style={st.dialogButtons}>
+              <TouchableOpacity
+                style={st.dialogBtnCancel}
+                onPress={() => setConfirmAction(null)}
+              >
+                <Text style={st.dialogBtnCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={st.dialogBtnConfirm}
+                onPress={confirmAction.onConfirm}
+              >
+                <LinearGradient
+                  colors={['#10B981', '#059669']}
+                  style={st.gradientBtn}
+                >
+                  <Text style={st.dialogBtnConfirmText}>Confirm</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Toast Notification */}
+      <ToastNotification
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+        onDismiss={() => setToast(prev => ({ ...prev, visible: false }))}
+      />
     </View>
   );
 }
@@ -276,5 +324,81 @@ const st = StyleSheet.create({
     fontFamily: 'Inter_500Medium',
     marginTop: vs(12),
     textAlign: 'center',
+  },
+  overlayContainer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  dialogBox: {
+    width: wp(82),
+    backgroundColor: '#0F0E11',
+    borderRadius: 24,
+    paddingHorizontal: wp(6),
+    paddingVertical: hp(3),
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#1F1F1F',
+  },
+  confirmIconContainer: {
+    width: wp(14),
+    height: wp(14),
+    borderRadius: wp(7),
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: hp(1.5),
+  },
+  dialogTitle: {
+    fontSize: ms(18),
+    fontFamily: 'Inter_900Black',
+    color: '#FFF',
+    marginBottom: hp(1),
+    textAlign: 'center',
+  },
+  dialogDesc: {
+    fontSize: ms(13),
+    color: '#9CA3AF',
+    textAlign: 'center',
+    fontFamily: 'Inter_400Regular',
+    lineHeight: hp(2.2),
+    marginBottom: hp(2.5),
+  },
+  dialogButtons: {
+    flexDirection: 'row',
+    gap: wp(3),
+    width: '100%',
+  },
+  dialogBtnCancel: {
+    flex: 1,
+    height: hp(5.5),
+    borderRadius: 30,
+    borderWidth: 1.5,
+    borderColor: '#3F3F46',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dialogBtnCancelText: {
+    color: '#A1A1AA',
+    fontSize: ms(14),
+    fontFamily: 'Inter_700Bold',
+  },
+  dialogBtnConfirm: {
+    flex: 1,
+    height: hp(5.5),
+    borderRadius: 30,
+    overflow: 'hidden',
+  },
+  dialogBtnConfirmText: {
+    color: '#FFF',
+    fontSize: ms(14),
+    fontFamily: 'Inter_700Bold',
+  },
+  gradientBtn: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

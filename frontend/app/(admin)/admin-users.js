@@ -20,6 +20,7 @@ import { ms, s, vs, wp, hp } from '../../utils/responsive';
 import UserDetailModal from '../../components/admin/UserDetailModal';
 import { adminAPI } from '../../utils/api';
 import { AdminPageSkeleton } from '../../components/admin/Skeleton';
+import ToastNotification from '../../components/shared/ToastNotification';
 
 const getAvatarImage = (gender, index) => {
   const parsedIndex = parseInt(index, 10) || 0;
@@ -59,6 +60,7 @@ export default function AdminUsersScreen() {
   const [showDetail, setShowDetail] = useState(false);
   const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
   const FILTER_CONFIG = {
     all: { icon: 'layers', color: '#8B5CF6', bg: 'rgba(139,92,246,0.1)' },
     active: { icon: 'checkmark-circle', color: '#22C55E', bg: 'rgba(34,197,94,0.1)' },
@@ -105,8 +107,9 @@ export default function AdminUsersScreen() {
       setShowDetail(false);
       setSelectedUser(null);
       loadUsers(filter);
+      setToast({ visible: true, message: `User ${isCurrentlyBanned ? 'unbanned' : 'banned'} successfully`, type: 'success' });
     } catch(e) {
-      Alert.alert('Error', 'Failed to update user status');
+      setToast({ visible: true, message: 'Failed to update user status', type: 'error' });
     }
   };
 
@@ -116,8 +119,9 @@ export default function AdminUsersScreen() {
       setUsers(prev => prev.filter(u => u.id !== userId));
       setShowDetail(false);
       setSelectedUser(null);
+      setToast({ visible: true, message: 'User deleted successfully', type: 'success' });
     } catch(e) {
-      Alert.alert('Error', 'Failed to delete user');
+      setToast({ visible: true, message: 'Failed to delete user', type: 'error' });
     }
   };
 
@@ -240,6 +244,14 @@ export default function AdminUsersScreen() {
         )}
         <View style={{ height: hp(4) }} />
       </ScrollView>
+
+      {/* Toast Notification */}
+      <ToastNotification
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+        onDismiss={() => setToast(prev => ({ ...prev, visible: false }))}
+      />
     </View>
   );
 }

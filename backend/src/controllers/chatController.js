@@ -23,7 +23,7 @@ class ChatController {
       const conversations = await Conversation.find({
         participants: userId
       })
-      .populate('participants', 'name username avatarIndex gender profileImage')
+      .populate('participants', 'name username avatarIndex gender profileImage role')
       .populate('lastMessage')
       .sort({ updatedAt: -1 });
 
@@ -42,13 +42,14 @@ class ChatController {
 
         const otherUser = conv.participants.find(p => p._id.toString() !== userId);
         const unreadCount = conv.unreadCount ? (conv.unreadCount.get(userId) || 0) : 0;
+        const isSupport = otherUser?.role === 'ADMIN';
 
         if (convSessions.length === 0) {
           // No sessions at all: push a default card
           cards.push({
             id: conv._id,
             sessionId: null,
-            name: otherUser?.name || otherUser?.username || 'Unknown',
+            name: isSupport ? 'Mingo Support' : (otherUser?.name || otherUser?.username || 'Unknown'),
             gender: otherUser?.gender,
             avatarIndex: otherUser?.avatarIndex,
             image: otherUser?.profileImage,
@@ -56,7 +57,8 @@ class ChatController {
             time: conv.lastMessage?.createdAt || conv.updatedAt,
             unread: unreadCount,
             isOnline: false,
-            sessionStatus: 'none'
+            sessionStatus: 'none',
+            isAdmin: isSupport
           });
         } else {
           // Push cards for each session
@@ -79,7 +81,7 @@ class ChatController {
             cards.push({
               id: conv._id,
               sessionId: session._id,
-              name: otherUser?.name || otherUser?.username || 'Unknown',
+              name: isSupport ? 'Mingo Support' : (otherUser?.name || otherUser?.username || 'Unknown'),
               gender: otherUser?.gender,
               avatarIndex: otherUser?.avatarIndex,
               image: otherUser?.profileImage,
@@ -92,7 +94,8 @@ class ChatController {
               startTime: session.startTime,
               endTime: session.endTime,
               listenerEarnings: session.listenerEarnings || 0,
-              coinsDeducted: session.coinsDeducted || 0
+              coinsDeducted: session.coinsDeducted || 0,
+              isAdmin: isSupport
             });
           }
 
@@ -110,7 +113,7 @@ class ChatController {
                 cards.push({
                   id: conv._id,
                   sessionId: null,
-                  name: otherUser?.name || otherUser?.username || 'Unknown',
+                  name: isSupport ? 'Mingo Support' : (otherUser?.name || otherUser?.username || 'Unknown'),
                   gender: otherUser?.gender,
                   avatarIndex: otherUser?.avatarIndex,
                   image: otherUser?.profileImage,
@@ -118,7 +121,8 @@ class ChatController {
                   time: conversationLastMessage.createdAt,
                   unread: unreadCount,
                   isOnline: false,
-                  sessionStatus: 'none'
+                  sessionStatus: 'none',
+                  isAdmin: isSupport
                 });
               }
             }

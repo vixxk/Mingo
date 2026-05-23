@@ -1188,15 +1188,12 @@ class AdminController {
       });
       await message.save();
 
-      // 3. Update conversation lastMessage & unread count
-      conversation.lastMessage = message._id;
-      if (!conversation.unreadCount) {
-        conversation.unreadCount = new Map();
-      }
+      // 3. Update conversation lastMessage & unread count atomically
       const targetUserIdStr = targetUserId.toString();
-      const currentUnread = conversation.unreadCount.get(targetUserIdStr) || 0;
-      conversation.unreadCount.set(targetUserIdStr, currentUnread + 1);
-      await conversation.save();
+      await Conversation.findByIdAndUpdate(conversation._id, {
+        lastMessage: message._id,
+        $inc: { [`unreadCount.${targetUserIdStr}`]: 1 }
+      });
 
       // 4. Emit socket events
       const io = req.app.get('io');

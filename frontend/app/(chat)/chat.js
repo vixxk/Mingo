@@ -74,6 +74,7 @@ const GiftMessageBubble = ({ item }) => {
   const giftName = item.text ? item.text.replace('Sent a gift: ', '') : 'Gift';
   const giftIcon = item.mediaUrl || '🎁';
   const price = getGiftPriceByName(giftName);
+  const giftCount = item.giftCount || 1;
 
   // Define themed colors and properties for the gift bubble
   let borderColors = ['#8B5CF6', '#EC4899']; // Default fuchsia/purple
@@ -146,19 +147,36 @@ const GiftMessageBubble = ({ item }) => {
             {/* Glowing Icon Badge */}
             <View style={styles.giftIconWrapper}>
               <View style={[styles.giftIconGlow, { backgroundColor: borderColors[0], opacity: glowOpacity }]} />
-              <Text style={styles.giftBubbleIcon}>{giftIcon}</Text>
+              {giftCount > 1 ? (
+                <View style={styles.giftIconStack}>
+                  <Text style={[styles.giftBubbleIcon, styles.giftIconStacked, { left: wp(0.5), top: hp(0.2), transform: [{ scale: 0.8 }] }]}>{giftIcon}</Text>
+                  <Text style={[styles.giftBubbleIcon, styles.giftIconStacked, { left: wp(1.5), top: hp(0.6), transform: [{ scale: 0.95 }] }]}>{giftIcon}</Text>
+                </View>
+              ) : (
+                <Text style={styles.giftBubbleIcon}>{giftIcon}</Text>
+              )}
+              {giftCount > 1 && (
+                <LinearGradient
+                  colors={['#FBBF24', '#FBBF24']}
+                  style={styles.multiplierBadge}
+                >
+                  <Text style={styles.multiplierBadgeText}>{giftCount}X</Text>
+                </LinearGradient>
+              )}
             </View>
 
             {/* Content Details */}
             <View style={styles.giftDetails}>
               <Text style={styles.giftBubbleTitle}>
-                {isSentByMe ? 'You sent a gift!' : 'Received a gift!'}
+                {isSentByMe 
+                  ? (giftCount > 1 ? `Sent ${giftCount}X gifts` : 'You sent a gift!') 
+                  : (giftCount > 1 ? `Received ${giftCount}X gifts` : 'Received a gift!')}
               </Text>
               <Text style={[styles.giftBubbleName, { color: textColor }]}>
                 {giftName}
               </Text>
               <Text style={[styles.giftValueText, { color: textColor }]}>
-                🪙 {price} Coins
+                🪙 {price * giftCount} Coins {giftCount > 1 ? `(${price} × ${giftCount})` : ''}
               </Text>
               <View style={[styles.giftBadge, { backgroundColor: badgeBg }]}>
                 <Text style={[styles.giftBadgeText, { color: textColor }]}>{badgeText}</Text>
@@ -445,6 +463,7 @@ export default function ChatScreen() {
                   sent: myId && String(msg.sender?._id || msg.sender) === String(myId),
                   type: type,
                   mediaUrl: mediaUrl,
+                  giftCount: msg.giftCount || 1,
                   senderId: msg.sender?._id || msg.sender,
                   senderModel: msg.senderModel,
                   isAdminMessage: msg.isAdminMessage || false,
@@ -522,6 +541,7 @@ export default function ChatScreen() {
             name: giftName,
             icon: mediaUrl || '🎁',
             price: getGiftPriceByName(giftName),
+            count: msg.giftCount || 1
           }
         });
       }
@@ -545,6 +565,7 @@ export default function ChatScreen() {
               sent: true,
               type: type,
               mediaUrl: mediaUrl,
+              giftCount: msg.giftCount || 1,
               senderId: msgSenderId,
               senderModel: msg.senderModel,
               isAdminMessage: msg.isAdminMessage || false,
@@ -560,6 +581,7 @@ export default function ChatScreen() {
           sent: isSent,
           type: type,
           mediaUrl: mediaUrl,
+          giftCount: msg.giftCount || 1,
           senderId: msgSenderId,
           senderModel: msg.senderModel,
           isAdminMessage: msg.isAdminMessage || false,
@@ -994,6 +1016,7 @@ export default function ChatScreen() {
               sent: true,
               type: 'gift',
               mediaUrl: giftIcon,
+              giftCount: gift.count || 1,
               senderId: currentUserId,
               senderModel: 'User',
               createdAt: new Date().toISOString(),
@@ -1007,6 +1030,7 @@ export default function ChatScreen() {
               content: giftMsg,
               type: 'gift',
               mediaUrl: giftIcon,
+              giftCount: gift.count || 1,
             });
             
             triggerGiftAnimation({
@@ -1023,6 +1047,7 @@ export default function ChatScreen() {
           giftName={receivedGift.gift.name}
           giftIcon={receivedGift.gift.icon}
           giftPrice={receivedGift.gift.price}
+          giftCount={receivedGift.gift.count || 1}
           senderName={receivedGift.isSentByMe ? 'You' : receivedGift.senderName || otherName || 'Someone'}
           receiverName={receivedGift.isSentByMe ? otherName : 'You'}
           isSentByMe={receivedGift.isSentByMe}
@@ -1315,6 +1340,37 @@ const styles = StyleSheet.create({
   },
   giftBubbleIcon: {
     fontSize: wp(8),
+  },
+  giftIconStack: {
+    width: wp(12),
+    height: wp(12),
+    position: 'relative',
+  },
+  giftIconStacked: {
+    position: 'absolute',
+  },
+  multiplierBadge: {
+    position: 'absolute',
+    bottom: -hp(0.8),
+    right: -wp(1.5),
+    paddingHorizontal: wp(1.5),
+    paddingVertical: hp(0.1),
+    borderRadius: wp(2),
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#0F0F1A',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  multiplierBadgeText: {
+    color: '#000000',
+    fontSize: wp(2.3),
+    fontWeight: '900',
+    fontFamily: 'Inter_900Black',
   },
   giftDetails: {
     flex: 1,

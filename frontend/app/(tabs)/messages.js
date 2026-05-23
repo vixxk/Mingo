@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { wp, hp } from '../../utils/responsive';
+import { wp, hp, ms, s, vs } from '../../utils/responsive';
 import { chatAPI } from '../../utils/api';
 import { socketService } from '../../utils/socket';
 import { useFocusEffect } from 'expo-router';
@@ -45,6 +45,25 @@ const getAvatarImage = (gender, index) => {
       require('../../images/female_avatar_8_1776973138772.png'),
     ];
     return femaleAvatars[parsedIndex] || femaleAvatars[0];
+  }
+};
+
+const formatMessageDate = (dateStr) => {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  const now = new Date();
+  
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+  const targetDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+  if (targetDate.getTime() === today.getTime()) {
+    return 'Today';
+  } else if (targetDate.getTime() === yesterday.getTime()) {
+    return 'Yesterday';
+  } else {
+    const dateOptions = { day: 'numeric', month: 'short' };
+    return date.toLocaleDateString('en-US', dateOptions);
   }
 };
 
@@ -138,10 +157,14 @@ export default function MessagesScreen() {
   });
 
   const renderMessageItem = ({ item }) => {
-    let timeStr = item.time;
-    if (typeof timeStr === 'string' && timeStr.includes('T')) {
-      const d = new Date(timeStr);
-      timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    let timeStr = '';
+    let dateLabel = '';
+    if (item.time) {
+      const d = new Date(item.time);
+      if (!isNaN(d.getTime())) {
+        timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        dateLabel = formatMessageDate(item.time);
+      }
     }
 
     return (
@@ -161,26 +184,51 @@ export default function MessagesScreen() {
         })}
       >
         <View style={styles.avatarContainer}>
-          <Image source={item.image || getAvatarImage(item.gender, item.avatarIndex)} style={styles.avatar} />
-          {item.isOnline && <View style={styles.onlineIndicator} />}
+          {item.isAdmin ? (
+            <LinearGradient
+              colors={['#1F1A0A', '#0F0B03']}
+              style={[styles.avatar, { alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#D4AF37' }]}
+            >
+              <Ionicons name="shield-checkmark" size={24} color="#D4AF37" />
+            </LinearGradient>
+          ) : (
+            <Image source={item.image || getAvatarImage(item.gender, item.avatarIndex)} style={styles.avatar} />
+          )}
+          {item.isOnline && !item.isAdmin && <View style={styles.onlineIndicator} />}
         </View>
         
         <View style={styles.messageDetails}>
           <View style={styles.nameRow}>
             <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 6, marginRight: 10 }}>
-              <Text style={styles.nameText} numberOfLines={1}>{item.name}</Text>
+              <Text style={[styles.nameText, item.isAdmin && { color: '#D4AF37' }]} numberOfLines={1}>
+                {item.name}
+              </Text>
               {item.sessionStatus === 'active' && (
                 <View style={[styles.statusBadge, { backgroundColor: 'rgba(34, 197, 94, 0.15)' }]}>
                   <Text style={[styles.statusBadgeText, { color: '#22C55E' }]}>Active</Text>
                 </View>
               )}
               {item.sessionStatus === 'completed' && (
-                <View style={[styles.statusBadge, { backgroundColor: 'rgba(156, 163, 175, 0.15)' }]}>
+                <View style={[styles.statusBadge, { backgroundColor: 'rgba(156, 163, 175, 0.15)', flexDirection: 'row', alignItems: 'center', gap: wp(1) }]}>
                   <Text style={[styles.statusBadgeText, { color: '#9CA3AF' }]}>Ended • {item.duration || 0}m</Text>
+                  {item.coinsDeducted !== undefined && (
+                    <>
+                      <View style={styles.bulletDot} />
+                      <View style={styles.miniCostBadge}>
+                        <Text style={styles.miniCostText}>{Math.floor((item.coinsDeducted || 0) / 10)}</Text>
+                        <Text style={{ fontSize: wp(2.5) }}>💎</Text>
+                      </View>
+                    </>
+                  )}
                 </View>
               )}
             </View>
-            <Text style={[styles.timeText, item.unread > 0 && styles.timeTextUnread]}>{timeStr}</Text>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={[styles.timeText, item.unread > 0 && styles.timeTextUnread]}>{timeStr}</Text>
+              {!!dateLabel && (
+                <Text style={[styles.dateText, item.unread > 0 && styles.dateTextUnread]}>{dateLabel}</Text>
+              )}
+            </View>
           </View>
           <View style={styles.messageRow}>
             <Text 
@@ -491,5 +539,36 @@ const styles = StyleSheet.create({
     fontSize: wp(2.5),
     fontWeight: '700',
     fontFamily: 'Inter_700Bold',
+  },
+  bulletDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: 'rgba(255,255,255,0.4)',
+  },
+  miniCostBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    paddingHorizontal: wp(1.2),
+    paddingVertical: hp(0.1),
+    borderRadius: 3,
+    gap: 2,
+  },
+  miniCostText: {
+    color: '#fff',
+    fontSize: wp(2.3),
+    fontWeight: '700',
+    fontFamily: 'Inter_700Bold',
+  },
+  dateText: {
+    fontSize: wp(2.6),
+    color: '#6B7280',
+    fontFamily: 'Inter_500Medium',
+    marginTop: hp(0.2),
+  },
+  dateTextUnread: {
+    color: '#3B82F6',
+    fontWeight: '600',
   },
 });
