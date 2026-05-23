@@ -19,6 +19,10 @@ const authenticate = async (req, res, next) => {
       return ApiResponse.unauthorized(res, 'User not found');
     }
 
+    if (user.isBanned) {
+      return ApiResponse.forbidden(res, 'Your account has been suspended. Contact support.');
+    }
+
     req.user = user;
     next();
   } catch (err) {

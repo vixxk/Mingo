@@ -188,7 +188,7 @@ export default function BalanceScreen() {
             <Text style={styles.footerRate}>
               10 <Image source={require('../../images/insufficient balance/twemoji_coin.png')} style={{width: wp(4.5), height: wp(4.5), transform: [{ translateY: 2.5 }]}} /> = 1 💎
             </Text>
-            <TouchableOpacity activeOpacity={0.7}>
+            <TouchableOpacity activeOpacity={0.7} onPress={() => router.push('/(wallet)/diamond-talks')}>
               <Text style={styles.footerLink}>Learn more about Diamonds</Text>
             </TouchableOpacity>
           </View>
@@ -254,5 +254,5 @@ const styles = StyleSheet.create({
 
   footerInfo: { marginTop: hp(4), alignItems: 'center', gap: hp(1.5) },
   footerRate: { fontSize: wp(4), color: '#fff', fontWeight: '600', textAlign: 'center' },
-  footerLink: { fontSize: wp(3.5), color: '#9CA3AF', textDecorationLine: 'underline' }
+  footerLink: { fontSize: wp(3.6), color: '#FBBF24', textDecorationLine: 'underline', fontWeight: '600' }
 });

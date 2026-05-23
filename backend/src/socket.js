@@ -341,17 +341,6 @@ const initSocket = (server) => {
                 userParticipant.coins -= CHAT_COINS_PER_SESSION;
                 await userParticipant.save();
 
-                // Record transaction
-                await Transaction.create({
-                  userId: userParticipantId,
-                  type: 'call_debit',
-                  amount: 0,
-                  coins: -CHAT_COINS_PER_SESSION,
-                  description: 'Chat session - 5 min block',
-                  status: 'completed',
-                  metadata: {},
-                });
-
                 // Mark session active
                 const Session = require('./models/sessionModel');
                 const { v4: uuidv4 } = require('uuid');
@@ -370,6 +359,17 @@ const initSocket = (server) => {
                 } catch (sessErr) {
                   console.error('Error creating chat Session document:', sessErr);
                 }
+
+                // Record transaction
+                await Transaction.create({
+                  userId: userParticipantId,
+                  type: 'call_debit',
+                  amount: 0,
+                  coins: -CHAT_COINS_PER_SESSION,
+                  description: 'Chat session - 5 min block',
+                  status: 'completed',
+                  metadata: { sessionId: chatSessionDoc ? chatSessionDoc._id : null },
+                });
 
                 conversation.chatSession = {
                   active: true,
@@ -565,23 +565,28 @@ const initSocket = (server) => {
           return;
         }
 
-        // Match with a listener
-        if (randomListeners.size > 0) {
-          const matchedListenerId = [...randomListeners][0];
-          randomListeners.delete(matchedListenerId);
-          if (randomSearchTimeouts[matchedListenerId]) {
-            clearTimeout(randomSearchTimeouts[matchedListenerId]);
-            delete randomSearchTimeouts[matchedListenerId];
-          }
+        // Match with any available approved, online and free listener
+        const availableListeners = await Listener.find({
+          status: 'approved',
+          isOnline: true,
+          isBusy: false,
+          userId: { $ne: userId }
+        });
 
-          const listener = await Listener.findOne({ userId: matchedListenerId });
+        if (availableListeners.length > 0) {
+          const randomIndex = Math.floor(Math.random() * availableListeners.length);
+          const matchedListener = availableListeners[randomIndex];
+          const matchedListenerId = matchedListener.userId.toString();
+
           const listenerUser = await User.findById(matchedListenerId);
+
+          console.log(`[Socket] Random match found: User ${userId} <-> Listener ${matchedListenerId}`);
 
           socket.emit('random_match_found', {
             partnerId: matchedListenerId,
             partnerName: listenerUser?.name || 'Listener',
-            partnerAvatar: listener?.avatarIndex || '0',
-            partnerGender: listener?.gender || 'Female',
+            partnerAvatar: matchedListener?.avatarIndex || listenerUser?.avatarIndex || '0',
+            partnerGender: matchedListener?.gender || listenerUser?.gender || 'Female',
             role: 'LISTENER'
           });
 
@@ -593,15 +598,11 @@ const initSocket = (server) => {
             role: 'USER'
           });
         } else {
-          randomUsers.add(userId);
           socket.emit('searching_random', { message: 'Searching for an online listener...' });
           
-          // Auto-timeout after 60 seconds
-          randomSearchTimeouts[userId] = setTimeout(() => {
-            randomUsers.delete(userId);
-            socket.emit('random_search_timeout');
-            delete randomSearchTimeouts[userId];
-          }, 60000);
+          // Auto-timeout after 60 seconds (fall back to queue or timeout immediately)
+          // We will timeout immediately if no listeners are online at all
+          socket.emit('random_search_timeout');
         }
       } else {
         // Listener looking for user
@@ -859,7 +860,7 @@ function startChatSessionTimer(conversationId, userId) {
         coins: -CHAT_COINS_PER_SESSION,
         description: 'Chat session - 5 min block',
         status: 'completed',
-        metadata: {},
+        metadata: { sessionId: conversation.chatSession.sessionId },
       });
 
       conversation.chatSession.lastDeductionTime = new Date();
@@ -924,19 +925,36 @@ async function endChatSession(conversationId) {
         const endTime = new Date();
         const startTime = conversationBefore.chatSession.startTime || conversationBefore.createdAt;
         const durationMs = endTime - startTime;
-        const durationMinutes = Math.ceil(durationMs / 60000);
-        const payoutAmount = durationMinutes * 0.5;
-
+        
+        // Calculate units billed based on actual coins deducted (at least 1 block)
         const coinsDeductedObj = conversationBefore.chatSession.totalCoinsDeducted || CHAT_COINS_PER_SESSION;
+        const unitsBilled = Math.ceil(coinsDeductedObj / CHAT_COINS_PER_SESSION);
+        
+        // Treat 5 minutes as the unit for session duration
+        const durationMinutesBilled = unitsBilled * 5;
+        
+        let chatPayout = CHAT_LISTENER_PAYOUT;
+        try {
+          const SystemSettings = require('./models/SystemSettings');
+          const settings = await SystemSettings.findOne();
+          if (settings && settings.chatPayoutRate !== undefined) {
+            chatPayout = settings.chatPayoutRate;
+          }
+        } catch (e) {
+          console.error('Error fetching chatPayoutRate:', e);
+        }
+
+        const payoutAmountBilled = unitsBilled * chatPayout;
+
         const revenue = coinsDeductedObj * 0.5; // 1 coin = Rs 0.50
-        const platformProfit = revenue - payoutAmount;
+        const platformProfit = revenue - payoutAmountBilled;
 
         await Session.findByIdAndUpdate(conversationBefore.chatSession.sessionId, {
           status: 'completed',
           endTime,
-          duration: durationMinutes,
+          duration: durationMinutesBilled,
           coinsDeducted: coinsDeductedObj,
-          listenerEarnings: payoutAmount,
+          listenerEarnings: payoutAmountBilled,
           platformProfit: platformProfit
         });
 
@@ -955,17 +973,17 @@ async function endChatSession(conversationId) {
         if (listenerId) {
           const listenerProfile = await Listener.findOne({ userId: listenerId });
           if (listenerProfile) {
-            listenerProfile.earnings += payoutAmount;
-            listenerProfile.todayEarnings += payoutAmount;
+            listenerProfile.earnings += payoutAmountBilled;
+            listenerProfile.todayEarnings += payoutAmountBilled;
             await listenerProfile.save();
 
             // Record transaction for listener
             await Transaction.create({
               userId: listenerId,
               type: 'call_credit',
-              amount: payoutAmount,
+              amount: payoutAmountBilled,
               coins: 0,
-              description: `Chat session earnings - ${durationMinutes} min`,
+              description: `Chat session earnings - ${durationMinutesBilled} min`,
               status: 'completed',
               metadata: { conversationId, sessionId: conversationBefore.chatSession.sessionId },
             });
@@ -1021,7 +1039,17 @@ async function startCallBillingTimer(sessionId) {
 
   const isVideo = session.callType === 'video';
   const coinsPerMin = isVideo ? VIDEO_COINS_PER_MIN : AUDIO_COINS_PER_MIN;
-  const payoutPerMin = isVideo ? VIDEO_PAYOUT_PER_MIN : AUDIO_PAYOUT_PER_MIN;
+  
+  let payoutPerMin = isVideo ? VIDEO_PAYOUT_PER_MIN : AUDIO_PAYOUT_PER_MIN;
+  try {
+    const SystemSettings = require('./models/SystemSettings');
+    const settings = await SystemSettings.findOne();
+    if (settings) {
+      payoutPerMin = isVideo ? (settings.videoPayoutRate ?? VIDEO_PAYOUT_PER_MIN) : (settings.audioPayoutRate ?? AUDIO_PAYOUT_PER_MIN);
+    }
+  } catch (err) {
+    console.error('Error loading dynamic payout rates:', err);
+  }
 
   // Mark the first deduction time
   session.lastDeductionTime = new Date();

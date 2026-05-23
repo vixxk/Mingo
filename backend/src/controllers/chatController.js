@@ -28,60 +28,23 @@ class ChatController {
       .sort({ updatedAt: -1 });
 
       const cards = [];
-      const conversationsWithSessions = new Set();
 
-      for (const session of chatSessions) {
-        const sessionUser = session.userId;
-        const sessionListener = session.listenerId;
-        if (!sessionUser || !sessionListener) continue;
+      for (const conv of conversations) {
+        // Find all sessions for this conversation
+        const convSessions = chatSessions.filter(s => {
+          const sUserId = s.userId?._id ? s.userId._id.toString() : s.userId?.toString();
+          const sListenerId = s.listenerId?._id ? s.listenerId._id.toString() : s.listenerId?.toString();
+          const p0Id = conv.participants[0]?._id ? conv.participants[0]._id.toString() : conv.participants[0]?.toString();
+          const p1Id = conv.participants[1]?._id ? conv.participants[1]._id.toString() : conv.participants[1]?.toString();
+          
+          return (sUserId === p0Id && sListenerId === p1Id) || (sUserId === p1Id && sListenerId === p0Id);
+        });
 
-        // Find the conversation for this session
-        const conv = conversations.find(c => 
-          c.participants.some(p => p._id.toString() === sessionUser._id.toString()) &&
-          c.participants.some(p => p._id.toString() === sessionListener._id.toString())
-        );
-
-        if (!conv) continue;
-        conversationsWithSessions.add(conv._id.toString());
-
-        const otherUser = sessionUser._id.toString() === userId ? sessionListener : sessionUser;
+        const otherUser = conv.participants.find(p => p._id.toString() !== userId);
         const unreadCount = conv.unreadCount ? (conv.unreadCount.get(userId) || 0) : 0;
 
-        // Find last message within this session's window
-        const query = {
-          conversationId: conv._id,
-          createdAt: { $gte: session.startTime }
-        };
-        if (session.endTime) {
-          query.createdAt.$lte = session.endTime;
-        }
-
-        const lastMsg = await Message.findOne(query).sort({ createdAt: -1 });
-
-        cards.push({
-          id: conv._id,
-          sessionId: session._id,
-          name: otherUser?.name || otherUser?.username || 'Unknown',
-          gender: otherUser?.gender,
-          avatarIndex: otherUser?.avatarIndex,
-          image: otherUser?.profileImage,
-          lastMessage: lastMsg?.content || 'Session started',
-          time: lastMsg?.createdAt || session.startTime,
-          unread: session.status === 'active' ? unreadCount : 0,
-          isOnline: false,
-          sessionStatus: session.status,
-          duration: session.duration,
-          startTime: session.startTime,
-          endTime: session.endTime
-        });
-      }
-
-      // Add default cards for conversations that do not have any sessions yet
-      for (const conv of conversations) {
-        if (!conversationsWithSessions.has(conv._id.toString())) {
-          const otherUser = conv.participants.find(p => p._id.toString() !== userId);
-          const unreadCount = conv.unreadCount ? (conv.unreadCount.get(userId) || 0) : 0;
-
+        if (convSessions.length === 0) {
+          // No sessions at all: push a default card
           cards.push({
             id: conv._id,
             sessionId: null,
@@ -95,6 +58,71 @@ class ChatController {
             isOnline: false,
             sessionStatus: 'none'
           });
+        } else {
+          // Push cards for each session
+          for (const session of convSessions) {
+            const sessionUser = session.userId;
+            const sessionListener = session.listenerId;
+            if (!sessionUser || !sessionListener) continue;
+
+            // Find last message within this session's window
+            const query = {
+              conversationId: conv._id,
+              createdAt: { $gte: session.startTime }
+            };
+            if (session.endTime) {
+              query.createdAt.$lte = session.endTime;
+            }
+
+            const lastMsg = await Message.findOne(query).sort({ createdAt: -1 });
+
+            cards.push({
+              id: conv._id,
+              sessionId: session._id,
+              name: otherUser?.name || otherUser?.username || 'Unknown',
+              gender: otherUser?.gender,
+              avatarIndex: otherUser?.avatarIndex,
+              image: otherUser?.profileImage,
+              lastMessage: lastMsg?.content || 'Session started',
+              time: lastMsg?.createdAt || session.startTime,
+              unread: session.status === 'active' ? unreadCount : 0,
+              isOnline: false,
+              sessionStatus: session.status,
+              duration: session.duration,
+              startTime: session.startTime,
+              endTime: session.endTime,
+              listenerEarnings: session.listenerEarnings || 0,
+              coinsDeducted: session.coinsDeducted || 0
+            });
+          }
+
+          // Check if there is an active session
+          const hasActiveSession = convSessions.some(s => s.status === 'active');
+          if (!hasActiveSession) {
+            // Find the most recent completed/cancelled session to check if there are newer messages
+            const sortedSessions = [...convSessions].sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
+            const mostRecentSession = sortedSessions[0];
+            
+            if (mostRecentSession && mostRecentSession.endTime) {
+              // Check if the conversation has a newer message after the session ended
+              const conversationLastMessage = conv.lastMessage;
+              if (conversationLastMessage && new Date(conversationLastMessage.createdAt) > new Date(mostRecentSession.endTime)) {
+                cards.push({
+                  id: conv._id,
+                  sessionId: null,
+                  name: otherUser?.name || otherUser?.username || 'Unknown',
+                  gender: otherUser?.gender,
+                  avatarIndex: otherUser?.avatarIndex,
+                  image: otherUser?.profileImage,
+                  lastMessage: conversationLastMessage.content || 'Say hello!',
+                  time: conversationLastMessage.createdAt,
+                  unread: unreadCount,
+                  isOnline: false,
+                  sessionStatus: 'none'
+                });
+              }
+            }
+          }
         }
       }
 

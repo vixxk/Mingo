@@ -415,6 +415,8 @@ export default function VideoCallScreen() {
             giftIcon={receivedGift.gift.icon}
             giftPrice={receivedGift.gift.price}
             senderName={receivedGift.isSentByMe ? 'You' : receivedGift.senderName || 'Someone'}
+            receiverName={receivedGift.isSentByMe ? name : 'You'}
+            isSentByMe={receivedGift.isSentByMe}
             onComplete={() => setReceivedGift(null)}
           />
         )}
@@ -584,6 +586,8 @@ export default function VideoCallScreen() {
           giftIcon={receivedGift.gift.icon}
           giftPrice={receivedGift.gift.price}
           senderName={receivedGift.isSentByMe ? 'You' : receivedGift.senderName || 'Someone'}
+          receiverName={receivedGift.isSentByMe ? name : 'You'}
+          isSentByMe={receivedGift.isSentByMe}
           onComplete={() => setReceivedGift(null)}
         />
       )}

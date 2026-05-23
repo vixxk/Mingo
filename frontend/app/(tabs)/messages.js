@@ -124,10 +124,10 @@ export default function MessagesScreen() {
         loadConversations(false);
       };
 
-      socketService.on('new_message_notification', handleNewMessage);
+      socketService.on('receive_message', handleNewMessage);
 
       return () => {
-        socketService.off('new_message_notification', handleNewMessage);
+        socketService.off('receive_message', handleNewMessage);
       };
     }, [])
   );
@@ -167,7 +167,7 @@ export default function MessagesScreen() {
         
         <View style={styles.messageDetails}>
           <View style={styles.nameRow}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 6 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 6, marginRight: 10 }}>
               <Text style={styles.nameText} numberOfLines={1}>{item.name}</Text>
               {item.sessionStatus === 'active' && (
                 <View style={[styles.statusBadge, { backgroundColor: 'rgba(34, 197, 94, 0.15)' }]}>
@@ -260,7 +260,7 @@ export default function MessagesScreen() {
         ) : (
           <FlatList
             data={filteredMessages}
-            keyExtractor={item => item.id}
+            keyExtractor={(item, index) => item.sessionId ? `${item.id}-${item.sessionId}` : `${item.id}-${index}`}
             renderItem={renderMessageItem}
             contentContainerStyle={styles.listContainer}
             showsVerticalScrollIndicator={false}

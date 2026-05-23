@@ -195,6 +195,27 @@ const MessageBubble = ({ item }) => {
   if (item.type === 'gift') {
     return <GiftMessageBubble item={item} />;
   }
+  if (item.isAdminMessage) {
+    return (
+      <View style={[styles.bubbleRow, styles.adminBubbleRow]}>
+        <LinearGradient
+          colors={['#4F46E5', '#1E1B4B']}
+          style={styles.adminBubble}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          <View style={styles.adminBadgeRow}>
+            <Ionicons name="shield-checkmark" size={12} color="#FBBF24" style={{ marginRight: wp(1) }} />
+            <Text style={styles.adminBadgeText}>MINGO SUPPORT</Text>
+          </View>
+          <Text style={styles.adminBubbleText}>{item.text}</Text>
+          <Text style={styles.adminTimeStamp}>
+            {item.createdAt ? new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+          </Text>
+        </LinearGradient>
+      </View>
+    );
+  }
 
   const isMedia = item.type === 'image' || item.type === 'sticker';
   const bubbleStyle = isMedia
@@ -332,12 +353,14 @@ export default function ChatScreen() {
     const init = async () => {
       try {
         let myId = null;
+        let myRole = 'USER';
         const userData = await AsyncStorage.getItem('user');
         if (userData) {
           const user = JSON.parse(userData);
           myId = user._id || user.id;
+          myRole = user.role || 'USER';
           setCurrentUserId(myId);
-          setUserRole(user.role || 'USER');
+          setUserRole(myRole);
         }
 
         // Fetch balance
@@ -363,7 +386,6 @@ export default function ChatScreen() {
               
               // Fetch the other user's profile for display (name, avatar, gender)
               try {
-                const myRole = (await AsyncStorage.getItem('userRole')) || 'USER';
                 if (myRole === 'USER') {
                   // I'm user, other is listener → get listener's public profile
                   const profileRes = await listenersAPI.getPublicProfile(other.toString());
@@ -425,6 +447,7 @@ export default function ChatScreen() {
                   mediaUrl: mediaUrl,
                   senderId: msg.sender?._id || msg.sender,
                   senderModel: msg.senderModel,
+                  isAdminMessage: msg.isAdminMessage || false,
                   createdAt: msg.createdAt,
                 };
               })
@@ -524,6 +547,7 @@ export default function ChatScreen() {
               mediaUrl: mediaUrl,
               senderId: msgSenderId,
               senderModel: msg.senderModel,
+              isAdminMessage: msg.isAdminMessage || false,
               createdAt: msg.createdAt,
             };
             return updated;
@@ -538,6 +562,7 @@ export default function ChatScreen() {
           mediaUrl: mediaUrl,
           senderId: msgSenderId,
           senderModel: msg.senderModel,
+          isAdminMessage: msg.isAdminMessage || false,
           createdAt: msg.createdAt,
         }];
       });
@@ -999,6 +1024,8 @@ export default function ChatScreen() {
           giftIcon={receivedGift.gift.icon}
           giftPrice={receivedGift.gift.price}
           senderName={receivedGift.isSentByMe ? 'You' : receivedGift.senderName || otherName || 'Someone'}
+          receiverName={receivedGift.isSentByMe ? otherName : 'You'}
+          isSentByMe={receivedGift.isSentByMe}
           onComplete={() => setReceivedGift(null)}
         />
       )}
@@ -1100,6 +1127,45 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(245,158,11,0.3)', maxWidth: wp(85),
   },
   systemBubbleText: { fontSize: wp(3.2), color: '#F59E0B', fontWeight: '600', flex: 1 },
+
+  // Admin Support message bubble
+  adminBubbleRow: { alignItems: 'center', marginVertical: hp(1), width: '100%' },
+  adminBubble: {
+    width: wp(85),
+    borderRadius: wp(4),
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1.5),
+    borderWidth: 1.5,
+    borderColor: 'rgba(251, 191, 36, 0.4)', // subtle gold border
+    shadowColor: '#4F46E5',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  adminBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: hp(0.6),
+  },
+  adminBadgeText: {
+    fontSize: wp(2.6),
+    fontFamily: 'Inter_900Black',
+    color: '#FBBF24', // Gold text
+    letterSpacing: 0.8,
+  },
+  adminBubbleText: {
+    fontSize: wp(3.5),
+    color: '#FFF',
+    lineHeight: wp(5.2),
+    fontFamily: 'Inter_500Medium',
+  },
+  adminTimeStamp: {
+    fontSize: wp(2.2),
+    color: 'rgba(255,255,255,0.5)',
+    textAlign: 'right',
+    marginTop: hp(0.5),
+  },
 
   // Blocked banner
   blockedBanner: {

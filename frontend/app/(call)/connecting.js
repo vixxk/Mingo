@@ -131,11 +131,13 @@ export default function ConnectingScreen() {
         
         let callerName = 'User';
         let callerId = null;
+        let userRole = 'USER';
         
         if (userStr) {
           const user = JSON.parse(userStr);
           callerName = user.name || user.username || 'Mingo User';
           callerId = user.id || user._id;
+          userRole = user.role || 'USER';
         }
 
         await socketService.connect();
@@ -179,7 +181,6 @@ export default function ConnectingScreen() {
 
         if (isRandom === 'true') {
           // RANDOM CALL FLOW
-          const userRole = await AsyncStorage.getItem('userRole') || 'USER';
           
           socketService.on('random_match_found', async (data) => {
             console.log('Random match found:', data);
@@ -334,6 +335,12 @@ export default function ConnectingScreen() {
         </Animated.View>
         <Text style={styles.callerName}>{name}</Text>
         <Text style={styles.connectingText}>Connecting...</Text>
+        <View style={styles.costBadge}>
+          <Text style={styles.diamondEmoji}>💎</Text>
+          <Text style={styles.costText}>
+            {callType === 'video' ? '4 Diamonds/min' : '1 Diamond/min'}
+          </Text>
+        </View>
       </View>
 
       <View style={styles.interestsSection}>
@@ -449,5 +456,26 @@ const styles = StyleSheet.create({
     fontSize: ms(15, 0.3),
     color: '#E5E7EB',
     fontFamily: 'Inter_500Medium',
+  },
+  costBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 16,
+    paddingHorizontal: s(12),
+    paddingVertical: vs(6),
+    marginTop: vs(12),
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  diamondEmoji: {
+    fontSize: ms(14, 0.3),
+    marginRight: s(4),
+  },
+  costText: {
+    fontSize: ms(13, 0.3),
+    color: '#38BDF8',
+    fontFamily: 'Inter_600SemiBold',
+    fontWeight: '600',
   },
 });

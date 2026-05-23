@@ -95,9 +95,18 @@ sessionSchema.statics.endSession = async function (sessionId) {
 
   const isVideo = session.callType === 'video';
   
+  let payoutRate = isVideo ? 4.00 : 1.00;
+  try {
+    const settings = await mongoose.model('SystemSettings').findOne();
+    if (settings) {
+      payoutRate = isVideo ? (settings.videoPayoutRate ?? 4.00) : (settings.audioPayoutRate ?? 1.00);
+    }
+  } catch (e) {
+    console.error('Error fetching system settings for payoutRate:', e);
+  }
+
   // Section A - Rates per minute
   const coinsPerMinute = isVideo ? 40 : 10; // 40 coins = ₹20, 10 coins = ₹5
-  const payoutRate = isVideo ? 4.00 : 1.00;
   const zegoRate = isVideo ? 0.20 : 0.06;
   const infraRate = isVideo ? 0.15 : 0.09;
 
@@ -132,7 +141,7 @@ sessionSchema.statics.findActiveByUserId = function (userId) {
 };
 
 sessionSchema.statics.findByUserId = function (userId, limit = 20, offset = 0) {
-  return this.find({ userId })
+  return this.find({ userId, callType: { $ne: 'chat' } })
     .populate('listenerId', 'name username avatarIndex gender')
     .sort({ startTime: -1 })
     .skip(offset)
@@ -140,7 +149,7 @@ sessionSchema.statics.findByUserId = function (userId, limit = 20, offset = 0) {
 };
 
 sessionSchema.statics.findByListenerId = function (listenerId, limit = 20, offset = 0) {
-  return this.find({ listenerId })
+  return this.find({ listenerId, callType: { $ne: 'chat' } })
     .populate('userId', 'name username avatarIndex gender')
     .sort({ startTime: -1 })
     .skip(offset)

@@ -768,7 +768,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.6,
     shadowRadius: 5,
-    elevation: 6,
+    elevation: 99,
+    zIndex: 999,
   },
   premiumTooltipLabel: {
     color: '#9CA3AF',

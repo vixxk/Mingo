@@ -28,6 +28,18 @@ const systemSettingsSchema = new mongoose.Schema(
       type: Number,
       default: 500,
     },
+    audioPayoutRate: {
+      type: Number,
+      default: 1.00,
+    },
+    videoPayoutRate: {
+      type: Number,
+      default: 4.00,
+    },
+    chatPayoutRate: {
+      type: Number,
+      default: 2.50,
+    },
     activePackagesCount: {
       type: Number,
       default: 7,

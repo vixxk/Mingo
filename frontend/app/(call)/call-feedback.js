@@ -45,9 +45,12 @@ export default function CallFeedbackScreen() {
   const handleSubmit = async () => {
     let target = '/(tabs)';
     try {
-      const userRole = await AsyncStorage.getItem('userRole');
-      if (userRole === 'LISTENER') {
-        target = '/(listener)';
+      const userStr = await AsyncStorage.getItem('user');
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        if (user.role === 'LISTENER') {
+          target = '/(listener)';
+        }
       }
     } catch (e) {
       console.log('Error checking role for redirect:', e);

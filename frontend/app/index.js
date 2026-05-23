@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ms, s, vs, SCREEN_WIDTH, SCREEN_HEIGHT } from '../utils/responsive';
 
 import { Notifications } from '../utils/notifications';
+import { authAPI } from '../utils/api';
 
 export default function SplashScreenPage() {
   const router = useRouter();
@@ -86,7 +87,7 @@ export default function SplashScreenPage() {
   const checkAuthAndRedirect = async () => {
     try {
       const userStr = await AsyncStorage.getItem('user');
-      const userToken = await AsyncStorage.getItem('userToken');
+      const userToken = await AsyncStorage.getItem('userToken') || await AsyncStorage.getItem('token');
 
       let role = 'USER';
       if (userStr) {
@@ -94,6 +95,32 @@ export default function SplashScreenPage() {
           const user = JSON.parse(userStr);
           if (user.role) role = user.role;
         } catch (e) {}
+      }
+
+      if (userToken) {
+        try {
+          const meRes = await authAPI.me();
+          if (meRes?.data?.isBanned) {
+            await AsyncStorage.removeItem('token');
+            await AsyncStorage.removeItem('userToken');
+            await AsyncStorage.removeItem('user');
+            router.replace('/banned');
+            return;
+          }
+          if (meRes?.data) {
+            role = meRes.data.role || 'USER';
+            await AsyncStorage.setItem('user', JSON.stringify(meRes.data));
+          }
+        } catch (authErr) {
+          console.log('Error verifying user during splash check:', authErr);
+          if (authErr.status === 403) {
+            await AsyncStorage.removeItem('token');
+            await AsyncStorage.removeItem('userToken');
+            await AsyncStorage.removeItem('user');
+            router.replace('/banned');
+            return;
+          }
+        }
       }
 
       if (role === 'ADMIN') {

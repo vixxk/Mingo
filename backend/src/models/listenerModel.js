@@ -214,9 +214,25 @@ listenerSchema.statics.updateRating = async function (userId, newRating) {
   const listener = await this.findOne({ userId });
   if (!listener) return null;
 
-  const newAvg = (listener.rating * listener.totalSessions + newRating) / (listener.totalSessions || 1);
+  const RatingModel = mongoose.model('Rating');
+  
+  // Calculate average rating from all reviews for this listener
+  const stats = await RatingModel.aggregate([
+    { $match: { listenerId: new mongoose.Types.ObjectId(userId) } },
+    {
+      $group: {
+        _id: null,
+        averageRating: { $avg: '$rating' }
+      }
+    }
+  ]);
 
-  listener.rating = Math.round(newAvg * 10) / 10;
+  let avgRating = newRating; // fallback if no ratings yet
+  if (stats && stats.length > 0) {
+    avgRating = stats[0].averageRating;
+  }
+
+  listener.rating = Math.round(avgRating * 10) / 10;
   await listener.save();
 
   return listener;

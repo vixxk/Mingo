@@ -126,10 +126,10 @@ export default function MessagesScreen() {
         loadConversations(false);
       };
 
-      socketService.on('new_message_notification', handleNewMessage);
+      socketService.on('receive_message', handleNewMessage);
 
       return () => {
-        socketService.off('new_message_notification', handleNewMessage);
+        socketService.off('receive_message', handleNewMessage);
       };
     }, [])
   );
@@ -150,7 +150,17 @@ export default function MessagesScreen() {
       <TouchableOpacity 
         style={styles.messageItem} 
         activeOpacity={0.7}
-        onPress={() => router.push({ pathname: '/chat', params: { id: item.id, name: item.name, avatarIndex: item.avatarIndex?.toString() || '0', gender: item.gender || 'Female' } })}
+        onPress={() => router.push({
+          pathname: '/chat',
+          params: {
+            id: item.id,
+            name: item.name,
+            avatarIndex: item.avatarIndex?.toString() || '0',
+            gender: item.gender || 'Female',
+            sessionId: item.sessionId || '',
+            sessionStatus: item.sessionStatus || 'none'
+          }
+        })}
       >
         <View style={styles.avatarContainer}>
           <Image source={item.image || getAvatarImage(item.gender, item.avatarIndex)} style={styles.avatar} />
@@ -159,7 +169,24 @@ export default function MessagesScreen() {
         
         <View style={styles.messageDetails}>
           <View style={styles.nameRow}>
-            <Text style={styles.nameText} numberOfLines={1}>{item.name}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 6, marginRight: 10 }}>
+              <Text style={styles.nameText} numberOfLines={1}>{item.name}</Text>
+              {item.sessionStatus === 'active' && (
+                <View style={[styles.statusBadge, { backgroundColor: 'rgba(34, 197, 94, 0.15)' }]}>
+                  <Text style={[styles.statusBadgeText, { color: '#22C55E' }]}>Active</Text>
+                </View>
+              )}
+              {item.sessionStatus === 'completed' && (
+                <View style={[styles.statusBadge, { backgroundColor: 'rgba(156, 163, 175, 0.15)' }]}>
+                  <Text style={[styles.statusBadgeText, { color: '#9CA3AF' }]}>Ended • {item.duration || 0}m</Text>
+                </View>
+              )}
+              {item.listenerEarnings !== undefined && (
+                <View style={[styles.statusBadge, { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderColor: 'rgba(16, 185, 129, 0.3)', borderWidth: 0.5 }]}>
+                  <Text style={[styles.statusBadgeText, { color: '#10B981' }]}>+ ₹{(item.listenerEarnings || 0).toFixed(2)}</Text>
+                </View>
+              )}
+            </View>
             <Text style={[styles.timeText, item.unread > 0 && styles.timeTextUnread]}>{timeStr}</Text>
           </View>
           <View style={styles.messageRow}>
@@ -240,7 +267,7 @@ export default function MessagesScreen() {
         ) : (
           <FlatList
             data={filteredMessages}
-            keyExtractor={item => item.id}
+            keyExtractor={(item, index) => item.sessionId ? `${item.id}-${item.sessionId}` : `${item.id}-${index}`}
             renderItem={renderMessageItem}
             contentContainerStyle={styles.listContainer}
             showsVerticalScrollIndicator={false}
@@ -460,5 +487,17 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: '#111827',
     marginTop: hp(0.8),
+  },
+  statusBadge: {
+    paddingHorizontal: wp(1.5),
+    paddingVertical: hp(0.2),
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusBadgeText: {
+    fontSize: wp(2.5),
+    fontWeight: '700',
+    fontFamily: 'Inter_700Bold',
   },
 });

@@ -54,8 +54,11 @@ export default function TransactionsScreen() {
   useEffect(() => {
     const fetchRole = async () => {
       try {
-        const role = await AsyncStorage.getItem('userRole');
-        if (role) setUserRole(role);
+        const userStr = await AsyncStorage.getItem('user');
+        if (userStr) {
+          const user = JSON.parse(userStr);
+          if (user.role) setUserRole(user.role);
+        }
       } catch (err) {
         console.log('Error fetching userRole in transactions page:', err);
       }
@@ -128,11 +131,12 @@ export default function TransactionsScreen() {
     let title = item.description || 'Transaction';
     let subtitle = `Transaction ID: ${item._id.toString().slice(-8)}`;
     let duration = '';
+    const isCallDebit = item.type === 'call_debit';
 
     if (item.type === 'call_debit') {
       const listenerName = item.metadata?.sessionId?.listenerId?.name || 'Listener';
       const diamonds = Math.abs(item.coins / 10);
-      title = `${diamonds} Diamond used for session with ${listenerName}`;
+      title = `${diamonds} ${diamonds === 1 ? 'Diamond' : 'Diamonds'} used for session with ${listenerName}`;
       if (item.metadata?.sessionId?.duration) {
         duration = ` •  ${item.metadata.sessionId.duration.toString().padStart(2, '0')} m`;
       }
@@ -183,15 +187,25 @@ export default function TransactionsScreen() {
           <View style={styles.amountSection}>
             <Text style={[styles.amountText, { color: isCredit ? '#22C55E' : '#EF4444' }]}>
               {item.coins !== 0 ? (
-                `${item.coins > 0 ? '+' : ''}${item.coins}`
+                isCallDebit ? (
+                  `${item.coins > 0 ? '+' : ''}${item.coins / 10}`
+                ) : (
+                  `${item.coins > 0 ? '+' : ''}${item.coins}`
+                )
               ) : (
                 `+₹${item.amount.toFixed(2)}`
               )}
             </Text>
             {item.coins !== 0 && (
-              <View style={styles.coinIconContainer}>
-                <Text style={{ fontSize: ms(12) }}>🪙</Text>
-              </View>
+              isCallDebit ? (
+                <View style={[styles.coinIconContainer, { backgroundColor: '#38BDF8' }]}>
+                  <Text style={{ fontSize: ms(12) }}>💎</Text>
+                </View>
+              ) : (
+                <View style={styles.coinIconContainer}>
+                  <Text style={{ fontSize: ms(12) }}>🪙</Text>
+                </View>
+              )
             )}
           </View>
         </View>

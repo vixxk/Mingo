@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, Dimensions, Modal, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, Dimensions, Modal, Alert, ActivityIndicator } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -82,6 +83,15 @@ export default function AdminListenersScreen() {
   const [selectedListener, setSelectedListener] = useState(null);
   const [showDetail, setShowDetail] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Message State
+  const [isMessaging, setIsMessaging] = useState(false);
+  const [messageText, setMessageText] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
+
+  // Custom Confirmation Dialog State
+  const [confirmAction, setConfirmAction] = useState(null); // { type: string, title: string, desc: string, onConfirm: () => void }
+
   const FILTER_CONFIG = {
     all: { icon: 'layers', color: '#8B5CF6', bg: 'rgba(139,92,246,0.1)' },
     pending: { icon: 'time', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
@@ -146,66 +156,109 @@ export default function AdminListenersScreen() {
     if (selectedListener?.id === id) setSelectedListener(prev => ({ ...prev, ...updates }));
   };
 
-  const handleApprove = async (id) => { 
-    await adminAPI.approveListener(id);
-    updateListenerState(id, { status: 'approved' }); 
-    Alert.alert('Approved', 'Listener has been approved.'); 
+  const handleApprove = (id) => {
+    setConfirmAction({
+      type: 'approve',
+      title: 'Approve Listener',
+      desc: 'Are you sure you want to approve this listener application?',
+      onConfirm: async () => {
+        try {
+          await adminAPI.approveListener(id);
+          updateListenerState(id, { status: 'approved' });
+          setConfirmAction(null);
+          Alert.alert('Success', 'Listener has been approved.');
+        } catch (e) {
+          Alert.alert('Error', 'Failed to approve listener');
+        }
+      }
+    });
   };
-  const handleReject = async (id) => { 
-    await adminAPI.rejectListener(id);
-    updateListenerState(id, { status: 'rejected' }); 
-    Alert.alert('Rejected', 'Listener has been rejected.'); 
+
+  const handleReject = (id) => {
+    setConfirmAction({
+      type: 'reject',
+      title: 'Reject Listener',
+      desc: 'Are you sure you want to reject this listener application?',
+      onConfirm: async () => {
+        try {
+          await adminAPI.rejectListener(id);
+          updateListenerState(id, { status: 'rejected' });
+          setConfirmAction(null);
+          Alert.alert('Success', 'Listener has been rejected.');
+        } catch (e) {
+          Alert.alert('Error', 'Failed to reject listener');
+        }
+      }
+    });
   };
+
   const toggleVerified = async (id, current) => { 
     await adminAPI.toggleVerified(id);
     updateListenerState(id, { verified: !current }); 
   };
+
   const toggleBestChoice = async (id, current) => { 
     await adminAPI.toggleBestChoice(id);
     updateListenerState(id, { bestChoice: !current }); 
   };
 
   const handleBanUser = (userId, isCurrentlyBanned) => {
-    Alert.alert(
-      isCurrentlyBanned ? 'Unban User' : 'Ban User',
-      `Are you sure you want to ${isCurrentlyBanned ? 'unban' : 'ban'} this listener's user account?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: isCurrentlyBanned ? 'Unban' : 'Ban', 
-          style: isCurrentlyBanned ? 'default' : 'destructive', 
-          onPress: async () => {
-            try {
-              await adminAPI.toggleBanUser(userId);
-              setListeners(prev => prev.map(l => l.userId === userId ? { ...l, isBanned: !isCurrentlyBanned } : l));
-              if (selectedListener?.userId === userId) {
-                setSelectedListener(prev => ({ ...prev, isBanned: !isCurrentlyBanned }));
-              }
-              Alert.alert('Success', `User ${isCurrentlyBanned ? 'unbanned' : 'banned'} successfully.`);
-            } catch(e) {
-              Alert.alert('Error', 'Failed to update user status');
-            }
+    setConfirmAction({
+      type: 'ban',
+      title: isCurrentlyBanned ? 'Unban User' : 'Ban User',
+      desc: `Are you sure you want to ${isCurrentlyBanned ? 'unban' : 'ban'} this listener's user account?`,
+      onConfirm: async () => {
+        try {
+          await adminAPI.toggleBanUser(userId);
+          setListeners(prev => prev.map(l => l.userId === userId ? { ...l, isBanned: !isCurrentlyBanned } : l));
+          if (selectedListener?.userId === userId) {
+            setSelectedListener(prev => ({ ...prev, isBanned: !isCurrentlyBanned }));
           }
-        },
-      ]
-    );
+          setConfirmAction(null);
+          Alert.alert('Success', `User ${isCurrentlyBanned ? 'unbanned' : 'banned'} successfully.`);
+        } catch(e) {
+          Alert.alert('Error', 'Failed to update user status');
+        }
+      }
+    });
   };
 
   const handleDeleteListener = (id, userId) => {
-    Alert.alert('Delete Listener Permanently', 'This will delete both the listener profile and the user account. This action cannot be undone. Are you sure?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => {
+    setConfirmAction({
+      type: 'delete',
+      title: 'Delete Listener',
+      desc: 'This will delete both the listener profile and the user account permanently. This action cannot be undone. Are you sure?',
+      onConfirm: async () => {
         try {
           await adminAPI.deleteUser(userId);
           setListeners(prev => prev.filter(l => l.id !== id));
           setShowDetail(false);
           setSelectedListener(null);
+          setConfirmAction(null);
           Alert.alert('Success', 'Listener deleted successfully.');
         } catch(e) {
           Alert.alert('Error', 'Failed to delete listener');
         }
-      }},
-    ]);
+      }
+    });
+  };
+
+  const handleSendMessage = async () => {
+    const trimmed = messageText.trim();
+    if (!trimmed || !selectedListener) return;
+
+    try {
+      setSendingMessage(true);
+      await adminAPI.sendAdminMessage(selectedListener.userId, trimmed);
+      setMessageText('');
+      setIsMessaging(false);
+      Alert.alert('Success', 'Message sent successfully');
+    } catch (e) {
+      console.log('Failed to send message:', e);
+      Alert.alert('Error', 'Failed to send message');
+    } finally {
+      setSendingMessage(false);
+    }
   };
 
   const getStatusColor = (status) => {
@@ -241,7 +294,6 @@ export default function AdminListenersScreen() {
                 <Text style={st.modalName}>{selectedListener.name}</Text>
                 <Text style={st.modalPhone}>{selectedListener.phone}</Text>
 
-                {}
                 <View style={{ flexDirection: 'row', gap: s(8), marginTop: SH * 0.01, marginBottom: SH * 0.02 }}>
                   <View style={[st.badge, { backgroundColor: `${getStatusColor(selectedListener.status)}20` }]}>
                     <Text style={[st.badgeText, { color: getStatusColor(selectedListener.status) }]}>{selectedListener.status.toUpperCase()}</Text>
@@ -258,9 +310,14 @@ export default function AdminListenersScreen() {
                       <Text style={[st.badgeText, { color: '#F59E0B' }]}>BEST CHOICE</Text>
                     </View>
                   )}
+                  {selectedListener.isBanned && (
+                    <View style={[st.badge, { backgroundColor: 'rgba(239,68,68,0.15)' }]}>
+                      <Ionicons name="ban" size={12} color="#EF4444" />
+                      <Text style={[st.badgeText, { color: '#EF4444' }]}>BANNED</Text>
+                    </View>
+                  )}
                 </View>
 
-                {}
                 <View style={st.statsRow}>
                   <View style={st.statBox}><Text style={st.statVal}>{selectedListener.totalCalls}</Text><Text style={st.statLbl}>Calls</Text></View>
                   <View style={st.statBox}><Text style={st.statVal}>{selectedListener.earnings}</Text><Text style={st.statLbl}>Earnings</Text></View>
@@ -279,7 +336,6 @@ export default function AdminListenersScreen() {
                   </View>
                 )}
 
-                {}
                 <View style={{ width: '100%', gap: SH * 0.01 }}>
                   {selectedListener.status === 'pending' && (
                     <View style={{ flexDirection: 'row', gap: s(10) }}>
@@ -317,6 +373,15 @@ export default function AdminListenersScreen() {
                     </Text>
                   </TouchableOpacity>
 
+                  {/* Message Button */}
+                  <TouchableOpacity 
+                    style={[st.actionBtn, { backgroundColor: 'rgba(168, 85, 247, 0.15)' }]} 
+                    onPress={() => setIsMessaging(true)}
+                  >
+                    <Ionicons name="chatbubble" size={18} color="#A855F7" />
+                    <Text style={[st.actionBtnText, { color: '#A855F7' }]}>Message</Text>
+                  </TouchableOpacity>
+
                   <TouchableOpacity
                     style={[st.actionBtn, { backgroundColor: 'rgba(239,68,68,0.1)' }]}
                     onPress={() => handleDeleteListener(selectedListener.id, selectedListener.userId)}
@@ -328,6 +393,90 @@ export default function AdminListenersScreen() {
                 </View>
               </ScrollView>
             )}
+
+            {/* MESSAGE OVERLAY */}
+            {isMessaging && selectedListener && (
+              <View style={st.overlayContainer}>
+                <View style={st.dialogBox}>
+                  <Text style={st.dialogTitle}>Send Message</Text>
+                  <Text style={st.dialogDesc}>Send a support message directly to {selectedListener.name}.</Text>
+
+                  <TextInput
+                    style={st.dialogInput}
+                    placeholder="Type your message here..."
+                    placeholderTextColor="#4B5563"
+                    multiline
+                    numberOfLines={4}
+                    value={messageText}
+                    onChangeText={setMessageText}
+                  />
+
+                  <View style={st.dialogButtons}>
+                    <TouchableOpacity
+                      style={st.dialogBtnCancel}
+                      onPress={() => { setIsMessaging(false); setMessageText(''); }}
+                      disabled={sendingMessage}
+                    >
+                      <Text style={st.dialogBtnCancelText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={st.dialogBtnConfirm}
+                      onPress={handleSendMessage}
+                      disabled={sendingMessage || !messageText.trim()}
+                    >
+                      <LinearGradient
+                        colors={['#A855F7', '#7C3AED']}
+                        style={st.gradientBtn}
+                      >
+                        {sendingMessage ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <Text style={st.dialogBtnConfirmText}>Send</Text>
+                        )}
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            )}
+
+            {/* CUSTOM CONFIRMATION DIALOG */}
+            {confirmAction && (
+              <View style={st.overlayContainer}>
+                <View style={st.dialogBox}>
+                  <View style={[st.confirmIconContainer, { backgroundColor: confirmAction.type === 'delete' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(168, 85, 247, 0.1)' }]}>
+                    <Ionicons
+                      name={confirmAction.type === 'delete' ? 'trash' : 'ban'}
+                      size={28}
+                      color={confirmAction.type === 'delete' ? '#EF4444' : '#A855F7'}
+                    />
+                  </View>
+                  <Text style={st.dialogTitle}>{confirmAction.title}</Text>
+                  <Text style={st.dialogDesc}>{confirmAction.desc}</Text>
+
+                  <View style={st.dialogButtons}>
+                    <TouchableOpacity
+                      style={st.dialogBtnCancel}
+                      onPress={() => setConfirmAction(null)}
+                    >
+                      <Text style={st.dialogBtnCancelText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={st.dialogBtnConfirm}
+                      onPress={confirmAction.onConfirm}
+                    >
+                      <LinearGradient
+                        colors={confirmAction.type === 'delete' ? ['#EF4444', '#DC2626'] : ['#A855F7', '#7C3AED']}
+                        style={st.gradientBtn}
+                      >
+                        <Text style={st.dialogBtnConfirmText}>Confirm</Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            )}
+
           </View>
         </View>
       </Modal>
@@ -532,5 +681,100 @@ const st = StyleSheet.create({
     marginTop: 10,
     fontFamily: 'Inter_700Bold',
     textDecorationLine: 'underline',
+  },
+  overlayContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+  },
+  dialogBox: {
+    width: wp(82),
+    backgroundColor: '#0F0E11',
+    borderRadius: 24,
+    paddingHorizontal: wp(6),
+    paddingVertical: hp(3),
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#1F1F1F',
+  },
+  confirmIconContainer: {
+    width: wp(14),
+    height: wp(14),
+    borderRadius: wp(7),
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: hp(1.5),
+  },
+  dialogTitle: {
+    fontSize: ms(18),
+    fontFamily: 'Inter_900Black',
+    color: '#FFF',
+    marginBottom: hp(1),
+    textAlign: 'center',
+  },
+  dialogDesc: {
+    fontSize: ms(13),
+    color: '#9CA3AF',
+    textAlign: 'center',
+    fontFamily: 'Inter_400Regular',
+    lineHeight: hp(2.2),
+    marginBottom: hp(2.5),
+  },
+  dialogInput: {
+    width: '100%',
+    backgroundColor: '#141414',
+    borderWidth: 1,
+    borderColor: '#1F1F1F',
+    borderRadius: 14,
+    color: '#fff',
+    padding: wp(3),
+    fontSize: ms(13.5),
+    fontFamily: 'Inter_400Regular',
+    textAlignVertical: 'top',
+    height: hp(12),
+    marginBottom: hp(2.5),
+  },
+  dialogButtons: {
+    flexDirection: 'row',
+    gap: wp(3),
+    width: '100%',
+  },
+  dialogBtnCancel: {
+    flex: 1,
+    height: hp(5.5),
+    borderRadius: 30,
+    borderWidth: 1.5,
+    borderColor: '#3F3F46',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dialogBtnCancelText: {
+    color: '#A1A1AA',
+    fontSize: ms(14),
+    fontFamily: 'Inter_700Bold',
+  },
+  dialogBtnConfirm: {
+    flex: 1,
+    height: hp(5.5),
+    borderRadius: 30,
+    overflow: 'hidden',
+  },
+  gradientBtn: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dialogBtnConfirmText: {
+    color: '#FFF',
+    fontSize: ms(14),
+    fontFamily: 'Inter_700Bold',
   },
 });

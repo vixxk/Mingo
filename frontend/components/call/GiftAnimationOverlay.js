@@ -29,7 +29,7 @@ const getGiftPrice = (name) => {
   return 10;
 };
 
-export default function GiftAnimationOverlay({ giftName, giftIcon, giftPrice, senderName, onComplete }) {
+export default function GiftAnimationOverlay({ giftName, giftIcon, giftPrice, senderName, receiverName, isSentByMe, onComplete }) {
   // Use a stable ref for onComplete to prevent parent ticks from resetting the animation
   const onCompleteRef = useRef(onComplete);
   useEffect(() => {
@@ -38,6 +38,9 @@ export default function GiftAnimationOverlay({ giftName, giftIcon, giftPrice, se
 
   const price = giftPrice !== undefined ? parseInt(giftPrice, 10) : getGiftPrice(giftName);
   const icon = giftIcon || getGiftIcon(giftName);
+
+  const isMe = isSentByMe || senderName === 'You';
+  const targetName = receiverName || 'Listener';
 
   // Decide how many particles based on price tier (higher price = more spectacular)
   const particleCount = useMemo(() => {
@@ -64,7 +67,9 @@ export default function GiftAnimationOverlay({ giftName, giftIcon, giftPrice, se
     if (price >= 1000) {
       return {
         title: 'JACKPOT! 👑',
-        subText: `${senderName} showered you with Gold Coins!`,
+        subText: isMe
+          ? `You showered ${targetName} with Gold Coins!`
+          : `${senderName} showered you with Gold Coins!`,
         colors: ['#F59E0B', '#10B981', '#3B82F6'], // Amber-emerald-blue gradient
         emojis: ['💰', '🪙', '✨', '⭐', '💎'],
         titleColor: '#FFD700',
@@ -74,7 +79,9 @@ export default function GiftAnimationOverlay({ giftName, giftIcon, giftPrice, se
     if (price >= 500) {
       return {
         title: 'LUXURY PRESENT! 💝',
-        subText: `${senderName} sent a premium gift!`,
+        subText: isMe
+          ? `You sent a premium gift to ${targetName}!`
+          : `${senderName} sent you a premium gift!`,
         colors: ['#EC4899', '#EF4444', '#F43F5E'], // Rose-red gradient
         emojis: ['💝', '💖', '✨', '🌹', '❤️'],
         titleColor: '#FF2E93',
@@ -84,7 +91,9 @@ export default function GiftAnimationOverlay({ giftName, giftIcon, giftPrice, se
     if (price >= 300) {
       return {
         title: 'MEGA SURPRISE! 🎁',
-        subText: `${senderName} sent a special surprise!`,
+        subText: isMe
+          ? `You sent a special surprise to ${targetName}!`
+          : `${senderName} sent you a special surprise!`,
         colors: ['#8B5CF6', '#EC4899', '#D946EF'], // Violet-fuchsia gradient
         emojis: ['🎁', '🎉', '✨', '🌟', '💝'],
         titleColor: '#D946EF',
@@ -94,7 +103,9 @@ export default function GiftAnimationOverlay({ giftName, giftIcon, giftPrice, se
     if (price >= 100) {
       return {
         title: 'DELICIOUS CANDY! 🍬',
-        subText: `${senderName} sent sweet wishes!`,
+        subText: isMe
+          ? `You sent sweet wishes to ${targetName}!`
+          : `${senderName} sent you sweet wishes!`,
         colors: ['#06B6D4', '#3B82F6', '#8B5CF6'], // Cyan-blue gradient
         emojis: ['🍬', '✨', '🍭', '💖'],
         titleColor: '#06B6D4',
@@ -104,7 +115,9 @@ export default function GiftAnimationOverlay({ giftName, giftIcon, giftPrice, se
     if (price >= 50) {
       return {
         title: 'SWEET TREAT! 🍭',
-        subText: `${senderName} sent a tasty treat!`,
+        subText: isMe
+          ? `You sent a tasty treat to ${targetName}!`
+          : `${senderName} sent you a tasty treat!`,
         colors: ['#F43F5E', '#EC4899'],
         emojis: ['🍭', '✨', '🍬'],
         titleColor: '#EC4899',
@@ -114,13 +127,15 @@ export default function GiftAnimationOverlay({ giftName, giftIcon, giftPrice, se
     // Default tier (Heart, etc.)
     return {
       title: 'SWEETHEART! ❤️',
-      subText: `${senderName} sent a lovely heart!`,
+      subText: isMe
+        ? `You sent a lovely heart to ${targetName}!`
+        : `${senderName} sent you a lovely heart!`,
       colors: ['#EF4444', '#F43F5E'],
       emojis: ['❤️', '💖', '✨'],
       titleColor: '#EF4444',
       textGradient: ['#FFEBEB', '#EF4444'],
     };
-  }, [price, senderName]);
+  }, [price, senderName, targetName, isMe]);
 
   // Max 100 particles pre-allocated to prevent React hooks reallocation issues
   const animations = useRef(

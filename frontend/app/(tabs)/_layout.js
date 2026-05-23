@@ -40,6 +40,21 @@ export default function TabLayout() {
         console.log('Call cancelled by caller:', data);
         setIncomingCall(null);
       });
+
+      socketService.on('account_banned', (data) => {
+        console.log('Account banned event received:', data);
+        Alert.alert('Account Suspended', data.message || 'Your account has been suspended.', [
+          {
+            text: 'OK',
+            onPress: async () => {
+              await AsyncStorage.removeItem('token');
+              await AsyncStorage.removeItem('userToken');
+              await AsyncStorage.removeItem('user');
+              router.replace('/banned');
+            }
+          }
+        ]);
+      });
     };
 
     setupSocket();
@@ -47,6 +62,7 @@ export default function TabLayout() {
     return () => {
       socketService.off('incoming_call');
       socketService.off('call_cancelled');
+      socketService.off('account_banned');
     };
   }, []);
 

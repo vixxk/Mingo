@@ -144,6 +144,63 @@ class WalletController {
         },
       });
 
+      // Send notifications for purchase
+      try {
+        const Notification = require('../models/Notification');
+        const PushService = require('../services/pushService');
+        const { getIo } = require('../socket');
+
+        const title = 'Coins Credited! 🪙';
+        const body = `Your wallet has been credited with ${p.coins} coins. Thank you for your purchase!`;
+
+        // 1. Create database notification
+        await Notification.create({
+          recipient: user._id,
+          title,
+          body,
+          type: 'payment',
+          data: {
+            coins: p.coins,
+            amount: effectivePrice,
+            transactionId: transaction._id
+          }
+        });
+
+        // 2. Send Push notification
+        await PushService.sendPushNotification(user._id.toString(), {
+          title,
+          body,
+          data: {
+            type: 'payment',
+            coins: p.coins,
+            amount: effectivePrice,
+          }
+        });
+
+        // 3. Emit real-time updates via Socket if user is connected
+        try {
+          const io = getIo();
+          io.to(`user_${user._id.toString()}`).emit('new_notification', {
+            title,
+            body,
+            type: 'payment',
+            data: {
+              coins: p.coins,
+              amount: effectivePrice,
+              transactionId: transaction._id
+            }
+          });
+          io.to(`user_${user._id.toString()}`).emit('balance_updated', {
+            coins: user.coins,
+            reason: 'purchase'
+          });
+        } catch (sockErr) {
+          console.log('Socket notification failed (user may be disconnected):', sockErr.message);
+        }
+      } catch (notifErr) {
+        console.error('Failed to create/send purchase notifications:', notifErr);
+      }
+
       return ApiResponse.success(res, {
         coins: user.coins,
         transaction: {

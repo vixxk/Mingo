@@ -8,6 +8,7 @@ const ADMIN_ROLES = ['ADMIN', 'SUPPORT_ADMIN', 'FINANCE_ADMIN', 'MODERATOR_ADMIN
 router.use(authenticate, authorize(...ADMIN_ROLES));
 
 router.get('/stats', AdminController.getStats);
+router.get('/export-data', AdminController.getExportData);
 router.get('/users', AdminController.getUsers);
 router.get('/listeners', AdminController.getListeners);
 router.patch('/listeners/:id/approve', AdminController.approveListener);
@@ -15,6 +16,8 @@ router.patch('/listeners/:id/reject', AdminController.rejectListener);
 router.patch('/listeners/:id/best-choice', AdminController.toggleBestChoice);
 router.patch('/listeners/:id/verify', AdminController.toggleVerified);
 router.patch('/users/:id/ban', AdminController.toggleBanUser);
+router.post('/users/:id/message', AdminController.sendAdminMessage);
+router.patch('/users/:id/interests', AdminController.updateUserInterests);
 router.delete('/users/:id', AdminController.deleteUser);
 router.get('/activities', AdminController.getActivities);
 router.get('/reports', AdminController.getReports);

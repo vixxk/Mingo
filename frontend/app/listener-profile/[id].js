@@ -319,9 +319,9 @@ export default function ListenerProfileScreen() {
           <Animated.View style={[styles.actionRow, { opacity: actionsAnim }]}>
             {profile.audioEnabled !== false && (
               <TouchableOpacity 
-                style={[styles.actionBtnWrapper, profile.isBusy && { opacity: 0.5 }]} 
+                style={[styles.actionBtnWrapper, (profile.isBusy || !profile.isOnline) && { opacity: 0.3 }]} 
                 activeOpacity={0.85}
-                disabled={profile.isBusy}
+                disabled={profile.isBusy || !profile.isOnline}
                 onPress={() => router.push({
                   pathname: '/(call)/connecting',
                   params: {
@@ -344,9 +344,9 @@ export default function ListenerProfileScreen() {
             
             {profile.videoEnabled === true && (
               <TouchableOpacity 
-                style={[styles.actionBtnWrapper, profile.isBusy && { opacity: 0.5 }]} 
+                style={[styles.actionBtnWrapper, (profile.isBusy || !profile.isOnline) && { opacity: 0.3 }]} 
                 activeOpacity={0.85}
-                disabled={profile.isBusy}
+                disabled={profile.isBusy || !profile.isOnline}
                 onPress={() => router.push({
                   pathname: '/(call)/connecting',
                   params: {
@@ -369,9 +369,9 @@ export default function ListenerProfileScreen() {
             
             {profile.chatEnabled !== false && (
               <TouchableOpacity 
-                style={[styles.actionBtnWrapper, profile.isBusy && { opacity: 0.5 }]} 
+                style={[styles.actionBtnWrapper, (profile.isBusy || !profile.isOnline) && { opacity: 0.3 }]} 
                 activeOpacity={0.85}
-                disabled={profile.isBusy}
+                disabled={profile.isBusy || !profile.isOnline}
                 onPress={() => router.push({
                   pathname: '/(chat)/chat',
                   params: {

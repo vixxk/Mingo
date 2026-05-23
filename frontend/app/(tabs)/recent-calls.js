@@ -15,7 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ms, s, vs, SCREEN_WIDTH } from '../../utils/responsive';
+import { ms, s, vs, wp, hp, SCREEN_WIDTH } from '../../utils/responsive';
 import { callAPI, userAPI, walletAPI, listenersAPI } from '../../utils/api';
 import FavouriteListenerPopup from '../../components/shared/FavouriteListenerPopup';
 import NotificationsPopup from '../../components/shared/NotificationsPopup';
@@ -50,6 +50,29 @@ const getAvatarImage = (gender, index) => {
       require('../../images/female_avatar_8_1776973138772.png'),
     ];
     return femaleAvatars[parsedIndex] || femaleAvatars[0];
+  }
+};
+
+const formatCallTime = (dateStr) => {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  const now = new Date();
+  
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+  const targetDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+  const timeOptions = { hour: 'numeric', minute: '2-digit', hour12: true };
+  const timeStr = date.toLocaleTimeString('en-US', timeOptions).toLowerCase();
+
+  if (targetDate.getTime() === today.getTime()) {
+    return `${timeStr} Today`;
+  } else if (targetDate.getTime() === yesterday.getTime()) {
+    return `${timeStr} Yesterday`;
+  } else {
+    const dateOptions = { day: 'numeric', month: 'short' };
+    const dateStrFormatted = date.toLocaleDateString('en-US', dateOptions);
+    return `${timeStr} ${dateStrFormatted}`;
   }
 };
 
@@ -126,26 +149,38 @@ const CallItem = ({ item, onShowOfflinePopup }) => {
           <Image source={item.image || getAvatarImage(item.gender, item.avatarIndex)} style={styles.callAvatar} />
           <View style={styles.callInfo}>
             <Text style={styles.callName}>{item.name}</Text>
-            <Text style={styles.callDuration}>{item.duration}</Text>
+            {item.diamonds !== undefined ? (
+              <>
+                {/* Row 1: callTime */}
+                <View style={styles.cardDetailRow}>
+                  <Text style={styles.callTimeText}>{item.callTime}</Text>
+                </View>
+
+                {/* Row 2: Duration & Diamond Cost */}
+                <View style={[styles.cardDetailRow, { marginTop: vs(3) }]}>
+                  <Text style={styles.callDurationText}>{item.duration}</Text>
+                  <View style={styles.bulletDot} />
+                  <View style={styles.miniCostBadge}>
+                    <Text style={styles.miniCostText}>{item.diamonds}</Text>
+                    <Text style={{ fontSize: 10 }}>💎</Text>
+                  </View>
+                </View>
+              </>
+            ) : (
+              <Text style={styles.callDuration}>{item.duration}</Text>
+            )}
           </View>
-          <View style={styles.callActions}>
-            <TouchableOpacity 
-              style={[styles.callActionBtn, calling && { opacity: 0.5 }]} 
-              activeOpacity={0.7} 
-              onPress={handleAudioCall}
-              disabled={calling}
-            >
-              <Ionicons name="call" size={18} color="#22C55E" />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.callActionBtn, calling && { opacity: 0.5 }]} 
-              activeOpacity={0.7} 
-              onPress={handleVideoCall}
-              disabled={calling}
-            >
-              <Ionicons name="videocam" size={18} color="#22C55E" />
-            </TouchableOpacity>
-          </View>
+          {item.diamonds !== undefined ? (
+            <View style={styles.callTypeRightContainer}>
+              <Ionicons 
+                name={item.callType === 'video' ? "videocam" : "call"} 
+                size={22} 
+                color={item.callType === 'video' ? "#60A5FA" : "#4ADE80"} 
+              />
+            </View>
+          ) : (
+            <Ionicons name="heart" size={24} color="#EF4444" style={styles.favHeartIcon} />
+          )}
         </LinearGradient>
       </TouchableOpacity>
     </Animated.View>
@@ -267,24 +302,40 @@ export default function RecentCallsScreen() {
         walletAPI.getBalance()
       ]);
 
+      const GRADIENTS = [
+        ['#5C21B6', '#121212'],
+        ['#451A03', '#121212'],
+        ['#0F766E', '#121212'],
+        ['#15803D', '#121212'],
+      ];
+
       if (callsRes?.data) {
-        setRecentCalls(callsRes.data.map(call => ({
-          id: call._id,
-          listenerId: call.listenerId?._id || call.listenerId,
-          name: call.listenerId?.name || 'Unknown',
-          gender: call.listenerId?.gender,
-          avatarIndex: call.listenerId?.avatarIndex,
-          duration: `${call.duration || 0} mins call`,
-        })));
+        setRecentCalls(callsRes.data.map((call, index) => {
+          const coins = call.coinsDeducted || 0;
+          const diamonds = Math.floor(coins / 10);
+          return {
+            id: call._id,
+            listenerId: call.listenerId?._id || call.listenerId,
+            name: call.listenerId?.name || 'Unknown',
+            gender: call.listenerId?.gender,
+            avatarIndex: call.listenerId?.avatarIndex,
+            duration: `${call.duration || 0} mins`,
+            callType: call.callType || 'audio',
+            callTime: formatCallTime(call.startTime || call.createdAt),
+            diamonds: diamonds,
+            gradientColors: GRADIENTS[index % GRADIENTS.length],
+          };
+        }));
       }
 
       if (favsRes?.data) {
-        setFavourites(favsRes.data.map(fav => ({
+        setFavourites(favsRes.data.map((fav, index) => ({
           id: fav._id,
           name: fav.name,
           gender: fav.gender,
           avatarIndex: fav.avatarIndex,
           duration: 'Favourite Listener',
+          gradientColors: GRADIENTS[index % GRADIENTS.length],
         })));
       }
 
@@ -412,9 +463,9 @@ export default function RecentCallsScreen() {
               key={item.id} 
               item={item} 
               onShowOfflinePopup={(name) => {
-                setStatusPopupTitle('Listener Offline');
-                setStatusPopupMessage(`${name} is currently offline. You can call them once they are back online.`);
-                setStatusPopupType('error');
+                setStatusPopupTitle('Unavailable Right Now');
+                setStatusPopupMessage(`${name} is currently offline. We will let you know when they are back!`);
+                setStatusPopupType('info');
                 setStatusPopupVisible(true);
               }}
             />
@@ -448,19 +499,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: s(20),
-    paddingVertical: vs(12),
+    paddingHorizontal: wp(5),
+    paddingVertical: hp(1.5),
   },
   headerTitle: {
-    fontSize: ms(28, 0.3),
+    fontSize: wp(7.5),
     fontWeight: '900',
     color: '#fff',
     fontFamily: 'Inter_900Black',
   },
   refreshBtn: {
-    width: s(40),
-    height: s(40),
-    borderRadius: s(20),
+    width: wp(10),
+    height: wp(10),
+    borderRadius: wp(5),
     backgroundColor: '#111827',
     alignItems: 'center',
     justifyContent: 'center',
@@ -543,17 +594,49 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     marginTop: 2,
   },
-  callActions: {
+  cardDetailRow: {
     flexDirection: 'row',
-    gap: s(10),
-  },
-  callActionBtn: {
-    width: s(36),
-    height: s(36),
-    borderRadius: s(18),
-    backgroundColor: 'rgba(0,0,0,0.25)',
     alignItems: 'center',
+    gap: s(6),
+  },
+  callTimeText: {
+    fontSize: ms(11, 0.3),
+    color: 'rgba(255,255,255,0.6)',
+    fontFamily: 'Inter_400Regular',
+  },
+  callDurationText: {
+    fontSize: ms(11, 0.3),
+    color: 'rgba(255,255,255,0.5)',
+    fontFamily: 'Inter_400Regular',
+  },
+  bulletDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+  },
+  miniCostBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    paddingHorizontal: s(6),
+    paddingVertical: vs(1.5),
+    borderRadius: s(6),
+    gap: s(2),
+  },
+  miniCostText: {
+    color: '#fff',
+    fontSize: ms(10, 0.3),
+    fontWeight: '700',
+    fontFamily: 'Inter_700Bold',
+  },
+  favHeartIcon: {
+    marginRight: s(4),
+  },
+  callTypeRightContainer: {
     justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: s(8),
   },
 
   

@@ -33,6 +33,18 @@ const formatDate = (dateStr) => {
     ' ' + d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 };
 
+const formatDateOnly = (dateStr) => {
+  if (!dateStr) return '-';
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' });
+};
+
+const formatTimeOnly = (dateStr) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+};
+
 const getStatusColor = (status) => {
   switch (status) {
     case 'completed': return '#22C55E';
@@ -104,12 +116,11 @@ export default function AdminSessions() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar style="light" />
 
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Call Sessions</Text>
+        <Text style={styles.headerTitle}>Sessions</Text>
         <Text style={styles.headerCount}>{total}</Text>
       </View>
 
@@ -253,7 +264,10 @@ export default function AdminSessions() {
                   </View>
                 )}
 
-                <Text style={styles.dateText}>{formatDate(sess.startTime)}</Text>
+                <View style={styles.dateRow}>
+                  <Text style={styles.dateText}>{formatDateOnly(sess.startTime)}</Text>
+                  <Text style={styles.timeText}>{formatTimeOnly(sess.startTime)}</Text>
+                </View>
               </View>
             </View>
           ))
@@ -445,7 +459,18 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
+  dateRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: hp(1),
+  },
   dateText: {
+    color: '#4B5563',
+    fontSize: ms(11),
+    fontFamily: 'Inter_400Regular',
+  },
+  timeText: {
     color: '#4B5563',
     fontSize: ms(11),
     fontFamily: 'Inter_400Regular',

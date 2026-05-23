@@ -82,42 +82,42 @@ const CallItem = ({ item }) => {
 
   return (
     <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-      <View style={styles.callItem}>
+      <LinearGradient 
+        colors={item.gradientColors || ['#3B82F6', '#8B5CF6']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.callItem}
+      >
         <View style={styles.callMainRow}>
           <Image source={getAvatarImage(item.gender, item.avatarIndex)} style={styles.callAvatar} />
           <View style={styles.callInfo}>
             <View style={styles.nameTimeRow}>
               <Text style={styles.callName} numberOfLines={1}>{item.name}</Text>
-              <Text style={styles.callTimeText}>{formatCallTime(item.time)}</Text>
+              <Text style={[styles.callTimeText, { color: 'rgba(255,255,255,0.8)' }]}>{formatCallTime(item.time)}</Text>
             </View>
             <View style={styles.typeDurationRow}>
               <Ionicons 
                 name={item.type === 'video' ? 'videocam' : item.type === 'chat' ? 'chatbubble' : 'call'} 
                 size={s(12)} 
-                color="#9CA3AF" 
+                color="rgba(255,255,255,0.8)" 
                 style={{ marginRight: wp(1) }} 
               />
-              <Text style={styles.callDuration}>{item.duration} • {item.type}</Text>
+              <Text style={[styles.callDuration, { color: 'rgba(255,255,255,0.8)' }]}>{item.duration} • {item.type ? (item.type.charAt(0).toUpperCase() + item.type.slice(1)) : ''}</Text>
             </View>
           </View>
         </View>
 
         {/* Extra Session Information Section */}
-        <View style={styles.sessionMetaSection}>
+        <View style={[styles.sessionMetaSection, { borderTopColor: 'rgba(255,255,255,0.2)' }]}>
           <View style={styles.metaRow}>
             {/* Earnings Badge */}
-            <View style={[styles.metaBadge, { backgroundColor: 'rgba(34, 197, 94, 0.15)' }]}>
-              <Text style={[styles.metaBadgeText, { color: '#22C55E' }]}>+ ₹{(item.earnings || 0).toFixed(2)}</Text>
-            </View>
-
-            {/* Coins Deducted Badge */}
-            <View style={[styles.metaBadge, { backgroundColor: 'rgba(245, 158, 11, 0.15)' }]}>
-              <Text style={[styles.metaBadgeText, { color: '#F59E0B' }]}>🪙 {item.coinsDeducted || 0} Coins</Text>
+            <View style={[styles.metaBadge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+              <Text style={[styles.metaBadgeText, { color: '#fff' }]}>+ ₹{(item.earnings || 0).toFixed(2)}</Text>
             </View>
 
             {/* Status Badge */}
-            <View style={[styles.metaBadge, { backgroundColor: statusStyle.bg }]}>
-              <Text style={[styles.metaBadgeText, { color: statusStyle.text }]}>
+            <View style={[styles.metaBadge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+              <Text style={[styles.metaBadgeText, { color: '#fff' }]}>
                 {(item.status || 'active').toUpperCase()}
               </Text>
             </View>
@@ -128,17 +128,17 @@ const CallItem = ({ item }) => {
             <View style={styles.ratingSection}>
               <View style={styles.ratingRow}>
                 <Ionicons name="star" size={s(12)} color="#FBBF24" style={{ marginRight: wp(1) }} />
-                <Text style={styles.ratingText}>{item.rating}.0 / 5.0</Text>
+                <Text style={[styles.ratingText, { color: '#fff' }]}>{item.rating}.0 / 5.0</Text>
               </View>
               {item.feedback && (
-                <Text style={styles.feedbackText}>
+                <Text style={[styles.feedbackText, { color: 'rgba(255,255,255,0.9)' }]}>
                   "{item.feedback}"
                 </Text>
               )}
             </View>
           )}
         </View>
-      </View>
+      </LinearGradient>
     </Animated.View>
   );
 };
@@ -191,21 +191,31 @@ export default function RecentCallsScreen() {
     if (showLoadingState) setIsLoading(true);
     try {
       const res = await callAPI.getHistory(20, 0);
+
+      const GRADIENTS = [
+        ['#5C21B6', '#121212'],
+        ['#451A03', '#121212'],
+        ['#0F766E', '#121212'],
+        ['#15803D', '#121212'],
+      ];
+
       if (res?.data) {
-        setRecentCalls(res.data.map(call => ({
+        const filtered = res.data.filter(call => (call.callType || call.type) !== 'chat');
+        setRecentCalls(filtered.map((call, index) => ({
           id: call._id,
           userId: call.userId?._id || call.userId,
           name: call.userId?.name || 'Unknown User',
           gender: call.userId?.gender || 'Female',
           avatarIndex: call.userId?.avatarIndex || '0',
           duration: `${call.duration || 0} mins`,
-          type: call.type || 'audio',
+          type: call.callType || 'audio',
           time: call.createdAt,
           earnings: call.listenerEarnings || 0,
           coinsDeducted: call.coinsDeducted || 0,
           rating: call.rating,
           feedback: call.feedback,
-          status: call.status
+          status: call.status,
+          gradientColors: GRADIENTS[index % GRADIENTS.length],
         })));
       }
       
@@ -302,24 +312,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: wp(5),
-    paddingVertical: hp(2),
+    paddingVertical: hp(1.5),
   },
   headerTitle: {
-    fontSize: wp(7),
+    fontSize: wp(7.5),
     fontWeight: '900',
     color: '#fff',
     fontFamily: 'Inter_900Black',
   },
   refreshBtn: {
-    width: wp(9),
-    height: wp(9),
-    borderRadius: wp(4.5),
-    backgroundColor: '#111',
+    width: wp(10),
+    height: wp(10),
+    borderRadius: wp(5),
+    backgroundColor: '#111827',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#1F1F1F',
-    marginLeft: 10,
+    borderColor: '#1F2937',
   },
   earningsBadge: {
     flexDirection: 'row',
@@ -348,7 +357,6 @@ const styles = StyleSheet.create({
   },
   callItem: {
     flexDirection: 'column',
-    backgroundColor: '#111',
     padding: wp(3.5),
     borderRadius: 16,
     borderWidth: 1,

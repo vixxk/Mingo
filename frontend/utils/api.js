@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import { router } from 'expo-router';
 
 const getBaseUrl = () => {
   return process.env.EXPO_PUBLIC_API_URL;
@@ -19,22 +20,31 @@ const apiRequest = async (endpoint, options = {}) => {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  try {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      ...options,
+      headers,
+    });
 
-  const data = await response.json();
+    const data = await response.json();
 
-  if (!response.ok) {
-    throw {
-      status: response.status,
-      message: data.message || 'Something went wrong',
-      errors: data.errors || null,
-    };
+    if (!response.ok) {
+      throw {
+        status: response.status,
+        message: data.message || 'Something went wrong',
+        errors: data.errors || null,
+      };
+    }
+
+    return data;
+  } catch (error) {
+    // If it's a network/fetch connection failure (no structured error response status)
+    if (!error.status && endpoint !== '/auth/me') {
+      console.log('Redirecting to network error page due to connection failure:', error);
+      router.push('/network-error');
+    }
+    throw error;
   }
-
-  return data;
 };
 
 export const authAPI = {
@@ -228,8 +238,8 @@ export const walletAPI = {
     });
   },
 
-  getTransactions: async (page = 1, limit = 20) => {
-    return apiRequest(`/wallet/transactions?page=${page}&limit=${limit}`);
+  getTransactions: async (page = 1, limit = 20, type = 'All') => {
+    return apiRequest(`/wallet/transactions?page=${page}&limit=${limit}&type=${type}`);
   },
 };
 
@@ -286,6 +296,11 @@ export const adminAPI = {
     return apiRequest('/admin/stats');
   },
 
+  getExportData: async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/admin/export-data?${query}`);
+  },
+
   getUsers: async (params = {}) => {
     const query = new URLSearchParams(params).toString();
     return apiRequest(`/admin/users?${query}`);
@@ -318,6 +333,20 @@ export const adminAPI = {
 
   deleteUser: async (id) => {
     return apiRequest(`/admin/users/${id}`, { method: 'DELETE' });
+  },
+
+  sendAdminMessage: async (id, content) => {
+    return apiRequest(`/admin/users/${id}/message`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    });
+  },
+
+  updateUserInterests: async (id, interests) => {
+    return apiRequest(`/admin/users/${id}/interests`, {
+      method: 'PATCH',
+      body: JSON.stringify({ interests }),
+    });
   },
 
   getActivities: async (limit = 20, page = 1) => {

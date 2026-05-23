@@ -176,7 +176,7 @@ const BestChoiceCard = ({ item, onCallPress, onProfilePress }) => {
 };
 
 
-const PeopleCard = ({ item, onCallPress, onProfilePress }) => {
+const PeopleCard = ({ item, onCallPress, onChatPress, onProfilePress }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
@@ -206,23 +206,26 @@ const PeopleCard = ({ item, onCallPress, onProfilePress }) => {
       style={styles.peopleCardWrapper}
     >
       <Animated.View style={[styles.peopleCard, { transform: [{ scale: scaleAnim }] }]}>
-        <Image
-          source={item.image || getAvatarImage(item.gender, item.avatarIndex)}
-          style={styles.peopleImage}
-          resizeMode="cover"
-        />
-        {}
-        <View style={styles.peopleLiveBadgeWrapper}>
-          {item.isBusy ? <BusyBadge /> : item.isLive ? <LiveBadge /> : null}
+        <View style={styles.peopleImageContainer}>
+          <Image
+            source={item.image || getAvatarImage(item.gender, item.avatarIndex)}
+            style={styles.peopleImage}
+            resizeMode="cover"
+          />
+          <LinearGradient
+            colors={['transparent', 'rgba(0, 0, 0, 0.8)']}
+            style={styles.peopleNameGradient}
+          />
+          <View style={styles.peopleLiveBadgeWrapper}>
+            {item.isBusy ? <BusyBadge /> : item.isLive ? <LiveBadge /> : null}
+          </View>
+          <View style={styles.peopleNameRow}>
+            <Text style={styles.peopleName} numberOfLines={1}>
+              {item.name}
+            </Text>
+            {item.isVerified && <VerifiedBadge />}
+          </View>
         </View>
-        {}
-        <View style={styles.peopleNameRow}>
-          <Text style={styles.peopleName} numberOfLines={1}>
-            {item.name}
-          </Text>
-          {item.isVerified && <VerifiedBadge />}
-        </View>
-        {}
         <View style={styles.peopleActions}>
           {item.audioEnabled && (
             <TouchableOpacity 
@@ -238,6 +241,7 @@ const PeopleCard = ({ item, onCallPress, onProfilePress }) => {
             <TouchableOpacity 
               style={[styles.peopleActionBtn, item.isBusy && { opacity: 0.5 }]} 
               activeOpacity={0.7}
+              onPress={onChatPress}
               disabled={item.isBusy}
             >
               <Ionicons name="chatbubble-outline" size={18} color="#fff" />
@@ -307,9 +311,22 @@ export default function HomeScreen() {
 
   const loadRealData = useCallback(async () => {
     try {
-      const gender = await AsyncStorage.getItem('userGender');
-      const avatarIndex = await AsyncStorage.getItem('userAvatarIndex');
-      if (gender && avatarIndex) {
+      let gender = await AsyncStorage.getItem('userGender');
+      let avatarIndex = await AsyncStorage.getItem('userAvatarIndex');
+      
+      if (!gender || avatarIndex === null || avatarIndex === undefined) {
+        const userData = await AsyncStorage.getItem('user');
+        if (userData) {
+          const user = JSON.parse(userData);
+          gender = gender || user.gender || 'Female';
+          avatarIndex = avatarIndex !== null && avatarIndex !== undefined ? avatarIndex : (user.avatarIndex !== undefined ? user.avatarIndex.toString() : '0');
+          
+          await AsyncStorage.setItem('userGender', gender);
+          await AsyncStorage.setItem('userAvatarIndex', avatarIndex);
+        }
+      }
+
+      if (gender && avatarIndex !== null && avatarIndex !== undefined) {
         const maleAvatars = [
           require('../../images/male_avatar_1_1776972918440.png'),
           require('../../images/male_avatar_2_1776972933241.png'),
@@ -387,7 +404,7 @@ export default function HomeScreen() {
         }));
 
         const bestChoice = mappedListeners.filter(l => l.bestChoice);
-        const people = mappedListeners.filter(l => !l.bestChoice);
+        const people = mappedListeners;
 
         if (bestChoice.length > 0) setBestChoiceData(bestChoice);
         if (people.length > 0) setPeopleData(people);
@@ -563,23 +580,16 @@ export default function HomeScreen() {
   };
 
   
-  const [showNewListeners, setShowNewListeners] = useState(false);
-  const bannerAnim = useRef(new Animated.Value(-200)).current; 
-
-  
   const [showRandom, setShowRandom] = useState(false);
   const randomAnim = useRef(new Animated.Value(120)).current; 
 
   const scrollViewRef = useRef(null);
 
   const handleScroll = (event) => {
-    const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+    const { contentOffset } = event.nativeEvent;
     const y = contentOffset.y;
     const isScrolledDown = y > 100;
-    const isNearBottom =
-      contentOffset.y + layoutMeasurement.height >= contentSize.height - 60;
 
-    
     if (isScrolledDown && !showRandom) {
       setShowRandom(true);
       Animated.spring(randomAnim, { toValue: 0, friction: 6, useNativeDriver: true }).start();
@@ -587,19 +597,6 @@ export default function HomeScreen() {
       setShowRandom(false);
       Animated.timing(randomAnim, { toValue: 120, duration: 200, useNativeDriver: true }).start();
     }
-
-    
-    if (isNearBottom && !showNewListeners) {
-      setShowNewListeners(true);
-      Animated.spring(bannerAnim, { toValue: 0, friction: 6, useNativeDriver: true }).start();
-    } else if (!isNearBottom && showNewListeners) {
-      setShowNewListeners(false);
-      Animated.timing(bannerAnim, { toValue: -200, duration: 200, useNativeDriver: true }).start();
-    }
-  };
-
-  const handleBannerPress = () => {
-    scrollViewRef.current?.scrollTo({ y: 0, animated: true });
   };
 
   const handleProfilePress = (id) => {
@@ -792,6 +789,17 @@ export default function HomeScreen() {
                   key={item.id} 
                   item={item} 
                   onCallPress={(type) => handleCallPress(item, type)} 
+                  onChatPress={() => {
+                    router.push({
+                      pathname: '/(chat)/chat',
+                      params: {
+                        name: item.name,
+                        id: item.id,
+                        avatarIndex: item.avatarIndex || '0',
+                        gender: item.gender || 'Female'
+                      }
+                    });
+                  }}
                   onProfilePress={() => handleProfilePress(item.id)} 
                 />
               ))
@@ -876,10 +884,10 @@ export default function HomeScreen() {
                 onPress={handleCloseFab}
               >
                 <LinearGradient
-                  colors={['#EF4444', '#DC2626']}
+                  colors={['#3B82F6', '#EC4899', '#F59E0B']}
                   style={styles.fabCloseCircle}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
+                  start={{ x: 0, y: 0.5 }}
+                  end={{ x: 1, y: 0.5 }}
                 >
                   <Ionicons name="close" size={hp(3.5)} color="#fff" />
                 </LinearGradient>
@@ -892,28 +900,7 @@ export default function HomeScreen() {
       {}
       <WelcomePopup visible={showWelcome} onAgree={handleWelcomeAgree} />
 
-      {}
-      <Animated.View
-        style={[
-          styles.newListenersBanner,
-          { top: insets.top + vs(56), transform: [{ translateY: bannerAnim }] },
-        ]}
-        pointerEvents={showNewListeners ? 'auto' : 'none'}
-      >
-        <TouchableOpacity
-          style={styles.newListenersInner}
-          activeOpacity={0.85}
-          onPress={handleBannerPress}
-        >
-          <View style={styles.newListenersAvatars}>
-            <Image source={require('../../images/avatar_1.png')} style={[styles.nlAvatar, { zIndex: 3 }]} />
-            <Image source={require('../../images/avatar_2.png')} style={[styles.nlAvatar, { marginLeft: -s(10), zIndex: 2 }]} />
-            <Image source={require('../../images/avatar_3.png')} style={[styles.nlAvatar, { marginLeft: -s(10), zIndex: 1 }]} />
-          </View>
-          <Text style={styles.newListenersText}>New Listeners</Text>
-          <Ionicons name="chevron-up" size={18} color="#9CA3AF" />
-        </TouchableOpacity>
-      </Animated.View>
+
       <CoinsOfferPopup
         visible={showCoinsOffer}
         onClose={handleCoinsClose}
@@ -1209,10 +1196,25 @@ const styles = StyleSheet.create({
     borderRadius: wp(5),
     overflow: 'hidden',
     backgroundColor: '#111',
+    borderWidth: 1,
+    borderColor: '#1C1C1C',
+  },
+  peopleImageContainer: {
+    width: '100%',
+    height: hp(22),
+    position: 'relative',
+    overflow: 'hidden',
   },
   peopleImage: {
     width: '100%',
-    height: hp(25),
+    height: '100%',
+  },
+  peopleNameGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: hp(8),
   },
   peopleLiveBadgeWrapper: {
     position: 'absolute',
@@ -1221,11 +1223,12 @@ const styles = StyleSheet.create({
   },
   peopleNameRow: {
     position: 'absolute',
-    bottom: hp(5.5),
+    bottom: hp(1),
     left: wp(2.5),
     right: wp(2.5),
     flexDirection: 'row',
     alignItems: 'center',
+    zIndex: 2,
   },
   peopleName: {
     fontSize: wp(3.5),
@@ -1234,9 +1237,8 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.8)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
+    flexShrink: 1,
   },
-
-  
   peopleActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1295,45 +1297,5 @@ const styles = StyleSheet.create({
   },
 
   
-  newListenersBanner: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 200,
-    overflow: 'hidden',
-  },
-  newListenersInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1A1A1A',
-    borderRadius: wp(7),
-    paddingHorizontal: wp(3.5),
-    paddingVertical: hp(1),
-    gap: wp(2),
-    borderWidth: 1,
-    borderColor: '#2A2A2A',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    elevation: 10,
-  },
-  newListenersAvatars: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  nlAvatar: {
-    width: wp(7),
-    height: wp(7),
-    borderRadius: wp(3.5),
-    borderWidth: 2,
-    borderColor: '#1A1A1A',
-  },
-  newListenersText: {
-    fontSize: wp(3.5),
-    color: '#fff',
-    fontWeight: '700',
-    fontFamily: 'Inter_700Bold',
-  },
+
 });

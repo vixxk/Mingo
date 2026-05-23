@@ -24,9 +24,20 @@ class CallService {
       throw new AppError('Insufficient coins. Please recharge.', 402);
     }
 
+    // Check if the user is already in an active call session
+    const existingUserSession = await Session.findOne({
+      $or: [
+        { userId: userIdStr },
+        { listenerId: userIdStr }
+      ],
+      status: 'active'
+    });
+    if (existingUserSession) {
+      throw new AppError('You are already in an active call session', 400);
+    }
+
     let matchedListenerId = listenerId;
 
-    
     if (!matchedListenerId) {
       const match = await MatchingService.findMatch(userIdStr);
       matchedListenerId = match.listenerId;
@@ -49,6 +60,19 @@ class CallService {
         throw new AppError('Listener is currently unavailable', 409);
       }
       matchedListenerId = listenerIdStr;
+    }
+
+    // Check if the selected listener is already in an active call session
+    const listenerIdStr = matchedListenerId.toString();
+    const existingListenerSession = await Session.findOne({
+      $or: [
+        { userId: listenerIdStr },
+        { listenerId: listenerIdStr }
+      ],
+      status: 'active'
+    });
+    if (existingListenerSession) {
+      throw new AppError('Listener is currently busy in another call', 400);
     }
 
     

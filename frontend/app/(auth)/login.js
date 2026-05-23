@@ -151,6 +151,12 @@ export default function LoginScreen() {
       
       await AsyncStorage.setItem('userToken', result.data.token);
       await AsyncStorage.setItem('user', JSON.stringify(result.data.user));
+      if (result.data.user.gender) {
+        await AsyncStorage.setItem('userGender', result.data.user.gender);
+      }
+      if (result.data.user.avatarIndex !== undefined) {
+        await AsyncStorage.setItem('userAvatarIndex', result.data.user.avatarIndex.toString());
+      }
       
       setUserName(result.data.user.name);
       setShowWelcomePopup(true);

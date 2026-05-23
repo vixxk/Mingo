@@ -99,52 +99,26 @@ export default function AdminUsersScreen() {
     loadUsers(filter);
   }, [filter]);
 
-  const handleBanUser = (userId, isCurrentlyBanned) => {
-    Alert.alert(
-      isCurrentlyBanned ? 'Unban User' : 'Ban User',
-      `Are you sure you want to ${isCurrentlyBanned ? 'unban' : 'ban'} this user?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: isCurrentlyBanned ? 'Unban' : 'Ban', 
-          style: isCurrentlyBanned ? 'default' : 'destructive', 
-          onPress: async () => {
-            try {
-              await adminAPI.toggleBanUser(userId);
-              setShowDetail(false);
-              setSelectedUser(null);
-              loadUsers(filter);
-            } catch(e) {
-              Alert.alert('Error', 'Failed to update user status');
-            }
-          }
-        },
-      ]
-    );
+  const handleBanUser = async (userId, isCurrentlyBanned) => {
+    try {
+      await adminAPI.toggleBanUser(userId);
+      setShowDetail(false);
+      setSelectedUser(null);
+      loadUsers(filter);
+    } catch(e) {
+      Alert.alert('Error', 'Failed to update user status');
+    }
   };
 
-  const handleDeleteUser = (userId) => {
-    Alert.alert(
-      'Delete User Permanently',
-      'This action cannot be undone. All user data will be lost. Are you sure?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
-          style: 'destructive', 
-          onPress: async () => {
-            try {
-              await adminAPI.deleteUser(userId);
-              setUsers(prev => prev.filter(u => u.id !== userId));
-              setShowDetail(false);
-              setSelectedUser(null);
-            } catch(e) {
-              Alert.alert('Error', 'Failed to delete user');
-            }
-          }
-        },
-      ]
-    );
+  const handleDeleteUser = async (userId) => {
+    try {
+      await adminAPI.deleteUser(userId);
+      setUsers(prev => prev.filter(u => u.id !== userId));
+      setShowDetail(false);
+      setSelectedUser(null);
+    } catch(e) {
+      Alert.alert('Error', 'Failed to delete user');
+    }
   };
 
   const filteredUsers = users.filter(u => {

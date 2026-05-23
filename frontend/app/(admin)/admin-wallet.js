@@ -369,11 +369,44 @@ export default function AdminWallet() {
               color="#fff"
             />
           </View>
+        </View>
 
+        <Text style={styles.sectionTitle}>Listener Earning Rates</Text>
+        <View style={styles.settingsCard}>
+          <View style={styles.settingItem}>
+            <Text style={styles.settingLabel}>Video Call Rate (₹/min)</Text>
+            <TextInput
+              style={styles.settingInput}
+              value={settings.videoPayoutRate?.toString() ?? '4'}
+              onChangeText={(v) => setSettings({ ...settings, videoPayoutRate: Number(v) })}
+              keyboardType="numeric"
+              color="#fff"
+            />
+          </View>
+          <View style={styles.settingItem}>
+            <Text style={styles.settingLabel}>Audio Call Rate (₹/min)</Text>
+            <TextInput
+              style={styles.settingInput}
+              value={settings.audioPayoutRate?.toString() ?? '1'}
+              onChangeText={(v) => setSettings({ ...settings, audioPayoutRate: Number(v) })}
+              keyboardType="numeric"
+              color="#fff"
+            />
+          </View>
+          <View style={styles.settingItem}>
+            <Text style={styles.settingLabel}>Chat Rate (₹/5 min)</Text>
+            <TextInput
+              style={styles.settingInput}
+              value={settings.chatPayoutRate?.toString() ?? '2.5'}
+              onChangeText={(v) => setSettings({ ...settings, chatPayoutRate: Number(v) })}
+              keyboardType="numeric"
+              color="#fff"
+            />
+          </View>
         </View>
 
         <TouchableOpacity style={[styles.saveBtn, { backgroundColor: '#10B981' }]} onPress={saveSettings} disabled={savingSettings}>
-          {savingSettings ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>Update Wallet Settings</Text>}
+          {savingSettings ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>Update Wallet & Earning Settings</Text>}
         </TouchableOpacity>
 
         <View style={{ height: hp(10) }} />

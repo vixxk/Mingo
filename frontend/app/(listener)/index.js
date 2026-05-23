@@ -449,7 +449,7 @@ export default function ListenerHomeScreen() {
       >
         {}
         <View style={[styles.card, isOnline && { opacity: 0.7 }]}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: vs(14) }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: vs(10) }}>
             <Text style={[styles.cardTitle, { marginBottom: 0 }]}>Mingo Mode</Text>
             {isOnline && (
               <View style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
@@ -830,7 +830,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#141414',
     borderRadius: 18,
     paddingHorizontal: s(18),
-    paddingVertical: vs(18),
+    paddingVertical: vs(12),
     borderWidth: 1,
     borderColor: '#1F1F1F',
   },
@@ -839,12 +839,12 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#fff',
     fontFamily: 'Inter_900Black',
-    marginBottom: vs(14),
+    marginBottom: vs(10),
   },
   cardDivider: {
     height: 1,
     backgroundColor: '#1F1F1F',
-    marginVertical: vs(12),
+    marginVertical: vs(8),
   },
 
   

@@ -403,6 +403,46 @@ class AdminController {
       user.isBanned = !user.isBanned;
       await user.save();
 
+      const { sendNotificationToMultiple } = require('../../utils/notifications');
+      if (user.isBanned) {
+        await Notification.create({
+          recipient: user._id,
+          title: 'Account Suspended ⚠️',
+          body: 'Your account has been suspended by the administrator.',
+          type: 'system',
+        });
+        
+        if (user.pushToken) {
+          try {
+            await sendNotificationToMultiple([user.pushToken], 'Account Suspended ⚠️', 'Your account has been suspended by the administrator.', { type: 'account_ban' });
+          } catch (e) {
+            console.log('Error sending ban push:', e);
+          }
+        }
+        
+        const io = req.app.get('io');
+        if (io) {
+          io.to(`user_${user._id.toString()}`).emit('account_banned', {
+            message: 'Your account has been suspended by the administrator.'
+          });
+        }
+      } else {
+        await Notification.create({
+          recipient: user._id,
+          title: 'Account Restored 🎉',
+          body: 'Your account has been unbanned. You can now log back in.',
+          type: 'system',
+        });
+        
+        if (user.pushToken) {
+          try {
+            await sendNotificationToMultiple([user.pushToken], 'Account Restored 🎉', 'Your account has been unbanned. You can now log back in.', { type: 'account_unban' });
+          } catch (e) {
+            console.log('Error sending unban push:', e);
+          }
+        }
+      }
+
       await ActivityLog.create({
         user: 'Admin',
         action: `${user.isBanned ? 'Banned' : 'Unbanned'} user ${user.name}`,
@@ -628,6 +668,9 @@ class AdminController {
         'diamondToInrRatio', 
         'commissionPercentage', 
         'minWithdrawalLimit', 
+        'audioPayoutRate',
+        'videoPayoutRate',
+        'chatPayoutRate',
         'maintenanceMode',
         'otpSettings',
         'notifications',
@@ -916,22 +959,43 @@ class AdminController {
         const startTime = s.startTime;
         const endTime = s.endTime || new Date();
 
-        // Query gift_send transactions between caller and listener during session time
         let giftsWorth = 0;
+        let giftEarnings = 0;
         try {
-          const giftTx = await Transaction.find({
-            userId: s.userId?._id,
-            type: 'gift_send',
-            'metadata.receiverId': s.listenerId?._id,
-            createdAt: { $gte: startTime, $lte: endTime }
+          const sendGifts = await Transaction.find({
+            $or: [
+              { 'metadata.sessionId': s._id.toString(), type: 'gift_send' },
+              { 'metadata.sessionId': s._id, type: 'gift_send' },
+              {
+                userId: s.userId?._id,
+                type: 'gift_send',
+                'metadata.receiverId': s.listenerId?._id,
+                createdAt: { $gte: startTime, $lte: endTime }
+              }
+            ]
           });
-          giftsWorth = giftTx.reduce((acc, tx) => acc + Math.abs(tx.coins), 0);
+          giftsWorth = sendGifts.reduce((acc, tx) => acc + Math.abs(tx.coins || 0), 0);
+
+          const receiveGifts = await Transaction.find({
+            $or: [
+              { 'metadata.sessionId': s._id.toString(), type: 'gift_receive' },
+              { 'metadata.sessionId': s._id, type: 'gift_receive' },
+              {
+                userId: s.listenerId?._id,
+                type: 'gift_receive',
+                'metadata.senderId': s.userId?._id,
+                createdAt: { $gte: startTime, $lte: endTime }
+              }
+            ]
+          });
+          giftEarnings = receiveGifts.reduce((acc, tx) => acc + (tx.amount || 0), 0);
+
+          if (giftEarnings === 0 && giftsWorth > 0) {
+            giftEarnings = giftsWorth * 0.70 * 0.25;
+          }
         } catch (e) {
           console.error('Error fetching session gift transactions:', e);
         }
-
-        // Listener gets 70% of gift worth (converted to rupees, where 1 coin = ₹0.25)
-        const giftEarnings = giftsWorth * 0.70 * 0.25;
 
         return {
           id: s._id,
@@ -1011,6 +1075,188 @@ class AdminController {
         page: parseInt(page),
         limit: parseInt(limit),
       }, 'Ratings retrieved');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async getExportData(req, res, next) {
+    try {
+      const { timeline, specificDay, startDate, endDate, types } = req.query;
+      const dataTypes = types ? types.split(',') : ['users', 'listeners', 'gifts', 'transactions'];
+      
+      let dateFilter = {};
+      if (startDate && endDate) {
+        const start = new Date(startDate);
+        start.setHours(0,0,0,0);
+        const end = new Date(endDate);
+        end.setHours(23,59,59,999);
+        dateFilter = { createdAt: { $gte: start, $lte: end } };
+      } else if (specificDay) {
+        const start = new Date(specificDay);
+        start.setHours(0,0,0,0);
+        const end = new Date(specificDay);
+        end.setHours(23,59,59,999);
+        dateFilter = { createdAt: { $gte: start, $lte: end } };
+      } else if (timeline && timeline !== 'all') {
+        const days = parseInt(timeline) || 7;
+        const start = new Date();
+        start.setDate(start.getDate() - days);
+        start.setHours(0,0,0,0);
+        dateFilter = { createdAt: { $gte: start } };
+      }
+
+      const results = {};
+
+      if (dataTypes.includes('users')) {
+        const filter = { role: 'USER' };
+        if (dateFilter.createdAt) filter.createdAt = dateFilter.createdAt;
+        results.users = await User.find(filter)
+          .select('name username phone email isBanned createdAt')
+          .sort({ createdAt: -1 })
+          .limit(1000);
+      }
+
+      if (dataTypes.includes('listeners')) {
+        const filter = { status: 'approved' };
+        results.listeners = await Listener.find(filter)
+          .populate('userId', 'name username phone email')
+          .sort({ createdAt: -1 })
+          .limit(1000);
+      }
+
+      if (dataTypes.includes('gifts')) {
+        const filter = { type: { $in: ['gift_send', 'gift_receive'] } };
+        if (dateFilter.createdAt) filter.createdAt = dateFilter.createdAt;
+        results.gifts = await Transaction.find(filter)
+          .populate('userId', 'name username phone')
+          .sort({ createdAt: -1 })
+          .limit(1000);
+      }
+
+      if (dataTypes.includes('transactions')) {
+        const filter = { type: { $in: ['purchase', 'call_debit', 'call_credit', 'signup_bonus', 'refund'] } };
+        if (dateFilter.createdAt) filter.createdAt = dateFilter.createdAt;
+        results.transactions = await Transaction.find(filter)
+          .populate('userId', 'name username phone')
+          .sort({ createdAt: -1 })
+          .limit(1000);
+      }
+
+      return ApiResponse.success(res, results, 'Export data retrieved');
+    } catch (e) {
+      next(e);
+    }
+  }
+
+  static async sendAdminMessage(req, res, next) {
+    try {
+      const { content } = req.body;
+      if (!content) {
+        throw new AppError('Message content is required', 400);
+      }
+
+      const targetUserId = req.params.id;
+      const adminId = req.user.id;
+
+      const targetUser = await User.findById(targetUserId);
+      if (!targetUser) throw new AppError('User not found', 404);
+
+      // 1. Find or create conversation between Admin and User
+      const Conversation = require('../models/conversationModel');
+      let conversation = await Conversation.findOne({
+        participants: { $all: [adminId, targetUserId] }
+      });
+
+      if (!conversation) {
+        conversation = await Conversation.create({
+          participants: [adminId, targetUserId],
+          unreadCount: {},
+          freeMessageUsed: {}
+        });
+      }
+
+      // 2. Create message marked as admin message
+      const Message = require('../models/messageModel');
+      const message = new Message({
+        conversationId: conversation._id,
+        sender: adminId,
+        senderModel: 'User',
+        content,
+        type: 'text',
+        isAdminMessage: true,
+      });
+      await message.save();
+
+      // 3. Update conversation lastMessage & unread count
+      conversation.lastMessage = message._id;
+      if (!conversation.unreadCount) {
+        conversation.unreadCount = new Map();
+      }
+      const targetUserIdStr = targetUserId.toString();
+      const currentUnread = conversation.unreadCount.get(targetUserIdStr) || 0;
+      conversation.unreadCount.set(targetUserIdStr, currentUnread + 1);
+      await conversation.save();
+
+      // 4. Emit socket events
+      const io = req.app.get('io');
+      if (io) {
+        io.to(conversation._id.toString()).emit('receive_message', message);
+        io.to(`user_${targetUserIdStr}`).emit('receive_message', message);
+      }
+
+      // 5. Send push notification to target user
+      const { sendNotificationToMultiple } = require('../../utils/notifications');
+      if (targetUser.pushToken) {
+        try {
+          await sendNotificationToMultiple(
+            [targetUser.pushToken],
+            'Support Message 🛡️',
+            content,
+            { conversationId: conversation._id.toString(), type: 'admin_message' }
+          );
+        } catch (e) {
+          console.log('Error sending admin message push notification:', e);
+        }
+      }
+
+      // 6. Create activity log
+      await ActivityLog.create({
+        user: 'Admin',
+        action: `Sent a support message to ${targetUser.name}: "${content.substring(0, 40)}${content.length > 40 ? '...' : ''}"`,
+        type: 'admin',
+        icon: 'chatbubble',
+        color: '#A855F7',
+      });
+
+      return ApiResponse.success(res, message, 'Message sent successfully by Admin');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async updateUserInterests(req, res, next) {
+    try {
+      const { interests } = req.body;
+      if (!Array.isArray(interests)) {
+        throw new AppError('Interests must be an array', 400);
+      }
+
+      const user = await User.findById(req.params.id);
+      if (!user) throw new AppError('User not found', 404);
+
+      user.interests = interests;
+      await user.save();
+
+      await ActivityLog.create({
+        user: 'Admin',
+        action: `Updated interests for user ${user.name}`,
+        type: 'admin',
+        icon: 'list-circle',
+        color: '#8B5CF6',
+      });
+
+      return ApiResponse.success(res, { interests: user.interests }, 'Interests updated successfully');
     } catch (err) {
       next(err);
     }

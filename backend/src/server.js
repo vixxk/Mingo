@@ -3,7 +3,7 @@ const app = require('./app');
 const config = require('./config/env');
 const { connectDB, mongoose } = require('./config/database');
 const http = require('http');
-const { initSocket } = require('./socket');
+const { initSocket, getIo } = require('./socket');
 
 const PORT = config.port;
 
@@ -18,6 +18,7 @@ const startServer = async () => {
 
   const server = http.createServer(app);
   initSocket(server);
+  app.set('io', getIo());
 
   server.listen(PORT, () => {
     console.log(`
