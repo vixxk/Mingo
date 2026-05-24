@@ -11,7 +11,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { hp, wp, ms } from '../../utils/responsive';
-import { chatAPI, walletAPI, giftsAPI, listenersAPI } from '../../utils/api';
+import { chatAPI, walletAPI, giftsAPI, listenersAPI, listenerAPI } from '../../utils/api';
 import { socketService } from '../../utils/socket';
 import GiftPopup from '../../components/shared/GiftPopup';
 import GiftAnimationOverlay from '../../components/call/GiftAnimationOverlay';
@@ -279,7 +279,8 @@ export default function ChatScreen() {
     name: paramName = 'User', id: conversationId, avatarIndex: paramAvatarIndex = '0', gender: paramGender = 'Female',
     listenerId: paramListenerId,
     sessionId,
-    sessionStatus
+    sessionStatus,
+    isAdmin: paramIsAdmin
   } = useLocalSearchParams();
 
   // Other user display info (will be resolved after loading)
@@ -315,6 +316,7 @@ export default function ChatScreen() {
   };
 
   const [messages, setMessages] = useState([]);
+  const [isAdminChat, setIsAdminChat] = useState(paramIsAdmin === 'true');
   const [loading, setLoading] = useState(true);
   const [showStickers, setShowStickers] = useState(false);
   const [showEmojis, setShowEmojis] = useState(false);
@@ -328,6 +330,7 @@ export default function ChatScreen() {
   const [otherUserId, setOtherUserId] = useState(null);
   const [showGiftPopup, setShowGiftPopup] = useState(false);
   const [sessionActive, setSessionActive] = useState(false);
+  const [isListenerOnline, setIsListenerOnline] = useState(true);
   const [sessionRemaining, setSessionRemaining] = useState(0);
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [receivedGift, setReceivedGift] = useState(null);
@@ -396,6 +399,9 @@ export default function ChatScreen() {
           if (response?.data) {
             const actualConvId = response.data.conversationId;
             setRealConversationId(actualConvId);
+            if (response.data.isAdmin !== undefined) {
+              setIsAdminChat(response.data.isAdmin);
+            }
             
             const parts = response.data.participants || [];
             const other = parts.find(p => p.toString() !== myId?.toString());
@@ -431,12 +437,43 @@ export default function ChatScreen() {
             socketService.joinRoom(actualConvId);
 
             // Handle chat session from response
+            let isOnline = true;
+            if (myRole === 'LISTENER') {
+              try {
+                const profileRes = await listenerAPI.getMyProfile();
+                if (profileRes?.data) {
+                  isOnline = !!profileRes.data.isOnline;
+                  setIsListenerOnline(isOnline);
+                }
+              } catch (e) {
+                console.log('Error fetching self profile:', e);
+              }
+            }
+
             const session = response.data.chatSession;
+            let blockedBySession = false;
             if (session && session.active) {
               setSessionActive(true);
               setActiveSessionId(session.sessionId);
               startElapsedTimer(session.startTime);
+              blockedBySession = false;
+            } else {
+              setSessionActive(false);
+              if (myRole === 'LISTENER') {
+                const apiMessages = response.data.messages || [];
+                const nonSystemMessages = apiMessages.filter(m => m.senderModel !== 'System' && m.type !== 'system');
+                const lastMessage = nonSystemMessages[nonSystemMessages.length - 1];
+                if (!lastMessage || lastMessage.senderModel !== 'User') {
+                  blockedBySession = true;
+                } else {
+                  blockedBySession = false;
+                }
+              } else {
+                blockedBySession = false;
+              }
             }
+
+            setChatBlocked(blockedBySession || (myRole === 'LISTENER' && !isOnline));
 
             const apiMessages = response.data.messages || [];
             const formatted = insertDateLabels(
@@ -546,6 +583,10 @@ export default function ChatScreen() {
         });
       }
 
+      if (userRole === 'LISTENER' && !isSent && !isSystem && msg.senderModel === 'User') {
+        setChatBlocked(false);
+      }
+
       setMessages((prev) => {
         const messageId = (msg._id || Math.random()).toString();
         if (prev.some(m => m.id?.toString() === messageId)) return prev;
@@ -606,6 +647,7 @@ export default function ChatScreen() {
       const session = data.chatSession;
       if (session?.sessionId) setActiveSessionId(session.sessionId);
       startElapsedTimer(session.startTime);
+      setChatBlocked(false);
     };
 
     const handleSessionRenewed = (data) => {
@@ -619,6 +661,9 @@ export default function ChatScreen() {
       setSessionRemaining(0);
       setActiveSessionId(null);
       if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
+      if (userRole === 'LISTENER') {
+        setChatBlocked(true);
+      }
     };
 
     const handleGiftReceived = (data) => {
@@ -653,6 +698,36 @@ export default function ChatScreen() {
         };
         setMessages(prev => [...prev, errorMsg]);
         setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+      } else if (data.type === 'listener_offline') {
+        setChatBlocked(true);
+        const errorMsg = {
+          id: `error_${Date.now()}`,
+          text: data.error || 'You are offline. Please go online to send messages.',
+          sent: false,
+          type: 'system',
+          createdAt: new Date().toISOString(),
+        };
+        setMessages(prev => [...prev, errorMsg]);
+        setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+      }
+    };
+
+    const handleListenerStatusChanged = (data) => {
+      console.log('[Chat] Listener status changed:', data);
+      const { userId, isOnline } = data;
+      if (currentUserId && userId.toString() === currentUserId.toString()) {
+        setIsListenerOnline(isOnline);
+        if (!isOnline) {
+          setChatBlocked(true);
+        } else {
+          setMessages(prev => {
+            const nonSystemMessages = prev.filter(m => m.type !== 'system' && m.type !== 'date');
+            const lastMessage = nonSystemMessages[nonSystemMessages.length - 1];
+            const isBlockedBySession = !sessionActive && (!lastMessage || !lastMessage.sent);
+            setChatBlocked(isBlockedBySession);
+            return prev;
+          });
+        }
       }
     };
 
@@ -667,6 +742,7 @@ export default function ChatScreen() {
     socketService.on('gift_received', handleGiftReceived);
     socketService.on('chat_user_offline', handleChatUserOffline);
     socketService.on('message_error', handleMessageError);
+    socketService.on('listener_status_changed', handleListenerStatusChanged);
 
     return () => {
       socketService.off('receive_message', handleNewMessage);
@@ -680,8 +756,9 @@ export default function ChatScreen() {
       socketService.off('gift_received', handleGiftReceived);
       socketService.off('chat_user_offline', handleChatUserOffline);
       socketService.off('message_error', handleMessageError);
+      socketService.off('listener_status_changed', handleListenerStatusChanged);
     };
-  }, [currentUserId]);
+  }, [currentUserId, sessionActive]);
 
   const insertDateLabels = (msgs) => {
     const result = [];
@@ -699,8 +776,8 @@ export default function ChatScreen() {
 
   const handleSend = () => {
     if (message.trim() && realConversationId && currentUserId) {
-      if (chatBlocked && userRole === 'USER') {
-        router.push('/balance');
+      if (chatBlocked) {
+        if (userRole === 'USER') router.push('/balance');
         return;
       }
       
@@ -750,7 +827,10 @@ export default function ChatScreen() {
 
   const handleSendSticker = (stickerUrl) => {
     if (realConversationId && currentUserId) {
-      if (chatBlocked && userRole === 'USER') { router.push('/balance'); return; }
+      if (chatBlocked) {
+        if (userRole === 'USER') router.push('/balance');
+        return;
+      }
       
       const tempId = `temp_${Date.now()}`;
       const optimisticMsg = {
@@ -941,7 +1021,7 @@ export default function ChatScreen() {
       )}
 
       {/* Chat blocked banner */}
-      {chatBlocked && (
+      {chatBlocked && userRole === 'USER' && (
         <TouchableOpacity style={styles.blockedBanner} activeOpacity={0.85} onPress={() => router.push('/balance')}>
           <Ionicons name="wallet-outline" size={wp(4.5)} color="#F59E0B" />
           <Text style={styles.blockedBannerText}>Insufficient balance. Tap to recharge.</Text>
@@ -950,7 +1030,13 @@ export default function ChatScreen() {
       )}
 
       {/* Input bar */}
-      {sessionStatus === 'completed' ? (
+      {isAdminChat ? (
+        <View style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, hp(1.2)), justifyContent: 'center', alignItems: 'center', minHeight: hp(6) }]}>
+          <Text style={{ color: '#9CA3AF', fontSize: wp(3.5), fontFamily: 'Inter_500Medium', fontStyle: 'italic' }}>
+            Replying to admin messages is disabled.
+          </Text>
+        </View>
+      ) : sessionStatus === 'completed' ? (
         <View style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, hp(1.2)), justifyContent: 'center', alignItems: 'center' }]}>
           <Text style={{ color: '#9CA3AF', fontSize: wp(3.5), fontFamily: 'Inter_500Medium', fontStyle: 'italic' }}>
             This chat session has ended.
@@ -960,7 +1046,15 @@ export default function ChatScreen() {
         <View style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, hp(1.2)) }]}>
           <TextInput
             style={styles.textInput}
-            placeholder={chatBlocked ? 'Recharge to continue...' : 'Enter your message...'}
+            placeholder={
+              chatBlocked 
+                ? (userRole === 'LISTENER' 
+                    ? (!isListenerOnline 
+                        ? 'Please go online to send messages.' 
+                        : 'Waiting for user to send a message...') 
+                    : 'Recharge to continue...') 
+                : 'Enter your message...'
+            }
             placeholderTextColor="#6B7280"
             value={message}
             onChangeText={handleTextChange}

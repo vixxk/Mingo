@@ -28,8 +28,10 @@ class PresenceService {
     try {
       const { getIo } = require('../socket');
       getIo().emit('listener_status_changed', { userId: userIdStr, isOnline: true, isBusy: false });
+      const sseService = require('./sseService');
+      sseService.broadcastListenerStatus(userIdStr, true, false);
     } catch (e) {
-      console.log('Socket not initialized yet', e.message);
+      console.log('Socket or SSE error', e.message);
     }
 
     return { status: 'online', userId: userIdStr };
@@ -49,8 +51,10 @@ class PresenceService {
     try {
       const { getIo } = require('../socket');
       getIo().emit('listener_status_changed', { userId: userIdStr, isOnline: false, isBusy: false });
+      const sseService = require('./sseService');
+      sseService.broadcastListenerStatus(userIdStr, false, false);
     } catch (e) {
-      console.log('Socket not initialized yet', e.message);
+      console.log('Socket or SSE error', e.message);
     }
 
     return { status: 'offline', userId: userIdStr };

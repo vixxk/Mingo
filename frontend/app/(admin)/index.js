@@ -167,7 +167,6 @@ export default function AdminDashboard() {
             onPress={() => router.push('/(admin)/admin-notifications')}
           >
             <Ionicons name="notifications" size={24} color="#A855F7" />
-            {stats.pendingReports > 0 && <View style={styles.notifBadge} />}
           </TouchableOpacity>
         </View>
       </View>

@@ -61,6 +61,7 @@ export default function AdminSessions() {
 
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState('all');
   const [page, setPage] = useState(1);
@@ -77,7 +78,11 @@ export default function AdminSessions() {
 
   const loadSessions = useCallback(async (p = 1, statusFilter = filter, searchVal = debouncedSearch) => {
     try {
-      if (p === 1) setLoading(true);
+      if (p === 1) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
       const params = { page: p, limit: 20 };
       if (statusFilter !== 'all') params.status = statusFilter;
       if (searchVal.trim() !== '') params.search = searchVal.trim();
@@ -90,6 +95,7 @@ export default function AdminSessions() {
       console.error('Failed to load sessions:', e);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
       setRefreshing(false);
     }
   }, [filter, debouncedSearch]);
@@ -278,8 +284,13 @@ export default function AdminSessions() {
             style={styles.loadMoreBtn}
             onPress={() => loadSessions(page + 1, filter)}
             activeOpacity={0.7}
+            disabled={loadingMore}
           >
-            <Text style={styles.loadMoreText}>Load More</Text>
+            {loadingMore ? (
+              <ActivityIndicator size="small" color="#A855F7" />
+            ) : (
+              <Text style={styles.loadMoreText}>Load More</Text>
+            )}
           </TouchableOpacity>
         )}
 

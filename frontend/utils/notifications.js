@@ -1,7 +1,76 @@
+import { Platform } from 'react-native';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
-import { Platform } from 'react-native';
 
+const ONESIGNAL_APP_ID = process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID;
+
+// --- 1. OneSignal Configuration & Setup ---
+let OneSignal = null;
+let LogLevel = null;
+
+try {
+  // Use require instead of ES6 import to prevent Expo Go from crashing on startup due to missing native binary
+  const OneSignalModule = require('react-native-onesignal');
+  if (OneSignalModule) {
+    OneSignal = OneSignalModule.OneSignal;
+    LogLevel = OneSignalModule.LogLevel;
+  }
+} catch (err) {
+  console.log('[OneSignal] Native module is not available in current environment (e.g. running in Expo Go). Bypassing OneSignal.');
+}
+
+/**
+ * Initializes OneSignal Push Notifications on the client device
+ * Registers the system userId as OneSignal's External ID for highly robust targeting without token databases
+ * @param {String} userId - Mongo database ID of the user
+ * @param {String} role - User role: 'USER' or 'LISTENER'
+ */
+export async function initializeOneSignal(userId, role) {
+  if (!OneSignal) {
+    console.log('[OneSignal] SDK native library is not loaded. Bypassing OneSignal setup.');
+    return;
+  }
+
+  if (!ONESIGNAL_APP_ID || ONESIGNAL_APP_ID.startsWith('placeholder')) {
+    console.log('[OneSignal] Client App ID not configured. Bypassing registration.');
+    return;
+  }
+
+  if (!userId) {
+    console.log('[OneSignal] Missing userId for initialization.');
+    return;
+  }
+
+  try {
+    console.log(`[OneSignal] Initializing with App ID: ${ONESIGNAL_APP_ID}`);
+    if (LogLevel) {
+      OneSignal.Debug.setLogLevel(LogLevel.Verbose);
+    }
+    OneSignal.initialize(ONESIGNAL_APP_ID);
+
+    // Request permissions dynamically
+    console.log('[OneSignal] Requesting push notification permissions...');
+    await OneSignal.Notifications.requestPermission(true);
+
+    // Log the user into OneSignal using their system ID as their External ID
+    console.log(`[OneSignal] Registering external userId: ${userId}`);
+    OneSignal.login(String(userId));
+
+    // Tag the user with their role for precise dashboard/segment marketing campaigns
+    if (role) {
+      const sanitizedRole = role.toUpperCase();
+      console.log(`[OneSignal] Adding audience tag 'role': ${sanitizedRole}`);
+      OneSignal.User.addTag('role', sanitizedRole);
+    }
+
+    console.log('[OneSignal] Setup finished successfully!');
+  } catch (err) {
+    console.error('[OneSignal] Failed to initialize push services:', err.message);
+  }
+}
+
+
+// --- 2. Expo Notifications Mocks and Fallbacks (For Backwards-Compatibility) ---
 let Notifications = {
   setNotificationHandler: () => {},
   AndroidImportance: { MAX: 4 },

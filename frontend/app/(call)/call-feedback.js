@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,12 +8,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { ActivityIndicator } from 'react-native';
 import { ms, s, vs, SCREEN_HEIGHT } from '../../utils/responsive';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -30,11 +31,36 @@ const TAGS = [
 export default function CallFeedbackScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const navigation = useNavigation();
   const { name = 'Priya Sharma', sessionId, listenerId, callType = 'audio' } = useLocalSearchParams();
   const [rating, setRating] = useState(4);
   const [selectedTags, setSelectedTags] = useState([]);
   const [feedback, setFeedback] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    navigation.setOptions({
+      gestureEnabled: false,
+    });
+
+    const backAction = () => {
+      return true;
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction
+    );
+
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      e.preventDefault();
+    });
+
+    return () => {
+      backHandler.remove();
+      unsubscribe();
+    };
+  }, [navigation]);
 
   const toggleTag = (tag) => {
     setSelectedTags((prev) =>

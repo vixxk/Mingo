@@ -9,17 +9,19 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ms, s, vs } from '../../utils/responsive';
 import { FilterTab } from '../../components/admin/AdminComponents';
 import { adminAPI } from '../../utils/api';
 import { AdminPageSkeleton } from '../../components/admin/Skeleton';
 
-const { height: SH } = Dimensions.get('window');
+const { width: SW, height: SH } = Dimensions.get('window');
 
 const formatTime = (dateStr) => {
   if (!dateStr) return '';
@@ -37,6 +39,19 @@ const formatTime = (dateStr) => {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
+const formatAbsoluteTime = (dateStr) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  return d.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  });
+};
+
 export default function MemberReportsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -45,6 +60,14 @@ export default function MemberReportsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [updating, setUpdating] = useState(null);
+
+  const [confirmModal, setConfirmModal] = useState({
+    visible: false,
+    reportId: null,
+    status: null,
+    title: '',
+    message: '',
+  });
 
   const fetchReports = useCallback(async (status) => {
     try {
@@ -74,28 +97,36 @@ export default function MemberReportsScreen() {
 
   const handleAction = (id, newStatus) => {
     const actionLabel = newStatus === 'resolved' ? 'Resolve' : 'Dismiss';
-    Alert.alert(
-      `${actionLabel} Report`,
-      `Are you sure you want to ${actionLabel.toLowerCase()} this issue?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Confirm',
-          onPress: async () => {
-            setUpdating(id);
-            try {
-              await adminAPI.updateReport(id, { status: newStatus });
-              setReports((prev) => prev.filter((r) => r._id !== id));
-            } catch (error) {
-              console.error('Failed to update report:', error);
-              Alert.alert('Error', 'Failed to update report. Please try again.');
-            } finally {
-              setUpdating(null);
-            }
-          },
-        },
-      ]
-    );
+    setConfirmModal({
+      visible: true,
+      reportId: id,
+      status: newStatus,
+      title: `${actionLabel} Report`,
+      message: `Are you sure you want to ${actionLabel.toLowerCase()} this issue?`,
+    });
+  };
+
+  const confirmAction = async () => {
+    const { reportId, status } = confirmModal;
+    if (!reportId || !status) return;
+
+    setUpdating(reportId);
+    try {
+      await adminAPI.updateReport(reportId, { status });
+      setReports((prev) => prev.filter((r) => r._id !== reportId));
+      setConfirmModal({
+        visible: false,
+        reportId: null,
+        status: null,
+        title: '',
+        message: '',
+      });
+    } catch (error) {
+      console.error('Failed to update report:', error);
+      Alert.alert('Error', 'Failed to update report. Please try again.');
+    } finally {
+      setUpdating(null);
+    }
   };
 
   if (loading) {
@@ -111,7 +142,7 @@ export default function MemberReportsScreen() {
     <View style={[st.container, { paddingTop: insets.top }]}>
       <StatusBar style="light" />
 
-      {}
+      {/* Header */}
       <View style={st.header}>
         <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7} style={st.backBtn}>
           <Ionicons name="chevron-back" size={24} color="#fff" />
@@ -120,7 +151,7 @@ export default function MemberReportsScreen() {
         <View style={{ width: s(40) }} />
       </View>
 
-      {}
+      {/* Filter Tabs */}
       <View style={st.filterRow}>
         <FilterTab
           label="Pending"
@@ -131,6 +162,11 @@ export default function MemberReportsScreen() {
           label="Resolved"
           active={filter === 'resolved'}
           onPress={() => setFilter('resolved')}
+        />
+        <FilterTab
+          label="Dismissed"
+          active={filter === 'reviewed'}
+          onPress={() => setFilter('reviewed')}
         />
       </View>
 
@@ -150,28 +186,34 @@ export default function MemberReportsScreen() {
         {reports.length === 0 ? (
           <View style={st.emptyState}>
             <Ionicons name="checkmark-done-circle" size={60} color="#1F2937" />
-            <Text style={st.emptyText}>No {filter} reports found</Text>
+            <Text style={st.emptyText}>No {filter === 'reviewed' ? 'dismissed' : filter} reports found</Text>
           </View>
         ) : (
           reports.map((report) => {
             const reportId = report._id || report.id;
-            const reporterName =
-              report.reporter?.name || report.reporter?.username || 'Unknown User';
+            const reporterName = report.reporter?.name || 'No Name';
+            const reporterUsername = report.reporter?.username ? `@${report.reporter.username}` : 'unknown';
+            const displayName = `${reporterName} (${reporterUsername})`;
             const reporterRole = report.reporterRole || 'user';
 
             return (
               <View key={reportId} style={st.reportCard}>
                 <View style={st.cardHeader}>
                   <View style={st.reporterInfo}>
-                    <Text style={st.reporterName}>{reporterName}</Text>
+                    <Text style={st.reporterName}>{displayName}</Text>
                     <View
                       style={[
                         st.roleBadge,
                         {
                           backgroundColor:
                             reporterRole === 'listener'
-                              ? 'rgba(168,85,247,0.15)'
-                              : 'rgba(59,130,246,0.15)',
+                              ? 'rgba(168,85,247,0.12)'
+                              : 'rgba(59,130,246,0.12)',
+                          borderColor:
+                            reporterRole === 'listener'
+                              ? 'rgba(168,85,247,0.25)'
+                              : 'rgba(59,130,246,0.25)',
+                          borderWidth: 1,
                         },
                       ]}
                     >
@@ -180,7 +222,7 @@ export default function MemberReportsScreen() {
                           st.roleText,
                           {
                             color:
-                              reporterRole === 'listener' ? '#A855F7' : '#3B82F6',
+                              reporterRole === 'listener' ? '#C084FC' : '#60A5FA',
                           },
                         ]}
                       >
@@ -188,34 +230,60 @@ export default function MemberReportsScreen() {
                       </Text>
                     </View>
                   </View>
-                  <Text style={st.timeText}>{formatTime(report.createdAt)}</Text>
                 </View>
 
-                <Text style={st.messageText}>{report.message}</Text>
+                {/* Subtitle/Time of reporting */}
+                <View style={st.reportMetaRow}>
+                  <Ionicons name="time-outline" size={14} color="#9CA3AF" />
+                  <Text style={st.metaTimeText}>
+                    Reported {formatTime(report.createdAt)} ({formatAbsoluteTime(report.createdAt)})
+                  </Text>
+                </View>
+
+                <View style={st.messageBox}>
+                  <Text style={st.messageText}>{report.message}</Text>
+                </View>
 
                 {filter === 'pending' && (
                   <View style={st.cardActions}>
                     <TouchableOpacity
-                      style={[st.actionBtn, { backgroundColor: '#10B981' }]}
+                      activeOpacity={0.8}
                       onPress={() => handleAction(reportId, 'resolved')}
                       disabled={updating === reportId}
+                      style={st.cardActionBtnContainer}
                     >
-                      {updating === reportId ? (
-                        <ActivityIndicator size="small" color="#fff" />
-                      ) : (
-                        <>
-                          <Ionicons name="checkmark" size={16} color="#fff" />
-                          <Text style={st.actionText}>Resolve</Text>
-                        </>
-                      )}
+                      <LinearGradient
+                        colors={['#10B981', '#059669']}
+                        style={st.actionBtnGradient}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                      >
+                        {updating === reportId ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <>
+                            <Ionicons name="checkmark-circle-outline" size={16} color="#fff" />
+                            <Text style={st.actionText}>Resolve</Text>
+                          </>
+                        )}
+                      </LinearGradient>
                     </TouchableOpacity>
+
                     <TouchableOpacity
-                      style={[st.actionBtn, { backgroundColor: '#374151' }]}
+                      activeOpacity={0.8}
                       onPress={() => handleAction(reportId, 'reviewed')}
                       disabled={updating === reportId}
+                      style={st.cardActionBtnContainer}
                     >
-                      <Ionicons name="trash-outline" size={16} color="#fff" />
-                      <Text style={st.actionText}>Dismiss</Text>
+                      <LinearGradient
+                        colors={['#374151', '#1F2937']}
+                        style={st.actionBtnGradient}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                      >
+                        <Ionicons name="close-circle-outline" size={16} color="#fff" />
+                        <Text style={st.actionText}>Dismiss</Text>
+                      </LinearGradient>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -224,6 +292,63 @@ export default function MemberReportsScreen() {
           })
         )}
       </ScrollView>
+
+      {/* Custom Resolve/Dismiss Confirmation Modal */}
+      <Modal
+        visible={confirmModal.visible}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setConfirmModal(prev => ({ ...prev, visible: false }))}
+      >
+        <View style={st.overlay}>
+          <View style={st.modalBox}>
+            <View style={[
+              st.modalIconContainer,
+              { backgroundColor: confirmModal.status === 'resolved' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)' }
+            ]}>
+              <Ionicons
+                name={confirmModal.status === 'resolved' ? 'checkmark-circle' : 'trash'}
+                size={SW * 0.08}
+                color={confirmModal.status === 'resolved' ? '#10B981' : '#EF4444'}
+              />
+            </View>
+
+            <Text style={st.modalTitle}>{confirmModal.title}</Text>
+            <Text style={st.modalMessage}>{confirmModal.message}</Text>
+
+            <View style={st.modalButtons}>
+              <TouchableOpacity
+                style={st.modalBtnCancel}
+                onPress={() => setConfirmModal(prev => ({ ...prev, visible: false }))}
+                activeOpacity={0.8}
+              >
+                <Text style={st.modalBtnCancelText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={st.modalBtnConfirm}
+                onPress={confirmAction}
+                activeOpacity={0.8}
+                disabled={updating === confirmModal.reportId}
+              >
+                <LinearGradient
+                  colors={confirmModal.status === 'resolved' ? ['#10B981', '#059669'] : ['#EF4444', '#DC2626']}
+                  style={st.modalBtnConfirmGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  {updating === confirmModal.reportId ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={st.modalBtnConfirmText}>Confirm</Text>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -266,29 +391,35 @@ const st = StyleSheet.create({
   },
   list: { flex: 1 },
   reportCard: {
-    backgroundColor: '#141414',
+    backgroundColor: '#0D0D10',
     borderRadius: 20,
-    padding: s(16),
-    marginBottom: vs(12),
-    borderWidth: 1,
-    borderColor: '#1F1F1F',
+    padding: s(18),
+    marginBottom: vs(14),
+    borderWidth: 1.2,
+    borderColor: '#1F1F24',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: vs(10),
+    marginBottom: vs(6),
   },
   reporterInfo: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: s(8),
   },
   reporterName: {
-    fontSize: ms(15, 0.3),
-    fontWeight: '700',
+    fontSize: ms(14, 0.3),
+    fontWeight: '800',
     color: '#fff',
-    fontFamily: 'Inter_700Bold',
+    fontFamily: 'Inter_800ExtraBold',
   },
   roleBadge: {
     paddingHorizontal: s(8),
@@ -296,33 +427,51 @@ const st = StyleSheet.create({
     borderRadius: 6,
   },
   roleText: {
-    fontSize: ms(10, 0.3),
+    fontSize: ms(9, 0.3),
     fontWeight: '800',
     fontFamily: 'Inter_800ExtraBold',
   },
-  timeText: {
+  reportMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(6),
+    marginBottom: vs(12),
+  },
+  metaTimeText: {
     fontSize: ms(11, 0.3),
-    color: '#4B5563',
+    color: '#9CA3AF',
     fontFamily: 'Inter_400Regular',
   },
+  messageBox: {
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: 12,
+    paddingHorizontal: s(12),
+    paddingVertical: vs(10),
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+    marginBottom: vs(16),
+  },
   messageText: {
-    fontSize: ms(14, 0.3),
-    color: '#D1D5DB',
+    fontSize: ms(13, 0.3),
+    color: '#E5E7EB',
     fontFamily: 'Inter_400Regular',
-    lineHeight: ms(20),
-    marginBottom: vs(15),
+    lineHeight: ms(19),
   },
   cardActions: {
     flexDirection: 'row',
     gap: s(10),
   },
-  actionBtn: {
+  cardActionBtnContainer: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  actionBtnGradient: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: s(6),
-    paddingHorizontal: s(16),
-    paddingVertical: vs(10),
-    borderRadius: 12,
+    paddingVertical: vs(12),
   },
   actionText: {
     fontSize: ms(13, 0.3),
@@ -340,5 +489,79 @@ const st = StyleSheet.create({
     fontSize: ms(16, 0.3),
     fontFamily: 'Inter_500Medium',
     marginTop: vs(10),
+  },
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.88)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: SW * 0.05,
+  },
+  modalBox: {
+    width: SW * 0.88,
+    backgroundColor: '#0D0D10',
+    borderRadius: SW * 0.06,
+    borderWidth: 1.5,
+    borderColor: '#1F1F24',
+    padding: SW * 0.06,
+    alignItems: 'center',
+  },
+  modalIconContainer: {
+    width: SW * 0.16,
+    height: SW * 0.16,
+    borderRadius: SW * 0.08,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: SH * 0.02,
+  },
+  modalTitle: {
+    color: '#fff',
+    fontSize: SW * 0.05,
+    fontFamily: 'Inter_900Black',
+    textAlign: 'center',
+    marginBottom: SH * 0.01,
+  },
+  modalMessage: {
+    color: '#9CA3AF',
+    fontSize: SW * 0.036,
+    fontFamily: 'Inter_400Regular',
+    textAlign: 'center',
+    lineHeight: SW * 0.052,
+    marginBottom: SH * 0.03,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    width: '100%',
+    justifyContent: 'space-between',
+    gap: SW * 0.03,
+  },
+  modalBtnCancel: {
+    flex: 1,
+    paddingVertical: SH * 0.016,
+    borderRadius: SW * 0.03,
+    borderWidth: 1.2,
+    borderColor: '#333',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalBtnCancelText: {
+    color: '#9CA3AF',
+    fontSize: SW * 0.036,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  modalBtnConfirm: {
+    flex: 1.2,
+    borderRadius: SW * 0.03,
+    overflow: 'hidden',
+  },
+  modalBtnConfirmGradient: {
+    paddingVertical: SH * 0.016,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalBtnConfirmText: {
+    color: '#fff',
+    fontSize: SW * 0.036,
+    fontFamily: 'Inter_700Bold',
   },
 });

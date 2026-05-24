@@ -294,6 +294,7 @@ class CallService {
     const userIdStr = userId.toString();
     return Session.findOne({
       status: 'active',
+      callType: { $in: ['audio', 'video', 'chat'] },
       $or: [
         { userId: userIdStr },
         { listenerId: userIdStr }

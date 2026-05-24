@@ -272,7 +272,7 @@ export default function RecentCallsScreen() {
           style={styles.refreshBtn}
         >
           <Animated.View style={{ transform: [{ rotate: spin }] }}>
-            <Ionicons name="refresh" size={20} color="#9CA3AF" />
+            <Ionicons name="refresh" size={22} color="#9CA3AF" />
           </Animated.View>
         </TouchableOpacity>
       </Animated.View>

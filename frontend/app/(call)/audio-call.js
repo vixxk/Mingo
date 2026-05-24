@@ -34,6 +34,37 @@ try {
   console.log('ZegoCloud not available (Expo Go mode)');
 }
 
+const ZegoCallWrapper = React.memo(({ appId, appSign, userId, userName, roomId, onCallEnd }) => {
+  if (!ZegoUIKitPrebuiltCall) return null;
+  return (
+    <ZegoUIKitPrebuiltCall
+      appID={appId}
+      appSign={appSign}
+      userID={userId}
+      userName={userName}
+      callID={roomId}
+      config={{
+        ...ONE_ON_ONE_VOICE_CALL_CONFIG,
+        onCallEnd: onCallEnd,
+        onHangUp: onCallEnd,
+        onOnlySelfInRoom: onCallEnd,
+        durationConfig: { isDurationVisible: true },
+        turnOnCameraWhenJoining: false,
+        turnOnMicrophoneWhenJoining: true,
+        useFrontFacingCamera: false,
+        layout: {
+          mode: 1, // Gallery mode to avoid floating PIP preview
+        },
+        audioVideoViewConfig: {
+          showMicrophoneStateOnView: false,
+          showCameraStateOnView: false,
+          useVideoViewAspectFill: false,
+        },
+      }}
+    />
+  );
+});
+
 const getAvatarImage = (gender, index) => {
   const parsedIndex = parseInt(index, 10) || 0;
   if (gender === 'Male') {
@@ -260,7 +291,10 @@ export default function AudioCallScreen() {
 
     const backAction = () => {
       // Return true to prevent default back action
-      return true;
+      if (!callEndedRef.current) {
+        return true;
+      }
+      return false;
     };
 
     const backHandler = BackHandler.addEventListener(
@@ -268,7 +302,16 @@ export default function AudioCallScreen() {
       backAction
     );
 
-    return () => backHandler.remove();
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (!callEndedRef.current) {
+        e.preventDefault();
+      }
+    });
+
+    return () => {
+      backHandler.remove();
+      unsubscribe();
+    };
   }, [navigation]);
 
   const formatDuration = (seconds) => {
@@ -321,29 +364,13 @@ export default function AudioCallScreen() {
   if (!isExpoGo && ZegoUIKitPrebuiltCall && userID && roomId && hasPermission) {
     return (
       <View style={{ flex: 1 }}>
-        <ZegoUIKitPrebuiltCall
-          appID={resolvedAppId}
+        <ZegoCallWrapper
+          appId={resolvedAppId}
           appSign={resolvedAppSign}
-          userID={userID}
+          userId={userID}
           userName={userName}
-          callID={roomId}
-          config={{
-            ...ONE_ON_ONE_VOICE_CALL_CONFIG,
-            onCallEnd: handleEndCall,
-            onHangUp: handleEndCall,
-            durationConfig: { isDurationVisible: true },
-            turnOnCameraWhenJoining: false,
-            turnOnMicrophoneWhenJoining: true,
-            useFrontFacingCamera: false,
-            layout: {
-              mode: 1, // Gallery mode to avoid floating PIP preview
-            },
-            audioVideoViewConfig: {
-              showMicrophoneStateOnView: false,
-              showCameraStateOnView: false,
-              useVideoViewAspectFill: false,
-            },
-          }}
+          roomId={roomId}
+          onCallEnd={handleEndCall}
         />
 
         {/* Balance badge + Recharge button */}

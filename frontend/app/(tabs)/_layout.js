@@ -11,7 +11,7 @@ import { socketService } from '../../utils/socket';
 import IncomingCallPopup from '../../components/shared/IncomingCallPopup';
 import { useSSE } from '../../utils/useSSE';
 
-import { registerForPushNotificationsAsync } from '../../utils/notifications';
+import { initializeOneSignal } from '../../utils/notifications';
 
 export default function TabLayout() {
   const router = useRouter();
@@ -112,30 +112,48 @@ export default function TabLayout() {
         setIsAuthenticated(true);
         socketService.connect();
         
-        // Push notification registration
-        registerForPushNotificationsAsync().then(token => {
-          if (token) {
-            userAPI.updatePushToken(token).catch(e => console.log('Update push token err:', e));
+        // OneSignal push notification initialization
+        try {
+          const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+          const userData = await AsyncStorage.getItem('user');
+          if (userData) {
+            const user = JSON.parse(userData);
+            initializeOneSignal(user._id || user.id, user.role || 'USER');
           }
-        });
+        } catch (oneErr) {
+          console.log('Error initializing OneSignal in TabLayout:', oneErr);
+        }
 
         // Redirect to ongoing active session if any
         callAPI.getActiveSession().then(res => {
           if (res?.data) {
             const session = res.data;
-            const targetScreen = session.callType === 'video' ? '/(call)/video-call' : '/(call)/audio-call';
-            router.replace({
-              pathname: targetScreen,
-              params: {
-                name: session.listenerId?.name || 'Listener',
-                callId: session._id,
-                roomId: session.roomId,
-                listenerId: session.listenerId?._id || session.listenerId,
-                avatarIndex: session.listenerId?.avatarIndex || '0',
-                gender: session.listenerId?.gender || 'Female',
-                callType: session.callType,
-              }
-            });
+            if (session.callType === 'chat') {
+              router.replace({
+                pathname: '/(chat)/chat',
+                params: {
+                  name: session.listenerId?.name || 'Listener',
+                  id: session.listenerId?._id || session.listenerId,
+                  avatarIndex: session.listenerId?.avatarIndex || '0',
+                  gender: session.listenerId?.gender || 'Female',
+                  sessionId: session._id,
+                }
+              });
+            } else {
+              const targetScreen = session.callType === 'video' ? '/(call)/video-call' : '/(call)/audio-call';
+              router.replace({
+                pathname: targetScreen,
+                params: {
+                  name: session.listenerId?.name || 'Listener',
+                  callId: session._id,
+                  roomId: session.roomId,
+                  listenerId: session.listenerId?._id || session.listenerId,
+                  avatarIndex: session.listenerId?.avatarIndex || '0',
+                  gender: session.listenerId?.gender || 'Female',
+                  callType: session.callType,
+                }
+              });
+            }
           }
         }).catch(err => console.log('Error checking active session:', err));
       }

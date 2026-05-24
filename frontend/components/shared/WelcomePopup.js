@@ -42,13 +42,7 @@ export default function WelcomePopup({ visible, onAgree, onClose }) {
       <Animated.View style={[styles.popupContainer, { transform: [{ translateY: slideAnim }] }]}>
         <View style={styles.popup}>
           {}
-          <TouchableOpacity 
-            style={styles.closeBtn} 
-            activeOpacity={0.7} 
-            onPress={onClose || onAgree}
-          >
-            <Ionicons name="close" size={24} color="rgba(255,255,255,0.6)" />
-          </TouchableOpacity>
+
 
           <Text style={styles.welcomeTitle}>Welcome to Mingo</Text>
           <Text style={styles.welcomeSubtitle}>Let's keep this space safe.</Text>

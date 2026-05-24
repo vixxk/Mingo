@@ -12,12 +12,13 @@ import {
   Modal,
   Pressable,
   RefreshControl,
+  BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useNavigation } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, wp, hp, SCREEN_WIDTH } from '../../utils/responsive';
 import { walletAPI, listenersAPI, authAPI, callAPI } from '../../utils/api';
@@ -26,6 +27,7 @@ import WelcomePopup from '../../components/shared/WelcomePopup';
 import CoinsOfferPopup from '../../components/shared/CoinsOfferPopup';
 import InsufficientBalancePopup from '../../components/shared/InsufficientBalancePopup';
 import NotificationsPopup from '../../components/shared/NotificationsPopup';
+import { useStatusSSE } from '../../utils/useStatusSSE';
 
 
 
@@ -266,6 +268,65 @@ const PeopleCard = ({ item, onCallPress, onChatPress, onProfilePress }) => {
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const navigation = useNavigation();
+
+  useEffect(() => {
+    const parentNav = navigation.getParent() || navigation;
+    parentNav.setOptions({
+      gestureEnabled: false,
+    });
+
+    const backAction = () => {
+      const state = parentNav.getState();
+      const routes = state?.routes || [];
+      if (routes.length >= 2) {
+        const prevRoute = routes[routes.length - 2];
+        const prevName = prevRoute?.name?.toLowerCase() || '';
+        if (
+          prevName.includes('auth') ||
+          prevName.includes('login') ||
+          prevName.includes('signup') ||
+          prevName.includes('welcome') ||
+          prevName === 'index'
+        ) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction
+    );
+
+    const unsubscribe = parentNav.addListener('beforeRemove', (e) => {
+      const actionType = e.data.action.type;
+      if (actionType === 'GO_BACK' || actionType === 'POP') {
+        const state = parentNav.getState();
+        const routes = state?.routes || [];
+        if (routes.length >= 2) {
+          const prevRoute = routes[routes.length - 2];
+          const prevName = prevRoute?.name?.toLowerCase() || '';
+          if (
+            prevName.includes('auth') ||
+            prevName.includes('login') ||
+            prevName.includes('signup') ||
+            prevName.includes('welcome') ||
+            prevName === 'index'
+          ) {
+            e.preventDefault();
+          }
+        }
+      }
+    });
+
+    return () => {
+      backHandler.remove();
+      unsubscribe();
+    };
+  }, [navigation]);
+
   const [activeSlide, setActiveSlide] = useState(0);
   const flatListRef = useRef(null);
   const scrollX = useRef(new Animated.Value(0)).current;
@@ -282,32 +343,10 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    const handleStatusChanged = (data) => {
-      console.log('[Home] Listener status changed:', data);
-      const { userId, isOnline, isBusy } = data;
-      
-      const updateStatus = (list) => 
-        list.map(item => {
-          if (item.id === userId) {
-            return {
-              ...item,
-              isLive: isOnline,
-              isBusy: isBusy
-            };
-          }
-          return item;
-        });
-
-      setBestChoiceData(prev => updateStatus(prev));
-      setPeopleData(prev => updateStatus(prev));
-    };
-
-    socketService.on('listener_status_changed', handleStatusChanged);
-    return () => {
-      socketService.off('listener_status_changed', handleStatusChanged);
-    };
-  }, []);
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [showCoinsOffer, setShowCoinsOffer] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [signupTimestamp, setSignupTimestamp] = useState(Date.now());
 
   const loadRealData = useCallback(async () => {
     try {
@@ -366,7 +405,6 @@ export default function HomeScreen() {
           setDiscountTimeLeft(Math.max(0, Math.floor((expiry - Date.now()) / 1000)));
           setSignupTimestamp(actualSignupTime);
 
-          
           const pkgRes = await walletAPI.getPackages();
           if (pkgRes?.data?.packages) {
             const bestPkg = pkgRes.data.packages[0]; 
@@ -387,7 +425,7 @@ export default function HomeScreen() {
 
     try {
       const listenersRes = await listenersAPI.getRecommended(20);
-      if (listenersRes?.data && listenersRes.data.length > 0) {
+      if (listenersRes?.data) {
         const mappedListeners = listenersRes.data.map(l => ({
           id: l.id,
           name: l.name,
@@ -406,8 +444,11 @@ export default function HomeScreen() {
         const bestChoice = mappedListeners.filter(l => l.bestChoice);
         const people = mappedListeners;
 
-        if (bestChoice.length > 0) setBestChoiceData(bestChoice);
-        if (people.length > 0) setPeopleData(people);
+        setBestChoiceData(bestChoice);
+        setPeopleData(people);
+      } else {
+        setBestChoiceData([]);
+        setPeopleData([]);
       }
     } catch (e) {
       console.log('Listeners fetch fallback:', e.message);
@@ -415,6 +456,60 @@ export default function HomeScreen() {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    const handleStatusChanged = (data) => {
+      console.log('[Home] Listener status changed:', data);
+      const { userId, isOnline, isBusy } = data;
+      
+      const updateStatus = (list) => 
+        list.map(item => {
+          if (item.id === userId) {
+            return {
+              ...item,
+              isLive: isOnline,
+              isBusy: isBusy
+            };
+          }
+          return item;
+        });
+
+      setBestChoiceData(prev => updateStatus(prev));
+      setPeopleData(prev => updateStatus(prev));
+
+      console.log(`[Home] Listener went ${isOnline ? 'online' : 'offline'}. Refreshing user home page for new real data...`);
+      loadRealData();
+    };
+
+    socketService.on('listener_status_changed', handleStatusChanged);
+    return () => {
+      socketService.off('listener_status_changed', handleStatusChanged);
+    };
+  }, [loadRealData]);
+
+  useStatusSSE(
+    useCallback((data) => {
+      console.log('[Home] SSE Listener status changed:', data);
+      const { userId, isOnline, isBusy } = data;
+      const updateStatus = (list) => 
+        list.map(item => {
+          if (item.id === userId) {
+            return {
+              ...item,
+              isLive: isOnline,
+              isBusy: isBusy
+            };
+          }
+          return item;
+        });
+
+      setBestChoiceData(prev => updateStatus(prev));
+      setPeopleData(prev => updateStatus(prev));
+
+      console.log(`[Home] SSE Listener went ${isOnline ? 'online' : 'offline'}. Refreshing user home page for new real data...`);
+      loadRealData();
+    }, [loadRealData])
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -440,11 +535,7 @@ export default function HomeScreen() {
   }, [discountTimeLeft > 0]);
 
   
-  const [showWelcome, setShowWelcome] = useState(false);
-  const [showCoinsOffer, setShowCoinsOffer] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [signupTimestamp, setSignupTimestamp] = useState(Date.now());
-
+  
   
   useEffect(() => {
     const checkFirstSignup = async () => {

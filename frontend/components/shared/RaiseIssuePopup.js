@@ -32,7 +32,6 @@ export default function RaiseIssuePopup({ visible, onClose }) {
     try {
       await userAPI.submitReport(message);
       showStatus('success', 'Issue Sent', 'Your report has been received. Our team will look into it shortly.', () => {
-        setStatusPopup(prev => ({ ...prev, visible: false }));
         setMessage('');
         onClose();
       });
@@ -116,7 +115,12 @@ export default function RaiseIssuePopup({ visible, onClose }) {
         type={statusPopup.type}
         title={statusPopup.title}
         message={statusPopup.message}
-        onClose={() => setStatusPopup(prev => ({ ...prev, visible: false }))}
+        onClose={() => {
+          setStatusPopup(prev => ({ ...prev, visible: false }));
+          if (statusPopup.onConfirm) {
+            statusPopup.onConfirm();
+          }
+        }}
         onConfirm={statusPopup.onConfirm}
       />
     </>

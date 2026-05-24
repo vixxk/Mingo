@@ -12,7 +12,7 @@ import { userAPI, callAPI } from '../../utils/api';
 import IncomingCallPopup from '../../components/shared/IncomingCallPopup';
 import { useSSE } from '../../utils/useSSE';
 
-import { registerForPushNotificationsAsync } from '../../utils/notifications';
+import { initializeOneSignal } from '../../utils/notifications';
 
 export default function ListenerLayout() {
   const insets = useSafeAreaInsets();
@@ -58,30 +58,48 @@ export default function ListenerLayout() {
         ]);
       });
 
-      registerForPushNotificationsAsync().then(token => {
-        if (token) {
-          userAPI.updatePushToken(token).catch(e => console.log('Update push token err:', e));
+      // OneSignal push notification initialization
+      try {
+        const userData = await AsyncStorage.getItem('user');
+        if (userData) {
+          const user = JSON.parse(userData);
+          initializeOneSignal(user._id || user.id, user.role || 'LISTENER');
         }
-      });
+      } catch (oneErr) {
+        console.log('Error initializing OneSignal in ListenerLayout:', oneErr);
+      }
 
       // Redirect listener to ongoing active session if any
       callAPI.getActiveSession().then(res => {
         if (res?.data) {
           const session = res.data;
-          const targetScreen = session.callType === 'video' ? '/(call)/video-call' : '/(call)/audio-call';
-          router.replace({
-            pathname: targetScreen,
-            params: {
-              name: session.userId?.name || 'User',
-              callId: session._id,
-              roomId: session.roomId,
-              userId: session.userId?._id || session.userId,
-              avatarIndex: session.userId?.avatarIndex || '0',
-              gender: session.userId?.gender || 'Female',
-              callType: session.callType,
-              isIncoming: 'true',
-            }
-          });
+          if (session.callType === 'chat') {
+            router.replace({
+              pathname: '/(chat)/chat',
+              params: {
+                name: session.userId?.name || 'User',
+                id: session.userId?._id || session.userId,
+                avatarIndex: session.userId?.avatarIndex || '0',
+                gender: session.userId?.gender || 'Female',
+                sessionId: session._id,
+              }
+            });
+          } else {
+            const targetScreen = session.callType === 'video' ? '/(call)/video-call' : '/(call)/audio-call';
+            router.replace({
+              pathname: targetScreen,
+              params: {
+                name: session.userId?.name || 'User',
+                callId: session._id,
+                roomId: session.roomId,
+                userId: session.userId?._id || session.userId,
+                avatarIndex: session.userId?.avatarIndex || '0',
+                gender: session.userId?.gender || 'Female',
+                callType: session.callType,
+                isIncoming: 'true',
+              }
+            });
+          }
         }
       }).catch(err => console.log('Error checking active session for listener:', err));
     };

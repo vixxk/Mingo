@@ -1,6 +1,7 @@
 const Conversation = require('../models/conversationModel');
 
 const clients = new Map(); // key: userId (string), value: Set of res objects
+const statusClients = new Set(); // value: res objects
 
 const sseService = {
   addClient: (userId, res) => {
@@ -20,6 +21,28 @@ const sseService = {
       console.log(`[SSE] Client removed for user ${userIdStr}. Remaining: ${userClients.size}`);
       if (userClients.size === 0) {
         clients.delete(userIdStr);
+      }
+    }
+  },
+
+  addStatusClient: (res) => {
+    statusClients.add(res);
+    console.log(`[SSE] Status client added. Total status clients: ${statusClients.size}`);
+  },
+
+  removeStatusClient: (res) => {
+    statusClients.delete(res);
+    console.log(`[SSE] Status client removed. Remaining: ${statusClients.size}`);
+  },
+
+  broadcastListenerStatus: (userId, isOnline, isBusy = false) => {
+    const data = JSON.stringify({ userId: userId.toString(), isOnline, isBusy });
+    console.log(`[SSE] Broadcasting listener status change: ${data}`);
+    for (const res of statusClients) {
+      try {
+        res.write(`data: ${data}\n\n`);
+      } catch (err) {
+        console.error('[SSE] Error writing to status client:', err.message);
       }
     }
   },

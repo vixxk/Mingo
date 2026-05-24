@@ -146,6 +146,7 @@ export default function ConversationsScreen() {
         id: item.id,
         avatarIndex: item.avatarIndex?.toString() || '0',
         gender: item.gender || 'Female',
+        isAdmin: item.isAdmin ? 'true' : 'false'
       },
     });
   };

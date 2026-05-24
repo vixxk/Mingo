@@ -179,7 +179,8 @@ export default function MessagesScreen() {
             avatarIndex: item.avatarIndex?.toString() || '0',
             gender: item.gender || 'Female',
             sessionId: item.sessionId || '',
-            sessionStatus: item.sessionStatus || 'none'
+            sessionStatus: item.sessionStatus || 'none',
+            isAdmin: item.isAdmin ? 'true' : 'false'
           }
         })}
       >

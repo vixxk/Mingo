@@ -42,7 +42,7 @@ class ChatController {
 
         const otherUser = conv.participants.find(p => p._id.toString() !== userId);
         const unreadCount = conv.unreadCount ? (conv.unreadCount.get(userId) || 0) : 0;
-        const isSupport = otherUser?.role === 'ADMIN';
+        const isSupport = otherUser && (otherUser.role === 'ADMIN' || otherUser.role.endsWith('_ADMIN'));
 
         if (convSessions.length === 0) {
           // No sessions at all: push a default card
@@ -61,11 +61,37 @@ class ChatController {
             isAdmin: isSupport
           });
         } else {
-          // Push cards for each session
-          for (const session of convSessions) {
-            const sessionUser = session.userId;
-            const sessionListener = session.listenerId;
-            if (!sessionUser || !sessionListener) continue;
+          // Get the most recent session
+          const sortedSessions = [...convSessions].sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
+          const session = sortedSessions[0];
+          
+          const sessionUser = session.userId;
+          const sessionListener = session.listenerId;
+          if (sessionUser && sessionListener) {
+            if (session.status === 'active') {
+              const startTime = session.startTime;
+              const coinsDeducted = session.coinsDeducted || 10;
+              const CHAT_SESSION_DURATION = 5 * 60 * 1000;
+              const paidBlocks = Math.ceil(coinsDeducted / 10);
+              const paidDuration = paidBlocks * CHAT_SESSION_DURATION;
+              const expirationTime = new Date(startTime).getTime() + paidDuration;
+
+              if (Date.now() >= expirationTime) {
+                session.status = 'completed';
+                session.endTime = new Date(expirationTime);
+                await session.save();
+
+                conv.chatSession = {
+                  active: false,
+                  startedBy: null,
+                  startTime: null,
+                  lastDeductionTime: null,
+                  sessionId: null,
+                  status: 'none'
+                };
+                await conv.save();
+              }
+            }
 
             // Find last message within this session's window
             const query = {
@@ -76,20 +102,30 @@ class ChatController {
               query.createdAt.$lte = session.endTime;
             }
 
-            const lastMsg = await Message.findOne(query).sort({ createdAt: -1 });
+            let lastMsg = await Message.findOne(query).sort({ createdAt: -1 });
+            if (!lastMsg) {
+              lastMsg = conv.lastMessage;
+            }
+
+            // Check if there is a newer message after the most recent session ended
+            const conversationLastMessage = conv.lastMessage;
+            const isNewerMessageAfterSession = !session.active && 
+              session.endTime && 
+              conversationLastMessage && 
+              new Date(conversationLastMessage.createdAt) > new Date(session.endTime);
 
             cards.push({
               id: conv._id,
-              sessionId: session._id,
+              sessionId: isNewerMessageAfterSession ? null : session._id,
               name: isSupport ? 'Mingo Support' : (otherUser?.name || otherUser?.username || 'Unknown'),
               gender: otherUser?.gender,
               avatarIndex: otherUser?.avatarIndex,
               image: otherUser?.profileImage,
-              lastMessage: lastMsg?.content || 'Session started',
-              time: lastMsg?.createdAt || session.startTime,
-              unread: session.status === 'active' ? unreadCount : 0,
+              lastMessage: isNewerMessageAfterSession ? (conversationLastMessage.content || 'Say hello!') : (lastMsg?.content || 'Session started'),
+              time: isNewerMessageAfterSession ? conversationLastMessage.createdAt : (lastMsg?.createdAt || session.startTime),
+              unread: isNewerMessageAfterSession ? unreadCount : (session.status === 'active' ? unreadCount : 0),
               isOnline: false,
-              sessionStatus: session.status,
+              sessionStatus: isNewerMessageAfterSession ? 'none' : session.status,
               duration: session.duration,
               startTime: session.startTime,
               endTime: session.endTime,
@@ -97,35 +133,6 @@ class ChatController {
               coinsDeducted: session.coinsDeducted || 0,
               isAdmin: isSupport
             });
-          }
-
-          // Check if there is an active session
-          const hasActiveSession = convSessions.some(s => s.status === 'active');
-          if (!hasActiveSession) {
-            // Find the most recent completed/cancelled session to check if there are newer messages
-            const sortedSessions = [...convSessions].sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
-            const mostRecentSession = sortedSessions[0];
-            
-            if (mostRecentSession && mostRecentSession.endTime) {
-              // Check if the conversation has a newer message after the session ended
-              const conversationLastMessage = conv.lastMessage;
-              if (conversationLastMessage && new Date(conversationLastMessage.createdAt) > new Date(mostRecentSession.endTime)) {
-                cards.push({
-                  id: conv._id,
-                  sessionId: null,
-                  name: isSupport ? 'Mingo Support' : (otherUser?.name || otherUser?.username || 'Unknown'),
-                  gender: otherUser?.gender,
-                  avatarIndex: otherUser?.avatarIndex,
-                  image: otherUser?.profileImage,
-                  lastMessage: conversationLastMessage.content || 'Say hello!',
-                  time: conversationLastMessage.createdAt,
-                  unread: unreadCount,
-                  isOnline: false,
-                  sessionStatus: 'none',
-                  isAdmin: isSupport
-                });
-              }
-            }
           }
         }
       }
@@ -206,14 +213,8 @@ class ChatController {
         const Session = require('../models/sessionModel');
         const session = await Session.findById(sessionId);
         if (session) {
-          const query = {
-            conversationId: conversation._id,
-            createdAt: { $gte: session.startTime }
-          };
-          if (session.endTime) {
-            query.createdAt.$lte = session.endTime;
-          }
-          messages = await Message.find(query).sort({ createdAt: 1 }).populate('sender', '_id name username');
+          // Load all messages of the conversation to show complete history
+          messages = await Message.find({ conversationId: conversation._id }).sort({ createdAt: 1 }).populate('sender', '_id name username');
           
           returnedChatSession = {
             active: session.status === 'active',
@@ -225,42 +226,54 @@ class ChatController {
           };
         }
       } else {
-        // No sessionId passed: load messages of current active session, or if none, those since the last completed session
+        // No sessionId passed: load ALL messages of the conversation
+        messages = await Message.find({ conversationId: conversation._id })
+          .sort({ createdAt: 1 })
+          .populate('sender', '_id name username');
+
         const Session = require('../models/sessionModel');
         const activeSession = await Session.findOne({
-          $or: [{ userId: req.user.id }, { listenerId: req.user.id }],
+          userId: { $in: conversation.participants },
+          listenerId: { $in: conversation.participants },
           callType: 'chat',
           status: 'active'
         });
 
         if (activeSession) {
-          messages = await Message.find({
-            conversationId: conversation._id,
-            createdAt: { $gte: activeSession.startTime }
-          }).sort({ createdAt: 1 }).populate('sender', '_id name username');
+          const startTime = activeSession.startTime;
+          const coinsDeducted = activeSession.coinsDeducted || 10;
+          const CHAT_SESSION_DURATION = 5 * 60 * 1000;
+          const paidBlocks = Math.ceil(coinsDeducted / 10);
+          const paidDuration = paidBlocks * CHAT_SESSION_DURATION;
+          const expirationTime = new Date(startTime).getTime() + paidDuration;
 
-          returnedChatSession = {
-            active: true,
-            startedBy: activeSession.userId,
-            startTime: activeSession.startTime,
-            lastDeductionTime: activeSession.lastDeductionTime,
-            sessionId: activeSession._id,
-            status: 'active'
-          };
-        } else {
-          const lastEndedSession = await Session.findOne({
-            $or: [{ userId: req.user.id }, { listenerId: req.user.id }],
-            callType: 'chat',
-            status: 'completed'
-          }).sort({ endTime: -1 });
+          if (Date.now() >= expirationTime) {
+            activeSession.status = 'completed';
+            activeSession.endTime = new Date(expirationTime);
+            await activeSession.save();
 
-          const query = { conversationId: conversation._id };
-          if (lastEndedSession && lastEndedSession.endTime) {
-            query.createdAt = { $gt: lastEndedSession.endTime };
+            conversation.chatSession = {
+              active: false,
+              startedBy: null,
+              startTime: null,
+              lastDeductionTime: null,
+              sessionId: null,
+              status: 'none'
+            };
+            await conversation.save();
+
+            returnedChatSession = conversation.chatSession;
+          } else {
+            returnedChatSession = {
+              active: true,
+              startedBy: activeSession.userId,
+              startTime: activeSession.startTime,
+              lastDeductionTime: activeSession.lastDeductionTime,
+              sessionId: activeSession._id,
+              status: 'active'
+            };
           }
-
-          messages = await Message.find(query).sort({ createdAt: 1 }).populate('sender', '_id name username');
-
+        } else {
           returnedChatSession = {
             active: false,
             startedBy: null,
@@ -283,11 +296,21 @@ class ChatController {
         console.error('SSE notification error in initiateConversation:', sseErr);
       }
 
+      let isSupport = false;
+      const otherParticipantId = conversation.participants.find(p => p.toString() !== req.user.id.toString());
+      if (otherParticipantId) {
+        const otherUserObj = await User.findById(otherParticipantId);
+        if (otherUserObj && (otherUserObj.role === 'ADMIN' || otherUserObj.role.endsWith('_ADMIN'))) {
+          isSupport = true;
+        }
+      }
+
       return ApiResponse.success(res, {
         conversationId: conversation._id,
         participants: conversation.participants,
         chatSession: returnedChatSession,
-        messages
+        messages,
+        isAdmin: isSupport
       }, 'Conversation initiated successfully');
     } catch (err) {
       next(err);

@@ -2,7 +2,19 @@ const admin = require('firebase-admin');
 const axios = require('axios');
 require('dotenv').config();
 
-
+// Safely parse Firebase Private Key by stripping double quotes/carriage returns/backslashes
+let firebasePrivateKey = process.env.FIREBASE_PRIVATE_KEY;
+if (firebasePrivateKey) {
+  // Strip surrounding quotes if present
+  if (firebasePrivateKey.startsWith('"') && firebasePrivateKey.endsWith('"')) {
+    firebasePrivateKey = firebasePrivateKey.slice(1, -1);
+  }
+  if (firebasePrivateKey.startsWith("'") && firebasePrivateKey.endsWith("'")) {
+    firebasePrivateKey = firebasePrivateKey.slice(1, -1);
+  }
+  // Replace literal '\n' sequences with actual newline characters
+  firebasePrivateKey = firebasePrivateKey.replace(/\\n/g, '\n');
+}
 
 try {
   if (!admin.apps.length) {
@@ -10,127 +22,269 @@ try {
       credential: admin.credential.cert({
         projectId: process.env.FIREBASE_PROJECT_ID,
         clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        
-        privateKey: process.env.FIREBASE_PRIVATE_KEY ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : undefined,
+        privateKey: firebasePrivateKey,
       }),
     });
-    console.log('Firebase Admin Initialized Successfully');
+    console.log('[Push Service] Firebase Admin SDK Initialized Successfully');
   }
 } catch (error) {
-  console.error('Firebase Admin Initialization Error:', error);
+  console.error('[Push Service] Firebase Admin SDK Initialization Error:', error.message);
 }
 
+/**
+ * Sends a push notification to a single device (supports both Expo and FCM)
+ */
 const sendNotificationToDevice = async (token, title, body, data = {}) => {
-  try {
-    if (token && (token.startsWith('ExponentPushToken') || token.includes('ExponentPushToken'))) {
-      console.log('Sending Expo notification to:', token);
-      const response = await axios.post('https://exp.host/--/api/v2/push/send', {
-        to: token,
-        title,
-        body,
-        data,
-      });
-      console.log('Expo notification sent response:', response.data);
-      return { success: true, response: response.data };
-    }
-
-    const message = {
-      notification: {
-        title,
-        body,
-      },
-      data,
-      token,
-    };
-
-    const response = await admin.messaging().send(message);
-    console.log('Successfully sent Firebase message:', response);
-    return { success: true, response };
-  } catch (error) {
-    console.error('Error sending message:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-const sendNotificationToMultiple = async (fcmTokens, title, body, data = {}) => {
-  if (!fcmTokens || fcmTokens.length === 0) return { success: true, message: 'No tokens provided' };
+  if (!token) return { success: false, error: 'No token provided' };
 
   try {
-    const expoTokens = [];
-    const fcmTokensList = [];
-
-    fcmTokens.forEach(t => {
-      if (t && (t.startsWith('ExponentPushToken') || t.includes('ExponentPushToken'))) {
-        expoTokens.push(t);
-      } else if (t) {
-        fcmTokensList.push(t);
-      }
-    });
-
-    const results = [];
-
-    if (expoTokens.length > 0) {
-      console.log('Sending multicast Expo notifications to:', expoTokens);
-      for (let i = 0; i < expoTokens.length; i += 100) {
-        const chunk = expoTokens.slice(i, i + 100);
-        const payloads = chunk.map(token => ({
+    // 1. Expo Push Token flow
+    if (token.startsWith('ExponentPushToken') || token.includes('ExponentPushToken')) {
+      console.log(`[Push Service] Sending Expo push notification to: ${token}`);
+      const response = await axios.post(
+        'https://exp.host/--/api/v2/push/send',
+        {
           to: token,
           title,
           body,
           data,
-        }));
-        try {
-          const response = await axios.post('https://exp.host/--/api/v2/push/send', payloads);
-          console.log(`Expo multicast response chunk ${i/100}:`, response.data);
-          results.push({ service: 'expo', success: true, response: response.data });
-        } catch (err) {
-          console.error('Expo multicast error:', err);
-          results.push({ service: 'expo', success: false, error: err.message });
-        }
-      }
-    }
-
-    if (fcmTokensList.length > 0) {
-      const message = {
-        notification: {
-          title,
-          body,
+          sound: 'default',
+          priority: 'high',
         },
-        data,
-        tokens: fcmTokensList,
-      };
-      const response = await admin.messaging().sendEachForMulticast(message);
-      console.log(`${response.successCount} Firebase messages sent successfully, ${response.failureCount} failed.`);
-      results.push({ service: 'fcm', success: true, response });
+        {
+          headers: {
+            'Accept': 'application/json',
+            'Accept-encoding': 'gzip, deflate',
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      
+      const resData = response.data;
+      console.log('[Push Service] Expo push sent response:', JSON.stringify(resData));
+      
+      const status = resData?.data?.status;
+      if (status === 'error') {
+        const errorMsg = resData?.data?.message || 'Expo push error';
+        console.error(`[Push Service] Expo returned status error: ${errorMsg}`);
+        return { success: false, error: errorMsg, isBadToken: true };
+      }
+      
+      return { success: true, response: resData };
     }
 
-    return { success: true, results };
+    // 2. Firebase FCM flow
+    const message = {
+      notification: { title, body },
+      data: Object.keys(data).reduce((acc, key) => {
+        acc[key] = String(data[key]);
+        return acc;
+      }, {}),
+      token,
+      android: {
+        priority: 'high',
+        notification: {
+          sound: 'default',
+        },
+      },
+      apns: {
+        payload: {
+          aps: {
+            sound: 'default',
+          },
+        },
+      },
+    };
+
+    const response = await admin.messaging().send(message);
+    console.log(`[Push Service] Successfully sent FCM message to ${token}:`, response);
+    return { success: true, response };
   } catch (error) {
-    console.error('Error sending multicast message:', error);
-    return { success: false, error: error.message };
+    console.error(`[Push Service] Error sending message to ${token}:`, error.message);
+    const isBadToken = 
+      error.code === 'messaging/invalid-registration-token' ||
+      error.code === 'messaging/registration-token-not-registered' ||
+      error.message.includes('not-registered');
+    return { success: false, error: error.message, isBadToken };
   }
 };
 
-const sendNotificationToTopic = async (topic, title, body, data = {}) => {
-  try {
-    const message = {
-      notification: {
+/**
+ * Sends a push notification to multiple tokens (handles batching, Expo chunks, and multi-service dispatching)
+ */
+const sendNotificationToMultiple = async (tokens, title, body, data = {}) => {
+  if (!tokens || tokens.length === 0) {
+    return { success: true, message: 'No tokens provided' };
+  }
+
+  // Deduplicate and filter empty values
+  const uniqueTokens = [...new Set(tokens.filter(Boolean))];
+  const expoTokens = [];
+  const fcmTokens = [];
+
+  uniqueTokens.forEach(token => {
+    if (token.startsWith('ExponentPushToken') || token.includes('ExponentPushToken')) {
+      expoTokens.push(token);
+    } else {
+      fcmTokens.push(token);
+    }
+  });
+
+  const results = {
+    totalTargeted: uniqueTokens.length,
+    expo: { sent: 0, failed: 0, badTokens: [] },
+    fcm: { sent: 0, failed: 0, badTokens: [] },
+  };
+
+  const stringifiedData = Object.keys(data).reduce((acc, key) => {
+    acc[key] = String(data[key]);
+    return acc;
+  }, {});
+
+  // 1. Send Expo push notifications in batches of 100
+  if (expoTokens.length > 0) {
+    console.log(`[Push Service] Preparing to send ${expoTokens.length} Expo notifications in batches...`);
+    for (let i = 0; i < expoTokens.length; i += 100) {
+      const chunk = expoTokens.slice(i, i + 100);
+      const payloads = chunk.map(token => ({
+        to: token,
         title,
         body,
-      },
-      data,
+        data: stringifiedData,
+        sound: 'default',
+        priority: 'high',
+      }));
+
+      try {
+        const response = await axios.post(
+          'https://exp.host/--/api/v2/push/send',
+          payloads,
+          {
+            headers: {
+              'Accept': 'application/json',
+              'Accept-encoding': 'gzip, deflate',
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+
+        const responseData = response.data;
+        if (responseData && Array.isArray(responseData.data)) {
+          responseData.data.forEach((ticket, idx) => {
+            const correspondingToken = chunk[idx];
+            if (ticket.status === 'ok') {
+              results.expo.sent++;
+            } else {
+              results.expo.failed++;
+              console.error(`[Push Service] Expo ticket error for ${correspondingToken}:`, ticket.message);
+              if (ticket.details?.error === 'DeviceNotRegistered') {
+                results.expo.badTokens.push(correspondingToken);
+              }
+            }
+          });
+        }
+      } catch (err) {
+        console.error('[Push Service] Expo batch multicast error:', err.message);
+        results.expo.failed += chunk.length;
+      }
+    }
+  }
+
+  // 2. Send Firebase FCM notifications using sendEachForMulticast
+  if (fcmTokens.length > 0) {
+    console.log(`[Push Service] Preparing to send ${fcmTokens.length} FCM notifications...`);
+    try {
+      const message = {
+        notification: { title, body },
+        data: stringifiedData,
+        tokens: fcmTokens,
+        android: {
+          priority: 'high',
+          notification: {
+            sound: 'default',
+          },
+        },
+        apns: {
+          payload: {
+            aps: {
+              sound: 'default',
+            },
+          },
+        },
+      };
+
+      const response = await admin.messaging().sendEachForMulticast(message);
+      console.log(`[Push Service] FCM Multicast complete. Success: ${response.successCount}, Failure: ${response.failureCount}`);
+      
+      results.fcm.sent = response.successCount;
+      results.fcm.failed = response.failureCount;
+
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success) {
+          const correspondingToken = fcmTokens[idx];
+          const err = resp.error;
+          console.error(`[Push Service] FCM Multicast error for token ${correspondingToken}:`, err?.message);
+          
+          const isBadToken = 
+            err?.code === 'messaging/invalid-registration-token' ||
+            err?.code === 'messaging/registration-token-not-registered' ||
+            err?.message?.includes('not-registered');
+
+          if (isBadToken) {
+            results.fcm.badTokens.push(correspondingToken);
+          }
+        }
+      });
+    } catch (err) {
+      console.error('[Push Service] FCM Multicast failed entirely:', err.message);
+      results.fcm.failed = fcmTokens.length;
+    }
+  }
+
+  // Auto clean up bad tokens if any are identified
+  const allBadTokens = [...results.expo.badTokens, ...results.fcm.badTokens];
+  if (allBadTokens.length > 0) {
+    try {
+      const User = require('../src/models/userModel');
+      const cleanRes = await User.updateMany(
+        { pushToken: { $in: allBadTokens } },
+        { $set: { pushToken: null } }
+      );
+      console.log(`[Push Service] Auto-cleanup complete. Removed ${cleanRes.modifiedCount} invalid tokens from user database.`);
+    } catch (cleanErr) {
+      console.error('[Push Service] Error running bad token database clean up:', cleanErr.message);
+    }
+  }
+
+  return { success: true, results };
+};
+
+/**
+ * Sends a notification to a specific Firebase topic
+ */
+const sendNotificationToTopic = async (topic, title, body, data = {}) => {
+  if (!topic) return { success: false, error: 'No topic provided' };
+
+  try {
+    const stringifiedData = Object.keys(data).reduce((acc, key) => {
+      acc[key] = String(data[key]);
+      return acc;
+    }, {});
+
+    const message = {
+      notification: { title, body },
+      data: stringifiedData,
       topic,
     };
 
     const response = await admin.messaging().send(message);
-    console.log(`Successfully sent message to topic ${topic}:`, response);
+    console.log(`[Push Service] Successfully sent message to topic ${topic}:`, response);
     return { success: true, response };
   } catch (error) {
-    console.error(`Error sending message to topic ${topic}:`, error);
+    console.error(`[Push Service] Error sending message to topic ${topic}:`, error.message);
     return { success: false, error: error.message };
   }
 };
-
 
 const sendPaymentSuccessNotification = async (fcmToken, amount) => {
   return sendNotificationToDevice(

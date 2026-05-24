@@ -269,10 +269,9 @@ export default function EditPublicProfileScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={28} color="#fff" />
+          <Ionicons name="chevron-back" size={32} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Public Profile</Text>
-        <View style={{ width: 28 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -520,12 +519,22 @@ const styles = StyleSheet.create({
   loadingText: { color: '#9CA3AF', fontSize: SW * 0.035, marginTop: 12, fontFamily: 'Inter_400Regular' },
 
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: '4%', paddingVertical: '3%',
-    borderBottomWidth: 1, borderBottomColor: '#1A1A1A',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SW * 0.05,
+    paddingVertical: SH * 0.015,
+    gap: SW * 0.02,
   },
-  backBtn: { padding: 4 },
-  headerTitle: { color: '#fff', fontSize: SW * 0.045, fontWeight: '700', fontFamily: 'Inter_700Bold' },
+  backBtn: {
+    padding: 4,
+    marginLeft: -SW * 0.02,
+  },
+  headerTitle: {
+    color: '#fff',
+    fontSize: SW * 0.075,
+    fontWeight: '900',
+    fontFamily: 'Inter_900Black',
+  },
   scrollContent: { padding: '5%' },
 
   // Status Banner
@@ -632,9 +641,8 @@ const styles = StyleSheet.create({
 const LoadingSkeleton = ({ insets }) => (
   <View style={[styles.container, { paddingTop: insets.top }]}>
     <View style={styles.header}>
-      <View style={{ width: 28 }}><Skeleton width={24} height={24} borderRadius={12} /></View>
-      <Skeleton width={150} height={20} borderRadius={4} />
-      <View style={{ width: 28 }} />
+      <Skeleton width={24} height={24} borderRadius={12} />
+      <Skeleton width={180} height={32} borderRadius={6} style={{ marginLeft: 8 }} />
     </View>
 
     <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>

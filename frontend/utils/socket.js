@@ -116,6 +116,20 @@ class SocketService {
   leaveRoom(roomId) {
     this.emit('leave_conversation', roomId);
   }
+
+  triggerLocalEvent(event, ...args) {
+    console.log(`[SocketService] Triggering local event: ${event}`, args);
+    const callbacks = this._listeners.get(event);
+    if (callbacks) {
+      callbacks.forEach(cb => {
+        try {
+          cb(...args);
+        } catch (err) {
+          console.error(`Error in local socket event callback for ${event}:`, err);
+        }
+      });
+    }
+  }
 }
 
 export const socketService = new SocketService();

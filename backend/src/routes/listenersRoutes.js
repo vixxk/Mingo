@@ -4,6 +4,7 @@ const ListenerController = require('../controllers/listenerController');
 const { authenticate } = require('../middlewares/auth');
 
 router.get('/', authenticate, ListenerController.getRecommended);
+router.get('/status/sse', authenticate, ListenerController.sseStatusStream);
 router.post('/go-online', authenticate, ListenerController.goOnline);
 router.post('/go-offline', authenticate, ListenerController.goOffline);
 router.post('/heartbeat', authenticate, ListenerController.heartbeat);

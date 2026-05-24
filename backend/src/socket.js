@@ -88,9 +88,10 @@ const initSocket = (server) => {
       }
     });
 
-    socket.on('join_conversation', (conversationId) => {
+    socket.on('join_conversation', async (conversationId) => {
       socket.join(conversationId);
       console.log(`Socket ${socket.id} joined conversation ${conversationId}`);
+      await syncAndResumeChatSession(conversationId);
     });
 
     socket.on('leave_conversation', (conversationId) => {
@@ -113,6 +114,30 @@ const initSocket = (server) => {
         if (!sender) {
           socket.emit('message_error', { error: 'User not found' });
           return;
+        }
+
+        // Prevent listener from sending messages if they are offline
+        if (sender.role === 'LISTENER') {
+          const listener = await Listener.findOne({ userId: senderId });
+          if (listener && !listener.isOnline) {
+            socket.emit('message_error', { 
+              error: 'You are offline. Please go online to send messages.',
+              type: 'listener_offline' 
+            });
+            return;
+          }
+        }
+
+        // Prevent user/listener from responding to messages from admin
+        const otherParticipantId = conversation.participants.find(p => p.toString() !== senderId.toString());
+        if (otherParticipantId) {
+          const otherUser = await User.findById(otherParticipantId);
+          if (otherUser && (otherUser.role === 'ADMIN' || otherUser.role.endsWith('_ADMIN'))) {
+            if (sender.role !== 'ADMIN' && !sender.role.endsWith('_ADMIN')) {
+              socket.emit('message_error', { error: 'Replying to admin messages is disabled.' });
+              return;
+            }
+          }
         }
 
         // Determine if the sender is the USER (not the listener)
@@ -714,13 +739,13 @@ const initSocket = (server) => {
               await redis.del(REDIS_KEYS.LOCK(listenerIdStr));
             }
 
-            // 3. Auto-end active chat sessions after 1 minute grace period
+            // 3. Notify other participant that user went offline
             const activeChatConvs = await Conversation.find({
               participants: disconnectedUserId,
               'chatSession.active': true
             });
             if (activeChatConvs.length > 0) {
-              console.log(`[Socket] User ${disconnectedUserId} disconnected with ${activeChatConvs.length} active chat(s). Starting 60s grace period...`);
+              console.log(`[Socket] User ${disconnectedUserId} disconnected with ${activeChatConvs.length} active chat(s).`);
               
               // Notify the other participant that user went offline
               for (const conv of activeChatConvs) {
@@ -729,46 +754,10 @@ const initSocket = (server) => {
                   io.to(`user_${otherParticipant}`).emit('chat_user_offline', {
                     conversationId: conv._id.toString(),
                     userId: disconnectedUserId,
-                    message: 'User went offline. Session will end in 1 minute if they don\'t reconnect.',
+                    message: 'User went offline.',
                   });
                 }
               }
-
-              // Wait 60 seconds, then check if user reconnected
-              setTimeout(async () => {
-                try {
-                  // Check if user has reconnected (any socket in their personal room)
-                  const userRoom = io.sockets.adapter.rooms.get(`user_${disconnectedUserId}`);
-                  const isReconnected = userRoom && userRoom.size > 0;
-                  
-                  if (!isReconnected) {
-                    // User did NOT reconnect — end all their active chat sessions
-                    for (const conv of activeChatConvs) {
-                      const freshConv = await Conversation.findById(conv._id);
-                      if (freshConv && freshConv.chatSession && freshConv.chatSession.active) {
-                        console.log(`[Socket] Auto-ending chat session for conv ${conv._id} — user ${disconnectedUserId} offline for >1 min.`);
-                        await endChatSession(conv._id.toString());
-                        
-                        // Send system message
-                        const systemMsg = new Message({
-                          conversationId: conv._id,
-                          sender: null,
-                          senderModel: 'System',
-                          content: 'Session ended — user went offline.',
-                          type: 'system',
-                        });
-                        await systemMsg.save();
-                        await Conversation.findByIdAndUpdate(conv._id, { lastMessage: systemMsg._id });
-                        io.to(conv._id.toString()).emit('receive_message', systemMsg);
-                      }
-                    }
-                  } else {
-                    console.log(`[Socket] User ${disconnectedUserId} reconnected within 60s — chat session(s) preserved.`);
-                  }
-                } catch (e) {
-                  console.error('Error in chat disconnect grace period:', e.message);
-                }
-              }, 60000); // 60 second grace period
             }
           } catch (e) {
             console.error('Error on disconnect cleanup:', e.message);
@@ -787,31 +776,6 @@ function startChatSessionTimer(conversationId, userId) {
   if (chatSessionTimers[conversationId]) {
     clearInterval(chatSessionTimers[conversationId]);
   }
-  if (chatSessionOfflineCheckers[conversationId]) {
-    clearInterval(chatSessionOfflineCheckers[conversationId]);
-  }
-
-  // Check user offline every 60 seconds
-  chatSessionOfflineCheckers[conversationId] = setInterval(() => {
-    if (!io) return;
-    const userSockets = io.sockets.adapter.rooms.get(`user_${userId}`);
-    if (!userSockets || userSockets.size === 0) {
-      console.log(`[Socket] User ${userId} is offline. Auto-ending chat session ${conversationId}.`);
-      endChatSession(conversationId);
-      
-      Conversation.findById(conversationId).then(conversation => {
-        if (conversation) {
-          const listenerId = conversation.participants.find(p => p.toString() !== userId.toString());
-          if (listenerId) {
-             io.to(`user_${listenerId}`).emit('chat_user_offline', { 
-               conversationId,
-               message: 'User went offline. Chat session ended automatically.'
-             });
-          }
-        }
-      }).catch(err => console.error('Error in offline check:', err));
-    }
-  }, 60000);
 
   chatSessionTimers[conversationId] = setInterval(async () => {
     try {
@@ -823,16 +787,22 @@ function startChatSessionTimer(conversationId, userId) {
       }
 
       const user = await User.findById(userId);
-      if (!user || user.coins < CHAT_COINS_PER_SESSION) {
-        // Insufficient balance — end session and notify
+      
+      // Check if user is online when the 5-minute block ends
+      const userSockets = io ? io.sockets.adapter.rooms.get(`user_${userId}`) : null;
+      const isUserOnline = userSockets && userSockets.size > 0;
+
+      if (!isUserOnline || !user || user.coins < CHAT_COINS_PER_SESSION) {
+        // End session if offline or insufficient balance
         await endChatSession(conversationId);
 
         // Send system message
+        const content = !isUserOnline ? 'Session ended — user went offline.' : 'Please recharge to continue chatting.';
         const systemMsg = new Message({
           conversationId,
           sender: null,
           senderModel: 'System',
-          content: 'Please recharge to continue chatting.',
+          content,
           type: 'system',
         });
         await systemMsg.save();
@@ -840,11 +810,13 @@ function startChatSessionTimer(conversationId, userId) {
 
         if (io) {
           io.to(conversationId).emit('receive_message', systemMsg);
-          io.to(`user_${userId}`).emit('insufficient_balance', {
-            conversationId,
-            requiredCoins: CHAT_COINS_PER_SESSION,
-            currentCoins: user ? user.coins : 0,
-          });
+          if (user && user.coins < CHAT_COINS_PER_SESSION) {
+            io.to(`user_${userId}`).emit('insufficient_balance', {
+              conversationId,
+              requiredCoins: CHAT_COINS_PER_SESSION,
+              currentCoins: user.coins,
+            });
+          }
           io.to(`user_${userId}`).emit('chat_session_ended', { conversationId });
         }
         return;
@@ -1009,6 +981,138 @@ async function endChatSession(conversationId) {
     }
   } catch (error) {
     console.error('Error ending chat session:', error);
+  }
+}
+
+/**
+ * Check if the active chat session has expired, and if so, auto-ends it.
+ * Otherwise, resumes/starts the timer for the remaining time of the current block.
+ */
+async function syncAndResumeChatSession(conversationId) {
+  try {
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation || !conversation.chatSession || !conversation.chatSession.active) {
+      return;
+    }
+
+    const { startTime, totalCoinsDeducted, startedBy } = conversation.chatSession;
+    if (!startTime || !totalCoinsDeducted || !startedBy) {
+      return;
+    }
+
+    const paidBlocks = Math.ceil(totalCoinsDeducted / CHAT_COINS_PER_SESSION);
+    const paidDuration = paidBlocks * CHAT_SESSION_DURATION;
+    const expirationTime = new Date(startTime).getTime() + paidDuration;
+
+    if (Date.now() >= expirationTime) {
+      console.log(`[Socket] Active chat session for conv ${conversationId} has expired. Auto-ending.`);
+      await endChatSession(conversationId);
+      
+      const systemMsg = new Message({
+        conversationId,
+        sender: null,
+        senderModel: 'System',
+        content: 'Session ended.',
+        type: 'system',
+      });
+      await systemMsg.save();
+      await Conversation.findByIdAndUpdate(conversationId, { lastMessage: systemMsg._id });
+      if (io) {
+        io.to(conversationId).emit('receive_message', systemMsg);
+      }
+    } else {
+      if (!chatSessionTimers[conversationId]) {
+        console.log(`[Socket] Resuming active chat session timer for conv ${conversationId}.`);
+        const remainingTime = expirationTime - Date.now();
+        
+        chatSessionTimers[conversationId] = setTimeout(async () => {
+          try {
+            delete chatSessionTimers[conversationId];
+            
+            const freshConv = await Conversation.findById(conversationId);
+            if (!freshConv || !freshConv.chatSession || !freshConv.chatSession.active) {
+              return;
+            }
+
+            const user = await User.findById(startedBy);
+            const userSockets = io ? io.sockets.adapter.rooms.get(`user_${startedBy}`) : null;
+            const isUserOnline = userSockets && userSockets.size > 0;
+
+            if (!isUserOnline || !user || user.coins < CHAT_COINS_PER_SESSION) {
+              await endChatSession(conversationId);
+              const content = !isUserOnline ? 'Session ended — user went offline.' : 'Please recharge to continue chatting.';
+              const systemMsg = new Message({
+                conversationId,
+                sender: null,
+                senderModel: 'System',
+                content,
+                type: 'system',
+              });
+              await systemMsg.save();
+              await Conversation.findByIdAndUpdate(conversationId, { lastMessage: systemMsg._id });
+              if (io) {
+                io.to(conversationId).emit('receive_message', systemMsg);
+                if (user && user.coins < CHAT_COINS_PER_SESSION) {
+                  io.to(`user_${startedBy}`).emit('insufficient_balance', {
+                    conversationId,
+                    requiredCoins: CHAT_COINS_PER_SESSION,
+                    currentCoins: user.coins,
+                  });
+                }
+              }
+            } else {
+              user.coins -= CHAT_COINS_PER_SESSION;
+              await user.save();
+
+              await Transaction.create({
+                userId: startedBy,
+                type: 'call_debit',
+                amount: 0,
+                coins: -CHAT_COINS_PER_SESSION,
+                description: 'Chat session - 5 min block',
+                status: 'completed',
+                metadata: { sessionId: freshConv.chatSession.sessionId },
+              });
+
+              freshConv.chatSession.lastDeductionTime = new Date();
+              freshConv.chatSession.totalCoinsDeducted += CHAT_COINS_PER_SESSION;
+              await freshConv.save();
+
+              if (freshConv.chatSession.sessionId) {
+                const Session = require('./models/sessionModel');
+                await Session.findByIdAndUpdate(freshConv.chatSession.sessionId, {
+                  $inc: { coinsDeducted: CHAT_COINS_PER_SESSION }
+                }).catch(err => console.error('Error updating chat session doc on renewal:', err));
+              }
+
+              if (io) {
+                io.to(`user_${startedBy}`).emit('balance_updated', {
+                  coins: user.coins,
+                  deducted: CHAT_COINS_PER_SESSION,
+                  reason: 'chat_session_renewal',
+                });
+                io.to(conversationId).emit('chat_session_renewed', {
+                  conversationId,
+                  chatSession: freshConv.chatSession,
+                });
+                freshConv.participants.forEach(p => {
+                  io.to(`user_${p}`).emit('chat_session_renewed', {
+                    conversationId,
+                    chatSession: freshConv.chatSession,
+                  });
+                });
+              }
+
+              startChatSessionTimer(conversationId, startedBy.toString());
+            }
+          } catch (err) {
+            console.error('Error in resumed chat session timeout:', err);
+          }
+        }, remainingTime);
+      }
+    }
+  } catch (err) {
+    console.error('Error in syncAndResumeChatSession:', err);
   }
 }
 

@@ -697,6 +697,8 @@ class AdminController {
         throw new AppError('Title and body are required', 400);
       }
 
+      console.log(`[Admin Push Campaign] Starting campaign: "${title}" target=${target} method=${notificationMethod}`);
+
       const Notification = require('../models/Notification');
       const { sendNotificationToMultiple } = require('../../utils/notifications');
       let filter = {};
@@ -713,47 +715,104 @@ class AdminController {
         throw new AppError('Invalid target for notification', 400);
       }
 
-      // We need to fetch users to get their IDs and tokens
-      const users = await User.find(filter).select('_id pushToken');
+      // Fetch target users
+      const targetUsers = await User.find(filter).select('_id pushToken');
       
-      // Filter tokens only for those who have it
-      const tokens = users.filter(u => u.pushToken).map(u => u.pushToken);
+      // Fetch all admins to make sure they also receive the notifications
+      const adminUsers = await User.find({ role: { $regex: /ADMIN/i } }).select('_id pushToken');
+      
+      // Combine target users and admins (deduplicated by ID)
+      const userMap = new Map();
+      targetUsers.forEach(u => userMap.set(u._id.toString(), u));
+      adminUsers.forEach(u => userMap.set(u._id.toString(), u));
+      
+      const users = Array.from(userMap.values());
+      console.log(`[Admin Push Campaign] Combined target + admin user count: ${users.length} (Target: ${targetUsers.length}, Admins added/merged: ${adminUsers.length})`);
+      
+      let pushResult = null;
 
-      // Send Push via FCM
-      if ((notificationMethod === 'push' || notificationMethod === 'both') && tokens.length > 0) {
-        await sendNotificationToMultiple(tokens, title, body, { type: 'admin_broadcast' });
+      // 1. Dispatch Push Notifications via OneSignal
+      if (notificationMethod === 'push' || notificationMethod === 'both') {
+        try {
+          const PushService = require('../services/pushService');
+          if (target === 'all' || target === 'users' || target === 'listeners') {
+            // Send via OneSignal segment/filters for optimal massive scale delivery
+            pushResult = await PushService.sendPushToSegment(target, {
+              title,
+              body,
+              data: { type: 'admin_broadcast', title, body }
+            });
+            
+            // Also send direct push to all admins to ensure they definitely get it in all segment target configurations
+            const adminIds = adminUsers.map(a => a._id.toString());
+            if (adminIds.length > 0) {
+              await PushService.sendPushToMultiple(adminIds, {
+                title,
+                body,
+                data: { type: 'admin_broadcast', title, body }
+              });
+            }
+          } else {
+            // Target is specific: send to combined unique userIds (which includes target users + admins)
+            const combinedUserIds = users.map(u => u._id.toString());
+            pushResult = await PushService.sendPushToMultiple(combinedUserIds, {
+              title,
+              body,
+              data: { type: 'admin_broadcast', title, body }
+            });
+          }
+          console.log('[Admin Push Campaign] OneSignal campaign dispatch result:', JSON.stringify(pushResult));
+        } catch (pushErr) {
+          console.error('[Admin Push Campaign] Error dispatching push notifications via OneSignal:', pushErr.message);
+        }
       }
 
-      // Save to Platform DB
+      // 2. Dispatch Platform In-App Notifications
       if (notificationMethod === 'platform' || notificationMethod === 'both') {
-        const notifications = users.map(u => ({
-          recipient: u._id,
-          title,
-          body,
-          type: 'admin',
-        }));
-        await Notification.insertMany(notifications);
+        try {
+          const notifications = users.map(u => ({
+            recipient: u._id,
+            title,
+            body,
+            type: 'admin',
+          }));
+          
+          if (notifications.length > 0) {
+            await Notification.insertMany(notifications);
+            console.log(`[Admin Push Campaign] Inserted ${notifications.length} platform notification records.`);
+          }
+        } catch (dbErr) {
+          console.error('[Admin Push Campaign] Error inserting platform notifications to database:', dbErr.message);
+        }
       }
 
-      // Create Campaign Record
-      await NotificationCampaign.create({
+      // 3. Create Campaign History Record
+      const campaignRecord = await NotificationCampaign.create({
         title,
         body,
         target,
         method: notificationMethod,
         sentToCount: users.length,
       });
+      console.log(`[Admin Push Campaign] Created campaign history record ID: ${campaignRecord._id}`);
 
+      // 4. Create Activity Log
       await ActivityLog.create({
         user: 'Admin',
-        action: `Sent ${notificationMethod} notification: "${title}" to ${target}`,
+        action: `Sent ${notificationMethod} campaign notification: "${title}" to ${target}`,
         type: 'admin',
         icon: 'notifications',
-        color: '#3B82F6',
+        color: '#A855F7',
       });
 
-      return ApiResponse.success(res, { usersCount: users.length, tokensCount: tokens.length }, 'Notification sent successfully');
+      return ApiResponse.success(res, { 
+        usersCount: users.length, 
+        tokensCount: users.length,
+        campaignId: campaignRecord._id,
+        pushResult: pushResult?.results || null
+      }, 'Push campaign dispatched and saved successfully');
     } catch (err) {
+      console.error('[Admin Push Campaign] Critical error in campaign dispatch:', err.message);
       next(err);
     }
   }

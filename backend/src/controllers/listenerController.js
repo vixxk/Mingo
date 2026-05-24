@@ -301,6 +301,33 @@ class ListenerController {
       next(err);
     }
   }
+
+  static async sseStatusStream(req, res, next) {
+    try {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders();
+
+      const sseService = require('../services/sseService');
+      sseService.addStatusClient(res);
+
+      const keepAlive = setInterval(() => {
+        res.write(': keep-alive\n\n');
+      }, 30000);
+
+      req.on('close', () => {
+        clearInterval(keepAlive);
+        sseService.removeStatusClient(res);
+        res.end();
+      });
+    } catch (err) {
+      console.error('SSE status stream error:', err);
+      if (!res.headersSent) {
+        next(err);
+      }
+    }
+  }
 }
 
 module.exports = ListenerController;

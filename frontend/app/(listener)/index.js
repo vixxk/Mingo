@@ -12,6 +12,8 @@ import {
   Pressable,
   Alert,
   ActivityIndicator,
+  RefreshControl,
+  BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,7 +22,8 @@ import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, hp, wp, SCREEN_HEIGHT, SCREEN_WIDTH } from '../../utils/responsive';
 import { listenerAPI, userAPI, walletAPI, authAPI, listenersAPI } from '../../utils/api';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useRouter, useNavigation } from 'expo-router';
+import { useStatusSSE } from '../../utils/useStatusSSE';
 
 
 const ConfirmationModal = ({ visible, isOnline, onConfirm, onCancel }) => {
@@ -161,6 +164,65 @@ const CantGoOnlinePopup = ({ visible, onClose }) => {
 export default function ListenerHomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const navigation = useNavigation();
+
+  useEffect(() => {
+    const parentNav = navigation.getParent() || navigation;
+    parentNav.setOptions({
+      gestureEnabled: false,
+    });
+
+    const backAction = () => {
+      const state = parentNav.getState();
+      const routes = state?.routes || [];
+      if (routes.length >= 2) {
+        const prevRoute = routes[routes.length - 2];
+        const prevName = prevRoute?.name?.toLowerCase() || '';
+        if (
+          prevName.includes('auth') ||
+          prevName.includes('login') ||
+          prevName.includes('signup') ||
+          prevName.includes('welcome') ||
+          prevName === 'index'
+        ) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction
+    );
+
+    const unsubscribe = parentNav.addListener('beforeRemove', (e) => {
+      const actionType = e.data.action.type;
+      if (actionType === 'GO_BACK' || actionType === 'POP') {
+        const state = parentNav.getState();
+        const routes = state?.routes || [];
+        if (routes.length >= 2) {
+          const prevRoute = routes[routes.length - 2];
+          const prevName = prevRoute?.name?.toLowerCase() || '';
+          if (
+            prevName.includes('auth') ||
+            prevName.includes('login') ||
+            prevName.includes('signup') ||
+            prevName.includes('welcome') ||
+            prevName === 'index'
+          ) {
+            e.preventDefault();
+          }
+        }
+      }
+    });
+
+    return () => {
+      backHandler.remove();
+      unsubscribe();
+    };
+  }, [navigation]);
+
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [videoEnabled, setVideoEnabled] = useState(false);
   const [chatEnabled, setChatEnabled] = useState(true);
@@ -169,6 +231,58 @@ export default function ListenerHomeScreen() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [showCantGoOnline, setShowCantGoOnline] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useStatusSSE(
+    useCallback((data) => {
+      AsyncStorage.getItem('user').then((userStr) => {
+        if (userStr) {
+          const userObj = JSON.parse(userStr);
+          const currentUserId = userObj.id || userObj._id;
+          if (currentUserId && data.userId === currentUserId.toString()) {
+            console.log('[Listener Home] SSE status synced:', data.isOnline);
+            setIsOnline(data.isOnline);
+          }
+        }
+      });
+    }, [])
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      try {
+        const meRes = await authAPI.me();
+        if (meRes?.data) {
+          const u = meRes.data;
+          await AsyncStorage.setItem('user', JSON.stringify(u));
+          if (u.gender) await AsyncStorage.setItem('userGender', u.gender);
+          if (u.avatarIndex !== undefined) await AsyncStorage.setItem('userAvatarIndex', u.avatarIndex.toString());
+          if (u.name) await AsyncStorage.setItem('userName', u.name);
+        }
+      } catch (meErr) {
+        console.log('Error refreshing auth inside listener onRefresh:', meErr);
+      }
+
+      const profileRes = await listenerAPI.getMyProfile();
+      if (profileRes?.data) {
+        setEarnings(profileRes.data.earnings || 0);
+        setTotalCalls({ audio: profileRes.data.audioCalls || 0, video: profileRes.data.videoCalls || 0 });
+        setTotalChats(profileRes.data.todayChats || 0);
+        setIsOnline(profileRes.data.isOnline);
+        setAudioEnabled(profileRes.data.audioEnabled !== false);
+        setVideoEnabled(profileRes.data.videoEnabled === true);
+        setChatEnabled(profileRes.data.chatEnabled !== false);
+      }
+
+      const balRes = await walletAPI.getBalance();
+      if (balRes?.data) setBalance(balRes.data.coins);
+    } catch (e) {
+      console.error('Error refreshing listener data:', e);
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const shimmerAnim = useRef(new Animated.Value(0.3)).current;
@@ -446,6 +560,14 @@ export default function ListenerHomeScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#A855F7']}
+            tintColor="#A855F7"
+          />
+        }
       >
         {}
         <View style={[styles.card, isOnline && { opacity: 0.7 }]}>
