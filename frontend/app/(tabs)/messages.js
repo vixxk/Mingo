@@ -272,7 +272,12 @@ export default function MessagesScreen() {
 
       {/* Header */}
       <Animated.View style={[styles.header, { opacity: headerAnim }]}>
-        <Text style={styles.headerTitle}>Messages</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: wp(2.5) }}>
+          <Text style={styles.headerTitle}>Messages</Text>
+          <View style={styles.costBadge}>
+            <Text style={styles.diamondText}>1 💎 / 5 min</Text>
+          </View>
+        </View>
         <TouchableOpacity 
           onPress={handleRefresh}
           activeOpacity={0.7}
@@ -343,6 +348,24 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#fff',
     fontFamily: 'Inter_900Black',
+  },
+  costBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: wp(3),
+    paddingHorizontal: wp(2.5),
+    paddingVertical: hp(0.5),
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    alignSelf: 'center',
+    marginTop: hp(0.5),
+  },
+  diamondText: {
+    color: '#38BDF8',
+    fontSize: wp(3),
+    fontWeight: '600',
+    fontFamily: 'Inter_600SemiBold',
   },
   refreshBtn: {
     width: wp(10),

@@ -692,7 +692,7 @@ export default function ListenerHomeScreen() {
 
         {}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Today's Earnings</Text>
+          <Text style={styles.cardTitle}>Total Earnings</Text>
 
           {}
           <View style={styles.earningsRow}>

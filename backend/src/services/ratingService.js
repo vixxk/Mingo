@@ -19,8 +19,10 @@ class RatingService {
     }
 
     
-    if (session.status !== 'completed') {
-      throw new AppError('Can only rate completed sessions', 400);
+    // Allow rating for both completed and cancelled sessions. Cancelled sessions
+    // happen when the call ends before billing deduction starts (e.g. very short calls).
+    if (session.status !== 'completed' && session.status !== 'cancelled') {
+      throw new AppError('Can only rate completed or cancelled sessions', 400);
     }
 
     

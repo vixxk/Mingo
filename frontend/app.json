@@ -39,7 +39,13 @@
         }
       ],
       "./plugins/withZegoCloud.js",
-      "expo-video"
+      "expo-video",
+      [
+        "onesignal-expo-plugin",
+        {
+          "mode": "development"
+        }
+      ]
     ],
     "android": {
       "adaptiveIcon": {

@@ -19,7 +19,7 @@ export default function ListenerLayout() {
   const router = useRouter();
   const segments = useSegments();
   
-  const [incomingCall, setIncomingCall] = useState(null);
+  const [incomingCalls, setIncomingCalls] = useState([]);
   const unreadCount = useSSE();
 
   const isChatOpenRef = React.useRef(false);
@@ -35,12 +35,15 @@ export default function ListenerLayout() {
       
       socketService.on('incoming_call', (callData) => {
         console.log('Incoming call received:', callData);
-        setIncomingCall(callData);
+        setIncomingCalls((prev) => {
+          if (prev.some(c => c.callId === callData.callId)) return prev;
+          return [...prev, callData];
+        });
       });
 
       socketService.on('call_cancelled', (data) => {
         console.log('Call cancelled by user:', data);
-        setIncomingCall(null);
+        setIncomingCalls((prev) => prev.filter(c => c.callId !== data.callId));
       });
 
       socketService.on('account_banned', (data) => {
@@ -113,10 +116,25 @@ export default function ListenerLayout() {
     };
   }, []);
 
-  const handleAcceptCall = async () => {
-    if (!incomingCall) return;
+  const handleAcceptCall = async (acceptedCall) => {
+    if (!acceptedCall) return;
     
-    const { callerId, callerName, callType, callId, roomId, avatarIndex, gender } = incomingCall;
+    const { callerId, callerName, callType, callId, roomId, avatarIndex, gender } = acceptedCall;
+    
+    // Automatically reject all other active requests
+    const otherCalls = incomingCalls.filter(c => c.callId !== callId);
+    otherCalls.forEach(otherCall => {
+      socketService.emit('call_rejected', { 
+        userId: otherCall.callerId, 
+        sessionId: otherCall.callId,
+        reason: 'busy' 
+      });
+    });
+
+    // Notify caller we accepted
+    socketService.emit('call_accepted', { userId: callerId, sessionId: callId, roomId });
+    
+    setIncomingCalls([]);
     
     // Get listener's own userId
     let myUserId = '';
@@ -127,11 +145,6 @@ export default function ListenerLayout() {
         myUserId = u._id || u.id || '';
       }
     } catch (e) {}
-    
-    // Notify caller we accepted
-    socketService.emit('call_accepted', { userId: callerId, sessionId: callId, roomId });
-    
-    setIncomingCall(null);
     
     // Route to call screen — listenerId is the listener's own ID (us)
     const targetScreen = callType === 'video' ? '/(call)/video-call' : '/(call)/audio-call';
@@ -151,14 +164,14 @@ export default function ListenerLayout() {
     });
   };
 
-  const handleRejectCall = () => {
-    if (!incomingCall) return;
+  const handleRejectCall = (rejectedCall) => {
+    if (!rejectedCall) return;
     socketService.emit('call_rejected', { 
-      userId: incomingCall.callerId, 
-      sessionId: incomingCall.callId,
+      userId: rejectedCall.callerId, 
+      sessionId: rejectedCall.callId,
       reason: 'busy' 
     });
-    setIncomingCall(null);
+    setIncomingCalls(prev => prev.filter(c => c.callId !== rejectedCall.callId));
   };
 
   return (
@@ -252,11 +265,7 @@ export default function ListenerLayout() {
       </Tabs>
 
       <IncomingCallPopup
-        visible={!!incomingCall}
-        callerName={incomingCall?.callerName}
-        callType={incomingCall?.callType}
-        avatarIndex={incomingCall?.avatarIndex}
-        gender={incomingCall?.gender}
+        calls={incomingCalls}
         onAccept={handleAcceptCall}
         onReject={handleRejectCall}
       />

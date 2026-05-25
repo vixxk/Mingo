@@ -15,7 +15,8 @@
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "http://13.60.51.35/api",
-        "EXPO_PUBLIC_SOCKET_URL": "http://13.60.51.35"
+        "EXPO_PUBLIC_SOCKET_URL": "http://13.60.51.35",
+        "EXPO_PUBLIC_ONESIGNAL_APP_ID": "3bfca954-5879-40e9-ba2c-c84e4d7d748a"
       }
     },
     "production": {

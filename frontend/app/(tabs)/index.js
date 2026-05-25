@@ -476,16 +476,13 @@ export default function HomeScreen() {
 
       setBestChoiceData(prev => updateStatus(prev));
       setPeopleData(prev => updateStatus(prev));
-
-      console.log(`[Home] Listener went ${isOnline ? 'online' : 'offline'}. Refreshing user home page for new real data...`);
-      loadRealData();
     };
 
     socketService.on('listener_status_changed', handleStatusChanged);
     return () => {
       socketService.off('listener_status_changed', handleStatusChanged);
     };
-  }, [loadRealData]);
+  }, []);
 
   useStatusSSE(
     useCallback((data) => {
@@ -505,10 +502,7 @@ export default function HomeScreen() {
 
       setBestChoiceData(prev => updateStatus(prev));
       setPeopleData(prev => updateStatus(prev));
-
-      console.log(`[Home] SSE Listener went ${isOnline ? 'online' : 'offline'}. Refreshing user home page for new real data...`);
-      loadRealData();
-    }, [loadRealData])
+    }, [])
   );
 
   useFocusEffect(

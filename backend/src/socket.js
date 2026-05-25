@@ -714,10 +714,11 @@ const initSocket = (server) => {
               console.log(`Listener ${disconnectedUserId} automatically set to offline on socket disconnect.`);
             }
 
-            // 2. Auto-end active calls (immediately)
+            // 2. Auto-end active calls (immediately) - only audio and video calls, not chat sessions
             const activeCall = await Session.findOne({
               $or: [{ userId: disconnectedUserId }, { listenerId: disconnectedUserId }],
-              status: 'active'
+              status: 'active',
+              callType: { $in: ['audio', 'video'] }
             });
             if (activeCall) {
               console.log(`[Socket] Auto-ending active call ${activeCall._id} on participant disconnect: ${disconnectedUserId}`);

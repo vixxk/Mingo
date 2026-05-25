@@ -17,7 +17,7 @@ export default function TabLayout() {
   const router = useRouter();
   const segments = useSegments();
   const [isAuthenticated, setIsAuthenticated] = useState(null);
-  const [incomingCall, setIncomingCall] = useState(null);
+  const [incomingCalls, setIncomingCalls] = useState([]);
   const unreadCount = useSSE();
 
   const isChatOpenRef = React.useRef(false);
@@ -33,12 +33,15 @@ export default function TabLayout() {
       
       socketService.on('incoming_call', (callData) => {
         console.log('Incoming call received:', callData);
-        setIncomingCall(callData);
+        setIncomingCalls((prev) => {
+          if (prev.some(c => c.callId === callData.callId)) return prev;
+          return [...prev, callData];
+        });
       });
 
       socketService.on('call_cancelled', (data) => {
         console.log('Call cancelled by caller:', data);
-        setIncomingCall(null);
+        setIncomingCalls((prev) => prev.filter(c => c.callId !== data.callId));
       });
 
       socketService.on('account_banned', (data) => {
@@ -66,15 +69,25 @@ export default function TabLayout() {
     };
   }, []);
 
-  const handleAcceptCall = () => {
-    if (!incomingCall) return;
+  const handleAcceptCall = (acceptedCall) => {
+    if (!acceptedCall) return;
     
-    const { callerId, callerName, callType, callId, roomId, avatarIndex, gender } = incomingCall;
+    const { callerId, callerName, callType, callId, roomId, avatarIndex, gender } = acceptedCall;
     
+    // Automatically reject all other active requests
+    const otherCalls = incomingCalls.filter(c => c.callId !== callId);
+    otherCalls.forEach(otherCall => {
+      socketService.emit('call_rejected', { 
+        userId: otherCall.callerId, 
+        sessionId: otherCall.callId,
+        reason: 'busy' 
+      });
+    });
+
     // Notify caller we accepted
     socketService.emit('call_accepted', { userId: callerId, sessionId: callId, roomId });
     
-    setIncomingCall(null);
+    setIncomingCalls([]);
     
     // Route to call screen
     const targetScreen = callType === 'video' ? '/(call)/video-call' : '/(call)/audio-call';
@@ -93,14 +106,14 @@ export default function TabLayout() {
     });
   };
 
-  const handleRejectCall = () => {
-    if (!incomingCall) return;
+  const handleRejectCall = (rejectedCall) => {
+    if (!rejectedCall) return;
     socketService.emit('call_rejected', { 
-      userId: incomingCall.callerId, 
-      sessionId: incomingCall.callId,
+      userId: rejectedCall.callerId, 
+      sessionId: rejectedCall.callId,
       reason: 'busy' 
     });
-    setIncomingCall(null);
+    setIncomingCalls(prev => prev.filter(c => c.callId !== rejectedCall.callId));
   };
 
   useEffect(() => {
@@ -249,11 +262,7 @@ export default function TabLayout() {
       </Tabs>
 
       <IncomingCallPopup
-        visible={!!incomingCall}
-        callerName={incomingCall?.callerName}
-        callType={incomingCall?.callType}
-        avatarIndex={incomingCall?.avatarIndex}
-        gender={incomingCall?.gender}
+        calls={incomingCalls}
         onAccept={handleAcceptCall}
         onReject={handleRejectCall}
       />

@@ -652,7 +652,11 @@ export default function ChatScreen() {
 
     const handleSessionRenewed = (data) => {
       console.log('[Chat] Session renewed:', data);
-      // Session continues, timer keeps counting from the original start
+      setSessionActive(true);
+      const session = data.chatSession;
+      if (session?.sessionId) setActiveSessionId(session.sessionId);
+      startElapsedTimer(session.startTime);
+      setChatBlocked(false);
     };
 
     const handleSessionEnded = () => {

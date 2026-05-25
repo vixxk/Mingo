@@ -18,7 +18,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { socketService } from '../../utils/socket';
-import { callAPI } from '../../utils/api';
+import { callAPI, listenersAPI } from '../../utils/api';
 import { ms, s, vs, SCREEN_HEIGHT } from '../../utils/responsive';
 
 const { width: SW, height: SH } = Dimensions.get('window');
@@ -120,6 +120,24 @@ export default function ConnectingScreen() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const dotsAnim = useRef(new Animated.Value(0)).current;
   const callTimeoutRef = useRef(null);
+  
+  const [listenerInterests, setListenerInterests] = React.useState([]);
+
+  useEffect(() => {
+    const fetchDirectInterests = async () => {
+      const targetId = partnerListenerId || listenerId;
+      if (!targetId || isRandom === 'true') return;
+      try {
+        const res = await listenersAPI.getPublicProfile(targetId);
+        if (res?.data?.publicProfile?.expertiseTags) {
+          setListenerInterests(res.data.publicProfile.expertiseTags);
+        }
+      } catch (err) {
+        console.log('Error fetching listener interests:', err);
+      }
+    };
+    fetchDirectInterests();
+  }, [partnerListenerId, listenerId]);
 
   const handleCancel = useCallback(() => {
     if (callTimeoutRef.current) {
@@ -236,6 +254,13 @@ export default function ConnectingScreen() {
               setPartnerListenerId(targetListenerId);
               setPartnerAvatarIndex(data.partnerAvatar);
               setPartnerGender(data.partnerGender);
+
+              // Fetch matched listener interests
+              listenersAPI.getPublicProfile(targetListenerId).then(res => {
+                if (res?.data?.publicProfile?.expertiseTags) {
+                  setListenerInterests(res.data.publicProfile.expertiseTags);
+                }
+              }).catch(err => console.log('Error fetching matched listener interests:', err));
 
               // Found a partner, now signal them
               socketService.emit('call_incoming', {
@@ -401,12 +426,21 @@ export default function ConnectingScreen() {
 
       <View style={styles.interestsSection}>
         <View style={styles.chipsWrap}>
-          {INTERESTS.map((item, index) => (
-            <View key={index} style={styles.chip}>
-              <Text style={styles.chipText}>{item.label}</Text>
-              <Ionicons name={item.icon} size={14} color="#9CA3AF" />
-            </View>
-          ))}
+          {listenerInterests.length > 0 ? (
+            listenerInterests.map((interest, index) => (
+              <View key={index} style={styles.chip}>
+                <Text style={styles.chipText}>{interest}</Text>
+                <Ionicons name="sparkles" size={14} color="#A855F7" />
+              </View>
+            ))
+          ) : (
+            INTERESTS.map((item, index) => (
+              <View key={index} style={styles.chip}>
+                <Text style={styles.chipText}>{item.label}</Text>
+                <Ionicons name={item.icon} size={14} color="#9CA3AF" />
+              </View>
+            ))
+          )}
         </View>
       </View>
 
