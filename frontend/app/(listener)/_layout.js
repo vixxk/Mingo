@@ -210,9 +210,9 @@ export default function ListenerLayout() {
           }}
         />
         <Tabs.Screen
-          name="recent-calls"
+          name="recent-sessions"
           options={{
-            title: 'Recent',
+            title: 'Sessions',
             tabBarIcon: ({ color, focused }) => (
               <Ionicons
                 name={focused ? 'time' : 'time-outline'}

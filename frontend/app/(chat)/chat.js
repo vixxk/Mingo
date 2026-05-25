@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Image, TouchableOpacity, ScrollView,
   TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Dimensions,
-  Animated, Modal, Pressable, AppState,
+  Animated, Modal, Pressable, AppState, BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -335,6 +335,28 @@ export default function ChatScreen() {
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [receivedGift, setReceivedGift] = useState(null);
   const [showCostPopup, setShowCostPopup] = useState(false);
+
+  const handleBack = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      if (userRole === 'LISTENER') {
+        router.replace('/(listener)');
+      } else {
+        router.replace('/(tabs)');
+      }
+    }
+    return true;
+  }, [userRole]);
+
+  useEffect(() => {
+    const onBackPress = () => {
+      handleBack();
+      return true;
+    };
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [handleBack]);
 
   const giftAnim = useRef(new Animated.Value(0)).current;
   const sessionTimerRef = useRef(null);
@@ -910,7 +932,7 @@ export default function ChatScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7}>
+        <TouchableOpacity onPress={handleBack} activeOpacity={0.7}>
           <Ionicons name="chevron-back" size={wp(5.5)} color="#fff" />
         </TouchableOpacity>
         

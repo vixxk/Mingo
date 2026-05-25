@@ -55,7 +55,7 @@ const formatCallTime = (dateStr) => {
   return `${d.toLocaleDateString('en-US', dateOptions)}, ${d.toLocaleTimeString('en-US', timeOptions)}`;
 };
 
-const CallItem = ({ item }) => {
+const SessionItem = ({ item }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
@@ -86,14 +86,14 @@ const CallItem = ({ item }) => {
         colors={item.gradientColors || ['#3B82F6', '#8B5CF6']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={styles.callItem}
+        style={styles.sessionItem}
       >
-        <View style={styles.callMainRow}>
-          <Image source={getAvatarImage(item.gender, item.avatarIndex)} style={styles.callAvatar} />
-          <View style={styles.callInfo}>
+        <View style={styles.sessionMainRow}>
+          <Image source={getAvatarImage(item.gender, item.avatarIndex)} style={styles.sessionAvatar} />
+          <View style={styles.sessionInfo}>
             <View style={styles.nameTimeRow}>
-              <Text style={styles.callName} numberOfLines={1}>{item.name}</Text>
-              <Text style={[styles.callTimeText, { color: 'rgba(255,255,255,0.8)' }]}>{formatCallTime(item.time)}</Text>
+              <Text style={styles.sessionName} numberOfLines={1}>{item.name}</Text>
+              <Text style={[styles.sessionTimeText, { color: 'rgba(255,255,255,0.8)' }]}>{formatCallTime(item.time)}</Text>
             </View>
             <View style={styles.typeDurationRow}>
               <Ionicons 
@@ -102,7 +102,7 @@ const CallItem = ({ item }) => {
                 color="rgba(255,255,255,0.8)" 
                 style={{ marginRight: wp(1) }} 
               />
-              <Text style={[styles.callDuration, { color: 'rgba(255,255,255,0.8)' }]}>{item.duration} • {item.type ? (item.type.charAt(0).toUpperCase() + item.type.slice(1)) : ''}</Text>
+              <Text style={[styles.sessionDuration, { color: 'rgba(255,255,255,0.8)' }]}>{item.duration} • {item.type ? (item.type.charAt(0).toUpperCase() + item.type.slice(1)) : ''}</Text>
             </View>
           </View>
         </View>
@@ -148,22 +148,22 @@ const EmptyState = () => {
     <View style={styles.emptyContainer}>
       <View style={styles.emptyIconContainer}>
         <View style={[styles.emptyIconCircle, { backgroundColor: '#1F2937' }]}>
-          <Ionicons name="call-outline" size={s(40)} color="#9CA3AF" />
+          <Ionicons name="time-outline" size={s(40)} color="#9CA3AF" />
         </View>
       </View>
-      <Text style={styles.emptyTitle}>No Recent Calls!</Text>
+      <Text style={styles.emptyTitle}>No Recent Sessions!</Text>
       <Text style={styles.emptySubtitle}>
-        When you receive calls from users,{'\n'}they will appear here for quick access.
+        When you have sessions with users,{'\n'}they will appear here for quick access.
       </Text>
     </View>
   );
 };
 
-export default function RecentCallsScreen() {
+export default function RecentSessionsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   
-  const [recentCalls, setRecentCalls] = useState([]);
+  const [recentSessions, setRecentSessions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [earnings, setEarnings] = useState(0);
 
@@ -200,8 +200,7 @@ export default function RecentCallsScreen() {
       ];
 
       if (res?.data) {
-        const filtered = res.data.filter(call => (call.callType || call.type) !== 'chat');
-        setRecentCalls(filtered.map((call, index) => ({
+        setRecentSessions(res.data.map((call, index) => ({
           id: call._id,
           userId: call.userId?._id || call.userId,
           name: call.userId?.name || 'Unknown User',
@@ -223,7 +222,7 @@ export default function RecentCallsScreen() {
       if (balRes?.data) setEarnings(balRes.data.coins || 0);
 
     } catch (e) {
-      console.error('Failed to load recent calls:', e);
+      console.error('Failed to load recent sessions:', e);
     } finally {
       setIsLoading(false);
     }
@@ -265,7 +264,7 @@ export default function RecentCallsScreen() {
       <StatusBar style="light" />
 
       <Animated.View style={[styles.header, { opacity: headerAnim }]}>
-        <Text style={styles.headerTitle}>Recent Calls</Text>
+        <Text style={styles.headerTitle}>Recent Sessions</Text>
         <TouchableOpacity 
           onPress={handleRefresh}
           activeOpacity={0.7}
@@ -286,13 +285,13 @@ export default function RecentCallsScreen() {
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
           />
-        ) : recentCalls.length === 0 ? (
+        ) : recentSessions.length === 0 ? (
           <EmptyState />
         ) : (
           <FlatList
-            data={recentCalls}
+            data={recentSessions}
             keyExtractor={item => item.id}
-            renderItem={({ item }) => <CallItem item={item} />}
+            renderItem={({ item }) => <SessionItem item={item} />}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
           />
@@ -330,50 +329,30 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1F2937',
   },
-  earningsBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1A1A1A',
-    borderRadius: 20,
-    paddingHorizontal: wp(3),
-    paddingVertical: hp(0.6),
-    gap: 4,
-    borderWidth: 1,
-    borderColor: '#333',
-  },
-  coinEmoji: {
-    fontSize: wp(3.5),
-  },
-  earningsText: {
-    fontSize: wp(3.5),
-    color: '#fff',
-    fontWeight: '700',
-    fontFamily: 'Inter_700Bold',
-  },
   listContent: {
     paddingHorizontal: wp(5),
     paddingBottom: hp(12),
     gap: hp(1.5),
   },
-  callItem: {
+  sessionItem: {
     flexDirection: 'column',
     padding: wp(3.5),
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#1F1F1F',
   },
-  callMainRow: {
+  sessionMainRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  callAvatar: {
+  sessionAvatar: {
     width: wp(12),
     height: wp(12),
     borderRadius: wp(6),
     borderWidth: 2,
     borderColor: '#333',
   },
-  callInfo: {
+  sessionInfo: {
     flex: 1,
     marginLeft: wp(3.5),
   },
@@ -383,7 +362,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
-  callTimeText: {
+  sessionTimeText: {
     fontSize: wp(3.0),
     color: '#6B7280',
     fontFamily: 'Inter_400Regular',
@@ -393,13 +372,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 2,
   },
-  callName: {
+  sessionName: {
     fontSize: wp(4),
     fontWeight: '700',
     color: '#fff',
     fontFamily: 'Inter_700Bold',
   },
-  callDuration: {
+  sessionDuration: {
     fontSize: wp(3.2),
     color: '#9CA3AF',
     fontFamily: 'Inter_400Regular',
@@ -449,18 +428,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     fontStyle: 'italic',
     marginTop: 2,
-  },
-  callActions: {
-    flexDirection: 'row',
-    gap: wp(3),
-  },
-  callActionBtn: {
-    width: wp(9),
-    height: wp(9),
-    borderRadius: wp(4.5),
-    backgroundColor: '#1F1F1F',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   emptyContainer: {
     flex: 1,
@@ -525,16 +492,6 @@ const styles = StyleSheet.create({
     width: '30%',
     height: hp(1.4),
     borderRadius: 4,
-    backgroundColor: '#1F1F1F',
-  },
-  skeletonActions: {
-    flexDirection: 'row',
-    gap: wp(3),
-  },
-  skeletonActionBtn: {
-    width: wp(9),
-    height: wp(9),
-    borderRadius: wp(4.5),
     backgroundColor: '#1F1F1F',
   },
 });

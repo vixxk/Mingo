@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -37,6 +37,7 @@ export default function CallFeedbackScreen() {
   const [selectedTags, setSelectedTags] = useState([]);
   const [feedback, setFeedback] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const allowNavigationRef = useRef(false);
 
   useEffect(() => {
     navigation.setOptions({
@@ -53,6 +54,9 @@ export default function CallFeedbackScreen() {
     );
 
     const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (allowNavigationRef.current) {
+        return;
+      }
       e.preventDefault();
     });
 
@@ -83,6 +87,7 @@ export default function CallFeedbackScreen() {
     }
 
     if (!sessionId) {
+      allowNavigationRef.current = true;
       router.replace(target);
       return;
     }
@@ -98,6 +103,7 @@ export default function CallFeedbackScreen() {
       console.log('Error submitting feedback:', e);
     } finally {
       setIsSubmitting(false);
+      allowNavigationRef.current = true;
       router.replace(target);
     }
   };

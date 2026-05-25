@@ -552,7 +552,7 @@ export default function ListenerHomeScreen() {
           </Text>
         </View>
         <Text style={styles.statusBannerSub}>
-          {isOnline ? 'You will receive calls from users' : 'Switch online to start earning'}
+          {isOnline ? 'You will receive calls/chats from users' : 'Switch online to start earning'}
         </Text>
       </LinearGradient>
 

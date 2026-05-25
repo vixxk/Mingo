@@ -65,7 +65,7 @@ export default function ConnectingScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { 
-    name = 'Priya Sharma',
+    name,
     callId: initialCallId,
     roomId: initialRoomId,
     listenerId,
@@ -102,20 +102,42 @@ export default function ConnectingScreen() {
     realRoomIdRef.current = realRoomId;
   }, [realRoomId]);
 
-  const [partnerName, setPartnerName] = React.useState(name);
-  const [partnerListenerId, setPartnerListenerId] = React.useState(listenerId);
-  const [partnerAvatarIndex, setPartnerAvatarIndex] = React.useState(avatarIndex);
-  const [partnerGender, setPartnerGender] = React.useState(gender);
+  const [partnerName, setPartnerName] = React.useState(name || '');
+  const [partnerListenerId, setPartnerListenerId] = React.useState(listenerId || '');
+  const [partnerAvatarIndex, setPartnerAvatarIndex] = React.useState(avatarIndex || '0');
+  const [partnerGender, setPartnerGender] = React.useState(gender || 'Female');
 
-  const partnerNameRef = useRef(name);
-  const partnerListenerIdRef = useRef(listenerId);
-  const partnerAvatarIndexRef = useRef(avatarIndex);
-  const partnerGenderRef = useRef(gender);
+  const partnerNameRef = useRef(name || '');
+  const partnerListenerIdRef = useRef(listenerId || '');
+  const partnerAvatarIndexRef = useRef(avatarIndex || '0');
+  const partnerGenderRef = useRef(gender || 'Female');
 
   useEffect(() => { partnerNameRef.current = partnerName; }, [partnerName]);
   useEffect(() => { partnerListenerIdRef.current = partnerListenerId; }, [partnerListenerId]);
   useEffect(() => { partnerAvatarIndexRef.current = partnerAvatarIndex; }, [partnerAvatarIndex]);
   useEffect(() => { partnerGenderRef.current = partnerGender; }, [partnerGender]);
+
+  // Sync state with parameters as they load/resolve from Expo Router search params
+  useEffect(() => {
+    if (isRandom !== 'true') {
+      if (name) {
+        setPartnerName(name);
+        partnerNameRef.current = name;
+      }
+      if (listenerId) {
+        setPartnerListenerId(listenerId);
+        partnerListenerIdRef.current = listenerId;
+      }
+      if (avatarIndex !== undefined && avatarIndex !== null) {
+        setPartnerAvatarIndex(avatarIndex);
+        partnerAvatarIndexRef.current = avatarIndex;
+      }
+      if (gender) {
+        setPartnerGender(gender);
+        partnerGenderRef.current = gender;
+      }
+    }
+  }, [name, listenerId, avatarIndex, gender, isRandom]);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const dotsAnim = useRef(new Animated.Value(0)).current;
@@ -129,8 +151,26 @@ export default function ConnectingScreen() {
       if (!targetId || isRandom === 'true') return;
       try {
         const res = await listenersAPI.getPublicProfile(targetId);
-        if (res?.data?.publicProfile?.expertiseTags) {
-          setListenerInterests(res.data.publicProfile.expertiseTags);
+        if (res?.data) {
+          const profileData = res.data;
+          const pub = profileData.publicProfile || {};
+          
+          if (profileData.displayName || profileData.name) {
+            const resolvedName = profileData.displayName || profileData.name;
+            setPartnerName(resolvedName);
+            partnerNameRef.current = resolvedName;
+          }
+          if (profileData.avatarIndex !== undefined && profileData.avatarIndex !== null) {
+            setPartnerAvatarIndex(profileData.avatarIndex.toString());
+            partnerAvatarIndexRef.current = profileData.avatarIndex.toString();
+          }
+          if (profileData.gender) {
+            setPartnerGender(profileData.gender);
+            partnerGenderRef.current = profileData.gender;
+          }
+          if (pub.expertiseTags) {
+            setListenerInterests(pub.expertiseTags);
+          }
         }
       } catch (err) {
         console.log('Error fetching listener interests:', err);
@@ -414,7 +454,7 @@ export default function ConnectingScreen() {
             style={styles.avatar}
           />
         </Animated.View>
-        <Text style={styles.callerName}>{partnerName}</Text>
+        <Text style={styles.callerName}>{partnerName || (isRandom === 'true' ? 'Random User' : 'Connecting...')}</Text>
         <Text style={styles.connectingText}>Connecting...</Text>
         <View style={styles.costBadge}>
           <Text style={styles.diamondEmoji}>💎</Text>
@@ -434,12 +474,20 @@ export default function ConnectingScreen() {
               </View>
             ))
           ) : (
-            INTERESTS.map((item, index) => (
-              <View key={index} style={styles.chip}>
-                <Text style={styles.chipText}>{item.label}</Text>
-                <Ionicons name={item.icon} size={14} color="#9CA3AF" />
-              </View>
-            ))
+            isRandom === 'true' ? (
+              INTERESTS.map((item, index) => (
+                <View key={index} style={styles.chip}>
+                  <Text style={styles.chipText}>{item.label}</Text>
+                  <Ionicons name={item.icon} size={14} color="#9CA3AF" />
+                </View>
+              ))
+            ) : (
+              [1, 2, 3].map((_, index) => (
+                <View key={index} style={[styles.chip, { opacity: 0.5 }]}>
+                  <Text style={styles.chipText}>Loading...</Text>
+                </View>
+              ))
+            )
           )}
         </View>
       </View>

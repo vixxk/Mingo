@@ -51,6 +51,17 @@ export default function NotificationsPopup({ visible, onClose }) {
     }
   };
 
+  const handleMarkAllAsRead = async () => {
+    try {
+      await notificationAPI.markAllAsRead();
+      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+    } catch (e) {
+      console.log('Failed to mark all as read:', e);
+    }
+  };
+
+  const hasUnread = notifications.some(n => !n.isRead);
+
   if (!visible) return null;
 
   const renderItem = ({ item }) => (
@@ -94,9 +105,20 @@ export default function NotificationsPopup({ visible, onClose }) {
               <Ionicons name="notifications" size={SW * 0.06} color="#A855F7" />
               <Text style={styles.title}>Notifications</Text>
             </View>
-            <TouchableOpacity style={styles.closeBtn} activeOpacity={0.7} onPress={onClose}>
-              <Ionicons name="close" size={SW * 0.06} color="rgba(255,255,255,0.6)" />
-            </TouchableOpacity>
+            <View style={styles.headerRight}>
+              {hasUnread && (
+                <TouchableOpacity
+                  style={styles.markAllBtn}
+                  activeOpacity={0.7}
+                  onPress={handleMarkAllAsRead}
+                >
+                  <Text style={styles.markAllText}>Mark all read</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity style={styles.closeBtn} activeOpacity={0.7} onPress={onClose}>
+                <Ionicons name="close" size={SW * 0.06} color="rgba(255,255,255,0.6)" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {loading ? (
@@ -262,5 +284,23 @@ const styles = StyleSheet.create({
     borderRadius: SW * 0.01,
     backgroundColor: '#A855F7',
     marginLeft: SW * 0.02,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SW * 0.03,
+  },
+  markAllBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: 'rgba(168, 85, 247, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(168, 85, 247, 0.25)',
+  },
+  markAllText: {
+    fontSize: SW * 0.03,
+    color: '#A855F7',
+    fontFamily: 'Inter_600SemiBold',
   },
 });

@@ -33,7 +33,7 @@ class CallService {
       status: 'active'
     });
     if (existingUserSession) {
-      throw new AppError('You are already in an active call session', 400);
+      throw new AppError('You are already in an active session', 400);
     }
 
     let matchedListenerId = listenerId;

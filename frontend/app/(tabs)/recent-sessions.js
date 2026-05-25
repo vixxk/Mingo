@@ -22,8 +22,6 @@ import NotificationsPopup from '../../components/shared/NotificationsPopup';
 import StatusPopup from '../../components/shared/StatusPopup';
 import { useFocusEffect } from 'expo-router';
 
-
-
 const getAvatarImage = (gender, index) => {
   const parsedIndex = parseInt(index, 10) || 0;
   if (gender === 'Male') {
@@ -76,7 +74,7 @@ const formatCallTime = (dateStr) => {
   }
 };
 
-const CallItem = ({ item, onShowOfflinePopup }) => {
+const SessionItem = ({ item, onShowOfflinePopup }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const router = useRouter();
   const [calling, setCalling] = useState(false);
@@ -113,15 +111,12 @@ const CallItem = ({ item, onShowOfflinePopup }) => {
         callType: type,
         callId: `call_${Date.now()}`,
         roomId: `room_${Date.now()}`,
-        listenerId: item.listenerId || item.id, // item.id is fallback for favourites
+        listenerId: item.listenerId || item.id,
         avatarIndex: item.avatarIndex || '0',
         gender: item.gender || 'Female'
       }
     });
   };
-
-  const handleAudioCall = () => handleCall('audio');
-  const handleVideoCall = () => handleCall('video');
 
   const handleProfilePress = () => {
     if (calling) return;
@@ -173,9 +168,9 @@ const CallItem = ({ item, onShowOfflinePopup }) => {
           {item.diamonds !== undefined ? (
             <View style={styles.callTypeRightContainer}>
               <Ionicons 
-                name={item.callType === 'video' ? "videocam" : "call"} 
+                name={item.callType === 'video' ? "videocam" : item.callType === 'chat' ? "chatbubble-ellipses" : "call"} 
                 size={22} 
-                color={item.callType === 'video' ? "#60A5FA" : "#4ADE80"} 
+                color={item.callType === 'video' ? "#60A5FA" : item.callType === 'chat' ? "#EC4899" : "#4ADE80"} 
               />
             </View>
           ) : (
@@ -217,12 +212,12 @@ const EmptyState = ({ tab }) => {
         <>
           <View style={styles.emptyIconContainer}>
             <View style={[styles.emptyIconCircle, { backgroundColor: '#1F2937' }]}>
-              <Ionicons name="call-outline" size={s(40)} color="#9CA3AF" />
+              <Ionicons name="time-outline" size={s(40)} color="#9CA3AF" />
             </View>
           </View>
           <Text style={styles.emptyTitle}>No Past Sessions!</Text>
           <Text style={styles.emptySubtitle}>
-            Start call now and a good{'\n'}conversation with strangers.
+            Start a session now and have a good{'\n'}conversation with strangers.
           </Text>
           <TouchableOpacity
             style={styles.exploreBtn}
@@ -251,7 +246,7 @@ const SkeletonItem = ({ opacity }) => (
   </View>
 );
 
-export default function RecentCallsScreen() {
+export default function RecentSessionsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('recent'); 
@@ -262,14 +257,13 @@ export default function RecentCallsScreen() {
   const [statusPopupMessage, setStatusPopupMessage] = useState('');
   const [statusPopupType, setStatusPopupType] = useState('info');
 
-  
   const headerAnim = useRef(new Animated.Value(0)).current;
   const contentAnim = useRef(new Animated.Value(0)).current;
   const contentSlide = useRef(new Animated.Value(15)).current;
   const shimmerAnim = useRef(new Animated.Value(0.3)).current;
   const spinAnim = useRef(new Animated.Value(0)).current;
 
-  const [recentCalls, setRecentCalls] = useState([]);
+  const [recentSessions, setRecentSessions] = useState([]);
   const [favourites, setFavourites] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [coinBalance, setCoinBalance] = useState(0);
@@ -310,7 +304,7 @@ export default function RecentCallsScreen() {
       ];
 
       if (callsRes?.data) {
-        setRecentCalls(callsRes.data.map((call, index) => {
+        setRecentSessions(callsRes.data.map((call, index) => {
           const coins = call.coinsDeducted || 0;
           const diamonds = Math.floor(coins / 10);
           return {
@@ -343,7 +337,7 @@ export default function RecentCallsScreen() {
         setCoinBalance(balRes.data.coins || 0);
       }
     } catch (e) {
-      console.error('Failed to load recent calls:', e);
+      console.error('Failed to load recent sessions:', e);
     } finally {
       setIsLoading(false);
     }
@@ -382,7 +376,7 @@ export default function RecentCallsScreen() {
     await AsyncStorage.setItem('hasSeenFavouritePopup', 'true');
   };
 
-  const data = activeTab === 'recent' ? recentCalls : favourites;
+  const data = activeTab === 'recent' ? recentSessions : favourites;
   const spin = spinAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
@@ -392,9 +386,8 @@ export default function RecentCallsScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar style="light" />
 
-      {}
       <Animated.View style={[styles.header, { opacity: headerAnim }]}>
-        <Text style={styles.headerTitle}>Recent Calls</Text>
+        <Text style={styles.headerTitle}>Recent Sessions</Text>
         <TouchableOpacity 
           onPress={handleRefresh}
           activeOpacity={0.7}
@@ -406,7 +399,6 @@ export default function RecentCallsScreen() {
         </TouchableOpacity>
       </Animated.View>
 
-      {}
       <Animated.View style={[styles.tabSwitcher, { opacity: headerAnim }]}>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'recent' && styles.tabActive]}
@@ -417,9 +409,9 @@ export default function RecentCallsScreen() {
             Recent
           </Text>
           <Ionicons
-            name="call"
+            name="time-outline"
             size={16}
-            color={activeTab === 'recent' ? '#fff' : '#6B7280'}
+            color={activeTab === 'recent' ? '#focus' : '#6B7280'}
           />
         </TouchableOpacity>
         <TouchableOpacity
@@ -438,7 +430,6 @@ export default function RecentCallsScreen() {
         </TouchableOpacity>
       </Animated.View>
 
-      {}
       <Animated.View style={{ flex: 1, opacity: contentAnim, transform: [{ translateY: contentSlide }] }}>
       {isLoading ? (
         <ScrollView
@@ -459,7 +450,7 @@ export default function RecentCallsScreen() {
           showsVerticalScrollIndicator={false}
         >
           {data.map((item) => (
-            <CallItem 
+            <SessionItem 
               key={item.id} 
               item={item} 
               onShowOfflinePopup={(name) => {
@@ -474,7 +465,6 @@ export default function RecentCallsScreen() {
       )}
       </Animated.View>
 
-      {}
       <FavouriteListenerPopup visible={showFavPopup} onGotIt={handleFavGotIt} />
       <NotificationsPopup visible={showNotifications} onClose={() => setShowNotifications(false)} />
       <StatusPopup
@@ -493,8 +483,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-
-  
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -518,8 +506,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1F2937',
   },
-
-  
   tabSwitcher: {
     flexDirection: 'row',
     marginHorizontal: s(16),
@@ -551,8 +537,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontFamily: 'Inter_700Bold',
   },
-
-  
   scrollView: {
     flex: 1,
   },
@@ -562,8 +546,6 @@ const styles = StyleSheet.create({
     paddingBottom: vs(40),
     gap: vs(10),
   },
-
-  
   callItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -638,8 +620,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: s(8),
   },
-
-  
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -691,8 +671,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     fontWeight: '600',
   },
-
-  
   skeletonItem: {
     flexDirection: 'row',
     alignItems: 'center',

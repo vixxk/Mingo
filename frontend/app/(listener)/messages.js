@@ -188,16 +188,6 @@ export default function MessagesScreen() {
                   <Text style={[styles.statusBadgeText, { color: '#22C55E' }]}>Active</Text>
                 </View>
               )}
-              {item.sessionStatus === 'completed' && (
-                <View style={[styles.statusBadge, { backgroundColor: 'rgba(156, 163, 175, 0.15)' }]}>
-                  <Text style={[styles.statusBadgeText, { color: '#9CA3AF' }]}>Ended • {item.duration || 0}m</Text>
-                </View>
-              )}
-              {item.listenerEarnings !== undefined && (
-                <View style={[styles.statusBadge, { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderColor: 'rgba(16, 185, 129, 0.3)', borderWidth: 0.5 }]}>
-                  <Text style={[styles.statusBadgeText, { color: '#10B981' }]}>+ ₹{(item.listenerEarnings || 0).toFixed(2)}</Text>
-                </View>
-              )}
             </View>
             <Text style={[styles.timeText, item.unread > 0 && styles.timeTextUnread]}>{timeStr}</Text>
           </View>

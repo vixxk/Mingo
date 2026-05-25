@@ -209,20 +209,6 @@ export default function MessagesScreen() {
                   <Text style={[styles.statusBadgeText, { color: '#22C55E' }]}>Active</Text>
                 </View>
               )}
-              {item.sessionStatus === 'completed' && (
-                <View style={[styles.statusBadge, { backgroundColor: 'rgba(156, 163, 175, 0.15)', flexDirection: 'row', alignItems: 'center', gap: wp(1) }]}>
-                  <Text style={[styles.statusBadgeText, { color: '#9CA3AF' }]}>Ended • {item.duration || 0}m</Text>
-                  {item.coinsDeducted !== undefined && (
-                    <>
-                      <View style={styles.bulletDot} />
-                      <View style={styles.miniCostBadge}>
-                        <Text style={styles.miniCostText}>{Math.floor((item.coinsDeducted || 0) / 10)}</Text>
-                        <Text style={{ fontSize: wp(2.5) }}>💎</Text>
-                      </View>
-                    </>
-                  )}
-                </View>
-              )}
             </View>
             <View style={{ alignItems: 'flex-end' }}>
               <Text style={[styles.timeText, item.unread > 0 && styles.timeTextUnread]}>{timeStr}</Text>

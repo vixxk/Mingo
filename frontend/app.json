@@ -15,7 +15,8 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.vixxk.mingo"
+      "bundleIdentifier": "com.vixxk.mingo",
+      "googleServicesFile": "./GoogleService-Info.plist"
     },
     "plugins": [
       "expo-router",
@@ -54,6 +55,7 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.vixxk.mingo",
+      "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",

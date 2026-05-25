@@ -141,7 +141,7 @@ sessionSchema.statics.findActiveByUserId = function (userId) {
 };
 
 sessionSchema.statics.findByUserId = function (userId, limit = 20, offset = 0) {
-  return this.find({ userId, callType: { $ne: 'chat' } })
+  return this.find({ userId })
     .populate('listenerId', 'name username avatarIndex gender')
     .sort({ startTime: -1 })
     .skip(offset)
@@ -149,7 +149,7 @@ sessionSchema.statics.findByUserId = function (userId, limit = 20, offset = 0) {
 };
 
 sessionSchema.statics.findByListenerId = function (listenerId, limit = 20, offset = 0) {
-  return this.find({ listenerId, callType: { $ne: 'chat' } })
+  return this.find({ listenerId })
     .populate('userId', 'name username avatarIndex gender')
     .sort({ startTime: -1 })
     .skip(offset)

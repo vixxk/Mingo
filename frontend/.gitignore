@@ -40,3 +40,9 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Google services configurations
+google-services.json
+GoogleService-Info.plist
+mingo-53ddf-firebase-adminsdk-*.json
+
