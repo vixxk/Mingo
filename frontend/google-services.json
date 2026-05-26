@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "310635330366",
-    "project_id": "mingo-53ddf",
-    "storage_bucket": "mingo-53ddf.firebasestorage.app"
+    "project_number": "554534642750",
+    "project_id": "mingo-c314c",
+    "storage_bucket": "mingo-c314c.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:310635330366:android:ffe9273f417ea55b254a6f",
+        "mobilesdk_app_id": "1:554534642750:android:df729d3cedf430ffc09d6f",
         "android_client_info": {
           "package_name": "com.vixxk.mingo"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAHf8Xe4E4YyFiMCjdvrXlFF_QU1jhBoiw"
+          "current_key": "AIzaSyAc4cfAFMPynBeiNznBfS3qTZM2rMXQDok"
         }
       ],
       "services": {
