@@ -15,6 +15,7 @@ import { chatAPI, walletAPI, giftsAPI, listenersAPI, listenerAPI } from '../../u
 import { socketService } from '../../utils/socket';
 import GiftPopup from '../../components/shared/GiftPopup';
 import GiftAnimationOverlay from '../../components/call/GiftAnimationOverlay';
+import EndChatPopup from '../../components/shared/EndChatPopup';
 
 const getAvatarImage = (gender, index) => {
   const parsedIndex = parseInt(index, 10) || 0;
@@ -298,7 +299,13 @@ export default function ChatScreen() {
 
   const handleEndSession = () => {
     if (realConversationIdRef.current) {
+      setIsEndingSession(true);
       socketService.emit('end_chat_session', { conversationId: realConversationIdRef.current });
+      
+      // Safety timeout to reset loading state in case of connection issues
+      setTimeout(() => {
+        setIsEndingSession(false);
+      }, 10000);
     }
   };
 
@@ -335,6 +342,8 @@ export default function ChatScreen() {
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [receivedGift, setReceivedGift] = useState(null);
   const [showCostPopup, setShowCostPopup] = useState(false);
+  const [showEndChatPopup, setShowEndChatPopup] = useState(false);
+  const [isEndingSession, setIsEndingSession] = useState(false);
 
   const handleBack = useCallback(() => {
     if (router.canGoBack()) {
@@ -690,6 +699,8 @@ export default function ChatScreen() {
       if (userRole === 'LISTENER') {
         setChatBlocked(true);
       }
+      setShowEndChatPopup(false);
+      setIsEndingSession(false);
     };
 
     const handleGiftReceived = (data) => {
@@ -970,7 +981,7 @@ export default function ChatScreen() {
             <TouchableOpacity
               style={styles.endSessionBtn}
               activeOpacity={0.7}
-              onPress={handleEndSession}
+              onPress={() => setShowEndChatPopup(true)}
             >
               <Text style={styles.endSessionText}>End</Text>
             </TouchableOpacity>
@@ -1202,6 +1213,14 @@ export default function ChatScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* End Chat Confirmation Popup */}
+      <EndChatPopup
+        visible={showEndChatPopup}
+        onConfirm={handleEndSession}
+        onCancel={() => setShowEndChatPopup(false)}
+        loading={isEndingSession}
+      />
     </KeyboardAvoidingView>
   );
 }
