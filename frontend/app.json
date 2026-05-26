@@ -67,8 +67,26 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "7b1c82be-73cc-4927-abce-4b034867a82a"
+        "build": {
+          "experimental": {
+            "ios": {
+              "appExtensions": [
+                {
+                  "targetName": "OneSignalNotificationServiceExtension",
+                  "bundleIdentifier": "com.vixxk.mingo.OneSignalNotificationServiceExtension",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.vixxk.mingo.onesignal"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "projectId": "f29dec6d-a4b3-46f3-bb1a-61b9008d869e"
       }
-    }
+    },
+    "owner": "sampletestingwork"
   }
 }
