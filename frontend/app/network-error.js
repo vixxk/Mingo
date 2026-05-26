@@ -22,16 +22,30 @@ export default function NetworkErrorScreen() {
     if (retrying) return;
     setRetrying(true);
     try {
-      // Test server connection
-      await authAPI.me();
-      // If successful, go back or navigate to tabs
+      // Test server connection using unauthenticated health check
+      await authAPI.healthCheck();
+      
+      const loggedIn = await authAPI.isLoggedIn();
+      // If successful, go back or navigate to tabs/welcome depending on login state
       if (router.canGoBack()) {
         router.back();
       } else {
-        router.replace('/(tabs)');
+        router.replace(loggedIn ? '/(tabs)' : '/welcome');
       }
     } catch (error) {
       console.log('Retry failed:', error);
+      
+      // Even if healthCheck failed, if it returned a response with a status code (e.g. 401, 500), the server is online/reachable!
+      if (error.status) {
+        const loggedIn = await authAPI.isLoggedIn();
+        if (router.canGoBack()) {
+          router.back();
+        } else {
+          router.replace(loggedIn ? '/(tabs)' : '/welcome');
+        }
+        return;
+      }
+      
       Alert.alert(
         'Connection Failed',
         'We still cannot reach the server. Please verify your connection and try again.',

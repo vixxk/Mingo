@@ -39,7 +39,7 @@ const apiRequest = async (endpoint, options = {}) => {
     return data;
   } catch (error) {
     // If it's a network/fetch connection failure (no structured error response status)
-    if (!error.status && endpoint !== '/auth/me') {
+    if (!error.status && endpoint !== '/auth/me' && endpoint !== '/health') {
       console.log('Redirecting to network error page due to connection failure:', error);
       router.push('/network-error');
     }
@@ -94,6 +94,10 @@ export const authAPI = {
 
     me: async () => {
     return apiRequest('/auth/me');
+  },
+
+    healthCheck: async () => {
+    return apiRequest('/health');
   },
 
     logout: async () => {

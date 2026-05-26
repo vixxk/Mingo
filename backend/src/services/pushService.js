@@ -22,42 +22,66 @@ class PushService {
     const appId = process.env.ONESIGNAL_APP_ID;
     const apiKey = process.env.ONESIGNAL_REST_API_KEY;
 
-    if (!appId || !apiKey || appId.startsWith('placeholder') || apiKey.startsWith('placeholder')) {
-      console.log('[PushService] OneSignal is not configured yet. Skipping push delivery.');
-      return;
-    }
-
     const cleanUserIds = [...new Set(userIds.filter(Boolean).map(id => String(id)))];
     if (cleanUserIds.length === 0) return;
 
-    try {
-      console.log(`[PushService] Dispatching OneSignal push to ${cleanUserIds.length} users:`, cleanUserIds);
-      
-      const payload = {
-        app_id: appId,
-        headings: { en: message.title },
-        contents: { en: message.body },
-        data: message.data || {},
-        include_external_user_ids: cleanUserIds,
-        target_channel: 'push',
-      };
+    let oneSignalSuccess = false;
+    let pushResult = null;
 
-      const response = await axios.post(
-        'https://onesignal.com/api/v1/notifications',
-        payload,
-        {
-          headers: {
-            'Content-Type': 'application/json; charset=utf-8',
-            'Authorization': `Basic ${apiKey}`,
-          },
-        }
-      );
+    if (!appId || !apiKey || appId.startsWith('placeholder') || apiKey.startsWith('placeholder')) {
+      console.log('[PushService] OneSignal is not configured yet. Skipping OneSignal push delivery.');
+    } else {
+      try {
+        console.log(`[PushService] Dispatching OneSignal push to ${cleanUserIds.length} users:`, cleanUserIds);
+        
+        const payload = {
+          app_id: appId,
+          headings: { en: message.title },
+          contents: { en: message.body },
+          data: message.data || {},
+          include_external_user_ids: cleanUserIds,
+          target_channel: 'push',
+        };
 
-      console.log('[PushService] OneSignal dispatch success:', response.data);
-      return response.data;
-    } catch (err) {
-      console.error('[PushService] OneSignal dispatch failed:', err.response?.data || err.message);
+        const response = await axios.post(
+          'https://onesignal.com/api/v1/notifications',
+          payload,
+          {
+            headers: {
+              'Content-Type': 'application/json; charset=utf-8',
+              'Authorization': `Basic ${apiKey}`,
+            },
+          }
+        );
+
+        console.log('[PushService] OneSignal dispatch success:', response.data);
+        oneSignalSuccess = true;
+        pushResult = response.data;
+      } catch (err) {
+        console.error('[PushService] OneSignal dispatch failed:', err.response?.data || err.message);
+      }
     }
+
+    // Fallback: Also dispatch using Firebase Admin SDK (FCM) / Expo Push Notifications using the user's stored pushToken.
+    // This handles cases where OneSignal has client-side errors, initialization issues, or is running in Expo Go.
+    try {
+      const User = require('../models/userModel');
+      const usersWithTokens = await User.find({
+        _id: { $in: cleanUserIds },
+        pushToken: { $ne: null }
+      }).select('pushToken');
+      
+      const pushTokens = usersWithTokens.map(u => u.pushToken).filter(Boolean);
+      if (pushTokens.length > 0) {
+        console.log(`[PushService] Found ${pushTokens.length} push tokens for FCM/Expo. Dispatching fallback notifications...`);
+        const { sendNotificationToMultiple } = require('../../utils/notifications');
+        await sendNotificationToMultiple(pushTokens, message.title, message.body, message.data || {});
+      }
+    } catch (fallbackErr) {
+      console.error('[PushService] Fallback FCM/Expo push notification failed:', fallbackErr.message);
+    }
+
+    return pushResult;
   }
 
   /**

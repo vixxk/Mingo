@@ -67,6 +67,19 @@ export default function ListenerLayout() {
         if (userData) {
           const user = JSON.parse(userData);
           initializeOneSignal(user._id || user.id, user.role || 'LISTENER');
+          
+          // Also fetch and update the Expo/FCM push token on the backend
+          const { registerForPushNotificationsAsync } = require('../../utils/notifications');
+          registerForPushNotificationsAsync().then(token => {
+            if (token) {
+              console.log('[ListenerLayout] Fetched push token, registering with backend:', token);
+              userAPI.updatePushToken(token).catch(err => 
+                console.log('[ListenerLayout] Error registering push token with backend:', err.message)
+              );
+            }
+          }).catch(tokenErr => {
+            console.log('[ListenerLayout] Error getting push token:', tokenErr.message);
+          });
         }
       } catch (oneErr) {
         console.log('Error initializing OneSignal in ListenerLayout:', oneErr);
