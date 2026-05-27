@@ -103,7 +103,7 @@ let Notifications = {
   setNotificationChannelAsync: async () => {},
   getPermissionsAsync: async () => ({ status: 'granted', granted: true }),
   requestPermissionsAsync: async () => ({ status: 'granted', granted: true }),
-  getExpoPushTokenAsync: async () => ({ data: 'expo-go-mock-token' }),
+  getExpoPushTokenAsync: async () => ({ data: null }),
   addNotificationReceivedListener: () => ({ remove: () => {} }),
   addNotificationResponseReceivedListener: () => ({ remove: () => {} }),
 };
@@ -162,7 +162,13 @@ export async function registerForPushNotificationsAsync() {
         Constants?.expoConfig?.extra?.eas?.projectId ?? '7b1c82be-73cc-4927-abce-4b034867a82a';
         
       token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-      console.log('Real Push Token:', token);
+      console.log('Push Token received:', token);
+
+      // Validate the token — reject mock/invalid tokens
+      if (!token || token === 'expo-go-mock-token' || (!token.startsWith('ExponentPushToken') && token.length < 20)) {
+        console.warn('[Notifications] Received invalid or mock push token, discarding:', token);
+        token = null;
+      }
     } catch (e) {
       console.error('Error fetching real push token:', e);
     }

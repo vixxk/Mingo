@@ -56,8 +56,20 @@ class PushService {
           }
         );
 
-        console.log('[PushService] OneSignal dispatch success:', response.data);
-        oneSignalSuccess = true;
+        console.log('[PushService] OneSignal dispatch response:', JSON.stringify(response.data));
+        
+        // Check if OneSignal actually delivered to any device
+        if (response.data?.errors) {
+          const errors = response.data.errors;
+          if (errors.invalid_aliases) {
+            console.warn('[PushService] OneSignal: Some users are NOT registered with OneSignal (invalid_aliases):', JSON.stringify(errors.invalid_aliases));
+          }
+          if (Array.isArray(errors) && errors.includes('All included players are not subscribed')) {
+            console.warn('[PushService] OneSignal: All targeted players are not subscribed. Relying on FCM/Expo fallback.');
+          }
+        }
+        
+        oneSignalSuccess = !response.data?.errors;
         pushResult = response.data;
       } catch (err) {
         console.error('[PushService] OneSignal dispatch failed:', err.response?.data || err.message);

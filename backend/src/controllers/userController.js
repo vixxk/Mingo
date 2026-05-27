@@ -61,6 +61,13 @@ class UserController {
       const { pushToken } = req.body;
       if (!pushToken) throw new AppError('Push token is required', 400);
 
+      // Reject mock/invalid tokens
+      const invalidTokens = ['expo-go-mock-token', 'mock-token', 'test-token', 'null', 'undefined'];
+      if (invalidTokens.includes(pushToken) || pushToken.length < 10) {
+        console.log(`[PushToken] Rejected invalid/mock token for user ${req.user.id}: ${pushToken}`);
+        return ApiResponse.success(res, { pushToken: null }, 'Invalid push token rejected');
+      }
+
       const user = await User.findByIdAndUpdate(
         req.user.id,
         { pushToken },
@@ -68,6 +75,7 @@ class UserController {
       );
       if (!user) throw new AppError('User not found', 404);
 
+      console.log(`[PushToken] Updated token for user ${req.user.id} (${user.name}): ${pushToken.substring(0, 30)}...`);
       return ApiResponse.success(res, { pushToken: user.pushToken }, 'Push token updated');
     } catch (err) {
       next(err);
