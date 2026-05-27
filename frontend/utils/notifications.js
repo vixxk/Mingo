@@ -4,9 +4,12 @@ import Constants from 'expo-constants';
 
 const ONESIGNAL_APP_ID = process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID;
 
+import { router } from 'expo-router';
+
 // --- 1. OneSignal Configuration & Setup ---
 let OneSignal = null;
 let LogLevel = null;
+let isClickListenerRegistered = false;
 
 try {
   // Use require instead of ES6 import to prevent Expo Go from crashing on startup due to missing native binary
@@ -63,6 +66,29 @@ export async function initializeOneSignal(userId, role) {
       OneSignal.User.addTag('role', sanitizedRole);
     }
 
+    // Register notification click listener if not already registered
+    if (!isClickListenerRegistered) {
+      OneSignal.Notifications.addEventListener('click', (event) => {
+        try {
+          const data = event.notification?.additionalData;
+          console.log('[OneSignal] Notification clicked, data:', JSON.stringify(data));
+          
+          if (data?.conversationId) {
+            router.push({
+              pathname: '/chat',
+              params: { id: data.conversationId },
+            });
+          } else if (data?.url) {
+            router.push(data.url);
+          }
+        } catch (clickErr) {
+          console.error('[OneSignal] Error handling notification click:', clickErr);
+        }
+      });
+      isClickListenerRegistered = true;
+      console.log('[OneSignal] Registered notification click listener.');
+    }
+
     console.log('[OneSignal] Setup finished successfully!');
   } catch (err) {
     console.error('[OneSignal] Failed to initialize push services:', err.message);
@@ -85,13 +111,9 @@ let Notifications = {
 const isExpoGo = Constants.appOwnership === 'expo';
 
 try {
-  if (!isExpoGo) {
-    const RealNotifications = require('expo-notifications');
-    if (RealNotifications) {
-      Notifications = RealNotifications;
-    }
-  } else {
-    console.log('[Notifications] Running in Expo Go, bypassing expo-notifications native import to avoid SDK 53 crash.');
+  const RealNotifications = require('expo-notifications');
+  if (RealNotifications) {
+    Notifications = RealNotifications;
   }
 } catch (e) {
   console.warn('Failed to load real expo-notifications, using mock:', e.message);

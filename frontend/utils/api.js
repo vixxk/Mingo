@@ -8,6 +8,8 @@ const getBaseUrl = () => {
 
 const API_BASE_URL = getBaseUrl();
 
+let isNetworkErrorScreenOpen = false;
+
 const apiRequest = async (endpoint, options = {}) => {
   const token = await AsyncStorage.getItem('token');
   
@@ -36,12 +38,19 @@ const apiRequest = async (endpoint, options = {}) => {
       };
     }
 
+    isNetworkErrorScreenOpen = false;
     return data;
   } catch (error) {
+    if (error.status) {
+      isNetworkErrorScreenOpen = false;
+    }
     // If it's a network/fetch connection failure (no structured error response status)
     if (!error.status && endpoint !== '/auth/me' && endpoint !== '/health') {
       console.log('Redirecting to network error page due to connection failure:', error);
-      router.push('/network-error');
+      if (!isNetworkErrorScreenOpen) {
+        isNetworkErrorScreenOpen = true;
+        router.push('/network-error');
+      }
     }
     throw error;
   }
