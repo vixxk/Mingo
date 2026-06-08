@@ -28,16 +28,42 @@ export default function NetworkErrorScreen() {
     };
   }, []);
 
+  const hasRestoredRef = React.useRef(false);
+
   const handleSuccess = async (intervalId) => {
+    // Prevent double-invocation from retry button and auto-poll racing
+    if (hasRestoredRef.current) return;
+    hasRestoredRef.current = true;
+
     if (intervalId) clearInterval(intervalId);
     setStatus('restored');
     
     const loggedIn = await authAPI.isLoggedIn();
+    let role = 'USER';
+    if (loggedIn) {
+      try {
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        const userStr = await AsyncStorage.getItem('user');
+        if (userStr) {
+          const user = JSON.parse(userStr);
+          role = user.role || 'USER';
+        }
+      } catch (e) {
+        console.log('Error reading role in network error success handler:', e);
+      }
+    }
+
+    // Always do a clean redirect — never router.back(), because the previous
+    // screen will re-trigger the same failing API call and bounce us right back here.
     setTimeout(() => {
-      if (router.canGoBack()) {
-        router.back();
+      if (!loggedIn) {
+        router.replace('/welcome');
+      } else if (role === 'ADMIN') {
+        router.replace('/(admin)');
+      } else if (role === 'LISTENER') {
+        router.replace('/(listener)');
       } else {
-        router.replace(loggedIn ? '/(tabs)' : '/welcome');
+        router.replace('/(tabs)');
       }
     }, 1200);
   };
@@ -49,7 +75,7 @@ export default function NetworkErrorScreen() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       controller.abort();
-    }, 5000); // 5 seconds timeout
+    }, 10000); // 10 seconds timeout — generous for mobile networks
     
     try {
       // Test server connection using unauthenticated health check
@@ -88,7 +114,7 @@ export default function NetworkErrorScreen() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
         controller.abort();
-      }, 3000); // 3 seconds timeout
+      }, 5000); // 5 seconds timeout
 
       try {
         await authAPI.healthCheck({ signal: controller.signal });
@@ -102,7 +128,7 @@ export default function NetworkErrorScreen() {
       } finally {
         isChecking = false;
       }
-    }, 3000);
+    }, 5000);
 
     return () => {
       clearInterval(intervalId);

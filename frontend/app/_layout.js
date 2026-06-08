@@ -34,7 +34,21 @@ export default function RootLayout() {
         const data = response.notification.request.content.data;
         console.log('[RootLayout] Notification tapped, data:', JSON.stringify(data));
         
-        if (data?.conversationId) {
+        if (data?.type === 'incoming_call') {
+          const { socketService } = require('../utils/socket');
+          const actionId = response.actionIdentifier;
+          if (actionId === 'accept') {
+            console.log('[Expo] User clicked Accept button on call notification');
+            socketService.triggerLocalEvent('accept_incoming_call', data);
+          } else if (actionId === 'decline') {
+            console.log('[Expo] User clicked Decline button on call notification');
+            socketService.triggerLocalEvent('reject_incoming_call', data);
+          } else {
+            console.log('[Expo] User clicked call notification body');
+            socketService.triggerLocalEvent('incoming_call', data);
+          }
+          router.push('/(listener)');
+        } else if (data?.conversationId) {
           // Chat message notification — navigate to the chat screen
           router.push({
             pathname: '/chat',

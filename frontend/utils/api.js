@@ -26,46 +26,77 @@ const apiRequest = async (endpoint, options = {}) => {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => {
+  // Use externally-provided signal if available, otherwise create an internal timeout
+  const hasExternalSignal = !!options.signal;
+  const controller = hasExternalSignal ? null : new AbortController();
+  const timeoutId = hasExternalSignal ? null : setTimeout(() => {
     controller.abort();
-  }, options.timeout || 8000); // 8 seconds default timeout
+  }, options.timeout || 15000); // 15 seconds default timeout (generous for mobile networks)
 
   try {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       ...options,
       headers,
-      signal: controller.signal,
+      signal: options.signal || controller.signal,
     });
 
-    clearTimeout(timeoutId);
+    if (timeoutId) clearTimeout(timeoutId);
 
     const data = await response.json();
 
     if (!response.ok) {
-      throw {
-        status: response.status,
-        message: data.message || 'Something went wrong',
-        errors: data.errors || null,
-      };
+      const error = new Error(data.message || 'API request failed');
+      error.status = response.status;
+      error.data = data;
+      throw error;
     }
 
+    // Server responded successfully — clear any stale network error state
     isNetworkErrorScreenOpen = false;
+
     return data;
   } catch (error) {
-    clearTimeout(timeoutId);
+    if (timeoutId) clearTimeout(timeoutId);
+
+    // If we got a structured HTTP error (4xx/5xx), the server is reachable — not a network issue
     if (error.status) {
       isNetworkErrorScreenOpen = false;
+      throw error;
     }
-    const isTimeoutOrNetwork = !error.status || error.name === 'AbortError' || error.message?.includes('aborted');
-    // If it's a network/fetch connection failure (no structured error response status)
-    if (isTimeoutOrNetwork && endpoint !== '/auth/me' && endpoint !== '/health') {
-      console.log('Redirecting to network error page due to connection failure:', error);
-      if (!isNetworkErrorScreenOpen) {
+
+    // Skip network-error redirect for health checks, auth checks, and background/cleanup endpoints
+    const skipRedirectEndpoints = [
+      '/auth/me',
+      '/health',
+      '/call/end',
+      '/listeners/go-offline',
+      '/listeners/heartbeat',
+      '/listeners/go-online',
+      '/user/push-token',
+      '/wallet/balance',
+      '/listener/my-profile',
+      '/notifications',
+      '/chat/conversations',
+    ];
+    const shouldSkip = skipRedirectEndpoints.some(ep => endpoint.startsWith(ep));
+
+    if (!shouldSkip && !isNetworkErrorScreenOpen) {
+      // Verify the network is truly down by pinging the health endpoint
+      try {
+        const healthController = new AbortController();
+        const healthTimeout = setTimeout(() => healthController.abort(), 6000);
+        await fetch(`${API_BASE_URL}/health`, { signal: healthController.signal });
+        clearTimeout(healthTimeout);
+        // Health check passed — server is reachable, so this was a transient failure
+        console.log('[apiRequest] Transient error on', endpoint, '— health check passed. Not redirecting.');
+      } catch (healthErr) {
+        // Health check also failed — network is truly down
+        console.log('[apiRequest] Network confirmed down (health check failed). Redirecting to /network-error for endpoint:', endpoint);
         isNetworkErrorScreenOpen = true;
         router.push('/network-error');
       }
     }
+
     throw error;
   }
 };
@@ -124,9 +155,28 @@ export const authAPI = {
   },
 
     logout: async () => {
-    await AsyncStorage.removeItem('token');
-    await AsyncStorage.removeItem('user');
-  },
+      try {
+        // 1. Tell backend to clear the push token for this user
+        if (typeof userAPI !== 'undefined' && userAPI.updatePushToken) {
+          await userAPI.updatePushToken('null').catch(err => {
+            console.log('[AuthAPI] Error clearing push token on backend during logout:', err);
+          });
+        }
+      } catch (e) {
+        console.log('[AuthAPI] Failed to run backend push token clearance:', e);
+      }
+
+      try {
+        // 2. Clear client-side OneSignal registration
+        const { logoutOneSignal } = require('./notifications');
+        await logoutOneSignal();
+      } catch (e) {
+        console.log('[AuthAPI] Failed to log out of OneSignal:', e);
+      }
+
+      await AsyncStorage.removeItem('token');
+      await AsyncStorage.removeItem('user');
+    },
 
     isLoggedIn: async () => {
     const token = await AsyncStorage.getItem('token');

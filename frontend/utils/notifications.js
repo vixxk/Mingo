@@ -110,6 +110,19 @@ export async function initializeOneSignal(userId, role) {
   }
 }
 
+export async function logoutOneSignal() {
+  if (!OneSignal) {
+    console.log('[OneSignal] SDK native library is not loaded. Bypassing OneSignal logout.');
+    return;
+  }
+  try {
+    console.log('[OneSignal] Logging out user and clearing external ID.');
+    OneSignal.logout();
+  } catch (err) {
+    console.error('[OneSignal] Failed to log out of push services:', err.message);
+  }
+}
+
 
 // --- 2. Expo Notifications Mocks and Fallbacks (For Backwards-Compatibility) ---
 let Notifications = {

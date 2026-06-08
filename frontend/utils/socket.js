@@ -7,6 +7,9 @@ class SocketService {
   constructor() {
     this.socket = null;
     this._listeners = new Map(); // event -> Set of callbacks
+    this.pendingIncomingCall = null;
+    this.pendingAcceptCall = null;
+    this.pendingRejectCall = null;
   }
 
   async connect() {
@@ -120,7 +123,7 @@ class SocketService {
   triggerLocalEvent(event, ...args) {
     console.log(`[SocketService] Triggering local event: ${event}`, args);
     const callbacks = this._listeners.get(event);
-    if (callbacks) {
+    if (callbacks && callbacks.size > 0) {
       callbacks.forEach(cb => {
         try {
           cb(...args);
@@ -128,6 +131,17 @@ class SocketService {
           console.error(`Error in local socket event callback for ${event}:`, err);
         }
       });
+    } else {
+      if (event === 'incoming_call') {
+        console.log('[SocketService] No active listener. Storing pendingIncomingCall:', args[0]);
+        this.pendingIncomingCall = args[0];
+      } else if (event === 'accept_incoming_call') {
+        console.log('[SocketService] No active listener. Storing pendingAcceptCall:', args[0]);
+        this.pendingAcceptCall = args[0];
+      } else if (event === 'reject_incoming_call') {
+        console.log('[SocketService] No active listener. Storing pendingRejectCall:', args[0]);
+        this.pendingRejectCall = args[0];
+      }
     }
   }
 }

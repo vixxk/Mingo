@@ -88,21 +88,25 @@ class PushService {
 
     // Fallback: Also dispatch using Firebase Admin SDK (FCM) / Expo Push Notifications using the user's stored pushToken.
     // This handles cases where OneSignal has client-side errors, initialization issues, or is running in Expo Go.
-    try {
-      const User = require('../models/userModel');
-      const usersWithTokens = await User.find({
-        _id: { $in: cleanUserIds },
-        pushToken: { $ne: null }
-      }).select('pushToken');
-      
-      const pushTokens = usersWithTokens.map(u => u.pushToken).filter(Boolean);
-      if (pushTokens.length > 0) {
-        console.log(`[PushService] Found ${pushTokens.length} push tokens for FCM/Expo. Dispatching fallback notifications...`);
-        const { sendNotificationToMultiple } = require('../../utils/notifications');
-        await sendNotificationToMultiple(pushTokens, message.title, message.body, message.data || {});
+    if (!oneSignalSuccess) {
+      try {
+        const User = require('../models/userModel');
+        const usersWithTokens = await User.find({
+          _id: { $in: cleanUserIds },
+          pushToken: { $ne: null }
+        }).select('pushToken');
+        
+        const pushTokens = usersWithTokens.map(u => u.pushToken).filter(Boolean);
+        if (pushTokens.length > 0) {
+          console.log(`[PushService] Found ${pushTokens.length} push tokens for FCM/Expo. Dispatching fallback notifications...`);
+          const { sendNotificationToMultiple } = require('../../utils/notifications');
+          await sendNotificationToMultiple(pushTokens, message.title, message.body, message.data || {});
+        }
+      } catch (fallbackErr) {
+        console.error('[PushService] Fallback FCM/Expo push notification failed:', fallbackErr.message);
       }
-    } catch (fallbackErr) {
-      console.error('[PushService] Fallback FCM/Expo push notification failed:', fallbackErr.message);
+    } else {
+      console.log('[PushService] OneSignal successfully dispatched notification. Skipping FCM/Expo fallback to prevent duplicates.');
     }
 
     return pushResult;
@@ -162,24 +166,28 @@ class PushService {
     }
 
     // Fallback: Also dispatch using Firebase Admin SDK (FCM) / Expo Push Notifications using target users' stored pushTokens.
-    try {
-      const User = require('../models/userModel');
-      let fallbackFilter = { pushToken: { $ne: null } };
-      if (targetType === 'users') {
-        fallbackFilter.role = 'USER';
-      } else if (targetType === 'listeners') {
-        fallbackFilter.role = 'LISTENER';
-      }
+    if (!campaignResult) {
+      try {
+        const User = require('../models/userModel');
+        let fallbackFilter = { pushToken: { $ne: null } };
+        if (targetType === 'users') {
+          fallbackFilter.role = 'USER';
+        } else if (targetType === 'listeners') {
+          fallbackFilter.role = 'LISTENER';
+        }
 
-      const usersWithTokens = await User.find(fallbackFilter).select('pushToken');
-      const pushTokens = usersWithTokens.map(u => u.pushToken).filter(Boolean);
-      if (pushTokens.length > 0) {
-        console.log(`[PushService] Found ${pushTokens.length} push tokens for FCM/Expo fallback (segment: ${targetType}). Dispatching...`);
-        const { sendNotificationToMultiple } = require('../../utils/notifications');
-        await sendNotificationToMultiple(pushTokens, message.title, message.body, message.data || {});
+        const usersWithTokens = await User.find(fallbackFilter).select('pushToken');
+        const pushTokens = usersWithTokens.map(u => u.pushToken).filter(Boolean);
+        if (pushTokens.length > 0) {
+          console.log(`[PushService] Found ${pushTokens.length} push tokens for FCM/Expo fallback (segment: ${targetType}). Dispatching...`);
+          const { sendNotificationToMultiple } = require('../../utils/notifications');
+          await sendNotificationToMultiple(pushTokens, message.title, message.body, message.data || {});
+        }
+      } catch (fallbackErr) {
+        console.error('[PushService] Fallback FCM/Expo segment push notification failed:', fallbackErr.message);
       }
-    } catch (fallbackErr) {
-      console.error('[PushService] Fallback FCM/Expo segment push notification failed:', fallbackErr.message);
+    } else {
+      console.log(`[PushService] OneSignal successfully dispatched campaign for segment ${targetType}. Skipping FCM/Expo fallback.`);
     }
 
     return campaignResult;

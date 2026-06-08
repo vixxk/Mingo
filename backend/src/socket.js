@@ -245,16 +245,23 @@ const initSocket = (server) => {
           if (recipientIdStr && !isRecipientInConvRoom) {
             io.to(`user_${recipientIdStr}`).emit('receive_message', message);
             
-            // Send push notification
-            PushService.sendPushNotification(recipientIdStr, {
-              title: sender.name || 'Mingo',
-              body: type === 'text' ? content : `Sent a ${type}`,
-              data: { 
-                url: `/chat?id=${conversationId}`,
-                conversationId: conversationId.toString(),
-                type: 'chat_message',
-              },
-            });
+            // Only send push notification if the recipient doesn't have unread messages in this conversation yet
+            const currentUnread = (conversation.unreadCount && typeof conversation.unreadCount.get === 'function')
+              ? (conversation.unreadCount.get(recipientIdStr) || 0)
+              : ((conversation.unreadCount && conversation.unreadCount[recipientIdStr]) || 0);
+
+            if (currentUnread === 0) {
+              // Send push notification
+              PushService.sendPushNotification(recipientIdStr, {
+                title: sender.name || 'Mingo',
+                body: type === 'text' ? content : `Sent a ${type}`,
+                data: { 
+                  url: `/chat?id=${conversationId}`,
+                  conversationId: conversationId.toString(),
+                  type: 'chat_message',
+                },
+              });
+            }
           }
           return;
         }
@@ -369,16 +376,23 @@ const initSocket = (server) => {
         if (recipientIdStr && !isRecipientInConvRoom) {
           io.to(`user_${recipientIdStr}`).emit('receive_message', message);
           
-          // Send push notification
-          PushService.sendPushNotification(recipientIdStr, {
-            title: sender.name || 'Mingo',
-            body: type === 'text' ? content : `Sent a ${type}`,
-            data: { 
-              url: `/chat?id=${conversationId}`,
-              conversationId: conversationId.toString(),
-              type: 'chat_message',
-            },
-          });
+          // Only send push notification if the recipient doesn't have unread messages in this conversation yet
+          const currentUnread = (conversation.unreadCount && typeof conversation.unreadCount.get === 'function')
+            ? (conversation.unreadCount.get(recipientIdStr) || 0)
+            : ((conversation.unreadCount && conversation.unreadCount[recipientIdStr]) || 0);
+
+          if (currentUnread === 0) {
+            // Send push notification
+            PushService.sendPushNotification(recipientIdStr, {
+              title: sender.name || 'Mingo',
+              body: type === 'text' ? content : `Sent a ${type}`,
+              data: { 
+                url: `/chat?id=${conversationId}`,
+                conversationId: conversationId.toString(),
+                type: 'chat_message',
+              },
+            });
+          }
         }
 
         // --- TIMED SESSION START ---

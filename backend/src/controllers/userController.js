@@ -59,14 +59,33 @@ class UserController {
   static async updatePushToken(req, res, next) {
     try {
       const { pushToken } = req.body;
-      if (!pushToken) throw new AppError('Push token is required', 400);
+
+      // If pushToken is null, empty, or 'null'/'undefined' string, clear it
+      const isClearRequest = !pushToken || pushToken === 'null' || pushToken === 'undefined' || String(pushToken).trim() === '';
+
+      if (isClearRequest) {
+        const user = await User.findByIdAndUpdate(
+          req.user.id,
+          { pushToken: null },
+          { new: true }
+        );
+        if (!user) throw new AppError('User not found', 404);
+        console.log(`[PushToken] Cleared push token for user ${req.user.id} (${user.name})`);
+        return ApiResponse.success(res, { pushToken: null }, 'Push token cleared');
+      }
 
       // Reject mock/invalid tokens
-      const invalidTokens = ['expo-go-mock-token', 'mock-token', 'test-token', 'null', 'undefined'];
+      const invalidTokens = ['expo-go-mock-token', 'mock-token', 'test-token'];
       if (invalidTokens.includes(pushToken) || pushToken.length < 10) {
         console.log(`[PushToken] Rejected invalid/mock token for user ${req.user.id}: ${pushToken}`);
         return ApiResponse.success(res, { pushToken: null }, 'Invalid push token rejected');
       }
+
+      // Clear this push token from all other users to prevent multiple routing issues on shared devices
+      await User.updateMany(
+        { _id: { $ne: req.user.id }, pushToken },
+        { $set: { pushToken: null } }
+      );
 
       const user = await User.findByIdAndUpdate(
         req.user.id,

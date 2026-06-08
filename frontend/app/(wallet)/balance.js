@@ -78,6 +78,7 @@ export default function BalanceScreen() {
   const [packages, setPackages] = useState(DEFAULT_PACKAGES);
   const [balance, setBalance] = useState(0);
   const [diamonds, setDiamonds] = useState(0);
+  const [isPurchasing, setIsPurchasing] = useState(false);
   const [popup, setPopup] = useState({
     visible: false,
     type: 'success',
@@ -87,6 +88,8 @@ export default function BalanceScreen() {
   });
 
   const handleBuyCoins = async (item) => {
+    if (isPurchasing) return;
+    setIsPurchasing(true);
     const previousBalance = balance;
     setBalance((prev) => prev + item.coins);
     try {
@@ -113,6 +116,8 @@ export default function BalanceScreen() {
         message: 'Please try again later.',
         onClose: () => setPopup((prev) => ({ ...prev, visible: false })),
       });
+    } finally {
+      setIsPurchasing(false);
     }
   };
 
@@ -179,7 +184,7 @@ export default function BalanceScreen() {
           {/* Grid */}
           <View style={styles.grid}>
             {packages.map((item, index) => (
-              <CoinCard key={item.id || item._id || index} item={item} onPress={handleBuyCoins} />
+              <CoinCard key={item.id || item._id || index} item={item} onPress={isPurchasing ? null : handleBuyCoins} />
             ))}
           </View>
 

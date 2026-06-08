@@ -129,6 +129,27 @@ export default function ListenerLayout() {
         handleRejectCallRef.current(callData);
       });
 
+      // Check for pending local triggers from notification clicks
+      if (socketService.pendingAcceptCall) {
+        const pending = socketService.pendingAcceptCall;
+        socketService.pendingAcceptCall = null;
+        console.log('[ListenerLayout] Found pending accept call event, executing:', pending);
+        handleAcceptCallRef.current(pending);
+      } else if (socketService.pendingRejectCall) {
+        const pending = socketService.pendingRejectCall;
+        socketService.pendingRejectCall = null;
+        console.log('[ListenerLayout] Found pending reject call event, executing:', pending);
+        handleRejectCallRef.current(pending);
+      } else if (socketService.pendingIncomingCall) {
+        const pending = socketService.pendingIncomingCall;
+        socketService.pendingIncomingCall = null;
+        console.log('[ListenerLayout] Found pending incoming call event, displaying popup:', pending);
+        setIncomingCalls((prev) => {
+          if (prev.some(c => c.callId === pending.callId)) return prev;
+          return [...prev, pending];
+        });
+      }
+
       socketService.on('call_cancelled', (data) => {
         console.log('Call cancelled by user:', data);
         setIncomingCalls((prev) => prev.filter(c => c.callId !== data.callId));
