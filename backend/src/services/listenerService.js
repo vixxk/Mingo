@@ -3,7 +3,7 @@ const Listener = require('../models/listenerModel');
 const AppError = require('../utils/appError');
 
 class ListenerService {
-    static async getRecommended(limit = 20) {
+    static async getRecommended(limit = 20, userLanguage = 'English') {
     // Query MongoDB directly for online, approved listeners
     const listeners = await Listener.find({ status: 'approved', isOnline: true })
       .populate('userId', 'name username phone role gender avatarIndex isBanned');
@@ -33,6 +33,11 @@ class ListenerService {
         Math.log(totalSessions + 1) * 0.2 +
         recentActivity * 0.2;
 
+      const listenerLanguages = listener.publicProfile?.languages || ['English'];
+      const speaksUserLanguage = listenerLanguages.some(
+        (lang) => lang && lang.toLowerCase() === userLanguage.toLowerCase()
+      );
+
       results.push({
         id: listener.userId._id || listener.userId,
         name: listener.displayName || listener.userId.name,
@@ -51,12 +56,18 @@ class ListenerService {
         gradientColors: listener.gradientColors,
         hookline: listener.publicProfile?.hookline || '',
         profileImage: listener.publicProfile?.profileImage || listener.profileImage,
+        languages: listenerLanguages,
+        speaksUserLanguage,
         score,
       });
     }
 
-    // Sort by recommended score descending
-    results.sort((a, b) => b.score - a.score);
+    // Sort by language match first, then by recommended score descending
+    results.sort((a, b) => {
+      if (a.speaksUserLanguage && !b.speaksUserLanguage) return -1;
+      if (!a.speaksUserLanguage && b.speaksUserLanguage) return 1;
+      return b.score - a.score;
+    });
 
     return results.slice(0, limit);
   }

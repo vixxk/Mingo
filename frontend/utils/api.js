@@ -8,7 +8,11 @@ const getBaseUrl = () => {
 
 const API_BASE_URL = getBaseUrl();
 
-let isNetworkErrorScreenOpen = false;
+export let isNetworkErrorScreenOpen = false;
+
+export const setNetworkErrorScreenOpen = (value) => {
+  isNetworkErrorScreenOpen = value;
+};
 
 const apiRequest = async (endpoint, options = {}) => {
   const token = await AsyncStorage.getItem('token');
@@ -22,11 +26,19 @@ const apiRequest = async (endpoint, options = {}) => {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, options.timeout || 8000); // 8 seconds default timeout
+
   try {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       ...options,
       headers,
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     const data = await response.json();
 
@@ -41,11 +53,13 @@ const apiRequest = async (endpoint, options = {}) => {
     isNetworkErrorScreenOpen = false;
     return data;
   } catch (error) {
+    clearTimeout(timeoutId);
     if (error.status) {
       isNetworkErrorScreenOpen = false;
     }
+    const isTimeoutOrNetwork = !error.status || error.name === 'AbortError' || error.message?.includes('aborted');
     // If it's a network/fetch connection failure (no structured error response status)
-    if (!error.status && endpoint !== '/auth/me' && endpoint !== '/health') {
+    if (isTimeoutOrNetwork && endpoint !== '/auth/me' && endpoint !== '/health') {
       console.log('Redirecting to network error page due to connection failure:', error);
       if (!isNetworkErrorScreenOpen) {
         isNetworkErrorScreenOpen = true;
@@ -105,8 +119,8 @@ export const authAPI = {
     return apiRequest('/auth/me');
   },
 
-    healthCheck: async () => {
-    return apiRequest('/health');
+    healthCheck: async (options = {}) => {
+    return apiRequest('/health', options);
   },
 
     logout: async () => {

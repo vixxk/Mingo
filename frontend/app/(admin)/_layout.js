@@ -3,7 +3,7 @@ import { Tabs, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ms, vs } from '../../utils/responsive';
+import { ms, s, vs } from '../../utils/responsive';
 import { adminAPI } from '../../utils/api';
 
 export default function AdminLayout() {
@@ -51,8 +51,16 @@ export default function AdminLayout() {
         },
         tabBarBadgeStyle: {
           backgroundColor: '#EF4444',
-          fontSize: ms(8),
-          lineHeight: ms(11),
+          color: '#FFF',
+          fontSize: ms(9),
+          fontWeight: '700',
+          minWidth: s(16),
+          height: s(16),
+          borderRadius: s(8),
+          alignItems: 'center',
+          justifyContent: 'center',
+          textAlign: 'center',
+          lineHeight: Platform.OS === 'ios' ? s(14) : s(15),
           marginTop: vs(-2),
         }
       }}
@@ -87,6 +95,7 @@ export default function AdminLayout() {
         name="admin-listeners"
         options={{
           title: 'Listeners',
+          tabBarBadge: counts.approvals > 0 ? counts.approvals : null,
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? 'headset-sharp' : 'headset-outline'}
@@ -113,7 +122,6 @@ export default function AdminLayout() {
         name="profile-approvals"
         options={{
           title: 'Approvals',
-          tabBarBadge: counts.approvals > 0 ? counts.approvals : null,
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? 'shield-checkmark-sharp' : 'shield-checkmark-outline'}

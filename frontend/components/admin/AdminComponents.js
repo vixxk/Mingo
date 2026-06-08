@@ -54,7 +54,14 @@ export const ActivityItem = ({ activity, isLast }) => (
         <Text style={cStyles.activityUser}>{activity.user}</Text>
         <Text style={cStyles.activityAction}>{activity.action}</Text>
       </View>
-      <Text style={cStyles.activityTime}>{activity.time}</Text>
+      <View style={{ alignItems: 'flex-end', justifyContent: 'center' }}>
+        <Text style={cStyles.activityTime}>{activity.time}</Text>
+        {activity.exactTime ? (
+          <Text style={[cStyles.activityTime, { marginTop: vs(3), color: '#4B5563', fontSize: ms(10, 0.3) }]}>
+            {activity.exactTime}
+          </Text>
+        ) : null}
+      </View>
     </View>
     {!isLast && <View style={cStyles.activityDivider} />}
   </View>

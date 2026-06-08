@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,49 +12,102 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { wp, hp } from '../utils/responsive';
-import { authAPI } from '../utils/api';
+import { authAPI, setNetworkErrorScreenOpen } from '../utils/api';
+import ToastNotification from '../components/shared/ToastNotification';
 
 export default function NetworkErrorScreen() {
   const router = useRouter();
   const [retrying, setRetrying] = useState(false);
+  const [status, setStatus] = useState('offline'); // 'offline' | 'restored'
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'error' });
 
-  const handleRetry = async () => {
-    if (retrying) return;
-    setRetrying(true);
-    try {
-      // Test server connection using unauthenticated health check
-      await authAPI.healthCheck();
-      
-      const loggedIn = await authAPI.isLoggedIn();
-      // If successful, go back or navigate to tabs/welcome depending on login state
+  useEffect(() => {
+    setNetworkErrorScreenOpen(true);
+    return () => {
+      setNetworkErrorScreenOpen(false);
+    };
+  }, []);
+
+  const handleSuccess = async (intervalId) => {
+    if (intervalId) clearInterval(intervalId);
+    setStatus('restored');
+    
+    const loggedIn = await authAPI.isLoggedIn();
+    setTimeout(() => {
       if (router.canGoBack()) {
         router.back();
       } else {
         router.replace(loggedIn ? '/(tabs)' : '/welcome');
       }
+    }, 1200);
+  };
+
+  const handleRetry = async () => {
+    if (retrying || status === 'restored') return;
+    setRetrying(true);
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 5000); // 5 seconds timeout
+    
+    try {
+      // Test server connection using unauthenticated health check
+      await authAPI.healthCheck({ signal: controller.signal });
+      clearTimeout(timeoutId);
+      await handleSuccess();
     } catch (error) {
+      clearTimeout(timeoutId);
       console.log('Retry failed:', error);
       
       // Even if healthCheck failed, if it returned a response with a status code (e.g. 401, 500), the server is online/reachable!
       if (error.status) {
-        const loggedIn = await authAPI.isLoggedIn();
-        if (router.canGoBack()) {
-          router.back();
-        } else {
-          router.replace(loggedIn ? '/(tabs)' : '/welcome');
-        }
+        await handleSuccess();
         return;
       }
       
-      Alert.alert(
-        'Connection Failed',
-        'We still cannot reach the server. Please verify your connection and try again.',
-        [{ text: 'OK' }]
-      );
+      const isTimeout = error.name === 'AbortError' || error.message?.includes('aborted');
+      setToast({
+        visible: true,
+        message: isTimeout 
+          ? 'Connection timed out. Please check your network connection.'
+          : 'Connection Failed: We still cannot reach the server. Please verify your connection.',
+        type: 'error'
+      });
     } finally {
       setRetrying(false);
     }
   };
+
+  useEffect(() => {
+    let isChecking = false;
+    const intervalId = setInterval(async () => {
+      if (retrying || isChecking || status === 'restored') return;
+      
+      isChecking = true;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, 3000); // 3 seconds timeout
+
+      try {
+        await authAPI.healthCheck({ signal: controller.signal });
+        clearTimeout(timeoutId);
+        await handleSuccess(intervalId);
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (error.status) {
+          await handleSuccess(intervalId);
+        }
+      } finally {
+        isChecking = false;
+      }
+    }, 3000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [retrying, status]);
 
   const handleContactSupport = () => {
     Linking.openURL('mailto:support@mingo.com?subject=Network%20Issue%20Report').catch((err) => {
@@ -67,28 +120,45 @@ export default function NetworkErrorScreen() {
     <View style={styles.container}>
       <StatusBar style="light" />
 
+      <ToastNotification
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+        onDismiss={() => setToast(prev => ({ ...prev, visible: false }))}
+      />
+
       <View style={styles.content}>
         {/* Title */}
-        <Text style={styles.title}>Oops! Something Went Wrong</Text>
+        <Text style={styles.title}>
+          {status === 'restored' ? 'Connection Restored!' : 'Oops! Something Went Wrong'}
+        </Text>
 
         {/* Subtitle */}
         <Text style={styles.subtitle}>
-          We couldn't complete your request. Please check your internet connection or try again later.
+          {status === 'restored'
+            ? 'Welcoming you back... We are redirecting you to your screen.'
+            : "We couldn't complete your request. Please check your internet connection or try again later."}
         </Text>
 
         {/* Center Illustration (Offline Cloud in circular frame) */}
-        <View style={styles.iconCircle}>
-          <Ionicons name="cloud-offline-outline" size={hp(7.5)} color="#fff" />
+        <View style={[styles.iconCircle, status === 'restored' && { borderColor: 'rgba(16, 185, 129, 0.4)' }]}>
+          {status === 'restored' ? (
+            <Ionicons name="checkmark-circle-outline" size={hp(7.5)} color="#10B981" />
+          ) : (
+            <Ionicons name="cloud-offline-outline" size={hp(7.5)} color="#fff" />
+          )}
         </View>
 
         {/* Action Button */}
         <TouchableOpacity
-          style={styles.retryButton}
+          style={[styles.retryButton, status === 'restored' && { backgroundColor: '#10B981' }]}
           activeOpacity={0.8}
           onPress={handleRetry}
-          disabled={retrying}
+          disabled={retrying || status === 'restored'}
         >
-          {retrying ? (
+          {status === 'restored' ? (
+            <Ionicons name="checkmark" size={20} color="#fff" />
+          ) : retrying ? (
             <ActivityIndicator size="small" color="#000" />
           ) : (
             <Text style={styles.retryText}>Retry</Text>

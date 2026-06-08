@@ -73,23 +73,23 @@ export default function ToastNotification({
         return {
           icon: 'close-circle',
           iconColor: '#EF4444',
-          borderColor: 'rgba(239,68,68,0.3)',
-          bgColor: '#1A0B0B'
+          borderColor: '#EF4444',
+          bgColor: '#1A0B0B',
         };
       case 'info':
         return {
           icon: 'information-circle',
           iconColor: '#3B82F6',
-          borderColor: 'rgba(59,130,246,0.3)',
-          bgColor: '#0B132B'
+          borderColor: '#3B82F6',
+          bgColor: '#0B132B',
         };
       case 'success':
       default:
         return {
           icon: 'checkmark-circle',
           iconColor: '#10B981',
-          borderColor: 'rgba(16,185,129,0.3)',
-          bgColor: '#05120B'
+          borderColor: '#10B981',
+          bgColor: '#05120B',
         };
     }
   };
@@ -108,7 +108,7 @@ export default function ToastNotification({
         }
       ]}
     >
-      <Ionicons name={config.icon} size={ms(20)} color={config.iconColor} />
+      <Ionicons name={config.icon} size={wp(5)} color={config.iconColor} />
       <Text style={styles.toastText} numberOfLines={2}>
         {message}
       </Text>
@@ -120,15 +120,15 @@ const styles = StyleSheet.create({
   toastContainer: {
     position: 'absolute',
     top: 0,
-    left: wp(5),
-    right: wp(5),
+    width: wp(90),
+    alignSelf: 'center',
     zIndex: 999999,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: wp(4),
-    paddingVertical: hp(1.5),
-    borderRadius: 16,
-    borderWidth: 1,
+    paddingVertical: hp(1.8),
+    borderRadius: wp(3.5),
+    borderWidth: 1.5,
     gap: wp(3),
     ...Platform.select({
       ios: {
@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
   },
   toastText: {
     color: '#FFF',
-    fontSize: ms(13.5),
+    fontSize: wp(3.8),
     fontFamily: 'Inter_600SemiBold',
     flex: 1,
   },

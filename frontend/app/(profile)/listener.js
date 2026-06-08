@@ -20,7 +20,7 @@ import { useRouter } from 'expo-router';
 import { ms, s, vs, SCREEN_WIDTH, SCREEN_HEIGHT, hp, wp } from '../../utils/responsive';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import FloatingCoin from '../../components/shared/FloatingCoin';
-import { userAPI } from '../../utils/api';
+import { userAPI, authAPI } from '../../utils/api';
 
 
 const COIN_POSITIONS = [
@@ -44,7 +44,7 @@ const SuccessModal = ({ visible, onClose }) => {
           </View>
           <Text style={styles.successTitle}>Video Submitted!</Text>
           <Text style={styles.successSub}>
-            Your application is now under review. We'll notify you once it's approved!
+            Your application has been successfully submitted and is under review. Please note it takes about 12 to 24 hours for application approval. You may need to logout and re-login to check/confirm your status.
           </Text>
           <TouchableOpacity style={styles.successBtn} onPress={onClose} activeOpacity={0.8}>
             <Text style={styles.successBtnText}>Got it</Text>
@@ -62,6 +62,7 @@ export default function ListenerScreen() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -81,14 +82,73 @@ export default function ListenerScreen() {
     checkStatus();
   }, []);
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const res = await authAPI.me();
+      if (res?.data) {
+        const userObj = res.data;
+        if (userObj.listener) {
+          const status = userObj.listener.status;
+          await AsyncStorage.setItem('listenerStatus', status);
+          setListenerStatus(status);
+          
+          if (status === 'approved') {
+            await AsyncStorage.setItem('user', JSON.stringify(userObj));
+            router.replace('/(listener)');
+            Alert.alert('Approved! 🎉', 'Your application has been approved. Welcome as a listener!');
+          } else if (status === 'rejected') {
+            Alert.alert('Status Update', 'Your application was rejected. You can re-apply.');
+          } else {
+            Alert.alert('Status Check', 'Your application is still under review.');
+          }
+        } else {
+          Alert.alert('Status Check', 'No listener application details found.');
+        }
+      }
+    } catch (err) {
+      console.error('Refresh error:', err);
+      Alert.alert('Error', 'Failed to refresh status. Please check your network connection.');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    Alert.alert(
+      'Confirm Logout',
+      'Are you sure you want to log out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Logout', 
+          style: 'destructive', 
+          onPress: async () => {
+            try {
+              await authAPI.logout();
+              router.replace('/welcome');
+            } catch (err) {
+              console.error('Logout error:', err);
+              Alert.alert('Error', 'Failed to logout. Please try again.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   useEffect(() => {
     const backAction = () => {
+      if (listenerStatus === 'pending') {
+        handleLogout();
+        return true;
+      }
       router.replace('/(auth)/role-selection');
       return true;
     };
     const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
     return () => backHandler.remove();
-  }, []);
+  }, [listenerStatus]);
 
   useEffect(() => {
     Animated.loop(
@@ -174,12 +234,39 @@ export default function ListenerScreen() {
       {}
       <TouchableOpacity
         style={[styles.backBtn, { top: insets.top + vs(8) }]}
-        onPress={() => router.replace('/(auth)/role-selection')}
+        onPress={listenerStatus === 'pending' ? handleLogout : () => router.replace('/(auth)/role-selection')}
         activeOpacity={0.7}
       >
-        <Ionicons name="chevron-back" size={22} color="#fff" />
-        <Text style={styles.backText}>Back</Text>
+        {listenerStatus === 'pending' ? (
+          <>
+            <Ionicons name="log-out-outline" size={22} color="#EF4444" />
+            <Text style={[styles.backText, { color: '#EF4444' }]}>Logout</Text>
+          </>
+        ) : (
+          <>
+            <Ionicons name="chevron-back" size={22} color="#fff" />
+            <Text style={styles.backText}>Back</Text>
+          </>
+        )}
       </TouchableOpacity>
+
+      {listenerStatus === 'pending' && (
+        <TouchableOpacity
+          style={[styles.refreshBtn, { top: insets.top + vs(8) }]}
+          onPress={handleRefresh}
+          activeOpacity={0.7}
+          disabled={refreshing}
+        >
+          {refreshing ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <>
+              <Ionicons name="refresh" size={22} color="#fff" />
+              <Text style={styles.backText}>Refresh</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      )}
 
       {}
       {COIN_POSITIONS.map((pos, i) => (
@@ -223,10 +310,12 @@ export default function ListenerScreen() {
       <View style={[styles.bottomSection, { paddingBottom: insets.bottom + vs(20) }]}>
         {listenerStatus === 'pending' ? (
           <View style={styles.pendingBanner}>
-            <Ionicons name="time-outline" size={22} color="#F59E0B" />
+            <Ionicons name="time-outline" size={26} color="#F59E0B" />
             <View style={{ flex: 1, marginLeft: 10 }}>
               <Text style={styles.pendingTitle}>Application Pending</Text>
-              <Text style={styles.pendingSubtext}>Your request is being reviewed by admin</Text>
+              <Text style={styles.pendingSubtext}>
+                Your request is being reviewed by Mingo Admin. It takes about 12 to 24 hours for application approval. Please logout and re-login later to confirm your status.
+              </Text>
             </View>
           </View>
         ) : listenerStatus === 'rejected' ? (
@@ -288,6 +377,14 @@ const styles = StyleSheet.create({
     fontSize: ms(16, 0.3),
     color: '#fff',
     fontFamily: 'Inter_500Medium',
+  },
+  refreshBtn: {
+    position: 'absolute',
+    right: s(16),
+    zIndex: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
 
   

@@ -212,10 +212,7 @@ class AuthService {
 
     const token = AuthService._generateToken(user);
 
-    let listenerData = null;
-    if (user.role === 'LISTENER') {
-      listenerData = await Listener.findOne({ userId: user._id });
-    }
+    const listenerData = await Listener.findOne({ userId: user._id });
 
     return {
       user: {
@@ -250,10 +247,7 @@ class AuthService {
       throw new AppError('User not found', 404);
     }
 
-    let listenerProfile = null;
-    if (user.role === 'LISTENER') {
-      listenerProfile = await Listener.findOne({ userId });
-    }
+    const listenerProfile = await Listener.findOne({ userId });
 
     return {
       id: user._id,

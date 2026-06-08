@@ -33,6 +33,9 @@ const LOW_BALANCE_THRESHOLD = 10; // Warn when below this many coins remaining
 // Active call billing timers: { sessionId: intervalRef }
 const callBillingTimers = {};
 
+// Active background offline timers for backgrounded users
+const backgroundOfflineTimers = {};
+
 // Random Call Matching Pools
 const randomUsers = new Set();
 const randomListeners = new Set();
@@ -59,6 +62,12 @@ const initSocket = (server) => {
         socket.userId = decoded.userId;
         socket.join(`user_${decoded.userId}`);
         console.log(`Socket ${socket.id} automatically authenticated from handshake as ${decoded.userId}`);
+        const userIdStr = decoded.userId.toString();
+        if (backgroundOfflineTimers[userIdStr]) {
+          clearTimeout(backgroundOfflineTimers[userIdStr]);
+          delete backgroundOfflineTimers[userIdStr];
+          console.log(`Cancelled background offline timer for ${userIdStr} on handshake auth`);
+        }
         if (!socket.appOpened) {
           socket.appOpened = true;
           User.findByIdAndUpdate(decoded.userId, { $inc: { appOpens: 1 } }).catch(err => console.error('handshake appOpen inc error:', err));
@@ -79,12 +88,38 @@ const initSocket = (server) => {
         socket.userId = decoded.userId;
         socket.join(`user_${decoded.userId}`);
         console.log(`Socket ${socket.id} authenticated as ${decoded.userId}`);
+        const userIdStr = decoded.userId.toString();
+        if (backgroundOfflineTimers[userIdStr]) {
+          clearTimeout(backgroundOfflineTimers[userIdStr]);
+          delete backgroundOfflineTimers[userIdStr];
+          console.log(`Cancelled background offline timer for ${userIdStr} on authenticate event`);
+        }
         if (!socket.appOpened) {
           socket.appOpened = true;
           User.findByIdAndUpdate(decoded.userId, { $inc: { appOpens: 1 } }).catch(err => console.error('authenticate appOpen inc error:', err));
         }
       } catch (err) {
         console.error('Socket auth error:', err.message);
+      }
+    });
+
+    socket.on('app_backgrounded', () => {
+      if (socket.userId) {
+        socket.isBackgrounded = true;
+        console.log(`User ${socket.userId} marked as backgrounded (in RAM)`);
+      }
+    });
+
+    socket.on('app_foregrounded', () => {
+      if (socket.userId) {
+        socket.isBackgrounded = false;
+        console.log(`User ${socket.userId} marked as foregrounded`);
+        const userIdStr = socket.userId.toString();
+        if (backgroundOfflineTimers[userIdStr]) {
+          clearTimeout(backgroundOfflineTimers[userIdStr]);
+          delete backgroundOfflineTimers[userIdStr];
+          console.log(`Cancelled background offline timer for ${userIdStr}`);
+        }
       }
     });
 
@@ -709,9 +744,27 @@ const initSocket = (server) => {
             // 1. Auto-offline listener
             const listener = await Listener.findOne({ userId: disconnectedUserId });
             if (listener) {
-              const PresenceService = require('./services/presenceService');
-              await PresenceService.goOffline(disconnectedUserId);
-              console.log(`Listener ${disconnectedUserId} automatically set to offline on socket disconnect.`);
+              const userIdStr = disconnectedUserId.toString();
+              if (socket.isBackgrounded) {
+                console.log(`Listener ${userIdStr} disconnected due to backgrounding. Keeping online for 2 minutes.`);
+                if (backgroundOfflineTimers[userIdStr]) {
+                  clearTimeout(backgroundOfflineTimers[userIdStr]);
+                }
+                backgroundOfflineTimers[userIdStr] = setTimeout(async () => {
+                  try {
+                    const PresenceService = require('./services/presenceService');
+                    await PresenceService.goOffline(disconnectedUserId);
+                    console.log(`Listener ${userIdStr} automatically set to offline after 2 mins background timeout.`);
+                    delete backgroundOfflineTimers[userIdStr];
+                  } catch (err) {
+                    console.error('Error running background offline timeout:', err.message);
+                  }
+                }, 120000); // 2 minutes
+              } else {
+                const PresenceService = require('./services/presenceService');
+                await PresenceService.goOffline(disconnectedUserId);
+                console.log(`Listener ${userIdStr} automatically set to offline on socket disconnect.`);
+              }
             }
 
             // 2. Auto-end active calls (immediately) - only audio and video calls, not chat sessions

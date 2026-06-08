@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,15 @@ import {
   Animated,
   TouchableOpacity,
   Dimensions,
+  PanResponder,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ms, s, vs } from '../../utils/responsive';
+import { ms, s, vs, hp, wp } from '../../utils/responsive';
+
+const AVATAR_SIZE = Math.min(wp(12.8), 52);
+const AVATAR_RING_SIZE = AVATAR_SIZE + 6;
+const ACTION_BTN_SIZE = Math.min(wp(11.5), 46);
 
 const getAvatarImage = (gender, index) => {
   const parsedIndex = parseInt(index, 10) || 0;
@@ -41,9 +46,44 @@ const getAvatarImage = (gender, index) => {
   }
 };
 
-const IncomingCallCard = ({ call, onAccept, onReject, isStacked, style }) => {
+const IncomingCallCard = ({ call, onAccept, onReject, onDismiss, isStacked, style }) => {
   const slideAnim = useRef(new Animated.Value(-100)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const panY = useRef(new Animated.Value(0)).current;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        // Detect vertical drag upwards
+        return Math.abs(gestureState.dx) < Math.abs(gestureState.dy) && gestureState.dy < -5;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy < 0) {
+          panY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy < -60) {
+          // Swipe up threshold met -> slide away completely
+          Animated.timing(panY, {
+            toValue: -300,
+            duration: 200,
+            useNativeDriver: true,
+          }).start(() => {
+            if (onDismiss) onDismiss();
+          });
+        } else {
+          // Snap back
+          Animated.spring(panY, {
+            toValue: 0,
+            useNativeDriver: true,
+            friction: 5,
+          }).start();
+        }
+      },
+    })
+  ).current;
 
   useEffect(() => {
     Animated.spring(slideAnim, {
@@ -64,11 +104,16 @@ const IncomingCallCard = ({ call, onAccept, onReject, isStacked, style }) => {
   const animatedStyle = [
     styles.card,
     style,
-    !isStacked && { transform: [{ translateY: slideAnim }] }
+    {
+      transform: [
+        ...(style?.transform || []),
+        { translateY: !isStacked ? Animated.add(slideAnim, panY) : panY }
+      ]
+    }
   ];
 
   return (
-    <Animated.View style={animatedStyle}>
+    <Animated.View style={animatedStyle} {...panResponder.panHandlers}>
       <LinearGradient
         colors={['#1F1F1F', '#141414']}
         style={styles.gradient}
@@ -112,8 +157,21 @@ const IncomingCallCard = ({ call, onAccept, onReject, isStacked, style }) => {
 };
 
 const IncomingCallPopup = ({ calls = [], onAccept, onReject, visible }) => {
-  // Backwards compatibility for older single-call usage
-  const activeCalls = Array.isArray(calls) ? calls : [];
+  const [dismissedCallIds, setDismissedCallIds] = useState([]);
+
+  // Keep local dismissed set in sync with actual active calls
+  useEffect(() => {
+    const parentCalls = Array.isArray(calls) ? calls : [];
+    setDismissedCallIds(prev => prev.filter(id => parentCalls.some(c => c.callId === id)));
+  }, [calls]);
+
+  const handleDismissCall = (callId) => {
+    setDismissedCallIds(prev => [...prev, callId]);
+  };
+
+  const activeCalls = (Array.isArray(calls) ? calls : []).filter(
+    (call) => !dismissedCallIds.includes(call.callId)
+  );
   
   if (activeCalls.length === 0) return null;
 
@@ -127,7 +185,7 @@ const IncomingCallPopup = ({ calls = [], onAccept, onReject, visible }) => {
           // Compute original index in slice (0 is top/front, 2 is back)
           const originalIdx = arr.length - 1 - reverseIdx;
           
-          const offsetTop = originalIdx * vs(12);
+          const offsetTop = originalIdx * hp(1.5);
           const scale = 1 - originalIdx * 0.04;
           const opacity = 1 - originalIdx * 0.15;
           const zIndex = 100 - originalIdx;
@@ -150,6 +208,7 @@ const IncomingCallPopup = ({ calls = [], onAccept, onReject, visible }) => {
                 call={call}
                 onAccept={() => onAccept(call)}
                 onReject={() => onReject(call)}
+                onDismiss={() => handleDismissCall(call.callId)}
                 isStacked={true}
                 style={{
                   transform: [{ scale }],
@@ -172,6 +231,7 @@ const IncomingCallPopup = ({ calls = [], onAccept, onReject, visible }) => {
           call={call}
           onAccept={() => onAccept(call)}
           onReject={() => onReject(call)}
+          onDismiss={() => handleDismissCall(call.callId)}
           isStacked={false}
         />
       ))}
@@ -182,18 +242,18 @@ const IncomingCallPopup = ({ calls = [], onAccept, onReject, visible }) => {
 const styles = StyleSheet.create({
   columnOuterContainer: {
     position: 'absolute',
-    top: vs(60),
-    left: s(16),
-    right: s(16),
-    gap: vs(10),
+    top: hp(7.5),
+    width: wp(92),
+    alignSelf: 'center',
+    gap: hp(1.2),
     zIndex: 99999,
   },
   stackOuterContainer: {
     position: 'absolute',
-    top: vs(60),
-    left: s(16),
-    right: s(16),
-    height: vs(120),
+    top: hp(7.5),
+    width: wp(92),
+    alignSelf: 'center',
+    height: hp(15),
     zIndex: 99999,
   },
   card: {
@@ -205,10 +265,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(168, 85, 247, 0.25)', // Premium purple glass border
   },
   gradient: {
-    padding: s(16),
+    paddingVertical: hp(1.8),
+    paddingHorizontal: wp(4),
   },
   content: {
     flexDirection: 'row',
@@ -221,25 +282,25 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   avatarRing: {
-    width: s(54),
-    height: s(54),
-    borderRadius: s(27),
+    width: AVATAR_RING_SIZE,
+    height: AVATAR_RING_SIZE,
+    borderRadius: AVATAR_RING_SIZE / 2,
     borderWidth: 2,
-    borderColor: '#9333EA',
+    borderColor: '#A855F7', // brand theme purple
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatar: {
-    width: s(48),
-    height: s(48),
-    borderRadius: s(24),
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
   },
   info: {
-    marginLeft: s(12),
+    marginLeft: wp(3.5),
     flex: 1,
   },
   callType: {
-    color: '#9CA3AF',
+    color: '#C084FC', // brand theme secondary accent
     fontSize: ms(12, 0.3),
     fontFamily: 'Inter_400Regular',
     marginBottom: 2,
@@ -251,12 +312,12 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: 'row',
-    gap: s(12),
+    gap: wp(3),
   },
   actionBtn: {
-    width: s(48),
-    height: s(48),
-    borderRadius: s(24),
+    width: ACTION_BTN_SIZE,
+    height: ACTION_BTN_SIZE,
+    borderRadius: ACTION_BTN_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
   },

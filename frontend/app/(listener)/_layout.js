@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Tabs, useRouter, useSegments } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { View, StyleSheet, Platform, Alert } from 'react-native';
+import { View, StyleSheet, Platform, Alert, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Device from 'expo-device';
@@ -23,11 +23,89 @@ export default function ListenerLayout() {
   const unreadCount = useSSE();
 
   const isChatOpenRef = React.useRef(false);
+  const incomingCallsRef = useRef([]);
+  
+  useEffect(() => {
+    incomingCallsRef.current = incomingCalls;
+  }, [incomingCalls]);
 
   // Track whether listener is on a chat screen
   useEffect(() => {
     isChatOpenRef.current = segments && (segments.includes('(chat)') || segments.includes('chat'));
   }, [segments]);
+
+  const handleAcceptCall = async (acceptedCall) => {
+    if (!acceptedCall) return;
+    
+    // Ensure socket is connected before emitting events
+    await socketService.connect();
+    
+    const { callerId, callerName, callType, callId, roomId, avatarIndex, gender } = acceptedCall;
+    
+    // Automatically reject all other active requests
+    const otherCalls = incomingCallsRef.current.filter(c => c.callId !== callId);
+    otherCalls.forEach(otherCall => {
+      socketService.emit('call_rejected', { 
+        userId: otherCall.callerId, 
+        sessionId: otherCall.callId,
+        reason: 'busy' 
+      });
+    });
+
+    // Notify caller we accepted
+    socketService.emit('call_accepted', { userId: callerId, sessionId: callId, roomId });
+    
+    setIncomingCalls([]);
+    
+    // Get listener's own userId
+    let myUserId = '';
+    try {
+      const userData = await AsyncStorage.getItem('user');
+      if (userData) {
+        const u = JSON.parse(userData);
+        myUserId = u._id || u.id || '';
+      }
+    } catch (e) {}
+    
+    // Route to call screen — listenerId is the listener's own ID (us)
+    const targetScreen = callType === 'video' ? '/(call)/video-call' : '/(call)/audio-call';
+    router.push({
+      pathname: targetScreen,
+      params: {
+        name: callerName,
+        callId,
+        roomId,
+        listenerId: myUserId, // Listener's own userId for gifting/endCall
+        userId: callerId,     // The user who called us
+        avatarIndex,
+        gender,
+        callType,
+        isIncoming: 'true'
+      }
+    });
+  };
+
+  const handleRejectCall = async (rejectedCall) => {
+    if (!rejectedCall) return;
+    
+    // Ensure socket is connected before emitting events
+    await socketService.connect();
+
+    socketService.emit('call_rejected', { 
+      userId: rejectedCall.callerId, 
+      sessionId: rejectedCall.callId,
+      reason: 'busy' 
+    });
+    setIncomingCalls(prev => prev.filter(c => c.callId !== rejectedCall.callId));
+  };
+
+  const handleAcceptCallRef = useRef(handleAcceptCall);
+  const handleRejectCallRef = useRef(handleRejectCall);
+
+  useEffect(() => {
+    handleAcceptCallRef.current = handleAcceptCall;
+    handleRejectCallRef.current = handleRejectCall;
+  }, [handleAcceptCall, handleRejectCall]);
 
   useEffect(() => {
     const setupSocket = async () => {
@@ -39,6 +117,16 @@ export default function ListenerLayout() {
           if (prev.some(c => c.callId === callData.callId)) return prev;
           return [...prev, callData];
         });
+      });
+
+      socketService.on('accept_incoming_call', (callData) => {
+        console.log('Incoming call accepted via local trigger:', callData);
+        handleAcceptCallRef.current(callData);
+      });
+
+      socketService.on('reject_incoming_call', (callData) => {
+        console.log('Incoming call rejected via local trigger:', callData);
+        handleRejectCallRef.current(callData);
       });
 
       socketService.on('call_cancelled', (data) => {
@@ -126,68 +214,30 @@ export default function ListenerLayout() {
 
     return () => {
       socketService.off('incoming_call');
+      socketService.off('accept_incoming_call');
+      socketService.off('reject_incoming_call');
       socketService.off('call_cancelled');
       socketService.off('account_banned');
     };
   }, []);
 
-  const handleAcceptCall = async (acceptedCall) => {
-    if (!acceptedCall) return;
-    
-    const { callerId, callerName, callType, callId, roomId, avatarIndex, gender } = acceptedCall;
-    
-    // Automatically reject all other active requests
-    const otherCalls = incomingCalls.filter(c => c.callId !== callId);
-    otherCalls.forEach(otherCall => {
-      socketService.emit('call_rejected', { 
-        userId: otherCall.callerId, 
-        sessionId: otherCall.callId,
-        reason: 'busy' 
-      });
-    });
-
-    // Notify caller we accepted
-    socketService.emit('call_accepted', { userId: callerId, sessionId: callId, roomId });
-    
-    setIncomingCalls([]);
-    
-    // Get listener's own userId
-    let myUserId = '';
-    try {
-      const userData = await AsyncStorage.getItem('user');
-      if (userData) {
-        const u = JSON.parse(userData);
-        myUserId = u._id || u.id || '';
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState) => {
+      console.log('[ListenerLayout] AppState changed:', nextAppState);
+      if (nextAppState === 'background') {
+        socketService.emit('app_backgrounded');
+      } else if (nextAppState === 'active') {
+        socketService.connect().then(() => {
+          socketService.emit('app_foregrounded');
+        }).catch(err => console.log('Error reconnecting socket on app foreground:', err));
       }
-    } catch (e) {}
-    
-    // Route to call screen — listenerId is the listener's own ID (us)
-    const targetScreen = callType === 'video' ? '/(call)/video-call' : '/(call)/audio-call';
-    router.push({
-      pathname: targetScreen,
-      params: {
-        name: callerName,
-        callId,
-        roomId,
-        listenerId: myUserId, // Listener's own userId for gifting/endCall
-        userId: callerId,     // The user who called us
-        avatarIndex,
-        gender,
-        callType,
-        isIncoming: 'true'
-      }
-    });
-  };
+    };
 
-  const handleRejectCall = (rejectedCall) => {
-    if (!rejectedCall) return;
-    socketService.emit('call_rejected', { 
-      userId: rejectedCall.callerId, 
-      sessionId: rejectedCall.callId,
-      reason: 'busy' 
-    });
-    setIncomingCalls(prev => prev.filter(c => c.callId !== rejectedCall.callId));
-  };
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   return (
     <View style={{ flex: 1 }}>

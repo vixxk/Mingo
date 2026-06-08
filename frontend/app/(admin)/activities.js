@@ -37,6 +37,12 @@ const formatActivityTime = (dateStr) => {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
+const formatExactTime = (dateStr) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+};
+
 export default function ActivitiesScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -59,6 +65,7 @@ export default function ActivitiesScreen() {
         action: a.action,
         type: a.type || 'system',
         time: formatActivityTime(a.createdAt),
+        exactTime: formatExactTime(a.createdAt),
         icon: a.icon || 'information-circle',
         color: a.color || '#3B82F6',
       }));

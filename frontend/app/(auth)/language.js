@@ -21,16 +21,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const languages = [
   { name: 'Hindi', symbol: 'अ' },
   { name: 'English', symbol: 'En' },
-  { name: 'Telugu', symbol: '' },
-  { name: 'Malayalam', symbol: '' },
-  { name: 'Kannada', symbol: '' },
-  { name: 'Tamil', symbol: '' },
-  { name: 'Marathi', symbol: '' },
-  { name: 'Punjabi', symbol: '' },
-  { name: 'Bengali', symbol: '' },
-  { name: 'Odia', symbol: '' },
-  { name: 'Assamese', symbol: '' },
-  { name: 'Gujarati', symbol: '' },
+  { name: 'Telugu', symbol: 'అ' },
+  { name: 'Malayalam', symbol: 'അ' },
+  { name: 'Kannada', symbol: 'ಅ' },
+  { name: 'Tamil', symbol: 'அ' },
+  { name: 'Marathi', symbol: 'अ' },
+  { name: 'Punjabi', symbol: 'ੳ' },
+  { name: 'Bengali', symbol: 'অ' },
+  { name: 'Odia', symbol: 'ଅ' },
+  { name: 'Assamese', symbol: 'অ' },
+  { name: 'Gujarati', symbol: 'અ' },
 ];
 
 export default function LanguageSelectionScreen() {

@@ -36,7 +36,8 @@ class ListenerController {
     static async getRecommended(req, res, next) {
     try {
       const limit = parseInt(req.query.limit, 10) || 20;
-      const listeners = await ListenerService.getRecommended(limit);
+      const userLanguage = req.user?.language || 'English';
+      const listeners = await ListenerService.getRecommended(limit, userLanguage);
       return ApiResponse.success(res, listeners, 'Listeners retrieved');
     } catch (err) {
       next(err);

@@ -71,9 +71,24 @@ export async function initializeOneSignal(userId, role) {
       OneSignal.Notifications.addEventListener('click', (event) => {
         try {
           const data = event.notification?.additionalData;
-          console.log('[OneSignal] Notification clicked, data:', JSON.stringify(data));
+          const actionId = event.action?.actionId;
+          console.log('[OneSignal] Notification clicked, data:', JSON.stringify(data), 'actionId:', actionId);
           
-          if (data?.conversationId) {
+          if (data?.type === 'incoming_call') {
+            const { socketService } = require('./socket');
+            if (actionId === 'accept') {
+              console.log('[OneSignal] User clicked Accept button on call notification');
+              socketService.triggerLocalEvent('accept_incoming_call', data);
+            } else if (actionId === 'decline') {
+              console.log('[OneSignal] User clicked Decline button on call notification');
+              socketService.triggerLocalEvent('reject_incoming_call', data);
+            } else {
+              // Clicked notification body, just show the incoming call popup in the app
+              console.log('[OneSignal] User clicked call notification body');
+              socketService.triggerLocalEvent('incoming_call', data);
+            }
+            router.push('/(listener)');
+          } else if (data?.conversationId) {
             router.push({
               pathname: '/chat',
               params: { id: data.conversationId },

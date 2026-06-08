@@ -45,6 +45,16 @@ class PushService {
           target_channel: 'push',
         };
 
+        if (message.data && message.data.type === 'incoming_call') {
+          payload.buttons = [
+            { id: 'accept', text: 'Accept' },
+            { id: 'decline', text: 'Decline' }
+          ];
+          payload.android_channel_id = 'calls';
+          payload.android_sound = 'ringtone';
+          payload.priority = 10;
+        }
+
         const response = await axios.post(
           'https://onesignal.com/api/v1/notifications',
           payload,

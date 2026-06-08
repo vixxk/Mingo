@@ -41,6 +41,12 @@ const formatActivityTime = (dateStr) => {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
+const formatExactTime = (dateStr) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+};
+
 export default function AdminDashboard() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -73,6 +79,7 @@ export default function AdminDashboard() {
       dailyRegistrations: []
     }
   });
+
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -89,7 +96,8 @@ export default function AdminDashboard() {
         const formatted = rawActs.map(a => ({
           ...a,
           id: a._id || a.id,
-          time: formatActivityTime(a.createdAt)
+          time: formatActivityTime(a.createdAt),
+          exactTime: formatExactTime(a.createdAt)
         }));
         setActivities(formatted);
       }

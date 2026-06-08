@@ -9,6 +9,7 @@ const PresenceService = require('./presenceService');
 const { getZegoCredentials } = require('../utils/zegoToken');
 const AppError = require('../utils/appError');
 const ActivityLog = require('../models/ActivityLog');
+const PushService = require('./pushService');
 
 class CallService {
     static async startCall(userId, listenerId = null, callType = 'audio') {
@@ -113,6 +114,29 @@ class CallService {
       icon: callType === 'video' ? 'videocam' : 'call',
       color: callType === 'video' ? '#3B82F6' : '#10B981',
     });
+
+    // Send push notification to listener
+    try {
+      console.log(`[CallService] Sending push notification to listener: ${matchedListenerId}`);
+      PushService.sendPushNotification(matchedListenerId, {
+        title: `Incoming ${callType === 'video' ? 'Video' : 'Audio'} Call`,
+        body: `${user.name || 'Someone'} is calling you. Tap to answer.`,
+        data: {
+          type: 'incoming_call',
+          callId: session._id.toString(),
+          roomId: roomId,
+          callerId: userId.toString(),
+          callerName: user.name || 'User',
+          avatarIndex: (user.avatarIndex || 0).toString(),
+          gender: user.gender || 'Female',
+          callType: callType,
+        }
+      }).catch(err => {
+        console.error('[CallService] Push notification promise failed:', err.message);
+      });
+    } catch (pushErr) {
+      console.error('[CallService] Failed to queue push notification:', pushErr.message);
+    }
 
     return {
       sessionId: session._id,
