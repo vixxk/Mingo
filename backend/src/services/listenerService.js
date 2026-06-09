@@ -3,7 +3,7 @@ const Listener = require('../models/listenerModel');
 const AppError = require('../utils/appError');
 
 class ListenerService {
-    static async getRecommended(limit = 20, userLanguage = 'English') {
+    static async getRecommended(limit = 20, userLanguage = 'English', blockedUserIds = []) {
     // Query MongoDB directly for online, approved listeners
     const listeners = await Listener.find({ status: 'approved', isOnline: true })
       .populate('userId', 'name username phone role gender avatarIndex isBanned');
@@ -12,6 +12,10 @@ class ListenerService {
 
     for (const listener of listeners) {
       if (!listener.userId || listener.userId.isBanned) continue;
+
+      // Skip blocked listeners
+      const listenerUserId = (listener.userId._id || listener.userId).toString();
+      if (blockedUserIds.includes(listenerUserId)) continue;
 
       // Compute dynamic recommended score
       const stats = await Listener.getStats(listener.userId._id);

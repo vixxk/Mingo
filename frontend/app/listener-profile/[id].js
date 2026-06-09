@@ -8,6 +8,7 @@ import { useRef, useEffect, useState } from 'react';
 import { listenersAPI, userAPI } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SkeletonProfile from '../../components/SkeletonProfile';
+import ReportUserPopup from '../../components/shared/ReportUserPopup';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
@@ -47,8 +48,11 @@ export default function ListenerProfileScreen() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isFavourite, setIsFavourite] = useState(false);
-  const [selectedImage, setSelectedImage] = useState(null);
   const [viewerVisible, setViewerVisible] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [showActions, setShowActions] = useState(false);
+  const [showReportPopup, setShowReportPopup] = useState(false);
+  const [isBlocking, setIsBlocking] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -143,6 +147,59 @@ export default function ListenerProfileScreen() {
     </Modal>
   );
 
+  const handleBlockUser = async () => {
+    setIsBlocking(true);
+    setShowActions(false);
+    try {
+      const { userAPI: uAPI } = require('../../utils/api');
+      await uAPI.blockUser(id);
+      router.back();
+    } catch (err) {
+      console.error('Block user failed:', err);
+    } finally {
+      setIsBlocking(false);
+    }
+  };
+
+  const ActionsMenu = () => (
+    <Modal
+      visible={showActions}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={() => setShowActions(false)}
+    >
+      <TouchableOpacity 
+        style={styles.actionMenuOverlay} 
+        activeOpacity={1} 
+        onPress={() => setShowActions(false)}
+      >
+        <View style={styles.actionMenuBox}>
+          <TouchableOpacity
+            style={styles.actionMenuItem}
+            onPress={() => {
+              setShowActions(false);
+              setShowReportPopup(true);
+            }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="flag-outline" size={SW * 0.05} color="#F59E0B" />
+            <Text style={styles.actionMenuLabel}>Report User</Text>
+          </TouchableOpacity>
+          <View style={styles.actionMenuDivider} />
+          <TouchableOpacity
+            style={styles.actionMenuItem}
+            onPress={handleBlockUser}
+            activeOpacity={0.7}
+            disabled={isBlocking}
+          >
+            <Ionicons name="ban-outline" size={SW * 0.05} color="#EF4444" />
+            <Text style={[styles.actionMenuLabel, { color: '#EF4444' }]}>Block User</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+
   if (loading) {
     return <ProfileViewSkeleton insets={insets} />;
   }
@@ -180,15 +237,21 @@ export default function ListenerProfileScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <ImageViewerModal />
+      <ActionsMenu />
       {/* Header */}
       <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
           <Ionicons name="chevron-back" size={SW * 0.06} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Listener Profile</Text>
-        <TouchableOpacity style={styles.heartBtn} activeOpacity={0.7} onPress={handleToggleFavourite}>
-          <Ionicons name={isFavourite ? "heart" : "heart-outline"} size={SW * 0.06} color={isFavourite ? "#EF4444" : "#fff"} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: SW * 0.025 }}>
+          <TouchableOpacity style={styles.heartBtn} activeOpacity={0.7} onPress={handleToggleFavourite}>
+            <Ionicons name={isFavourite ? "heart" : "heart-outline"} size={SW * 0.06} color={isFavourite ? "#EF4444" : "#fff"} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.heartBtn} activeOpacity={0.7} onPress={() => setShowActions(true)}>
+            <Ionicons name="ellipsis-vertical" size={SW * 0.05} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </Animated.View>
 
       <ScrollView
@@ -469,6 +532,14 @@ export default function ListenerProfileScreen() {
           <View style={{ height: SH * 0.05 }} />
         </Animated.View>
       </ScrollView>
+
+      <ReportUserPopup
+        visible={showReportPopup}
+        onClose={() => setShowReportPopup(false)}
+        reportedUserId={id}
+        reportType="user_report"
+        userName={profile?.displayName || profile?.name || 'this listener'}
+      />
     </View>
   );
 }
@@ -600,6 +671,40 @@ const styles = StyleSheet.create({
   fullImage: {
     width: SW,
     height: SH * 0.8,
+  },
+
+  // Action Menu (Block/Report)
+  actionMenuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    paddingTop: SH * 0.12,
+    paddingRight: SW * 0.04,
+  },
+  actionMenuBox: {
+    backgroundColor: '#1A1A1F',
+    borderRadius: SW * 0.04,
+    borderWidth: 1,
+    borderColor: '#2A2A2F',
+    minWidth: SW * 0.5,
+    overflow: 'hidden',
+  },
+  actionMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SH * 0.018,
+    paddingHorizontal: SW * 0.045,
+    gap: SW * 0.03,
+  },
+  actionMenuLabel: {
+    color: '#E5E7EB',
+    fontSize: SW * 0.038,
+    fontFamily: 'Inter_500Medium',
+  },
+  actionMenuDivider: {
+    height: 1,
+    backgroundColor: '#2A2A2F',
   },
 });
 

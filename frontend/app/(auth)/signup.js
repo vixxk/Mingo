@@ -13,6 +13,7 @@ import {
   Animated,
   Alert,
   Modal,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -496,9 +497,9 @@ export default function SignupScreen() {
               {}
               <View style={styles.footer}>
                 <Text style={styles.footerText}>By clicking, I Accept the </Text>
-                <TouchableOpacity activeOpacity={0.7}><Text style={styles.footerLink}>Terms & Conditions</Text></TouchableOpacity>
+                <TouchableOpacity activeOpacity={0.7} onPress={() => Linking.openURL('https://app.notion.com/p/TERMS-CONDITIONS-37aa4992143b80c0a4c6fd5a8b4618df')}><Text style={styles.footerLink}>Terms & Conditions</Text></TouchableOpacity>
                 <Text style={styles.footerText}> & </Text>
-                <TouchableOpacity activeOpacity={0.7}><Text style={styles.footerLink}>Privacy Policy</Text></TouchableOpacity>
+                <TouchableOpacity activeOpacity={0.7} onPress={() => Linking.openURL('https://app.notion.com/p/Privacy-Policy-of-Mingo-37aa4992143b8022948fc9122e441308')}><Text style={styles.footerLink}>Privacy Policy</Text></TouchableOpacity>
               </View>
 
             </Animated.View>

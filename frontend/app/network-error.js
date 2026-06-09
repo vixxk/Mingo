@@ -136,9 +136,9 @@ export default function NetworkErrorScreen() {
   }, [retrying, status]);
 
   const handleContactSupport = () => {
-    Linking.openURL('mailto:support@mingo.com?subject=Network%20Issue%20Report').catch((err) => {
+    Linking.openURL('mailto:support@talkmingo.com?subject=Network%20Issue%20Report').catch((err) => {
       console.error('Failed to open email client:', err);
-      Alert.alert('Error', 'Unable to open email client. Please email us at support@mingo.com');
+      Alert.alert('Error', 'Unable to open email client. Please email us at support@talkmingo.com');
     });
   };
 

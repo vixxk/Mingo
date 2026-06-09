@@ -90,7 +90,7 @@ export default function VerificationFailedScreen() {
         {}
         <Text style={styles.supportText}>
           For any queries please contact{' '}
-          <Text style={styles.supportEmail}>customer@support.com</Text>
+          <Text style={styles.supportEmail}>support@talkmingo.com</Text>
         </Text>
 
         <View style={{ height: vs(30) }} />

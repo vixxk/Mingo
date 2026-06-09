@@ -30,7 +30,7 @@ export default function RaiseIssuePopup({ visible, onClose }) {
 
     setIsSending(true);
     try {
-      await userAPI.submitReport(message);
+      await userAPI.submitReport({ message, reportType: 'general', category: 'other' });
       showStatus('success', 'Issue Sent', 'Your report has been received. Our team will look into it shortly.', () => {
         setMessage('');
         onClose();

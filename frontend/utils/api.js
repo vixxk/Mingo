@@ -360,10 +360,35 @@ export const userAPI = {
     return apiRequest('/user/favourites');
   },
 
-  submitReport: async (message) => {
+  submitReport: async (data) => {
     return apiRequest('/user/report', {
       method: 'POST',
-      body: JSON.stringify({ message }),
+      body: JSON.stringify(data),
+    });
+  },
+
+  blockUser: async (targetUserId) => {
+    return apiRequest('/user/block', {
+      method: 'POST',
+      body: JSON.stringify({ targetUserId }),
+    });
+  },
+
+  unblockUser: async (targetUserId) => {
+    return apiRequest('/user/unblock', {
+      method: 'POST',
+      body: JSON.stringify({ targetUserId }),
+    });
+  },
+
+  getBlockedUsers: async () => {
+    return apiRequest('/user/blocked');
+  },
+
+  deleteAccount: async (reason) => {
+    return apiRequest('/user/delete-account', {
+      method: 'DELETE',
+      body: JSON.stringify({ reason }),
     });
   },
 };

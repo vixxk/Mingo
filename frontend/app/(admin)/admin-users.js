@@ -65,6 +65,7 @@ export default function AdminUsersScreen() {
     all: { icon: 'layers', color: '#8B5CF6', bg: 'rgba(139,92,246,0.1)' },
     active: { icon: 'checkmark-circle', color: '#22C55E', bg: 'rgba(34,197,94,0.1)' },
     inactive: { icon: 'ban', color: '#EF4444', bg: 'rgba(239,68,68,0.1)' },
+    deleted: { icon: 'trash', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
   };
 
   const loadUsers = async (statusFilter = filter) => {
@@ -73,6 +74,7 @@ export default function AdminUsersScreen() {
       const params = { limit: 100 };
       if (statusFilter === 'active') params.status = 'active';
       if (statusFilter === 'inactive') params.status = 'inactive';
+      if (statusFilter === 'deleted') params.status = 'deleted';
       
       const res = await adminAPI.getUsers(params);
       if (res?.data) {
@@ -84,7 +86,8 @@ export default function AdminUsersScreen() {
           phone: u.phone || 'Unknown',
           language: u.language || 'English',
           avatar: getAvatarImage(u.gender, u.avatarIndex),
-          status: u.isOnline ? 'active' : 'inactive',
+          status: u.isDeleted ? 'deleted' : (u.isOnline ? 'active' : 'inactive'),
+          isDeleted: u.isDeleted || false,
           totalCalls: u.totalCalls || 0,
           coins: u.coins || 0
         }));
@@ -177,7 +180,7 @@ export default function AdminUsersScreen() {
       {}
       <View style={styles.filterContainer}>
         <View style={styles.filterWrapper}>
-          {['all', 'active', 'inactive'].map((f) => {
+          {['all', 'active', 'inactive', 'deleted'].map((f) => {
             const active = filter === f;
             const config = FILTER_CONFIG[f];
             return (
@@ -230,7 +233,12 @@ export default function AdminUsersScreen() {
               <View style={styles.userInfo}>
                 <View style={styles.userNameRow}>
                   <Text style={styles.userName}>{user.name}</Text>
-                  <View style={[styles.statusDot, user.status === 'active' ? styles.dotActive : styles.dotInactive]} />
+                  <View style={[styles.statusDot, user.status === 'active' ? styles.dotActive : user.status === 'deleted' ? styles.dotDeleted : styles.dotInactive]} />
+                  {user.isDeleted && (
+                    <View style={styles.deletedBadge}>
+                      <Text style={styles.deletedBadgeText}>DELETED</Text>
+                    </View>
+                  )}
                 </View>
                 <Text style={styles.userMeta}>{user.phone} • {user.language}</Text>
                 <View style={styles.userStats}>
@@ -392,6 +400,22 @@ const styles = StyleSheet.create({
   },
   dotInactive: {
     backgroundColor: '#4B5563',
+  },
+  dotDeleted: {
+    backgroundColor: '#F59E0B',
+  },
+  deletedBadge: {
+    backgroundColor: 'rgba(245,158,11,0.12)',
+    paddingHorizontal: s(6),
+    paddingVertical: 1,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(245,158,11,0.25)',
+  },
+  deletedBadgeText: {
+    color: '#F59E0B',
+    fontSize: ms(8, 0.3),
+    fontFamily: 'Inter_800ExtraBold',
   },
   userMeta: {
     fontSize: ms(12, 0.3),

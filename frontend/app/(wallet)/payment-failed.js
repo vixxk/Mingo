@@ -46,7 +46,7 @@ export default function PaymentFailedScreen() {
 
         <Text style={styles.subtitle}>
           Incase any amount was deducted, please{'\n'}contact{' '}
-          <Text style={styles.emailLink}>support@mingo.in</Text>
+          <Text style={styles.emailLink}>support@talkmingo.com</Text>
         </Text>
 
         <TouchableOpacity

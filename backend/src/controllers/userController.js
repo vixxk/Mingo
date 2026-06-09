@@ -197,20 +197,139 @@ class UserController {
     }
   }
 
+  // ─── Report User / Listener ─────────────────────────────────
   static async submitReport(req, res, next) {
     try {
-      const { message } = req.body;
+      const { reportedUserId, category, message, reportType, sessionId } = req.body;
       if (!message || !message.trim()) {
         throw new AppError('Report message is required', 400);
       }
 
-      const report = await MemberReport.create({
+      const reportData = {
         reporter: req.user.id,
         reporterRole: req.user.role === 'LISTENER' ? 'listener' : 'user',
         message: message.trim(),
+        category: category || 'other',
+        reportType: reportType || 'general',
+      };
+
+      if (reportedUserId) {
+        reportData.reportedUser = reportedUserId;
+      }
+      if (sessionId) {
+        reportData.sessionId = sessionId;
+      }
+
+      const report = await MemberReport.create(reportData);
+
+      return ApiResponse.created(res, report, 'Report submitted successfully');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // ─── Block / Unblock User ──────────────────────────────────
+  static async blockUser(req, res, next) {
+    try {
+      const { targetUserId } = req.body;
+      if (!targetUserId) {
+        throw new AppError('Target user ID is required', 400);
+      }
+
+      if (targetUserId === req.user.id) {
+        throw new AppError('You cannot block yourself', 400);
+      }
+
+      const user = await User.findById(req.user.id);
+      if (!user) throw new AppError('User not found', 404);
+
+      // Check if already blocked
+      if (user.blockedUsers.includes(targetUserId)) {
+        return ApiResponse.success(res, { blockedUsers: user.blockedUsers }, 'User is already blocked');
+      }
+
+      user.blockedUsers.push(targetUserId);
+      await user.save();
+
+      return ApiResponse.success(res, { blockedUsers: user.blockedUsers }, 'User blocked successfully');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async unblockUser(req, res, next) {
+    try {
+      const { targetUserId } = req.body;
+      if (!targetUserId) {
+        throw new AppError('Target user ID is required', 400);
+      }
+
+      const user = await User.findById(req.user.id);
+      if (!user) throw new AppError('User not found', 404);
+
+      const idx = user.blockedUsers.indexOf(targetUserId);
+      if (idx === -1) {
+        return ApiResponse.success(res, { blockedUsers: user.blockedUsers }, 'User is not blocked');
+      }
+
+      user.blockedUsers.splice(idx, 1);
+      await user.save();
+
+      return ApiResponse.success(res, { blockedUsers: user.blockedUsers }, 'User unblocked successfully');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async getBlockedUsers(req, res, next) {
+    try {
+      const user = await User.findById(req.user.id).populate({
+        path: 'blockedUsers',
+        select: 'name username avatarIndex gender',
+      });
+      if (!user) throw new AppError('User not found', 404);
+
+      return ApiResponse.success(res, user.blockedUsers, 'Blocked users retrieved');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // ─── Delete Account (Self) ─────────────────────────────────
+  static async deleteAccount(req, res, next) {
+    try {
+      const { reason } = req.body;
+
+      const user = await User.findById(req.user.id);
+      if (!user) throw new AppError('User not found', 404);
+
+      // Soft delete — anonymize data
+      user.isDeleted = true;
+      user.deletedAt = new Date();
+      user.deletionReason = reason || '';
+      user.pushToken = null;
+      user.isBanned = false;
+      await user.save();
+
+      // If user is a listener, set offline and deactivate
+      const listener = await Listener.findOne({ userId: user._id });
+      if (listener) {
+        listener.isOnline = false;
+        listener.isBusy = false;
+        await listener.save();
+      }
+
+      // Log activity
+      const ActivityLog = require('../models/ActivityLog');
+      await ActivityLog.create({
+        user: user.name,
+        action: `User ${user.name} (@${user.username}) deleted their account. Reason: ${reason || 'Not specified'}`,
+        type: 'user',
+        icon: 'person-remove',
+        color: '#EF4444',
       });
 
-      return ApiResponse.created(res, report, 'Report submitted');
+      return ApiResponse.success(res, null, 'Account deleted successfully');
     } catch (err) {
       next(err);
     }

@@ -52,11 +52,26 @@ const formatAbsoluteTime = (dateStr) => {
   });
 };
 
+const CATEGORY_COLORS = {
+  harassment: { bg: 'rgba(239,68,68,0.12)', text: '#FCA5A5', border: 'rgba(239,68,68,0.25)' },
+  inappropriate_content: { bg: 'rgba(245,158,11,0.12)', text: '#FCD34D', border: 'rgba(245,158,11,0.25)' },
+  spam: { bg: 'rgba(59,130,246,0.12)', text: '#93C5FD', border: 'rgba(59,130,246,0.25)' },
+  hate_speech: { bg: 'rgba(168,85,247,0.12)', text: '#C4B5FD', border: 'rgba(168,85,247,0.25)' },
+  fraud: { bg: 'rgba(239,68,68,0.12)', text: '#FCA5A5', border: 'rgba(239,68,68,0.25)' },
+  other: { bg: 'rgba(156,163,175,0.12)', text: '#D1D5DB', border: 'rgba(156,163,175,0.25)' },
+};
+
+const formatCategory = (cat) => {
+  if (!cat) return 'Other';
+  return cat.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+};
+
 export default function MemberReportsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [reports, setReports] = useState([]);
-  const [filter, setFilter] = useState('pending');
+  const [statusFilter, setStatusFilter] = useState('pending');
+  const [reportTypeFilter, setReportTypeFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [updating, setUpdating] = useState(null);
@@ -69,9 +84,13 @@ export default function MemberReportsScreen() {
     message: '',
   });
 
-  const fetchReports = useCallback(async (status) => {
+  const fetchReports = useCallback(async (status, reportType) => {
     try {
-      const response = await adminAPI.getReports({ status });
+      const params = { status };
+      if (reportType && reportType !== 'all') {
+        params.reportType = reportType;
+      }
+      const response = await adminAPI.getReports(params);
       const data = response.data?.reports || response.data || [];
       setReports(data);
     } catch (error) {
@@ -86,14 +105,14 @@ export default function MemberReportsScreen() {
   useFocusEffect(
     useCallback(() => {
       setLoading(true);
-      fetchReports(filter);
-    }, [filter, fetchReports])
+      fetchReports(statusFilter, reportTypeFilter);
+    }, [statusFilter, reportTypeFilter, fetchReports])
   );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchReports(filter);
-  }, [filter, fetchReports]);
+    fetchReports(statusFilter, reportTypeFilter);
+  }, [statusFilter, reportTypeFilter, fetchReports]);
 
   const handleAction = (id, newStatus) => {
     const actionLabel = newStatus === 'resolved' ? 'Resolve' : 'Dismiss';
@@ -102,7 +121,7 @@ export default function MemberReportsScreen() {
       reportId: id,
       status: newStatus,
       title: `${actionLabel} Report`,
-      message: `Are you sure you want to ${actionLabel.toLowerCase()} this issue?`,
+      message: `Are you sure you want to ${actionLabel.toLowerCase()} this report?`,
     });
   };
 
@@ -147,26 +166,46 @@ export default function MemberReportsScreen() {
         <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7} style={st.backBtn}>
           <Ionicons name="chevron-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={st.headerTitle}>Member Reports</Text>
+        <Text style={st.headerTitle}>Reports</Text>
         <View style={{ width: s(40) }} />
       </View>
 
-      {/* Filter Tabs */}
+      {/* Report Type Filter */}
+      <View style={st.typeFilterRow}>
+        {[
+          { key: 'all', label: 'All Reports' },
+          { key: 'user_report', label: 'By Users' },
+          { key: 'listener_report', label: 'By Listeners' },
+        ].map((tab) => (
+          <TouchableOpacity
+            key={tab.key}
+            style={[st.typeTab, reportTypeFilter === tab.key && st.typeTabActive]}
+            onPress={() => setReportTypeFilter(tab.key)}
+            activeOpacity={0.7}
+          >
+            <Text style={[st.typeTabText, reportTypeFilter === tab.key && st.typeTabTextActive]}>
+              {tab.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Status Filter Tabs */}
       <View style={st.filterRow}>
         <FilterTab
           label="Pending"
-          active={filter === 'pending'}
-          onPress={() => setFilter('pending')}
+          active={statusFilter === 'pending'}
+          onPress={() => setStatusFilter('pending')}
         />
         <FilterTab
           label="Resolved"
-          active={filter === 'resolved'}
-          onPress={() => setFilter('resolved')}
+          active={statusFilter === 'resolved'}
+          onPress={() => setStatusFilter('resolved')}
         />
         <FilterTab
           label="Dismissed"
-          active={filter === 'reviewed'}
-          onPress={() => setFilter('reviewed')}
+          active={statusFilter === 'reviewed'}
+          onPress={() => setStatusFilter('reviewed')}
         />
       </View>
 
@@ -186,7 +225,7 @@ export default function MemberReportsScreen() {
         {reports.length === 0 ? (
           <View style={st.emptyState}>
             <Ionicons name="checkmark-done-circle" size={60} color="#1F2937" />
-            <Text style={st.emptyText}>No {filter === 'reviewed' ? 'dismissed' : filter} reports found</Text>
+            <Text style={st.emptyText}>No {statusFilter === 'reviewed' ? 'dismissed' : statusFilter} reports found</Text>
           </View>
         ) : (
           reports.map((report) => {
@@ -195,6 +234,13 @@ export default function MemberReportsScreen() {
             const reporterUsername = report.reporter?.username ? `@${report.reporter.username}` : 'unknown';
             const displayName = `${reporterName} (${reporterUsername})`;
             const reporterRole = report.reporterRole || 'user';
+
+            // Reported user info
+            const reportedName = report.reportedUser?.name || null;
+            const reportedUsername = report.reportedUser?.username ? `@${report.reportedUser.username}` : null;
+
+            const category = report.category || 'other';
+            const catStyle = CATEGORY_COLORS[category] || CATEGORY_COLORS.other;
 
             return (
               <View key={reportId} style={st.reportCard}>
@@ -232,19 +278,35 @@ export default function MemberReportsScreen() {
                   </View>
                 </View>
 
-                {/* Subtitle/Time of reporting */}
-                <View style={st.reportMetaRow}>
-                  <Ionicons name="time-outline" size={14} color="#9CA3AF" />
-                  <Text style={st.metaTimeText}>
-                    Reported {formatTime(report.createdAt)} ({formatAbsoluteTime(report.createdAt)})
-                  </Text>
+                {/* Reported User */}
+                {reportedName && (
+                  <View style={st.reportedUserRow}>
+                    <Ionicons name="person-outline" size={14} color="#6B7280" />
+                    <Text style={st.reportedUserText}>
+                      Reported: <Text style={{ color: '#E5E7EB', fontFamily: 'Inter_600SemiBold' }}>{reportedName}</Text>
+                      {reportedUsername ? ` (${reportedUsername})` : ''}
+                    </Text>
+                  </View>
+                )}
+
+                {/* Category Badge + Time */}
+                <View style={st.metaInfoRow}>
+                  <View style={[st.categoryBadge, { backgroundColor: catStyle.bg, borderColor: catStyle.border }]}>
+                    <Text style={[st.categoryText, { color: catStyle.text }]}>{formatCategory(category)}</Text>
+                  </View>
+                  <View style={st.reportMetaRow}>
+                    <Ionicons name="time-outline" size={14} color="#9CA3AF" />
+                    <Text style={st.metaTimeText}>
+                      {formatTime(report.createdAt)}
+                    </Text>
+                  </View>
                 </View>
 
                 <View style={st.messageBox}>
                   <Text style={st.messageText}>{report.message}</Text>
                 </View>
 
-                {filter === 'pending' && (
+                {statusFilter === 'pending' && (
                   <View style={st.cardActions}>
                     <TouchableOpacity
                       activeOpacity={0.8}
@@ -383,6 +445,33 @@ const st = StyleSheet.create({
     color: '#fff',
     fontFamily: 'Inter_900Black',
   },
+  typeFilterRow: {
+    flexDirection: 'row',
+    paddingHorizontal: s(16),
+    marginBottom: vs(10),
+    gap: s(8),
+  },
+  typeTab: {
+    flex: 1,
+    paddingVertical: vs(10),
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+  },
+  typeTabActive: {
+    backgroundColor: 'rgba(168,85,247,0.12)',
+    borderColor: 'rgba(168,85,247,0.35)',
+  },
+  typeTabText: {
+    color: '#6B7280',
+    fontSize: ms(11, 0.3),
+    fontFamily: 'Inter_600SemiBold',
+  },
+  typeTabTextActive: {
+    color: '#C084FC',
+  },
   filterRow: {
     flexDirection: 'row',
     gap: s(10),
@@ -431,11 +520,39 @@ const st = StyleSheet.create({
     fontWeight: '800',
     fontFamily: 'Inter_800ExtraBold',
   },
+  reportedUserRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(6),
+    marginBottom: vs(8),
+    paddingLeft: s(2),
+  },
+  reportedUserText: {
+    fontSize: ms(12, 0.3),
+    color: '#9CA3AF',
+    fontFamily: 'Inter_400Regular',
+  },
+  metaInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: vs(12),
+  },
+  categoryBadge: {
+    paddingHorizontal: s(10),
+    paddingVertical: vs(3),
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  categoryText: {
+    fontSize: ms(10, 0.3),
+    fontWeight: '700',
+    fontFamily: 'Inter_700Bold',
+  },
   reportMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: s(6),
-    marginBottom: vs(12),
   },
   metaTimeText: {
     fontSize: ms(11, 0.3),

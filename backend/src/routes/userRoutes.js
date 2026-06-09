@@ -11,4 +11,12 @@ router.post('/favourite', authenticate, UserController.toggleFavourite);
 router.get('/favourites', authenticate, UserController.getFavourites);
 router.post('/report', authenticate, UserController.submitReport);
 
+// Block / Unblock
+router.post('/block', authenticate, UserController.blockUser);
+router.post('/unblock', authenticate, UserController.unblockUser);
+router.get('/blocked', authenticate, UserController.getBlockedUsers);
+
+// Account Deletion
+router.delete('/delete-account', authenticate, UserController.deleteAccount);
+
 module.exports = router;

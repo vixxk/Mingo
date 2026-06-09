@@ -37,7 +37,7 @@ const FAQ_DATA = [
     id: '3',
     question: 'Why are coins not added to my wallet even after recharge?',
     answer:
-      'Please wait a few minutes for the transaction to process. If coins still don\'t appear, contact support@mingo.in with your transaction ID.',
+      'Please wait a few minutes for the transaction to process. If coins still don\'t appear, contact support@talkmingo.com with your transaction ID.',
   },
   {
     id: '4',

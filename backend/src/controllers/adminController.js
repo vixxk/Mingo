@@ -242,6 +242,14 @@ class AdminController {
         filter.isBanned = true;
       }
 
+      if (status === 'deleted') {
+        delete filter._id;
+        filter.isDeleted = true;
+      } else {
+        // Only show non-deleted users unless explicitly filtering for deleted
+        filter.isDeleted = { $ne: true };
+      }
+
       const users = await User.find(filter)
         .select('-__v')
         .sort({ createdAt: -1 })
@@ -525,12 +533,14 @@ class AdminController {
 
   static async getReports(req, res, next) {
     try {
-      const { status = 'pending', page = 1, limit = 20 } = req.query;
+      const { status = 'pending', reportType, page = 1, limit = 20 } = req.query;
       const filter = {};
       if (status !== 'all') filter.status = status;
+      if (reportType && reportType !== 'all') filter.reportType = reportType;
 
       const reports = await MemberReport.find(filter)
         .populate('reporter', 'name username phone')
+        .populate('reportedUser', 'name username phone')
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(parseInt(limit));

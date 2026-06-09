@@ -8,6 +8,7 @@ import {
   ScrollView,
   Alert,
   Animated,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,11 +16,12 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs } from '../../utils/responsive';
-import { authAPI } from '../../utils/api';
+import { authAPI, userAPI } from '../../utils/api';
 import { socketService } from '../../utils/socket';
 import RaiseIssuePopup from '../../components/shared/RaiseIssuePopup';
 import LogoutPopup from '../../components/shared/LogoutPopup';
 import SkeletonProfile from '../../components/SkeletonProfile';
+import DeleteAccountPopup from '../../components/shared/DeleteAccountPopup';
 
 const MENU_ITEMS = [
   { id: '1', label: 'Wallet', icon: 'wallet-outline', route: '/balance' },
@@ -29,6 +31,9 @@ const MENU_ITEMS = [
   { id: '5', label: 'Help & Support', icon: 'help-circle-outline', route: '/help-support' },
   { id: '7', label: 'Raise an Issue', icon: 'flag-outline', action: 'issue' },
   { id: '6', label: 'Account Settings', icon: 'person-outline', route: '/edit-profile' },
+  { id: '8', label: 'Privacy Policy', icon: 'shield-checkmark-outline', action: 'privacy' },
+  { id: '10', label: 'Terms & Conditions', icon: 'document-text-outline', action: 'terms' },
+  { id: '9', label: 'Delete Account', icon: 'trash-outline', action: 'delete', danger: true },
 ];
 
 const MenuItem = ({ item, onPress }) => (
@@ -37,9 +42,9 @@ const MenuItem = ({ item, onPress }) => (
     activeOpacity={0.6}
     onPress={() => onPress(item)}
   >
-    <Ionicons name={item.icon} size={22} color="#9CA3AF" style={styles.menuIcon} />
-    <Text style={styles.menuLabel}>{item.label}</Text>
-    <Ionicons name="chevron-forward" size={20} color="#6B7280" />
+    <Ionicons name={item.icon} size={22} color={item.danger ? '#EF4444' : '#9CA3AF'} style={styles.menuIcon} />
+    <Text style={[styles.menuLabel, item.danger && { color: '#EF4444' }]}>{item.label}</Text>
+    <Ionicons name="chevron-forward" size={20} color={item.danger ? '#EF4444' : '#6B7280'} />
   </TouchableOpacity>
 );
 
@@ -49,6 +54,8 @@ export default function ProfileScreen() {
   const [userAvatar, setUserAvatar] = useState(require('../../images/user_avatar.png'));
   const [showIssuePopup, setShowIssuePopup] = useState(false);
   const [showLogoutPopup, setShowLogoutPopup] = useState(false);
+  const [showDeletePopup, setShowDeletePopup] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -159,6 +166,12 @@ export default function ProfileScreen() {
   const handleMenuPress = (item) => {
     if (item.action === 'issue') {
       setShowIssuePopup(true);
+    } else if (item.action === 'privacy') {
+      Linking.openURL('https://app.notion.com/p/Privacy-Policy-of-Mingo-37aa4992143b8022948fc9122e441308');
+    } else if (item.action === 'terms') {
+      Linking.openURL('https://app.notion.com/p/TERMS-CONDITIONS-37aa4992143b80c0a4c6fd5a8b4618df');
+    } else if (item.action === 'delete') {
+      setShowDeletePopup(true);
     } else if (item.route) {
       router.push(item.route);
     } else {
@@ -251,6 +264,25 @@ export default function ProfileScreen() {
         visible={showLogoutPopup}
         onCancel={() => setShowLogoutPopup(false)}
         onConfirm={confirmLogout}
+      />
+      <DeleteAccountPopup
+        visible={showDeletePopup}
+        onClose={() => setShowDeletePopup(false)}
+        isDeleting={isDeleting}
+        onConfirm={async (reason) => {
+          setIsDeleting(true);
+          try {
+            await userAPI.deleteAccount(reason);
+            socketService.disconnect();
+            await AsyncStorage.multiRemove(['userToken', 'token', 'user', 'listenerStatus', 'isAdmin']);
+            setShowDeletePopup(false);
+            router.replace('/welcome');
+          } catch (err) {
+            console.error('Delete account error:', err);
+          } finally {
+            setIsDeleting(false);
+          }
+        }}
       />
     </View>
   );

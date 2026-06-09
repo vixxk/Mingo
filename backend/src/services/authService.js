@@ -59,6 +59,10 @@ class AuthService {
       throw new AppError('Your account has been suspended. Contact support.', 403);
     }
 
+    if (user && user.isDeleted) {
+      throw new AppError('This account has been deleted. Please sign up again if you wish to use Mingo.', 410);
+    }
+
     return await AuthService.sendOtp(phone);
   }
 
@@ -208,6 +212,10 @@ class AuthService {
 
     if (user.isBanned) {
       throw new AppError('Your account has been suspended. Contact support.', 403);
+    }
+
+    if (user.isDeleted) {
+      throw new AppError('This account has been deleted. Please sign up again if you wish to use Mingo.', 410);
     }
 
     const token = AuthService._generateToken(user);

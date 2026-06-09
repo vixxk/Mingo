@@ -37,7 +37,13 @@ class ListenerController {
     try {
       const limit = parseInt(req.query.limit, 10) || 20;
       const userLanguage = req.user?.language || 'English';
-      const listeners = await ListenerService.getRecommended(limit, userLanguage);
+      
+      // Get user's blocked list to filter out blocked listeners
+      const User = require('../models/userModel');
+      const currentUser = await User.findById(req.user.id).select('blockedUsers');
+      const blockedUserIds = (currentUser?.blockedUsers || []).map(id => id.toString());
+      
+      const listeners = await ListenerService.getRecommended(limit, userLanguage, blockedUserIds);
       return ApiResponse.success(res, listeners, 'Listeners retrieved');
     } catch (err) {
       next(err);

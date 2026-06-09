@@ -17,6 +17,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, wp, hp, SCREEN_WIDTH } from '../../utils/responsive';
 import { callAPI, walletAPI } from '../../utils/api';
+import ReportUserPopup from '../../components/shared/ReportUserPopup';
 
 const getAvatarImage = (gender, index) => {
   const parsedIndex = parseInt(index, 10) || 0;
@@ -55,7 +56,7 @@ const formatCallTime = (dateStr) => {
   return `${d.toLocaleDateString('en-US', dateOptions)}, ${d.toLocaleTimeString('en-US', timeOptions)}`;
 };
 
-const SessionItem = ({ item }) => {
+const SessionItem = ({ item, onReport }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
@@ -138,6 +139,15 @@ const SessionItem = ({ item }) => {
             </View>
           )}
         </View>
+
+        {/* Report Button */}
+        <TouchableOpacity
+          style={styles.reportIconBtn}
+          activeOpacity={0.7}
+          onPress={() => onReport(item)}
+        >
+          <Ionicons name="alert-circle-outline" size={wp(5)} color="rgba(255,255,255,0.6)" />
+        </TouchableOpacity>
       </LinearGradient>
     </Animated.View>
   );
@@ -166,6 +176,8 @@ export default function RecentSessionsScreen() {
   const [recentSessions, setRecentSessions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [earnings, setEarnings] = useState(0);
+  const [reportTarget, setReportTarget] = useState(null);
+  const [showReportPopup, setShowReportPopup] = useState(false);
 
   const headerAnim = useRef(new Animated.Value(0)).current;
   const contentAnim = useRef(new Animated.Value(0)).current;
@@ -291,12 +303,32 @@ export default function RecentSessionsScreen() {
           <FlatList
             data={recentSessions}
             keyExtractor={item => item.id}
-            renderItem={({ item }) => <SessionItem item={item} />}
+            renderItem={({ item }) => (
+              <SessionItem 
+                item={item} 
+                onReport={(session) => {
+                  setReportTarget(session);
+                  setShowReportPopup(true);
+                }}
+              />
+            )}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
           />
         )}
       </Animated.View>
+
+      <ReportUserPopup
+        visible={showReportPopup}
+        onClose={() => {
+          setShowReportPopup(false);
+          setReportTarget(null);
+        }}
+        reportedUserId={reportTarget?.userId}
+        reportType="listener_report"
+        sessionId={reportTarget?.id}
+        userName={reportTarget?.name || 'this user'}
+      />
     </View>
   );
 }
@@ -389,6 +421,17 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#1A1A1A',
     gap: hp(1.2),
+  },
+  reportIconBtn: {
+    position: 'absolute',
+    top: wp(3),
+    right: wp(3),
+    width: wp(8),
+    height: wp(8),
+    borderRadius: wp(4),
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   metaRow: {
     flexDirection: 'row',

@@ -85,6 +85,22 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    blockedUsers: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    }],
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
+    deletionReason: {
+      type: String,
+      default: '',
+    },
   },
   {
     timestamps: true,
@@ -94,6 +110,7 @@ const userSchema = new mongoose.Schema(
 
 userSchema.index({ role: 1 });
 userSchema.index({ isBanned: 1 });
+userSchema.index({ isDeleted: 1 });
 
 userSchema.statics.findByPhone = function (phone) {
   return this.findOne({ phone });
