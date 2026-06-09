@@ -20,9 +20,28 @@ export default function NetworkErrorScreen() {
   const [retrying, setRetrying] = useState(false);
   const [status, setStatus] = useState('offline'); // 'offline' | 'restored'
   const [toast, setToast] = useState({ visible: false, message: '', type: 'error' });
+  const [internetStatus, setInternetStatus] = useState('unknown'); // 'online' | 'offline' | 'unknown'
 
   useEffect(() => {
     setNetworkErrorScreenOpen(true);
+    
+    const checkInternet = async () => {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 4000);
+        const res = await fetch('https://clients3.google.com/generate_204', { signal: controller.signal });
+        clearTimeout(timeout);
+        if (res.status === 204 || res.ok) {
+          setInternetStatus('online');
+        } else {
+          setInternetStatus('offline');
+        }
+      } catch (e) {
+        setInternetStatus('offline');
+      }
+    };
+    checkInternet();
+
     return () => {
       setNetworkErrorScreenOpen(false);
     };
@@ -37,6 +56,9 @@ export default function NetworkErrorScreen() {
 
     if (intervalId) clearInterval(intervalId);
     setStatus('restored');
+    
+    // Explicitly close the network error state immediately
+    setNetworkErrorScreenOpen(false);
     
     const loggedIn = await authAPI.isLoggedIn();
     let role = 'USER';
@@ -70,6 +92,9 @@ export default function NetworkErrorScreen() {
 
   const handleRetry = async () => {
     if (retrying || status === 'restored') return;
+    
+    // Reset toast state before starting check
+    setToast(prev => ({ ...prev, visible: false }));
     setRetrying(true);
     
     const controller = new AbortController();
@@ -92,12 +117,29 @@ export default function NetworkErrorScreen() {
         return;
       }
       
-      const isTimeout = error.name === 'AbortError' || error.message?.includes('aborted');
+      // Check if general internet is working
+      let hasInternet = false;
+      try {
+        const netCheckController = new AbortController();
+        const netCheckTimeout = setTimeout(() => netCheckController.abort(), 4000);
+        const netCheck = await fetch('https://clients3.google.com/generate_204', { signal: netCheckController.signal });
+        clearTimeout(netCheckTimeout);
+        if (netCheck.status === 204 || netCheck.ok) {
+          hasInternet = true;
+          setInternetStatus('online');
+        } else {
+          setInternetStatus('offline');
+        }
+      } catch (netErr) {
+        hasInternet = false;
+        setInternetStatus('offline');
+      }
+
       setToast({
         visible: true,
-        message: isTimeout 
-          ? 'Connection timed out. Please check your network connection.'
-          : 'Connection Failed: We still cannot reach the server. Please verify your connection.',
+        message: !hasInternet
+          ? 'No internet connection. Please check your network connection.'
+          : 'Server Unreachable: We cannot reach the Mingo servers. Please try again later.',
         type: 'error'
       });
     } finally {
@@ -156,14 +198,20 @@ export default function NetworkErrorScreen() {
       <View style={styles.content}>
         {/* Title */}
         <Text style={styles.title}>
-          {status === 'restored' ? 'Connection Restored!' : 'Oops! Something Went Wrong'}
+          {status === 'restored' 
+            ? 'Connection Restored!' 
+            : internetStatus === 'online' 
+            ? 'Server Unreachable' 
+            : 'No Internet Connection'}
         </Text>
 
         {/* Subtitle */}
         <Text style={styles.subtitle}>
           {status === 'restored'
             ? 'Welcoming you back... We are redirecting you to your screen.'
-            : "We couldn't complete your request. Please check your internet connection or try again later."}
+            : internetStatus === 'online'
+            ? 'Mingo servers are currently unreachable. We are working to restore connection. Please try again in a few moments.'
+            : "We couldn't complete your request. Please check your internet connection and try again."}
         </Text>
 
         {/* Center Illustration (Offline Cloud in circular frame) */}

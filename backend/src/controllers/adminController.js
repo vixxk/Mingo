@@ -71,7 +71,6 @@ class AdminController {
       const [
         totalUsers,
         totalListeners,
-        pendingApprovals,
         activeNow,
         totalCalls,
         pendingReports,
@@ -80,16 +79,12 @@ class AdminController {
         diamondsGeneratedTodayAgg,
         pendingPayoutAgg,
         pendingPayoutsCount,
-        activeChats
+        activeChats,
+        pendingUsersCount,
+        pendingListenersCount
       ] = await Promise.all([
         User.countDocuments({ role: 'USER', _id: { $nin: allListenerUserIds } }),
         approvedListenersCountPromise,
-        Listener.countDocuments({ 
-          $or: [
-            { status: 'pending' },
-            { profileStatus: 'pending' }
-          ]
-        }),
         onlineApprovedListenersCountPromise,
         Session.countDocuments({ status: 'completed' }),
         MemberReport.countDocuments({ status: 'pending' }),
@@ -107,8 +102,12 @@ class AdminController {
           { $group: { _id: null, total: { $sum: '$amount' } } }
         ]),
         PayoutRequest.countDocuments({ status: 'pending' }),
-        Session.countDocuments({ status: 'active' })
+        Session.countDocuments({ status: 'active' }),
+        Listener.countDocuments({ status: 'pending' }),
+        Listener.countDocuments({ status: 'approved', profileStatus: 'pending' })
       ]);
+
+      const pendingApprovals = pendingUsersCount + pendingListenersCount;
 
       const revenueAgg = await Transaction.aggregate([
         { $match: { type: 'purchase', status: 'completed' } },
@@ -194,6 +193,8 @@ class AdminController {
         diamondsGeneratedToday,
         pendingPayoutAmount,
         activeChats,
+        pendingUsers: pendingUsersCount,
+        pendingListeners: pendingListenersCount,
         charts: {
           dailyRevenue,
           dailyRegistrations
@@ -291,7 +292,7 @@ class AdminController {
       if (status && status !== 'all') filter.status = status;
       
       let listeners = await Listener.find(filter)
-        .populate('userId', 'name username phone gender avatarIndex isBanned')
+        .populate('userId', 'name username phone gender avatarIndex isBanned isDeleted deletionReason')
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(parseInt(limit));
@@ -323,6 +324,8 @@ class AdminController {
         introVideoUrl: l.introVideoUrl,
         audioCalls: l.audioCalls || 0,
         videoCalls: l.videoCalls || 0,
+        isDeleted: l.userId?.isDeleted || false,
+        deletionReason: l.userId?.deletionReason || '',
       }));
 
       return ApiResponse.success(res, { listeners: result, total, page: parseInt(page), limit: parseInt(limit) }, 'Listeners retrieved');

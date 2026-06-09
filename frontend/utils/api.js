@@ -42,7 +42,27 @@ const apiRequest = async (endpoint, options = {}) => {
 
     if (timeoutId) clearTimeout(timeoutId);
 
-    const data = await response.json();
+    let data = {};
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      try {
+        data = await response.json();
+      } catch (jsonErr) {
+        try {
+          const text = await response.text();
+          data = { message: text || 'Invalid JSON response received' };
+        } catch (e) {
+          data = { message: 'Failed to read response body' };
+        }
+      }
+    } else {
+      try {
+        const text = await response.text();
+        data = { message: text || 'Non-JSON response received' };
+      } catch (e) {
+        data = { message: 'Failed to read response body' };
+      }
+    }
 
     if (!response.ok) {
       const error = new Error(data.message || 'API request failed');

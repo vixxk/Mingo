@@ -240,12 +240,13 @@ const st = StyleSheet.create({
   categoriesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: SW * 0.025,
+    justifyContent: 'space-between',
     width: '100%',
+    rowGap: SH * 0.012,
     marginBottom: SH * 0.02,
   },
   categoryItem: {
-    width: (SW * 0.88 - SW * 0.05) / 2 - SW * 0.025,
+    width: '48.5%',
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: SH * 0.015,

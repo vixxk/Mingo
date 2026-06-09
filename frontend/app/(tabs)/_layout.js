@@ -41,7 +41,7 @@ export default function TabLayout() {
 
       socketService.on('call_cancelled', (data) => {
         console.log('Call cancelled by caller:', data);
-        setIncomingCalls((prev) => prev.filter(c => c.callId !== data.callId));
+        setIncomingCalls((prev) => prev.filter(c => c.callId !== data.callId && c.callId !== data.sessionId));
       });
 
       socketService.on('account_banned', (data) => {
@@ -69,10 +69,29 @@ export default function TabLayout() {
     };
   }, []);
 
-  const handleAcceptCall = (acceptedCall) => {
+  const handleAcceptCall = async (acceptedCall) => {
     if (!acceptedCall) return;
     
+    // Ensure socket is connected before emitting events
+    await socketService.connect();
+    
     const { callerId, callerName, callType, callId, roomId, avatarIndex, gender } = acceptedCall;
+    
+    try {
+      // Validate that the session is still active
+      const sessionRes = await callAPI.getSession(callId);
+      const session = sessionRes?.data;
+      if (!session || session.status === 'cancelled' || session.status === 'completed') {
+        Alert.alert('Call Cancelled', 'This call has been cancelled by the other participant.', [{ text: 'OK' }]);
+        setIncomingCalls(prev => prev.filter(c => c.callId !== callId));
+        return;
+      }
+    } catch (err) {
+      console.log('Error validating session before accept:', err);
+      Alert.alert('Call Unavailable', 'This call is no longer available.', [{ text: 'OK' }]);
+      setIncomingCalls(prev => prev.filter(c => c.callId !== callId));
+      return;
+    }
     
     // Automatically reject all other active requests
     const otherCalls = incomingCalls.filter(c => c.callId !== callId);
@@ -206,8 +225,8 @@ export default function TabLayout() {
             backgroundColor: '#111111',
             borderTopWidth: 0.5,
             borderTopColor: '#222',
-            height: Platform.OS === 'ios' ? vs(75) + insets.bottom : vs(65),
-            paddingBottom: Platform.OS === 'ios' ? insets.bottom : vs(8),
+            height: vs(65) + insets.bottom,
+            paddingBottom: insets.bottom > 0 ? insets.bottom : vs(8),
             paddingTop: vs(8),
             elevation: 0,
             shadowOpacity: 0,

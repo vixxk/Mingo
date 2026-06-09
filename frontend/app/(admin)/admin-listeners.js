@@ -132,7 +132,9 @@ export default function AdminListenersScreen() {
           videoCalls: l.videoCalls || 0,
           earnings: typeof l.earnings === 'string' ? l.earnings : `₹${l.earnings || 0}`,
           rating: l.rating,
-          introVideoUrl: l.introVideoUrl
+          introVideoUrl: l.introVideoUrl,
+          isDeleted: l.isDeleted || false,
+          deletionReason: l.deletionReason || ''
         }));
         setListeners(formatted);
       }
@@ -325,6 +327,12 @@ export default function AdminListenersScreen() {
                       <Text style={[st.badgeText, { color: '#EF4444' }]}>BANNED</Text>
                     </View>
                   )}
+                  {selectedListener.isDeleted && (
+                    <View style={[st.badge, { backgroundColor: 'rgba(245,158,11,0.15)' }]}>
+                      <Ionicons name="trash" size={12} color="#F59E0B" />
+                      <Text style={[st.badgeText, { color: '#F59E0B' }]}>DELETED</Text>
+                    </View>
+                  )}
                 </View>
 
                 <View style={st.statsRow}>
@@ -337,6 +345,13 @@ export default function AdminListenersScreen() {
                   <View style={st.statBox}><Text style={st.statVal}>{selectedListener.audioCalls}</Text><Text style={st.statLbl}>Audio</Text></View>
                   <View style={st.statBox}><Text style={st.statVal}>{selectedListener.videoCalls}</Text><Text style={st.statLbl}>Video</Text></View>
                 </View>
+
+                {selectedListener.isDeleted && (
+                  <View style={{ width: '100%', backgroundColor: '#141414', borderRadius: 16, padding: s(14), marginBottom: SH * 0.02, borderWidth: 1, borderColor: '#1F1F1F' }}>
+                    <Text style={{ color: '#6B7280', fontSize: ms(12), fontFamily: 'Inter_500Medium', marginBottom: 4 }}>Reason for Deletion</Text>
+                    <Text style={{ color: '#F59E0B', fontSize: ms(14), fontFamily: 'Inter_700Bold' }}>{selectedListener.deletionReason || 'Not specified'}</Text>
+                  </View>
+                )}
  
                 {selectedListener.introVideoUrl && (
                   <View style={{ width: '100%', marginBottom: SH * 0.02 }}>

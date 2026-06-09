@@ -14,12 +14,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { authAPI, listenerAPI } from '../../utils/api';
+import { authAPI, listenerAPI, userAPI } from '../../utils/api';
 import { socketService } from '../../utils/socket';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs } from '../../utils/responsive';
 import RaiseIssuePopup from '../../components/shared/RaiseIssuePopup';
 import LogoutPopup from '../../components/shared/LogoutPopup';
+import DeleteAccountPopup from '../../components/shared/DeleteAccountPopup';
 
 const MENU_ITEMS = [
   { id: '2', label: 'Transactions', icon: 'receipt-outline', route: '/transactions' },
@@ -28,6 +29,7 @@ const MENU_ITEMS = [
   { id: '7', label: 'Raise an Issue', icon: 'flag-outline', action: 'issue' },
   { id: '8', label: 'Edit Public Profile', icon: 'id-card-outline', route: '/(listener)/edit-public-profile' },
   { id: '6', label: 'Account Settings', icon: 'person-outline', route: '/edit-profile' },
+  { id: '9', label: 'Delete Account', icon: 'trash-outline', action: 'delete', danger: true },
 ];
 
 const MenuItem = ({ item, onPress }) => (
@@ -36,9 +38,9 @@ const MenuItem = ({ item, onPress }) => (
     activeOpacity={0.6}
     onPress={() => onPress(item)}
   >
-    <Ionicons name={item.icon} size={22} color="#9CA3AF" style={styles.menuIcon} />
-    <Text style={styles.menuLabel}>{item.label}</Text>
-    <Ionicons name="chevron-forward" size={20} color="#6B7280" />
+    <Ionicons name={item.icon} size={22} color={item.danger ? '#EF4444' : '#9CA3AF'} style={styles.menuIcon} />
+    <Text style={[styles.menuLabel, item.danger && { color: '#EF4444' }]}>{item.label}</Text>
+    <Ionicons name="chevron-forward" size={20} color={item.danger ? '#EF4444' : '#6B7280'} />
   </TouchableOpacity>
 );
 
@@ -47,6 +49,8 @@ export default function ListenerProfileScreen() {
   const router = useRouter();
   const [showIssuePopup, setShowIssuePopup] = useState(false);
   const [showLogoutPopup, setShowLogoutPopup] = useState(false);
+  const [showDeletePopup, setShowDeletePopup] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [userAvatar, setUserAvatar] = useState(require('../../images/user_avatar.png'));
   const [username, setUsername] = useState('Listener');
   const [joinDate, setJoinDate] = useState('Member');
@@ -183,6 +187,8 @@ export default function ListenerProfileScreen() {
   const handleMenuPress = (item) => {
     if (item.action === 'issue') {
       setShowIssuePopup(true);
+    } else if (item.action === 'delete') {
+      setShowDeletePopup(true);
     } else if (item.route) {
       router.push(item.route);
     }
@@ -313,6 +319,30 @@ export default function ListenerProfileScreen() {
         visible={showLogoutPopup}
         onCancel={() => setShowLogoutPopup(false)}
         onConfirm={confirmLogout}
+      />
+      <DeleteAccountPopup
+        visible={showDeletePopup}
+        onClose={() => setShowDeletePopup(false)}
+        isDeleting={isDeleting}
+        onConfirm={async (reason) => {
+          setIsDeleting(true);
+          try {
+            await userAPI.deleteAccount(reason);
+            try {
+              await listenerAPI.goOffline();
+            } catch (e) {
+              console.log('Go offline on delete account error (non-critical):', e);
+            }
+            socketService.disconnect();
+            await AsyncStorage.multiRemove(['userToken', 'token', 'user', 'listenerStatus', 'isAdmin']);
+            setShowDeletePopup(false);
+            router.replace('/welcome');
+          } catch (err) {
+            console.error('Delete account error:', err);
+          } finally {
+            setIsDeleting(false);
+          }
+        }}
       />
     </View>
   );

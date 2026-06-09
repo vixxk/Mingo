@@ -1,99 +1,86 @@
+import React from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  Image,
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, SCREEN_WIDTH, SCREEN_HEIGHT } from '../../utils/responsive';
-import { useState, useEffect } from 'react';
 
 export default function VerificationFailedScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const [isFemale, setIsFemale] = useState(false);
 
-  useEffect(() => {
-    AsyncStorage.getItem('userGender').then((g) => {
-      if (g && g.toLowerCase() === 'female') {
-        setIsFemale(true);
-      }
-    });
-  }, []);
+  const handleBecomeCustomer = () => {
+    router.replace('/(tabs)');
+  };
 
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
 
-      <LinearGradient
-        colors={['transparent', '#1A0000', '#4A0000']}
-        locations={[0, 0.65, 1]}
-        style={styles.bgGradient}
-      />
-
-      {}
-      <TouchableOpacity
-        style={[styles.backBtn, { top: insets.top + vs(8) }]}
-        onPress={() => router.back()}
-        activeOpacity={0.7}
-      >
-        <Ionicons name="chevron-back" size={22} color="#fff" />
-        <Text style={styles.backText}>Back</Text>
-      </TouchableOpacity>
+      {/* Decorative background ambient light circles matching the Role Selection screen theme */}
+      <View style={styles.bgCircle1} />
+      <View style={styles.bgCircle2} />
 
       <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + vs(80) }]}
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + vs(60), paddingBottom: insets.bottom + vs(30) },
+        ]}
         showsVerticalScrollIndicator={false}
       >
-        {}
-        <Text style={styles.heading}>Verification Failed!</Text>
-        <Text style={styles.subtitle}>
-          Unable to verify as per policy.{'\n'}You can try again after 15 days.
-        </Text>
-
-        {}
-        <View style={styles.illustrationWrap}>
-          {}
-          <View style={styles.docCard}>
-            <Image
-              source={require('../../images/doc.png')}
-              style={styles.docImage}
-              resizeMode="contain"
-            />
-          </View>
-
-          {}
-          <View style={styles.errorBadge}>
-            <Ionicons name="alert-circle" size={28} color="#fff" />
-          </View>
+        {/* Left-aligned Text Content from the reference image */}
+        <View style={styles.textContainer}>
+          <Text style={styles.heading}>Verification failed</Text>
+          <Text style={styles.subtitle}>
+            Unable to verify as per policy. You can try again after 15 days.
+          </Text>
         </View>
 
-        {}
-        {isFemale && (
-          <TouchableOpacity
-            style={styles.listenerBtn}
-            activeOpacity={0.85}
-            onPress={() => router.push('/listener')}
+        {/* Custom Glowing Sad Face Vector Graphic */}
+        <View style={styles.graphicContainer}>
+          <LinearGradient
+            colors={['#EC4899', '#D946EF', '#8B5CF6']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.sadFaceCircle}
           >
-            <Text style={styles.listenerBtnText}>Become a Listener</Text>
-          </TouchableOpacity>
-        )}
+            <View style={styles.eyesRow}>
+              <View style={styles.eye} />
+              <View style={styles.eye} />
+            </View>
+            <View style={styles.sadMouth} />
+          </LinearGradient>
+        </View>
 
-        {}
+        {/* Become a Customer Button styled with Mingo's Signature Gradient */}
+        <TouchableOpacity
+          style={styles.buttonContainer}
+          activeOpacity={0.85}
+          onPress={handleBecomeCustomer}
+        >
+          <LinearGradient
+            colors={['#3B82F6', '#EC4899', '#F59E0B']}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={styles.button}
+          >
+            <Text style={styles.buttonText}>Become a Customer</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+
+        {/* Contact Support Footer */}
         <Text style={styles.supportText}>
           For any queries please contact{' '}
           <Text style={styles.supportEmail}>support@talkmingo.com</Text>
         </Text>
-
-        <View style={{ height: vs(30) }} />
       </ScrollView>
     </View>
   );
@@ -104,112 +91,132 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-  bgGradient: {
+  bgCircle1: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: SCREEN_HEIGHT * 0.4,
+    width: SCREEN_WIDTH * 0.8,
+    height: SCREEN_WIDTH * 0.8,
+    borderRadius: SCREEN_WIDTH * 0.4,
+    backgroundColor: '#3B82F6',
+    top: -SCREEN_WIDTH * 0.2,
+    right: -SCREEN_WIDTH * 0.2,
+    opacity: 0.12,
   },
-
-  
-  backBtn: {
+  bgCircle2: {
     position: 'absolute',
-    left: s(16),
-    zIndex: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+    width: SCREEN_WIDTH * 0.7,
+    height: SCREEN_WIDTH * 0.7,
+    borderRadius: SCREEN_WIDTH * 0.35,
+    backgroundColor: '#8B5CF6',
+    bottom: -SCREEN_WIDTH * 0.15,
+    left: -SCREEN_WIDTH * 0.15,
+    opacity: 0.12,
   },
-  backText: {
-    fontSize: ms(16, 0.3),
-    color: '#fff',
-    fontFamily: 'Inter_500Medium',
+  scrollView: {
+    flex: 1,
   },
-
-  
   content: {
-    paddingHorizontal: s(24),
+    paddingHorizontal: s(28),
     alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: SCREEN_HEIGHT * 0.88,
+  },
+  textContainer: {
+    width: '100%',
+    alignItems: 'flex-start',
+    marginBottom: vs(20),
   },
   heading: {
-    fontSize: ms(28, 0.3),
-    fontWeight: '900',
+    fontSize: ms(30, 0.3),
     color: '#fff',
     fontFamily: 'Inter_900Black',
-    textAlign: 'center',
-    marginBottom: vs(14),
+    textAlign: 'left',
+    lineHeight: ms(38),
+    marginBottom: vs(12),
   },
   subtitle: {
-    fontSize: ms(14, 0.3),
+    fontSize: ms(15, 0.3),
     color: '#9CA3AF',
     fontFamily: 'Inter_400Regular',
-    textAlign: 'center',
-    lineHeight: ms(21),
-    marginBottom: vs(32),
+    textAlign: 'left',
+    lineHeight: ms(22),
   },
-
-  
-  illustrationWrap: {
-    position: 'relative',
-    marginBottom: vs(40),
-    alignItems: 'center',
-  },
-  docCard: {
-    width: SCREEN_WIDTH * 0.6,
-    height: vs(180),
-    backgroundColor: '#1A1A1A',
-    borderRadius: 20,
+  graphicContainer: {
+    width: SCREEN_WIDTH * 0.72,
+    height: SCREEN_WIDTH * 0.72,
+    borderRadius: (SCREEN_WIDTH * 0.72) / 2,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#2A2A2A',
+    marginVertical: vs(40),
+    shadowColor: '#EC4899',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.45,
+    shadowRadius: 24,
+    elevation: 10,
   },
-  docImage: {
-    width: '70%',
-    height: '80%',
-  },
-  errorBadge: {
-    position: 'absolute',
-    top: -vs(6),
-    right: -s(6),
-    width: s(40),
-    height: s(40),
-    borderRadius: s(20),
-    backgroundColor: '#DC2626',
+  sadFaceCircle: {
+    width: '100%',
+    height: '100%',
+    borderRadius: (SCREEN_WIDTH * 0.72) / 2,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#DC2626',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    elevation: 8,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+    paddingTop: vs(12),
   },
-
-  
-  listenerBtn: {
-    backgroundColor: '#fff',
+  eyesRow: {
+    flexDirection: 'row',
+    gap: s(20),
+    marginBottom: vs(24),
+  },
+  eye: {
+    width: s(16),
+    height: vs(34),
+    borderRadius: s(8),
+    backgroundColor: '#FFF',
+  },
+  sadMouth: {
+    width: s(54),
+    height: vs(27),
+    borderWidth: s(5),
+    borderColor: '#FFF',
+    borderBottomWidth: 0,
+    borderTopLeftRadius: s(27),
+    borderTopRightRadius: s(27),
+    transform: [{ rotate: '180deg' }],
+  },
+  buttonContainer: {
+    width: '100%',
     borderRadius: 30,
-    paddingHorizontal: s(44),
-    paddingVertical: vs(15),
-    marginBottom: vs(16),
+    overflow: 'hidden',
+    marginBottom: vs(24),
+    shadowColor: '#EC4899',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  listenerBtnText: {
+  button: {
+    width: '100%',
+    paddingVertical: vs(16),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonText: {
     fontSize: ms(16, 0.3),
-    color: '#000',
+    color: '#fff',
     fontWeight: '700',
     fontFamily: 'Inter_700Bold',
   },
-
-  
   supportText: {
-    fontSize: ms(12, 0.3),
-    color: '#6B7280',
+    fontSize: ms(13, 0.3),
+    color: '#9CA3AF',
     fontFamily: 'Inter_400Regular',
     textAlign: 'center',
+    marginTop: 'auto',
   },
   supportEmail: {
-    color: '#9CA3AF',
+    color: '#D8B4FE',
     textDecorationLine: 'underline',
+    fontWeight: '600',
   },
 });

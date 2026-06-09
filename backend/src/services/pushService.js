@@ -25,11 +25,12 @@ class PushService {
     const cleanUserIds = [...new Set(userIds.filter(Boolean).map(id => String(id)))];
     if (cleanUserIds.length === 0) return;
 
-    let oneSignalSuccess = false;
     let pushResult = null;
+    let failedUserIds = [];
 
     if (!appId || !apiKey || appId.startsWith('placeholder') || apiKey.startsWith('placeholder')) {
       console.log('[PushService] OneSignal is not configured yet. Skipping OneSignal push delivery.');
+      failedUserIds = cleanUserIds;
     } else {
       try {
         console.log(`[PushService] Dispatching OneSignal push to ${cleanUserIds.length} users:`, cleanUserIds);
@@ -67,32 +68,34 @@ class PushService {
         );
 
         console.log('[PushService] OneSignal dispatch response:', JSON.stringify(response.data));
-        
-        // Check if OneSignal actually delivered to any device
-        if (response.data?.errors) {
-          const errors = response.data.errors;
-          if (errors.invalid_aliases) {
-            console.warn('[PushService] OneSignal: Some users are NOT registered with OneSignal (invalid_aliases):', JSON.stringify(errors.invalid_aliases));
-          }
-          if (Array.isArray(errors) && errors.includes('All included players are not subscribed')) {
-            console.warn('[PushService] OneSignal: All targeted players are not subscribed. Relying on FCM/Expo fallback.');
-          }
-        }
-        
-        oneSignalSuccess = !response.data?.errors;
         pushResult = response.data;
+        
+        if (pushResult && pushResult.id) {
+          if (pushResult.errors) {
+            const errors = pushResult.errors;
+            if (errors.invalid_aliases && Array.isArray(errors.invalid_aliases)) {
+              failedUserIds = errors.invalid_aliases.map(String);
+              console.warn('[PushService] OneSignal: Some external IDs are not registered on OneSignal:', failedUserIds);
+            } else if (Array.isArray(errors) && errors.includes('All included players are not subscribed')) {
+              failedUserIds = cleanUserIds;
+              console.warn('[PushService] OneSignal: All players are not subscribed. Falling back to FCM.');
+            }
+          }
+        } else {
+          failedUserIds = cleanUserIds;
+        }
       } catch (err) {
         console.error('[PushService] OneSignal dispatch failed:', err.response?.data || err.message);
+        failedUserIds = cleanUserIds;
       }
     }
 
-    // Fallback: Also dispatch using Firebase Admin SDK (FCM) / Expo Push Notifications using the user's stored pushToken.
-    // This handles cases where OneSignal has client-side errors, initialization issues, or is running in Expo Go.
-    if (!oneSignalSuccess) {
+    // Fallback: Only dispatch using Firebase Admin SDK (FCM) / Expo Push Notifications for users who failed/unregistered in OneSignal.
+    if (failedUserIds.length > 0) {
       try {
         const User = require('../models/userModel');
         const usersWithTokens = await User.find({
-          _id: { $in: cleanUserIds },
+          _id: { $in: failedUserIds },
           pushToken: { $ne: null }
         }).select('pushToken');
         
@@ -106,7 +109,7 @@ class PushService {
         console.error('[PushService] Fallback FCM/Expo push notification failed:', fallbackErr.message);
       }
     } else {
-      console.log('[PushService] OneSignal successfully dispatched notification. Skipping FCM/Expo fallback to prevent duplicates.');
+      console.log('[PushService] OneSignal successfully dispatched notification to all users. Skipping FCM/Expo fallback to prevent duplicates.');
     }
 
     return pushResult;
@@ -157,15 +160,19 @@ class PushService {
             }
           );
 
-          console.log('[PushService] OneSignal campaign success:', response.data);
-          campaignResult = response.data;
+          if (response.data && response.data.id) {
+            console.log('[PushService] OneSignal campaign success:', response.data);
+            campaignResult = response.data;
+          } else {
+            console.warn('[PushService] OneSignal campaign dispatch returned no ID:', response.data);
+          }
         }
       } catch (err) {
         console.error('[PushService] OneSignal campaign failed:', err.response?.data || err.message);
       }
     }
 
-    // Fallback: Also dispatch using Firebase Admin SDK (FCM) / Expo Push Notifications using target users' stored pushTokens.
+    // Fallback: Also dispatch using Firebase Admin SDK (FCM) / Expo Push Notifications if OneSignal failed completely.
     if (!campaignResult) {
       try {
         const User = require('../models/userModel');

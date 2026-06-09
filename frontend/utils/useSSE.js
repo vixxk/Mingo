@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export function useSSE() {
@@ -13,10 +14,24 @@ export function useSSE() {
       if (!keepConnecting) return;
 
       const token = await AsyncStorage.getItem('token');
+      if (!keepConnecting) return;
+
       if (!token) {
         setUnreadCount(0);
+        if (reconnectTimeout) clearTimeout(reconnectTimeout);
         reconnectTimeout = setTimeout(connectSSE, 5000);
         return;
+      }
+
+      // Abort any existing connection before starting a new one
+      if (xhr) {
+        console.log('[SSE] Aborting existing XHR connection before initiating new one');
+        try {
+          xhr.abort();
+        } catch (e) {
+          console.log('[SSE] Error aborting existing XHR:', e.message);
+        }
+        xhr = null;
       }
 
       const baseUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api';
@@ -24,18 +39,25 @@ export function useSSE() {
 
       console.log('[SSE] Connecting to:', sseUrl);
 
-      xhr = new XMLHttpRequest();
-      xhr.open('GET', sseUrl);
-      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      const localXhr = new XMLHttpRequest();
+      xhr = localXhr;
+
+      localXhr.open('GET', sseUrl);
+      localXhr.setRequestHeader('Authorization', `Bearer ${token}`);
       
       let lastProcessedLength = 0;
 
-      xhr.onreadystatechange = () => {
-        if (!keepConnecting) return;
-
-        if (xhr.readyState === 3 || xhr.readyState === 4) {
+      localXhr.onreadystatechange = () => {
+        if (!keepConnecting || xhr !== localXhr) {
           try {
-            const responseText = xhr.responseText;
+            localXhr.abort();
+          } catch (e) {}
+          return;
+        }
+
+        if (localXhr.readyState === 3 || localXhr.readyState === 4) {
+          try {
+            const responseText = localXhr.responseText;
             if (responseText.length > lastProcessedLength) {
               const newChunk = responseText.substring(lastProcessedLength);
               lastProcessedLength = responseText.length;
@@ -62,34 +84,61 @@ export function useSSE() {
           }
         }
 
-        if (xhr.readyState === 4) {
-          console.log('[SSE] Connection closed. ReadyState:', xhr.readyState, 'Status:', xhr.status);
-          if (keepConnecting) {
+        if (localXhr.readyState === 4) {
+          console.log('[SSE] Connection closed. ReadyState:', localXhr.readyState, 'Status:', localXhr.status);
+          if (keepConnecting && xhr === localXhr) {
+            if (reconnectTimeout) clearTimeout(reconnectTimeout);
             reconnectTimeout = setTimeout(connectSSE, 3000);
           }
         }
       };
 
-      xhr.onerror = (err) => {
+      localXhr.onerror = (err) => {
         console.log('[SSE] XHR error:', err);
-        if (keepConnecting) {
+        if (keepConnecting && xhr === localXhr) {
+          if (reconnectTimeout) clearTimeout(reconnectTimeout);
           reconnectTimeout = setTimeout(connectSSE, 5000);
         }
       };
 
-      xhr.send();
+      localXhr.send();
     };
 
-    connectSSE();
-
-    return () => {
-      keepConnecting = false;
+    const disconnectSSE = () => {
       if (xhr) {
-        xhr.abort();
+        console.log('[SSE] Aborting connection due to background/disposal');
+        try {
+          xhr.abort();
+        } catch (e) {}
+        xhr = null;
       }
       if (reconnectTimeout) {
         clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
       }
+    };
+
+    // Initial connect
+    connectSSE();
+
+    // Reconnect / Disconnect on App State change
+    const handleAppStateChange = (nextAppState) => {
+      console.log('[SSE] AppState transition:', nextAppState);
+      if (nextAppState === 'active') {
+        keepConnecting = true;
+        connectSSE();
+      } else {
+        keepConnecting = false;
+        disconnectSSE();
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+    return () => {
+      subscription.remove();
+      keepConnecting = false;
+      disconnectSSE();
     };
   }, []);
 

@@ -24,6 +24,7 @@ import { ms, s, vs, hp, wp, SCREEN_HEIGHT, SCREEN_WIDTH } from '../../utils/resp
 import { listenerAPI, userAPI, walletAPI, authAPI, listenersAPI } from '../../utils/api';
 import { useFocusEffect, useRouter, useNavigation } from 'expo-router';
 import { useStatusSSE } from '../../utils/useStatusSSE';
+import StatusPopup from '../../components/shared/StatusPopup';
 
 
 const ConfirmationModal = ({ visible, isOnline, onConfirm, onCancel }) => {
@@ -232,6 +233,9 @@ export default function ListenerHomeScreen() {
   const [showCantGoOnline, setShowCantGoOnline] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [statusErrorVisible, setStatusErrorVisible] = useState(false);
+  const [statusErrorTitle, setStatusErrorTitle] = useState('');
+  const [statusErrorMessage, setStatusErrorMessage] = useState('');
 
   useStatusSSE(
     useCallback((data) => {
@@ -422,7 +426,9 @@ export default function ListenerHomeScreen() {
       }
     } catch (e) {
       console.error('Failed to change status', e);
-      Alert.alert('Error', 'Failed to update status. Please try again.');
+      setStatusErrorTitle('Status Update Failed');
+      setStatusErrorMessage('Failed to update your status. Please check your connection and try again.');
+      setStatusErrorVisible(true);
     }
     setShowConfirm(false);
   };
@@ -432,6 +438,10 @@ export default function ListenerHomeScreen() {
       await listenerAPI.updateSettings(updates);
     } catch (e) {
       console.error('Failed to update settings', e);
+      setStatusErrorTitle('Settings Update Failed');
+      setStatusErrorMessage('Failed to save your settings. Please check your connection and try again.');
+      setStatusErrorVisible(true);
+      onRefresh();
     }
   };
 
@@ -507,6 +517,14 @@ export default function ListenerHomeScreen() {
       <CantGoOnlinePopup 
         visible={showCantGoOnline}
         onClose={() => setShowCantGoOnline(false)}
+      />
+
+      <StatusPopup
+        visible={statusErrorVisible}
+        type="error"
+        title={statusErrorTitle}
+        message={statusErrorMessage}
+        onClose={() => setStatusErrorVisible(false)}
       />
 
       {}

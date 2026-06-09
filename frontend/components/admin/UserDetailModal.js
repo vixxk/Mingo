@@ -163,16 +163,17 @@ const UserDetailModal = ({ visible, user, onClose, onDelete, onBan }) => {
                 { label: 'Coins', value: `🪙 ${user.coins || 0}`, icon: 'wallet-outline' },
                 { label: 'Joined', value: user.joinDate || (user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Unknown'), icon: 'calendar-outline' },
                 { label: 'Last Active', value: user.lastActive || 'Recently', icon: 'time-outline' },
-              ].map((item, i) => (
+                ...(user.isDeleted ? [{ label: 'Reason for Deletion', value: user.deletionReason || 'Not specified', icon: 'trash-outline' }] : [])
+              ].map((item, i, arr) => (
                 <View key={i}>
                   <View style={styles.modalDetailRow}>
                     <View style={styles.modalDetailLeft}>
                       <Ionicons name={item.icon} size={16} color="#6B7280" />
                       <Text style={styles.modalDetailLabel}>{item.label}</Text>
                     </View>
-                    <Text style={styles.modalDetailValue}>{item.value}</Text>
+                    <Text style={[styles.modalDetailValue, item.label === 'Reason for Deletion' && { color: '#F59E0B' }]}>{item.value}</Text>
                   </View>
-                  {i < 4 && <View style={styles.modalDetailDivider} />}
+                  {i < arr.length - 1 && <View style={styles.modalDetailDivider} />}
                 </View>
               ))}
             </View>

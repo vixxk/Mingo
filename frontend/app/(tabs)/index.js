@@ -13,6 +13,7 @@ import {
   Pressable,
   RefreshControl,
   BackHandler,
+  AppState,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
@@ -28,6 +29,7 @@ import CoinsOfferPopup from '../../components/shared/CoinsOfferPopup';
 import InsufficientBalancePopup from '../../components/shared/InsufficientBalancePopup';
 import NotificationsPopup from '../../components/shared/NotificationsPopup';
 import { useStatusSSE } from '../../utils/useStatusSSE';
+import HomeSkeleton from '../../components/HomeSkeleton';
 
 
 
@@ -566,6 +568,19 @@ export default function HomeScreen() {
     handleAppOpenCount();
   }, []);
 
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState) => {
+      if (nextAppState === 'active') {
+        console.log('[Home] App came to foreground, refreshing data...');
+        loadRealData();
+      }
+    };
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => {
+      subscription.remove();
+    };
+  }, [loadRealData]);
+
   const handleWelcomeAgree = async () => {
     setShowWelcome(false);
     await AsyncStorage.setItem('hasSeenWelcomePopup', 'true');
@@ -698,58 +713,7 @@ export default function HomeScreen() {
 
   // Skeleton loading UI
   if (loading && bestChoiceData.length === 0 && peopleData.length === 0) {
-    return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <StatusBar style="light" />
-        {/* Skeleton Header */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <View style={{ width: wp(10), height: wp(10), borderRadius: wp(5), backgroundColor: 'rgba(255,255,255,0.08)' }} />
-            <View style={{ width: wp(18), height: hp(3.5), borderRadius: wp(5), backgroundColor: 'rgba(255,255,255,0.06)', marginLeft: wp(2) }} />
-          </View>
-          <View style={{ width: wp(10), height: wp(10), borderRadius: wp(5), backgroundColor: 'rgba(255,255,255,0.06)' }} />
-        </View>
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {/* Section Title Skeleton */}
-          <View style={{ width: wp(35), height: hp(2.5), borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.08)', marginBottom: hp(2) }} />
-          {/* Best Choice Carousel Skeleton */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: wp(2), gap: wp(3) }}>
-            {[1, 2, 3].map((i) => (
-              <View key={i} style={{ width: wp(42), height: hp(28), borderRadius: wp(4), backgroundColor: 'rgba(255,255,255,0.05)', overflow: 'hidden' }}>
-                <View style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.03)' }} />
-                <View style={{ padding: wp(3) }}>
-                  <View style={{ width: wp(25), height: hp(1.8), borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.08)', marginBottom: hp(0.8) }} />
-                  <View style={{ width: wp(18), height: hp(1.2), borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.05)' }} />
-                </View>
-              </View>
-            ))}
-          </ScrollView>
-          {/* Pagination Dots Skeleton */}
-          <View style={{ flexDirection: 'row', justifyContent: 'center', marginVertical: hp(2), gap: wp(1.5) }}>
-            {[1, 2, 3].map((i) => (
-              <View key={i} style={{ width: wp(2), height: wp(2), borderRadius: wp(1), backgroundColor: 'rgba(255,255,255,0.1)' }} />
-            ))}
-          </View>
-          {/* People Section Title Skeleton */}
-          <View style={{ width: wp(45), height: hp(2.5), borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.08)', marginBottom: hp(2) }} />
-          {/* People Grid Skeleton */}
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: wp(3), paddingHorizontal: wp(1) }}>
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <View key={i} style={{ width: (wp(100) - wp(10) - wp(3)) / 2, height: hp(24), borderRadius: wp(4), backgroundColor: 'rgba(255,255,255,0.05)', overflow: 'hidden' }}>
-                <View style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.03)' }} />
-                <View style={{ padding: wp(3) }}>
-                  <View style={{ width: wp(20), height: hp(1.5), borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.08)', marginBottom: hp(0.8) }} />
-                  <View style={{ flexDirection: 'row', gap: wp(2) }}>
-                    <View style={{ width: wp(8), height: wp(8), borderRadius: wp(4), backgroundColor: 'rgba(255,255,255,0.06)' }} />
-                    <View style={{ width: wp(8), height: wp(8), borderRadius: wp(4), backgroundColor: 'rgba(255,255,255,0.06)' }} />
-                  </View>
-                </View>
-              </View>
-            ))}
-          </View>
-        </ScrollView>
-      </View>
-    );
+    return <HomeSkeleton />;
   }
 
   return (

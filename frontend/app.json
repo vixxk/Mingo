@@ -53,7 +53,7 @@
         "foregroundImage": "./images/logo.png",
         "backgroundColor": "#000000"
       },
-      "edgeToEdgeEnabled": true,
+      "edgeToEdgeEnabled": false,
       "package": "com.vixxk.mingo",
       "googleServicesFile": "./google-services.json",
       "permissions": [

@@ -9,7 +9,7 @@ import { adminAPI } from '../../utils/api';
 export default function AdminLayout() {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
-  const [counts, setCounts] = useState({ approvals: 0, reports: 0, payouts: 0 });
+  const [counts, setCounts] = useState({ approvals: 0, reports: 0, payouts: 0, pendingUsers: 0, pendingListeners: 0 });
 
   useEffect(() => {
     const fetchCounts = async () => {
@@ -19,6 +19,8 @@ export default function AdminLayout() {
           approvals: res.data.pendingApprovals || 0,
           reports: res.data.pendingReports || 0,
           payouts: res.data.pendingPayoutsCount || 0,
+          pendingUsers: res.data.pendingUsers || 0,
+          pendingListeners: res.data.pendingListeners || 0,
         });
       } catch (e) {
         console.error('Failed to fetch admin counts:', e);
@@ -39,8 +41,8 @@ export default function AdminLayout() {
           backgroundColor: '#0A0A0A',
           borderTopColor: '#1A1A1A',
           borderTopWidth: 1,
-          height: Platform.OS === 'ios' ? vs(75) + insets.bottom : vs(65),
-          paddingBottom: Platform.OS === 'ios' ? insets.bottom : vs(10),
+          height: vs(65) + insets.bottom,
+          paddingBottom: insets.bottom > 0 ? insets.bottom : vs(10),
           paddingTop: vs(6),
         },
         tabBarActiveTintColor: '#A855F7',
@@ -82,6 +84,7 @@ export default function AdminLayout() {
         name="admin-users"
         options={{
           title: 'Users',
+          tabBarBadge: counts.pendingUsers > 0 ? counts.pendingUsers : null,
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? 'people-sharp' : 'people-outline'}
@@ -95,7 +98,7 @@ export default function AdminLayout() {
         name="admin-listeners"
         options={{
           title: 'Listeners',
-          tabBarBadge: counts.approvals > 0 ? counts.approvals : null,
+          tabBarBadge: counts.pendingListeners > 0 ? counts.pendingListeners : null,
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? 'headset-sharp' : 'headset-outline'}
@@ -122,6 +125,7 @@ export default function AdminLayout() {
         name="profile-approvals"
         options={{
           title: 'Approvals',
+          tabBarBadge: counts.approvals > 0 ? counts.approvals : null,
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? 'shield-checkmark-sharp' : 'shield-checkmark-outline'}

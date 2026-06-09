@@ -75,6 +75,9 @@ export default function ListenerScreen() {
         if (status === 'approved') {
           router.replace('/(listener)');
           return;
+        } else if (status === 'rejected') {
+          router.replace('/(auth)/verification-failed');
+          return;
         }
       } catch (e) {}
       setLoading(false);
@@ -98,7 +101,7 @@ export default function ListenerScreen() {
             router.replace('/(listener)');
             Alert.alert('Approved! 🎉', 'Your application has been approved. Welcome as a listener!');
           } else if (status === 'rejected') {
-            Alert.alert('Status Update', 'Your application was rejected. You can re-apply.');
+            router.replace('/(auth)/verification-failed');
           } else {
             Alert.alert('Status Check', 'Your application is still under review.');
           }

@@ -9,6 +9,7 @@ import {
   Alert,
   Animated,
   Linking,
+  AppState,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -87,81 +88,95 @@ export default function ProfileScreen() {
     ]).start();
   }, []);
 
+  const loadProfile = useCallback(async () => {
+    try {
+      setLoading(true);
+      // Fetch fresh data from API
+      const res = await authAPI.me();
+      let userObj = null;
+      
+      if (res?.data) {
+        userObj = res.data;
+        // Sync fresh data to local storage
+        await AsyncStorage.setItem('user', JSON.stringify(userObj));
+        if (userObj.gender) await AsyncStorage.setItem('userGender', userObj.gender);
+        if (userObj.avatarIndex !== undefined && userObj.avatarIndex !== null) {
+          await AsyncStorage.setItem('userAvatarIndex', userObj.avatarIndex.toString());
+        }
+      } else {
+        // Fallback to local storage if API fails
+        const userStr = await AsyncStorage.getItem('user');
+        if (userStr) userObj = JSON.parse(userStr);
+      }
+
+      if (userObj) {
+        setUsername(userObj.name || userObj.username || 'User');
+        if (userObj.createdAt) {
+          const d = new Date(userObj.createdAt);
+          setCreatedAtStr(`Profile created on ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth()+1).padStart(2, '0')}/${d.getFullYear()}`);
+        }
+
+        const rawGender = userObj.gender || (await AsyncStorage.getItem('userGender')) || 'Male';
+        const normalizedGender = rawGender.charAt(0).toUpperCase() + rawGender.slice(1).toLowerCase();
+        
+        const avatarIndex = userObj.avatarIndex !== undefined ? userObj.avatarIndex.toString() : (await AsyncStorage.getItem('userAvatarIndex') || '0');
+        
+        if (normalizedGender && avatarIndex !== null) {
+          const maleAvatars = [
+            require('../../images/male_avatar_1_1776972918440.png'),
+            require('../../images/male_avatar_2_1776972933241.png'),
+            require('../../images/male_avatar_3_1776972950218.png'),
+            require('../../images/male_avatar_4_1776972963577.png'),
+            require('../../images/male_avatar_5_1776972978900.png'),
+            require('../../images/male_avatar_6_1776972993180.png'),
+            require('../../images/male_avatar_7_1776973008143.png'),
+            require('../../images/male_avatar_8_1776973021635.png'),
+          ];
+          const femaleAvatars = [
+            require('../../images/female_avatar_1_1776973035859.png'),
+            require('../../images/female_avatar_2_1776973050039.png'),
+            require('../../images/female_avatar_3_1776973063471.png'),
+            require('../../images/female_avatar_4_1776973077539.png'),
+            require('../../images/female_avatar_5_1776973090730.png'),
+            require('../../images/female_avatar_6_1776973108100.png'),
+            require('../../images/female_avatar_7_1776973124018.png'),
+            require('../../images/female_avatar_8_1776973138772.png'),
+          ];
+          const avatars = normalizedGender === 'Male' ? maleAvatars : femaleAvatars;
+          setUserAvatar(avatars[parseInt(avatarIndex, 10)] || avatars[0]);
+
+          if (normalizedGender === 'Male') {
+            setActiveMenuItems(MENU_ITEMS.filter(item => item.id !== '4'));
+          } else {
+            setActiveMenuItems(MENU_ITEMS);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error loading profile:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
-      const loadProfile = async () => {
-        try {
-          setLoading(true);
-          // Fetch fresh data from API
-          const res = await authAPI.me();
-          let userObj = null;
-          
-          if (res?.data) {
-            userObj = res.data;
-            // Sync fresh data to local storage
-            await AsyncStorage.setItem('user', JSON.stringify(userObj));
-            if (userObj.gender) await AsyncStorage.setItem('userGender', userObj.gender);
-            if (userObj.avatarIndex !== undefined && userObj.avatarIndex !== null) {
-              await AsyncStorage.setItem('userAvatarIndex', userObj.avatarIndex.toString());
-            }
-          } else {
-            // Fallback to local storage if API fails
-            const userStr = await AsyncStorage.getItem('user');
-            if (userStr) userObj = JSON.parse(userStr);
-          }
-
-          if (userObj) {
-            setUsername(userObj.name || userObj.username || 'User');
-            if (userObj.createdAt) {
-              const d = new Date(userObj.createdAt);
-              setCreatedAtStr(`Profile created on ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth()+1).padStart(2, '0')}/${d.getFullYear()}`);
-            }
-
-            const rawGender = userObj.gender || (await AsyncStorage.getItem('userGender')) || 'Male';
-            const normalizedGender = rawGender.charAt(0).toUpperCase() + rawGender.slice(1).toLowerCase();
-            
-            const avatarIndex = userObj.avatarIndex !== undefined ? userObj.avatarIndex.toString() : (await AsyncStorage.getItem('userAvatarIndex') || '0');
-            
-            if (normalizedGender && avatarIndex !== null) {
-              const maleAvatars = [
-                require('../../images/male_avatar_1_1776972918440.png'),
-                require('../../images/male_avatar_2_1776972933241.png'),
-                require('../../images/male_avatar_3_1776972950218.png'),
-                require('../../images/male_avatar_4_1776972963577.png'),
-                require('../../images/male_avatar_5_1776972978900.png'),
-                require('../../images/male_avatar_6_1776972993180.png'),
-                require('../../images/male_avatar_7_1776973008143.png'),
-                require('../../images/male_avatar_8_1776973021635.png'),
-              ];
-              const femaleAvatars = [
-                require('../../images/female_avatar_1_1776973035859.png'),
-                require('../../images/female_avatar_2_1776973050039.png'),
-                require('../../images/female_avatar_3_1776973063471.png'),
-                require('../../images/female_avatar_4_1776973077539.png'),
-                require('../../images/female_avatar_5_1776973090730.png'),
-                require('../../images/female_avatar_6_1776973108100.png'),
-                require('../../images/female_avatar_7_1776973124018.png'),
-                require('../../images/female_avatar_8_1776973138772.png'),
-              ];
-              const avatars = normalizedGender === 'Male' ? maleAvatars : femaleAvatars;
-              setUserAvatar(avatars[parseInt(avatarIndex, 10)] || avatars[0]);
-
-              if (normalizedGender === 'Male') {
-                setActiveMenuItems(MENU_ITEMS.filter(item => item.id !== '4'));
-              } else {
-                setActiveMenuItems(MENU_ITEMS);
-              }
-            }
-          }
-        } catch (e) {
-          console.error('Error loading profile:', e);
-        } finally {
-          setLoading(false);
-        }
-      };
       loadProfile();
-    }, [])
+    }, [loadProfile])
   );
+
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState) => {
+      if (nextAppState === 'active') {
+        console.log('[Profile] App came to foreground, refreshing data...');
+        loadProfile();
+      }
+    };
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => {
+      subscription.remove();
+    };
+  }, [loadProfile]);
 
   const handleMenuPress = (item) => {
     if (item.action === 'issue') {

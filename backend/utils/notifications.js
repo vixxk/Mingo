@@ -84,6 +84,8 @@ const sendNotificationToDevice = async (token, title, body, data = {}) => {
       android: {
         priority: 'high',
         notification: {
+          title,
+          body,
           sound: data?.type === 'incoming_call' ? 'ringtone' : 'default',
           channelId: data?.type === 'incoming_call' ? 'calls' : 'default',
         },
@@ -202,6 +204,8 @@ const sendNotificationToMultiple = async (tokens, title, body, data = {}) => {
         android: {
           priority: 'high',
           notification: {
+            title,
+            body,
             sound: data?.type === 'incoming_call' ? 'ringtone' : 'default',
             channelId: data?.type === 'incoming_call' ? 'calls' : 'default',
           },

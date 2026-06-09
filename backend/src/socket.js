@@ -216,17 +216,18 @@ const initSocket = (server) => {
               [...recipientPersonalSockets].some(sid => recipientRoom.has(sid));
           }
 
+          let updatedConv = null;
           if (recipientIdStr) {
             if (isRecipientInConvRoom) {
-              await Conversation.findByIdAndUpdate(conversationId, { 
+              updatedConv = await Conversation.findByIdAndUpdate(conversationId, { 
                 lastMessage: message._id,
                 [`unreadCount.${recipientIdStr}`]: 0
-              });
+              }, { new: true });
             } else {
-              await Conversation.findByIdAndUpdate(conversationId, { 
+              updatedConv = await Conversation.findByIdAndUpdate(conversationId, { 
                 lastMessage: message._id,
                 $inc: { [`unreadCount.${recipientIdStr}`]: 1 }
-              });
+              }, { new: true });
             }
             try {
               const sseService = require('./services/sseService');
@@ -235,7 +236,7 @@ const initSocket = (server) => {
               console.error('SSE notify error in FREE send_message:', sseErr);
             }
           } else {
-            await Conversation.findByIdAndUpdate(conversationId, { lastMessage: message._id });
+            updatedConv = await Conversation.findByIdAndUpdate(conversationId, { lastMessage: message._id }, { new: true });
           }
 
           console.log(`[Socket] Emitting receive_message (free) to room ${conversationId}`);
@@ -246,11 +247,11 @@ const initSocket = (server) => {
             io.to(`user_${recipientIdStr}`).emit('receive_message', message);
             
             // Only send push notification if the recipient doesn't have unread messages in this conversation yet
-            const currentUnread = (conversation.unreadCount && typeof conversation.unreadCount.get === 'function')
-              ? (conversation.unreadCount.get(recipientIdStr) || 0)
-              : ((conversation.unreadCount && conversation.unreadCount[recipientIdStr]) || 0);
+            const currentUnread = (updatedConv && updatedConv.unreadCount && typeof updatedConv.unreadCount.get === 'function')
+              ? (updatedConv.unreadCount.get(recipientIdStr) || 0)
+              : ((updatedConv && updatedConv.unreadCount && updatedConv.unreadCount[recipientIdStr]) || 0);
 
-            if (currentUnread === 0) {
+            if (currentUnread === 1) {
               // Send push notification
               PushService.sendPushNotification(recipientIdStr, {
                 title: sender.name || 'Mingo',
@@ -344,19 +345,20 @@ const initSocket = (server) => {
             [...recipientPersonalSockets].some(sid => recipientRoom.has(sid));
         }
 
+        let updatedConv = null;
         if (recipientIdStr) {
           if (isRecipientInConvRoom) {
             // Recipient is already in the chat — just update lastMessage, don't increment unread
-            await Conversation.findByIdAndUpdate(conversationId, { 
+            updatedConv = await Conversation.findByIdAndUpdate(conversationId, { 
               lastMessage: message._id,
               [`unreadCount.${recipientIdStr}`]: 0
-            });
+            }, { new: true });
           } else {
             // Recipient is NOT in the chat — increment unread count
-            await Conversation.findByIdAndUpdate(conversationId, { 
+            updatedConv = await Conversation.findByIdAndUpdate(conversationId, { 
               lastMessage: message._id,
               $inc: { [`unreadCount.${recipientIdStr}`]: 1 }
-            });
+            }, { new: true });
           }
           try {
             const sseService = require('./services/sseService');
@@ -365,7 +367,7 @@ const initSocket = (server) => {
             console.error('SSE notify error in send_message:', sseErr);
           }
         } else {
-          await Conversation.findByIdAndUpdate(conversationId, { lastMessage: message._id });
+          updatedConv = await Conversation.findByIdAndUpdate(conversationId, { lastMessage: message._id }, { new: true });
         }
         
         // Emit to the conversation room (for people already in the chat)
@@ -377,11 +379,11 @@ const initSocket = (server) => {
           io.to(`user_${recipientIdStr}`).emit('receive_message', message);
           
           // Only send push notification if the recipient doesn't have unread messages in this conversation yet
-          const currentUnread = (conversation.unreadCount && typeof conversation.unreadCount.get === 'function')
-            ? (conversation.unreadCount.get(recipientIdStr) || 0)
-            : ((conversation.unreadCount && conversation.unreadCount[recipientIdStr]) || 0);
+          const currentUnread = (updatedConv && updatedConv.unreadCount && typeof updatedConv.unreadCount.get === 'function')
+            ? (updatedConv.unreadCount.get(recipientIdStr) || 0)
+            : ((updatedConv && updatedConv.unreadCount && updatedConv.unreadCount[recipientIdStr]) || 0);
 
-          if (currentUnread === 0) {
+          if (currentUnread === 1) {
             // Send push notification
             PushService.sendPushNotification(recipientIdStr, {
               title: sender.name || 'Mingo',
@@ -518,9 +520,41 @@ const initSocket = (server) => {
       io.to(`user_${listenerId}`).emit('incoming_call', callData);
     });
 
-    socket.on('call_accepted', (data) => {
+    socket.on('call_accepted', async (data) => {
       const { userId, sessionId, roomId } = data;
-      io.to(`user_${userId}`).emit('call_accepted', { sessionId, roomId });
+      console.log(`[Socket] call_accepted event received for session: ${sessionId}, user: ${userId}`);
+      try {
+        const session = await Session.findById(sessionId);
+        if (!session || session.status === 'cancelled' || session.status === 'completed') {
+          console.log(`[Socket] Call accept failed: Session ${sessionId} is ${session?.status || 'not found'}`);
+          socket.emit('call_validation_failed', { sessionId, reason: 'cancelled' });
+          return;
+        }
+
+        // Check if the caller (user) is still online/connected to the socket
+        const callerRooms = io.sockets.adapter.rooms.get(`user_${userId}`);
+        if (!callerRooms || callerRooms.size === 0) {
+          console.log(`[Socket] Call accept failed: User ${userId} is offline/disconnected.`);
+          session.status = 'cancelled';
+          await session.save();
+          
+          let listenerUserId = socket.userId || session.listenerId;
+          if (listenerUserId) {
+            await Listener.findOneAndUpdate({ userId: listenerUserId }, { isBusy: false });
+            io.emit('listener_status_changed', { userId: listenerUserId, isOnline: true, isBusy: false });
+            await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, listenerUserId.toString());
+            await redis.del(REDIS_KEYS.LOCK(listenerUserId.toString()));
+          }
+          
+          socket.emit('call_validation_failed', { sessionId, reason: 'user_offline' });
+          return;
+        }
+
+        io.to(`user_${userId}`).emit('call_accepted', { sessionId, roomId });
+      } catch (err) {
+        console.error('[Socket] Error in call_accepted validation:', err.message);
+        socket.emit('call_validation_failed', { sessionId, reason: 'error', message: err.message });
+      }
     });
 
     socket.on('call_rejected', async (data) => {

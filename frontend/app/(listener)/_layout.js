@@ -42,6 +42,22 @@ export default function ListenerLayout() {
     
     const { callerId, callerName, callType, callId, roomId, avatarIndex, gender } = acceptedCall;
     
+    try {
+      // Validate that the session is still active
+      const sessionRes = await callAPI.getSession(callId);
+      const session = sessionRes?.data;
+      if (!session || session.status === 'cancelled' || session.status === 'completed') {
+        Alert.alert('Call Cancelled', 'This call has been cancelled by the user.', [{ text: 'OK' }]);
+        setIncomingCalls(prev => prev.filter(c => c.callId !== callId));
+        return;
+      }
+    } catch (err) {
+      console.log('Error validating session before accept:', err);
+      Alert.alert('Call Unavailable', 'This call is no longer available.', [{ text: 'OK' }]);
+      setIncomingCalls(prev => prev.filter(c => c.callId !== callId));
+      return;
+    }
+    
     // Automatically reject all other active requests
     const otherCalls = incomingCallsRef.current.filter(c => c.callId !== callId);
     otherCalls.forEach(otherCall => {
@@ -152,7 +168,7 @@ export default function ListenerLayout() {
 
       socketService.on('call_cancelled', (data) => {
         console.log('Call cancelled by user:', data);
-        setIncomingCalls((prev) => prev.filter(c => c.callId !== data.callId));
+        setIncomingCalls((prev) => prev.filter(c => c.callId !== data.callId && c.callId !== data.sessionId));
       });
 
       socketService.on('account_banned', (data) => {
@@ -270,8 +286,8 @@ export default function ListenerLayout() {
             backgroundColor: '#000',
             borderTopColor: '#1A1A1A',
             borderTopWidth: 1,
-            height: Platform.OS === 'ios' ? vs(75) + insets.bottom : vs(65),
-            paddingBottom: Platform.OS === 'ios' ? insets.bottom : vs(10),
+            height: vs(65) + insets.bottom,
+            paddingBottom: insets.bottom > 0 ? insets.bottom : vs(10),
             paddingTop: vs(6),
           },
           tabBarActiveTintColor: '#fff',

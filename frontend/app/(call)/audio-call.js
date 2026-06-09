@@ -243,6 +243,13 @@ export default function AudioCallScreen() {
       }
     };
 
+    const handleCallCancelled = async (data) => {
+      if (data.sessionId === callId || data.callId === callId) {
+        Alert.alert('Call Cancelled', 'The call was cancelled by the user.', [{ text: 'OK' }]);
+        await exitCallScreen();
+      }
+    };
+
     const handleGiftReceived = (data) => {
       triggerGiftAnimation(data);
     };
@@ -252,6 +259,8 @@ export default function AudioCallScreen() {
     socketService.on('low_balance_warning', handleLowBalance);
     socketService.on('call_auto_ended', handleAutoEnded);
     socketService.on('call_ended', handleCallEnded);
+    socketService.on('call_cancelled', handleCallCancelled);
+    socketService.on('call_validation_failed', handleCallCancelled);
     socketService.on('gift_received', handleGiftReceived);
 
     setupBilling();
@@ -261,6 +270,8 @@ export default function AudioCallScreen() {
       socketService.off('low_balance_warning', handleLowBalance);
       socketService.off('call_auto_ended', handleAutoEnded);
       socketService.off('call_ended', handleCallEnded);
+      socketService.off('call_cancelled', handleCallCancelled);
+      socketService.off('call_validation_failed', handleCallCancelled);
       socketService.off('gift_received', handleGiftReceived);
     };
   }, [callId]);
