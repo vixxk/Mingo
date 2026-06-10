@@ -97,6 +97,14 @@ export default function SplashScreenPage() {
         } catch (e) {}
       }
 
+      let listenerStatus = null;
+      let hasDismissedRejection = false;
+      try {
+        listenerStatus = await AsyncStorage.getItem('listenerStatus');
+        const dismissed = await AsyncStorage.getItem('hasDismissedRejection');
+        hasDismissedRejection = dismissed === 'true';
+      } catch (e) {}
+
       if (userToken) {
         try {
           const meRes = await authAPI.me();
@@ -110,6 +118,13 @@ export default function SplashScreenPage() {
           if (meRes?.data) {
             role = meRes.data.role || 'USER';
             await AsyncStorage.setItem('user', JSON.stringify(meRes.data));
+            if (meRes.data.listener) {
+              listenerStatus = meRes.data.listener.status;
+              await AsyncStorage.setItem('listenerStatus', listenerStatus);
+            } else {
+              listenerStatus = null;
+              await AsyncStorage.removeItem('listenerStatus');
+            }
           }
         } catch (authErr) {
           console.log('Error verifying user during splash check:', authErr);
@@ -128,7 +143,13 @@ export default function SplashScreenPage() {
       } else if (role === 'LISTENER') {
         router.replace('/(listener)');
       } else if (userToken) {
-        router.replace('/(tabs)');
+        if (listenerStatus === 'pending') {
+          router.replace('/(profile)/listener');
+        } else if (listenerStatus === 'rejected' && !hasDismissedRejection) {
+          router.replace('/(auth)/verification-failed');
+        } else {
+          router.replace('/(tabs)');
+        }
       } else {
         router.replace('/welcome');
       }

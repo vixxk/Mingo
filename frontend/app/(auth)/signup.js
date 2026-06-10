@@ -153,6 +153,8 @@ export default function SignupScreen() {
       
       await AsyncStorage.setItem('userToken', result.data.token);
       await AsyncStorage.setItem('user', JSON.stringify(result.data.user));
+      await AsyncStorage.removeItem('listenerStatus');
+      await AsyncStorage.removeItem('hasDismissedRejection');
       
       setUserName(result.data.user.name);
       setShowWelcomePopup(true);

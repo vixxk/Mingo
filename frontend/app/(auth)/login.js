@@ -69,10 +69,23 @@ export default function LoginScreen() {
         try {
           const user = JSON.parse(userStr);
           const role = user.role || 'USER';
+
+          let listenerStatus = null;
+          let hasDismissedRejection = false;
+          try {
+            listenerStatus = await AsyncStorage.getItem('listenerStatus');
+            const dismissed = await AsyncStorage.getItem('hasDismissedRejection');
+            hasDismissedRejection = dismissed === 'true';
+          } catch (e) {}
+
           if (role === 'ADMIN') {
             router.replace('/(admin)');
           } else if (role === 'LISTENER') {
             router.replace('/(listener)');
+          } else if (listenerStatus === 'pending') {
+            router.replace('/(profile)/listener');
+          } else if (listenerStatus === 'rejected' && !hasDismissedRejection) {
+            router.replace('/(auth)/verification-failed');
           } else {
             router.replace('/(tabs)');
           }
@@ -158,6 +171,12 @@ export default function LoginScreen() {
       if (result.data.user.avatarIndex !== undefined) {
         await AsyncStorage.setItem('userAvatarIndex', result.data.user.avatarIndex.toString());
       }
+      if (result.data.user.listener) {
+        await AsyncStorage.setItem('listenerStatus', result.data.user.listener.status);
+      } else {
+        await AsyncStorage.removeItem('listenerStatus');
+      }
+      await AsyncStorage.removeItem('hasDismissedRejection');
       
       setUserName(result.data.user.name);
       setShowWelcomePopup(true);
@@ -253,10 +272,22 @@ export default function LoginScreen() {
                     } catch(e) {}
                   }
                   
+                  let listenerStatus = null;
+                  let hasDismissedRejection = false;
+                  try {
+                    listenerStatus = await AsyncStorage.getItem('listenerStatus');
+                    const dismissed = await AsyncStorage.getItem('hasDismissedRejection');
+                    hasDismissedRejection = dismissed === 'true';
+                  } catch (e) {}
+
                   if (role === 'ADMIN') {
                     router.replace('/(admin)');
                   } else if (role === 'LISTENER') {
                     router.replace('/(listener)');
+                  } else if (listenerStatus === 'pending') {
+                    router.replace('/(profile)/listener');
+                  } else if (listenerStatus === 'rejected' && !hasDismissedRejection) {
+                    router.replace('/(auth)/verification-failed');
                   } else {
                     router.replace('/(tabs)');
                   }

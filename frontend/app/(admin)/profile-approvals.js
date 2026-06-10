@@ -185,16 +185,16 @@ export default function ProfileApprovalsScreen() {
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Approve', onPress: async () => {
-          setProcessing(id);
+          const originalApprovals = [...approvals];
+          // Optimistically update UI
+          setApprovals((prev) => prev.filter((r) => r.id !== id));
           try {
             await adminAPI.approveProfileChanges(id);
-            Alert.alert('Approved', 'Profile changes are now live.');
-            setApprovals((prev) => prev.filter((r) => r.id !== id));
           } catch (error) {
+            // Rollback on error
+            setApprovals(originalApprovals);
             console.error('Failed to approve:', error);
             Alert.alert('Error', 'Failed to approve profile changes.');
-          } finally {
-            setProcessing(null);
           }
         },
       },
@@ -209,16 +209,17 @@ export default function ProfileApprovalsScreen() {
   const handleReject = async () => {
     const { id } = rejectModal;
     setRejectModal({ visible: false, id: null });
-    setProcessing(id);
+    
+    const originalApprovals = [...approvals];
+    // Optimistically update UI
+    setApprovals((prev) => prev.filter((r) => r.id !== id));
     try {
       await adminAPI.rejectProfileChanges(id, rejectNotes || 'Your profile changes did not meet our guidelines.');
-      Alert.alert('Rejected', 'Profile changes have been rejected.');
-      setApprovals((prev) => prev.filter((r) => r.id !== id));
     } catch (error) {
+      // Rollback on error
+      setApprovals(originalApprovals);
       console.error('Failed to reject:', error);
       Alert.alert('Error', 'Failed to reject profile changes.');
-    } finally {
-      setProcessing(null);
     }
   };
 

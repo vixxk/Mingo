@@ -167,7 +167,7 @@ export const authAPI = {
   },
 
     me: async () => {
-    return apiRequest('/auth/me');
+    return apiRequest(`/auth/me?cb=${Date.now()}`);
   },
 
     healthCheck: async (options = {}) => {
@@ -195,7 +195,12 @@ export const authAPI = {
       }
 
       await AsyncStorage.removeItem('token');
+      await AsyncStorage.removeItem('userToken');
       await AsyncStorage.removeItem('user');
+      await AsyncStorage.removeItem('listenerStatus');
+      await AsyncStorage.removeItem('userGender');
+      await AsyncStorage.removeItem('userAvatarIndex');
+      await AsyncStorage.removeItem('userName');
     },
 
     isLoggedIn: async () => {

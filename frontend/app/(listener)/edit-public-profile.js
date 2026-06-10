@@ -47,11 +47,12 @@ export default function EditPublicProfileScreen() {
     type: 'success',
     title: '',
     message: '',
-    onConfirm: null
+    onConfirm: null,
+    icon: null
   });
 
-  const showPopup = (type, title, message, onConfirm = null) => {
-    setPopup({ visible: true, type, title, message, onConfirm });
+  const showPopup = (type, title, message, onConfirm = null, icon = null) => {
+    setPopup({ visible: true, type, title, message, onConfirm, icon });
   };
 
   const closePopup = () => {
@@ -210,7 +211,10 @@ export default function EditPublicProfileScreen() {
   };
 
   const removeGalleryImage = (index) => {
-    setGalleryImages((prev) => prev.filter((_, i) => i !== index));
+    showPopup('confirm', 'Remove Image?', 'Are you sure you want to remove this image from your gallery?', () => {
+      setGalleryImages((prev) => prev.filter((_, i) => i !== index));
+      closePopup();
+    }, 'close-circle');
   };
 
   const handleSaveDraft = async () => {
@@ -268,9 +272,6 @@ export default function EditPublicProfileScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={32} color="#fff" />
-        </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Public Profile</Text>
       </View>
 
@@ -508,6 +509,7 @@ export default function EditPublicProfileScreen() {
         message={popup.message}
         onClose={closePopup}
         onConfirm={popup.onConfirm}
+        icon={popup.icon}
       />
     </View>
   );
@@ -641,8 +643,7 @@ const styles = StyleSheet.create({
 const LoadingSkeleton = ({ insets }) => (
   <View style={[styles.container, { paddingTop: insets.top }]}>
     <View style={styles.header}>
-      <Skeleton width={24} height={24} borderRadius={12} />
-      <Skeleton width={180} height={32} borderRadius={6} style={{ marginLeft: 8 }} />
+      <Skeleton width={180} height={32} borderRadius={6} />
     </View>
 
     <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>

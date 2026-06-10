@@ -9,6 +9,7 @@ import {
   Alert,
   RefreshControl,
   Animated,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,6 +30,8 @@ const MENU_ITEMS = [
   { id: '7', label: 'Raise an Issue', icon: 'flag-outline', action: 'issue' },
   { id: '8', label: 'Edit Public Profile', icon: 'id-card-outline', route: '/(listener)/edit-public-profile' },
   { id: '6', label: 'Account Settings', icon: 'person-outline', route: '/edit-profile' },
+  { id: '10', label: 'Privacy Policy', icon: 'shield-checkmark-outline', action: 'privacy' },
+  { id: '11', label: 'Terms & Conditions', icon: 'document-text-outline', action: 'terms' },
   { id: '9', label: 'Delete Account', icon: 'trash-outline', action: 'delete', danger: true },
 ];
 
@@ -187,6 +190,10 @@ export default function ListenerProfileScreen() {
   const handleMenuPress = (item) => {
     if (item.action === 'issue') {
       setShowIssuePopup(true);
+    } else if (item.action === 'privacy') {
+      Linking.openURL('https://app.notion.com/p/Privacy-Policy-of-Mingo-37aa4992143b8022948fc9122e441308');
+    } else if (item.action === 'terms') {
+      Linking.openURL('https://app.notion.com/p/TERMS-CONDITIONS-37aa4992143b80c0a4c6fd5a8b4618df');
     } else if (item.action === 'delete') {
       setShowDeletePopup(true);
     } else if (item.route) {

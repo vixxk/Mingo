@@ -44,7 +44,7 @@ const SuccessModal = ({ visible, onClose }) => {
           </View>
           <Text style={styles.successTitle}>Video Submitted!</Text>
           <Text style={styles.successSub}>
-            Your application has been successfully submitted and is under review. Please note it takes about 12 to 24 hours for application approval. You may need to logout and re-login to check/confirm your status.
+            Your application has been successfully submitted and is under review. Please note it takes about 12 to 24 hours for application approval.
           </Text>
           <TouchableOpacity style={styles.successBtn} onPress={onClose} activeOpacity={0.8}>
             <Text style={styles.successBtnText}>Got it</Text>
@@ -91,23 +91,26 @@ export default function ListenerScreen() {
       const res = await authAPI.me();
       if (res?.data) {
         const userObj = res.data;
-        if (userObj.listener) {
-          const status = userObj.listener.status;
-          await AsyncStorage.setItem('listenerStatus', status);
-          setListenerStatus(status);
-          
-          if (status === 'approved') {
-            await AsyncStorage.setItem('user', JSON.stringify(userObj));
-            router.replace('/(listener)');
-            Alert.alert('Approved! 🎉', 'Your application has been approved. Welcome as a listener!');
-          } else if (status === 'rejected') {
-            router.replace('/(auth)/verification-failed');
-          } else {
-            Alert.alert('Status Check', 'Your application is still under review.');
-          }
+        const status = userObj.listener?.status;
+        const role = userObj.role;
+
+        if (status === 'approved' || role === 'LISTENER') {
+          await AsyncStorage.setItem('listenerStatus', 'approved');
+          await AsyncStorage.setItem('user', JSON.stringify(userObj));
+          router.replace('/(listener)');
+          Alert.alert('Approved! 🎉', 'Your application has been approved. Welcome as a listener!');
+        } else if (status === 'rejected') {
+          await AsyncStorage.setItem('listenerStatus', 'rejected');
+          router.replace('/(auth)/verification-failed');
         } else {
-          Alert.alert('Status Check', 'No listener application details found.');
+          if (status) {
+            await AsyncStorage.setItem('listenerStatus', status);
+            setListenerStatus(status);
+          }
+          Alert.alert('Status Check', 'Your application is still under review.');
         }
+      } else {
+        Alert.alert('Status Check', 'Failed to get status details.');
       }
     } catch (err) {
       console.error('Refresh error:', err);
@@ -236,14 +239,18 @@ export default function ListenerScreen() {
 
       {}
       <TouchableOpacity
-        style={[styles.backBtn, { top: insets.top + vs(8) }]}
+        style={[
+          styles.backBtn, 
+          { top: insets.top + vs(8) },
+          listenerStatus === 'pending' && styles.logoutBtnPending
+        ]}
         onPress={listenerStatus === 'pending' ? handleLogout : () => router.replace('/(auth)/role-selection')}
         activeOpacity={0.7}
       >
         {listenerStatus === 'pending' ? (
           <>
-            <Ionicons name="log-out-outline" size={22} color="#EF4444" />
-            <Text style={[styles.backText, { color: '#EF4444' }]}>Logout</Text>
+            <Ionicons name="log-out-outline" size={18} color="#EF4444" />
+            <Text style={[styles.backText, { color: '#EF4444', fontSize: ms(14, 0.3) }]}>Logout</Text>
           </>
         ) : (
           <>
@@ -255,17 +262,21 @@ export default function ListenerScreen() {
 
       {listenerStatus === 'pending' && (
         <TouchableOpacity
-          style={[styles.refreshBtn, { top: insets.top + vs(8) }]}
+          style={[
+            styles.refreshBtn, 
+            { top: insets.top + vs(8) },
+            styles.refreshBtnPending
+          ]}
           onPress={handleRefresh}
           activeOpacity={0.7}
           disabled={refreshing}
         >
           {refreshing ? (
-            <ActivityIndicator size="small" color="#fff" />
+            <ActivityIndicator size="small" color="#fff" style={{ paddingHorizontal: s(18) }} />
           ) : (
             <>
-              <Ionicons name="refresh" size={22} color="#fff" />
-              <Text style={styles.backText}>Refresh</Text>
+              <Ionicons name="refresh" size={18} color="#fff" />
+              <Text style={[styles.backText, { fontSize: ms(14, 0.3) }]}>Refresh</Text>
             </>
           )}
         </TouchableOpacity>
@@ -317,7 +328,7 @@ export default function ListenerScreen() {
             <View style={{ flex: 1, marginLeft: 10 }}>
               <Text style={styles.pendingTitle}>Application Pending</Text>
               <Text style={styles.pendingSubtext}>
-                Your request is being reviewed by Mingo Admin. It takes about 12 to 24 hours for application approval. Please logout and re-login later to confirm your status.
+                Your request is being reviewed by Mingo Admin. It takes about 12 to 24 hours for application approval. Use the Refresh button at the top to check your status.
               </Text>
             </View>
           </View>
@@ -388,6 +399,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+  },
+  logoutBtnPending: {
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+    borderRadius: 20,
+    paddingHorizontal: s(12),
+    paddingVertical: vs(6),
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  refreshBtnPending: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 20,
+    paddingHorizontal: s(12),
+    paddingVertical: vs(6),
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
   },
 
   

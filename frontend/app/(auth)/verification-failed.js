@@ -10,13 +10,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, SCREEN_WIDTH, SCREEN_HEIGHT } from '../../utils/responsive';
 
 export default function VerificationFailedScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const handleBecomeCustomer = () => {
+  const handleBecomeCustomer = async () => {
+    try {
+      await AsyncStorage.setItem('hasDismissedRejection', 'true');
+      await AsyncStorage.setItem('listenerStatus', 'user');
+    } catch (e) {}
     router.replace('/(tabs)');
   };
 

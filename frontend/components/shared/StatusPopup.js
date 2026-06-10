@@ -15,6 +15,7 @@ const StatusPopup = ({
   onConfirm,
   confirmText = 'Continue',
   cancelText = 'Cancel',
+  icon,
 }) => {
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
@@ -36,37 +37,46 @@ const StatusPopup = ({
   if (!visible && opacityAnim._value === 0) return null;
 
   const getConfig = () => {
+    let conf;
     switch (type) {
       case 'error':
-        return {
+        conf = {
           icon: 'close-circle',
           color: '#EF4444',
           bg: ['#1A0505', '#0A0000'],
           btnColors: ['#EF4444', '#B91C1C'],
         };
+        break;
       case 'info':
-        return {
+        conf = {
           icon: 'information-circle',
           color: '#3B82F6',
           bg: ['#050A1A', '#000000'],
           btnColors: ['#3B82F6', '#1D4ED8'],
         };
+        break;
       case 'confirm':
-        return {
+        conf = {
           icon: 'help-circle',
           color: '#8B5CF6',
           bg: ['#0A051A', '#000000'],
           btnColors: ['#8B5CF6', '#6D28D9'],
         };
+        break;
       case 'success':
       default:
-        return {
+        conf = {
           icon: 'checkmark-circle',
           color: '#10B981',
           bg: ['#051A10', '#000000'],
           btnColors: ['#10B981', '#059669'],
         };
+        break;
     }
+    if (icon) {
+      conf.icon = icon;
+    }
+    return conf;
   };
 
   const config = getConfig();

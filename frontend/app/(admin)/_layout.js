@@ -84,7 +84,6 @@ export default function AdminLayout() {
         name="admin-users"
         options={{
           title: 'Users',
-          tabBarBadge: counts.pendingUsers > 0 ? counts.pendingUsers : null,
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? 'people-sharp' : 'people-outline'}
@@ -98,7 +97,7 @@ export default function AdminLayout() {
         name="admin-listeners"
         options={{
           title: 'Listeners',
-          tabBarBadge: counts.pendingListeners > 0 ? counts.pendingListeners : null,
+          tabBarBadge: counts.pendingUsers > 0 ? counts.pendingUsers : null,
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? 'headset-sharp' : 'headset-outline'}
@@ -125,7 +124,7 @@ export default function AdminLayout() {
         name="profile-approvals"
         options={{
           title: 'Approvals',
-          tabBarBadge: counts.approvals > 0 ? counts.approvals : null,
+          tabBarBadge: counts.pendingListeners > 0 ? counts.pendingListeners : null,
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? 'shield-checkmark-sharp' : 'shield-checkmark-outline'}

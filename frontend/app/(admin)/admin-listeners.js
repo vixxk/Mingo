@@ -103,6 +103,7 @@ export default function AdminListenersScreen() {
     verified: { icon: 'shield-checkmark', color: '#3B82F6', bg: 'rgba(59,130,246,0.1)' },
     bestChoice: { icon: 'star', color: '#EC4899', bg: 'rgba(236,72,153,0.1)' },
     rejected: { icon: 'close-circle', color: '#EF4444', bg: 'rgba(239,68,68,0.1)' },
+    deleted: { icon: 'trash', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
   };
 
   useEffect(() => {
@@ -153,6 +154,16 @@ export default function AdminListenersScreen() {
 
   const filtered = listeners.filter(l => {
     const matchSearch = l.name.toLowerCase().includes(searchQuery.toLowerCase()) || l.phone.includes(searchQuery);
+    
+    if (filter === 'deleted') {
+      return matchSearch && l.isDeleted;
+    }
+    
+    // Hide deleted listeners from other filters
+    if (l.isDeleted) {
+      return false;
+    }
+    
     const matchFilter = filter === 'all' || filter === l.status || (filter === 'verified' && l.verified) || (filter === 'bestChoice' && l.bestChoice);
     return matchSearch && matchFilter;
   });
@@ -168,12 +179,16 @@ export default function AdminListenersScreen() {
       title: 'Approve Listener',
       desc: 'Are you sure you want to approve this listener application?',
       onConfirm: async () => {
+        // Optimistically update UI immediately
+        updateListenerState(id, { status: 'approved' });
+        setConfirmAction(null);
+        setToast({ visible: true, message: 'Listener approved successfully', type: 'success' });
+        
         try {
           await adminAPI.approveListener(id);
-          updateListenerState(id, { status: 'approved' });
-          setConfirmAction(null);
-          setToast({ visible: true, message: 'Listener approved successfully', type: 'success' });
         } catch (e) {
+          // Rollback on error
+          updateListenerState(id, { status: 'pending' });
           setToast({ visible: true, message: 'Failed to approve listener', type: 'error' });
         }
       }
@@ -186,12 +201,16 @@ export default function AdminListenersScreen() {
       title: 'Reject Listener',
       desc: 'Are you sure you want to reject this listener application?',
       onConfirm: async () => {
+        // Optimistically update UI immediately
+        updateListenerState(id, { status: 'rejected' });
+        setConfirmAction(null);
+        setToast({ visible: true, message: 'Listener rejected successfully', type: 'success' });
+        
         try {
           await adminAPI.rejectListener(id);
-          updateListenerState(id, { status: 'rejected' });
-          setConfirmAction(null);
-          setToast({ visible: true, message: 'Listener rejected successfully', type: 'success' });
         } catch (e) {
+          // Rollback on error
+          updateListenerState(id, { status: 'pending' });
           setToast({ visible: true, message: 'Failed to reject listener', type: 'error' });
         }
       }
@@ -361,50 +380,54 @@ export default function AdminListenersScreen() {
                 )}
 
                 <View style={{ width: '100%', gap: SH * 0.01 }}>
-                  {selectedListener.status === 'pending' && (
-                    <View style={{ flexDirection: 'row', gap: s(10) }}>
-                      <TouchableOpacity style={[st.actionBtn, { backgroundColor: '#10B981', flex: 2 }]} onPress={() => handleApprove(selectedListener.id)}>
-                        <Ionicons name="checkmark" size={18} color="#fff" />
-                        <Text style={st.actionBtnText}>Approve</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={[st.actionBtn, { backgroundColor: '#EF4444', flex: 1 }]} onPress={() => handleReject(selectedListener.id)}>
-                        <Ionicons name="close" size={18} color="#fff" />
-                        <Text style={st.actionBtnText}>Reject</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                  {selectedListener.status === 'approved' && (
+                  {!selectedListener.isDeleted && (
                     <>
-                      <TouchableOpacity style={[st.actionBtn, { backgroundColor: selectedListener.verified ? 'rgba(59,130,246,0.15)' : '#3B82F6' }]} onPress={() => toggleVerified(selectedListener.id, selectedListener.verified)}>
-                        <Ionicons name={selectedListener.verified ? 'checkmark-circle' : 'checkmark-circle-outline'} size={18} color={selectedListener.verified ? '#3B82F6' : '#fff'} />
-                        <Text style={[st.actionBtnText, selectedListener.verified && { color: '#3B82F6' }]}>{selectedListener.verified ? 'Remove Verified' : 'Mark as Verified'}</Text>
+                      {selectedListener.status === 'pending' && (
+                        <View style={{ flexDirection: 'row', gap: s(10) }}>
+                          <TouchableOpacity style={[st.actionBtn, { backgroundColor: '#10B981', flex: 2 }]} onPress={() => handleApprove(selectedListener.id)}>
+                            <Ionicons name="checkmark" size={18} color="#fff" />
+                            <Text style={st.actionBtnText}>Approve</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={[st.actionBtn, { backgroundColor: '#EF4444', flex: 1 }]} onPress={() => handleReject(selectedListener.id)}>
+                            <Ionicons name="close" size={18} color="#fff" />
+                            <Text style={st.actionBtnText}>Reject</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                      {selectedListener.status === 'approved' && (
+                        <>
+                          <TouchableOpacity style={[st.actionBtn, { backgroundColor: selectedListener.verified ? 'rgba(59,130,246,0.15)' : '#3B82F6' }]} onPress={() => toggleVerified(selectedListener.id, selectedListener.verified)}>
+                            <Ionicons name={selectedListener.verified ? 'checkmark-circle' : 'checkmark-circle-outline'} size={18} color={selectedListener.verified ? '#3B82F6' : '#fff'} />
+                            <Text style={[st.actionBtnText, selectedListener.verified && { color: '#3B82F6' }]}>{selectedListener.verified ? 'Remove Verified' : 'Mark as Verified'}</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={[st.actionBtn, { backgroundColor: selectedListener.bestChoice ? 'rgba(245,158,11,0.15)' : '#F59E0B' }]} onPress={() => toggleBestChoice(selectedListener.id, selectedListener.bestChoice)}>
+                            <Ionicons name={selectedListener.bestChoice ? 'star' : 'star-outline'} size={18} color={selectedListener.bestChoice ? '#F59E0B' : '#fff'} />
+                            <Text style={[st.actionBtnText, selectedListener.bestChoice && { color: '#F59E0B' }]}>{selectedListener.bestChoice ? 'Remove Best Choice' : 'Set Best Choice'}</Text>
+                          </TouchableOpacity>
+                        </>
+                      )}
+                      
+                      {/* Ban/Unban Button */}
+                      <TouchableOpacity 
+                        style={[st.actionBtn, { backgroundColor: selectedListener.isBanned ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)' }]} 
+                        onPress={() => handleBanUser(selectedListener.userId, selectedListener.isBanned)}
+                      >
+                        <Ionicons name={selectedListener.isBanned ? "checkmark-circle" : "ban"} size={18} color={selectedListener.isBanned ? "#10B981" : "#EF4444"} />
+                        <Text style={[st.actionBtnText, { color: selectedListener.isBanned ? "#10B981" : "#EF4444" }]}>
+                          {selectedListener.isBanned ? 'Unban User' : 'Ban User'}
+                        </Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={[st.actionBtn, { backgroundColor: selectedListener.bestChoice ? 'rgba(245,158,11,0.15)' : '#F59E0B' }]} onPress={() => toggleBestChoice(selectedListener.id, selectedListener.bestChoice)}>
-                        <Ionicons name={selectedListener.bestChoice ? 'star' : 'star-outline'} size={18} color={selectedListener.bestChoice ? '#F59E0B' : '#fff'} />
-                        <Text style={[st.actionBtnText, selectedListener.bestChoice && { color: '#F59E0B' }]}>{selectedListener.bestChoice ? 'Remove Best Choice' : 'Set Best Choice'}</Text>
+
+                      {/* Message Button */}
+                      <TouchableOpacity 
+                        style={[st.actionBtn, { backgroundColor: 'rgba(168, 85, 247, 0.15)' }]} 
+                        onPress={() => setIsMessaging(true)}
+                      >
+                        <Ionicons name="chatbubble" size={18} color="#A855F7" />
+                        <Text style={[st.actionBtnText, { color: '#A855F7' }]}>Message</Text>
                       </TouchableOpacity>
                     </>
                   )}
-                  
-                  {/* Ban/Unban Button */}
-                  <TouchableOpacity 
-                    style={[st.actionBtn, { backgroundColor: selectedListener.isBanned ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)' }]} 
-                    onPress={() => handleBanUser(selectedListener.userId, selectedListener.isBanned)}
-                  >
-                    <Ionicons name={selectedListener.isBanned ? "checkmark-circle" : "ban"} size={18} color={selectedListener.isBanned ? "#10B981" : "#EF4444"} />
-                    <Text style={[st.actionBtnText, { color: selectedListener.isBanned ? "#10B981" : "#EF4444" }]}>
-                      {selectedListener.isBanned ? 'Unban User' : 'Ban User'}
-                    </Text>
-                  </TouchableOpacity>
-
-                  {/* Message Button */}
-                  <TouchableOpacity 
-                    style={[st.actionBtn, { backgroundColor: 'rgba(168, 85, 247, 0.15)' }]} 
-                    onPress={() => setIsMessaging(true)}
-                  >
-                    <Ionicons name="chatbubble" size={18} color="#A855F7" />
-                    <Text style={[st.actionBtnText, { color: '#A855F7' }]}>Message</Text>
-                  </TouchableOpacity>
 
                   <TouchableOpacity
                     style={[st.actionBtn, { backgroundColor: 'rgba(239,68,68,0.1)' }]}
@@ -522,7 +545,7 @@ export default function AdminListenersScreen() {
           <Ionicons name="chevron-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={st.headerTitle}>Listeners</Text>
-        <Text style={st.headerCount}>{listeners.length}</Text>
+        <Text style={st.headerCount}>{filtered.length}</Text>
       </View>
 
       {}
@@ -534,7 +557,7 @@ export default function AdminListenersScreen() {
       {}
       <View style={{ paddingVertical: SH * 0.012 }}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: s(16), gap: s(8) }}>
-          {['all','pending','approved','verified','bestChoice','rejected'].map(f => {
+          {['all','pending','approved','verified','bestChoice','rejected','deleted'].map(f => {
             const active = filter === f;
             const config = FILTER_CONFIG[f];
             return (
@@ -579,12 +602,19 @@ export default function AdminListenersScreen() {
                   {listener.bestChoice && <Ionicons name="star" size={14} color="#F59E0B" />}
                 </View>
                 <Text style={st.meta}>{listener.phone} • {listener.totalCalls} calls</Text>
-                <View style={[st.statusBadge, { backgroundColor: `${getStatusColor(listener.status)}20` }]}>
-                  <View style={[st.statusDot, { backgroundColor: getStatusColor(listener.status) }]} />
-                  <Text style={[st.statusText, { color: getStatusColor(listener.status) }]}>{listener.status}</Text>
-                </View>
+                {listener.isDeleted ? (
+                  <View style={[st.statusBadge, { backgroundColor: 'rgba(245,158,11,0.15)' }]}>
+                    <Ionicons name="trash" size={10} color="#F59E0B" style={{ marginRight: 2 }} />
+                    <Text style={[st.statusText, { color: '#F59E0B' }]}>deleted</Text>
+                  </View>
+                ) : (
+                  <View style={[st.statusBadge, { backgroundColor: `${getStatusColor(listener.status)}20` }]}>
+                    <View style={[st.statusDot, { backgroundColor: getStatusColor(listener.status) }]} />
+                    <Text style={[st.statusText, { color: getStatusColor(listener.status) }]}>{listener.status}</Text>
+                  </View>
+                )}
               </View>
-              {listener.status === 'pending' && (
+              {listener.status === 'pending' && !listener.isDeleted && (
                 <View style={{ flexDirection: 'row', gap: s(6) }}>
                   <TouchableOpacity style={[st.quickBtn, { backgroundColor: 'rgba(16,185,129,0.2)' }]} onPress={() => handleApprove(listener.id)}>
                     <Ionicons name="checkmark" size={16} color="#10B981" />
@@ -594,7 +624,7 @@ export default function AdminListenersScreen() {
                   </TouchableOpacity>
                 </View>
               )}
-              {listener.status !== 'pending' && <Ionicons name="chevron-forward" size={18} color="#4B5563" />}
+              {(listener.status !== 'pending' || listener.isDeleted) && <Ionicons name="chevron-forward" size={18} color="#4B5563" />}
             </TouchableOpacity>
           ))
         )}
