@@ -11,6 +11,7 @@ import {
   Animated,
   Dimensions,
   Modal,
+  RefreshControl,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -105,13 +106,14 @@ export default function AdminWallet() {
   const [packages, setPackages] = useState([]);
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [savingPackages, setSavingPackages] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [popup, setPopup] = useState({ visible: false, type: 'success', title: '', message: '' });
 
-  const loadData = async () => {
+  const loadData = async (isRefresher = false) => {
     try {
-      setLoading(true);
+      if (!isRefresher) setLoading(true);
       const [pkgRes, setRes] = await Promise.all([
         adminAPI.getCoinPackages(),
         adminAPI.getSettings()
@@ -122,8 +124,14 @@ export default function AdminWallet() {
       console.error('Failed to load wallet data:', e);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadData(true);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -254,7 +262,17 @@ export default function AdminWallet() {
         <Text style={styles.headerTitle}>Wallet & Coins</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#A855F7']}
+            tintColor="#A855F7"
+          />
+        }
+      >
         <Text style={styles.sectionTitle}>Coin Packages</Text>
 
         <View style={styles.actionRow}>

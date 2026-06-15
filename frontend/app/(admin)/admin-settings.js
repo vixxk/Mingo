@@ -1,11 +1,12 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Alert } from 'react-native';
+import { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Alert, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { ms, s, vs } from '../../utils/responsive';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { authAPI } from '../../utils/api';
 import SendNotificationPopup from '../../components/admin/SendNotificationPopup';
 import LogoutPopup from '../../components/shared/LogoutPopup';
 
@@ -37,17 +38,33 @@ export default function AdminSettingsScreen() {
   const router = useRouter();
   const [showNotificationPopup, setShowNotificationPopup] = useState(false);
   const [showLogoutPopup, setShowLogoutPopup] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await new Promise(resolve => setTimeout(resolve, 800));
+    setRefreshing(false);
+  }, []);
 
   const handleLogout = () => {
     setShowLogoutPopup(true);
   };
 
   const confirmLogout = async () => {
-    try { 
-      await AsyncStorage.multiRemove(['isAdmin', 'userToken', 'token', 'user', 'listenerStatus']); 
-    } catch (e) {}
+    try {
+      await AsyncStorage.multiRemove(['isAdmin', 'userToken', 'token', 'user', 'listenerStatus', 'userGender', 'userAvatarIndex', 'userName']);
+      try {
+        await authAPI.logout();
+      } catch (err) {
+        console.warn('Backend logout failed:', err);
+      }
+    } catch (e) {
+      console.error('Logout storage error:', e);
+    }
     setShowLogoutPopup(false);
-    router.replace('/welcome');
+    setTimeout(() => {
+      router.replace('/welcome');
+    }, 300);
   };
 
   const handleMenuPress = (item) => {
@@ -63,7 +80,19 @@ export default function AdminSettingsScreen() {
         <Text style={st.headerTitle}>Settings</Text>
       </View>
 
-      <ScrollView style={{ flex:1 }} contentContainerStyle={{ paddingHorizontal:s(16), paddingBottom:SH*0.05 }} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={{ flex:1 }} 
+        contentContainerStyle={{ paddingHorizontal:s(16), paddingBottom:SH*0.05 }} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#A855F7']}
+            tintColor="#A855F7"
+          />
+        }
+      >
         {}
         <View style={st.adminCard}>
           <View style={st.adminIcon}>

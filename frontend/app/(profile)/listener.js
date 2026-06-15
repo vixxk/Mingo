@@ -21,6 +21,8 @@ import { ms, s, vs, SCREEN_WIDTH, SCREEN_HEIGHT, hp, wp } from '../../utils/resp
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import FloatingCoin from '../../components/shared/FloatingCoin';
 import { userAPI, authAPI } from '../../utils/api';
+import LogoutPopup from '../../components/shared/LogoutPopup';
+import ToastNotification from '../../components/shared/ToastNotification';
 
 
 const COIN_POSITIONS = [
@@ -63,8 +65,14 @@ export default function ListenerScreen() {
   const [uploading, setUploading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [showLogoutPopup, setShowLogoutPopup] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
 
-  
+  const showToast = (message, type = 'success') => {
+    setToast({ visible: true, message, type });
+  };
+
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -76,8 +84,20 @@ export default function ListenerScreen() {
           router.replace('/(listener)');
           return;
         } else if (status === 'rejected') {
-          router.replace('/(auth)/verification-failed');
-          return;
+          const userStr = await AsyncStorage.getItem('user');
+          let userId = null;
+          if (userStr) {
+            try {
+              const user = JSON.parse(userStr);
+              userId = user._id || user.id;
+            } catch (e) {}
+          }
+          const dismissed = await AsyncStorage.getItem('hasDismissedRejection');
+          const userDismissed = userId ? await AsyncStorage.getItem(`hasDismissedRejection_${userId}`) : null;
+          if (dismissed !== 'true' && userDismissed !== 'true') {
+            router.replace('/(auth)/verification-failed');
+            return;
+          }
         }
       } catch (e) {}
       setLoading(false);
@@ -98,49 +118,58 @@ export default function ListenerScreen() {
           await AsyncStorage.setItem('listenerStatus', 'approved');
           await AsyncStorage.setItem('user', JSON.stringify(userObj));
           router.replace('/(listener)');
-          Alert.alert('Approved! 🎉', 'Your application has been approved. Welcome as a listener!');
         } else if (status === 'rejected') {
           await AsyncStorage.setItem('listenerStatus', 'rejected');
-          router.replace('/(auth)/verification-failed');
+          const userId = userObj._id || userObj.id;
+          const dismissed = await AsyncStorage.getItem('hasDismissedRejection');
+          const userDismissed = userId ? await AsyncStorage.getItem(`hasDismissedRejection_${userId}`) : null;
+          if (dismissed !== 'true' && userDismissed !== 'true') {
+            router.replace('/(auth)/verification-failed');
+          } else {
+            setListenerStatus('rejected');
+          }
         } else {
           if (status) {
             await AsyncStorage.setItem('listenerStatus', status);
             setListenerStatus(status);
           }
-          Alert.alert('Status Check', 'Your application is still under review.');
+          showToast('Your application is still under review.', 'warning');
         }
       } else {
-        Alert.alert('Status Check', 'Failed to get status details.');
+        showToast('Failed to get status details.', 'error');
       }
     } catch (err) {
       console.error('Refresh error:', err);
-      Alert.alert('Error', 'Failed to refresh status. Please check your network connection.');
+      showToast('Failed to refresh status. Please check your network connection.', 'error');
     } finally {
       setRefreshing(false);
     }
   };
 
-  const handleLogout = async () => {
-    Alert.alert(
-      'Confirm Logout',
-      'Are you sure you want to log out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Logout', 
-          style: 'destructive', 
-          onPress: async () => {
-            try {
-              await authAPI.logout();
-              router.replace('/welcome');
-            } catch (err) {
-              console.error('Logout error:', err);
-              Alert.alert('Error', 'Failed to logout. Please try again.');
-            }
-          }
-        }
-      ]
-    );
+  const handleLogout = () => {
+    setShowLogoutPopup(true);
+  };
+
+  const confirmLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await AsyncStorage.multiRemove(['userToken', 'token', 'user', 'listenerStatus', 'isAdmin', 'userGender', 'userAvatarIndex', 'userName']);
+      try {
+        await authAPI.logout();
+      } catch (apiErr) {
+        console.warn('API logout failed, proceeding with local logout:', apiErr);
+      }
+      setShowLogoutPopup(false);
+      setTimeout(() => {
+        router.replace('/welcome');
+      }, 300);
+    } catch (err) {
+      console.error('Logout error:', err);
+      showToast('Failed to logout. Please try again.', 'error');
+      setShowLogoutPopup(false);
+    } finally {
+      setLoggingOut(false);
+    }
   };
 
   useEffect(() => {
@@ -213,7 +242,7 @@ export default function ListenerScreen() {
       }
     } catch (e) {
       console.log('Error applying as listener:', e);
-      Alert.alert('Error', e?.message || 'Failed to submit application.');
+      showToast(e?.message || 'Failed to submit application.', 'error');
     } finally {
       setUploading(false);
     }
@@ -237,50 +266,7 @@ export default function ListenerScreen() {
         style={styles.bottomGradient}
       />
 
-      {}
-      <TouchableOpacity
-        style={[
-          styles.backBtn, 
-          { top: insets.top + vs(8) },
-          listenerStatus === 'pending' && styles.logoutBtnPending
-        ]}
-        onPress={listenerStatus === 'pending' ? handleLogout : () => router.replace('/(auth)/role-selection')}
-        activeOpacity={0.7}
-      >
-        {listenerStatus === 'pending' ? (
-          <>
-            <Ionicons name="log-out-outline" size={18} color="#EF4444" />
-            <Text style={[styles.backText, { color: '#EF4444', fontSize: ms(14, 0.3) }]}>Logout</Text>
-          </>
-        ) : (
-          <>
-            <Ionicons name="chevron-back" size={22} color="#fff" />
-            <Text style={styles.backText}>Back</Text>
-          </>
-        )}
-      </TouchableOpacity>
 
-      {listenerStatus === 'pending' && (
-        <TouchableOpacity
-          style={[
-            styles.refreshBtn, 
-            { top: insets.top + vs(8) },
-            styles.refreshBtnPending
-          ]}
-          onPress={handleRefresh}
-          activeOpacity={0.7}
-          disabled={refreshing}
-        >
-          {refreshing ? (
-            <ActivityIndicator size="small" color="#fff" style={{ paddingHorizontal: s(18) }} />
-          ) : (
-            <>
-              <Ionicons name="refresh" size={18} color="#fff" />
-              <Text style={[styles.backText, { fontSize: ms(14, 0.3) }]}>Refresh</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      )}
 
       {}
       {COIN_POSITIONS.map((pos, i) => (
@@ -328,7 +314,7 @@ export default function ListenerScreen() {
             <View style={{ flex: 1, marginLeft: 10 }}>
               <Text style={styles.pendingTitle}>Application Pending</Text>
               <Text style={styles.pendingSubtext}>
-                Your request is being reviewed by Mingo Admin. It takes about 12 to 24 hours for application approval. Use the Refresh button at the top to check your status.
+                Your request is being reviewed by Mingo Admin. It takes about 12 to 24 hours for application approval.
               </Text>
             </View>
           </View>
@@ -361,6 +347,69 @@ export default function ListenerScreen() {
           </>
         )}
       </View>
+
+      {/* Header Container Rendered Last for absolute zIndex and elevation priority */}
+      <View style={[styles.headerContainer, { top: insets.top + vs(8) }]} pointerEvents="box-none">
+        <TouchableOpacity
+          style={[
+            styles.backBtn, 
+            listenerStatus === 'pending' && styles.logoutBtnPending
+          ]}
+          onPress={listenerStatus === 'pending' ? handleLogout : () => router.replace('/(auth)/role-selection')}
+          activeOpacity={0.7}
+          disabled={loggingOut}
+        >
+          {listenerStatus === 'pending' ? (
+            loggingOut ? (
+              <ActivityIndicator size="small" color="#EF4444" style={{ paddingHorizontal: s(15) }} />
+            ) : (
+              <>
+                <Ionicons name="log-out-outline" size={18} color="#EF4444" />
+                <Text style={[styles.backText, { color: '#EF4444', fontSize: ms(14, 0.3) }]}>Logout</Text>
+              </>
+            )
+          ) : (
+            <>
+              <Ionicons name="chevron-back" size={22} color="#fff" />
+              <Text style={styles.backText}>Back</Text>
+            </>
+          )}
+        </TouchableOpacity>
+
+        {listenerStatus === 'pending' && (
+          <TouchableOpacity
+            style={[
+              styles.refreshBtn, 
+              styles.refreshBtnPending
+            ]}
+            onPress={handleRefresh}
+            activeOpacity={0.7}
+            disabled={refreshing}
+          >
+            {refreshing ? (
+              <ActivityIndicator size="small" color="#fff" style={{ paddingHorizontal: s(18) }} />
+            ) : (
+              <>
+                <Ionicons name="refresh" size={18} color="#fff" />
+                <Text style={[styles.backText, { fontSize: ms(14, 0.3) }]}>Refresh</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <LogoutPopup 
+        visible={showLogoutPopup}
+        onCancel={() => setShowLogoutPopup(false)}
+        onConfirm={confirmLogout}
+        loading={loggingOut}
+      />
+      <ToastNotification
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+        onDismiss={() => setToast(prev => ({ ...prev, visible: false }))}
+      />
     </View>
   );
 }
@@ -379,10 +428,19 @@ const styles = StyleSheet.create({
   },
 
   
+  headerContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: vs(50),
+    zIndex: 9999,
+    elevation: 9999,
+  },
   backBtn: {
     position: 'absolute',
     left: s(16),
-    zIndex: 10,
+    zIndex: 10000,
+    elevation: 10000,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
@@ -395,7 +453,8 @@ const styles = StyleSheet.create({
   refreshBtn: {
     position: 'absolute',
     right: s(16),
-    zIndex: 10,
+    zIndex: 10000,
+    elevation: 10000,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
@@ -410,6 +469,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
+    minWidth: s(85),
   },
   refreshBtnPending: {
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
@@ -421,6 +481,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
+    minWidth: s(85),
   },
 
   

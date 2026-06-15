@@ -10,6 +10,7 @@ import {
   Modal,
   TextInput,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,23 +26,30 @@ export default function AdminPayouts() {
 
   const [payouts, setPayouts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState('pending');
   const [selectedPayout, setSelectedPayout] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [adminNotes, setAdminNotes] = useState('');
   const [transactionId, setTransactionId] = useState('');
 
-  const loadPayouts = async () => {
+  const loadPayouts = async (isRefresher = false) => {
     try {
-      setLoading(true);
+      if (!isRefresher) setLoading(true);
       const res = await adminAPI.getPayouts({ status: filter });
       setPayouts(res.data.payouts || []);
     } catch (e) {
       console.error('Failed to load payouts:', e);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadPayouts(true);
+  }, [filter]);
 
   useFocusEffect(
     useCallback(() => {
@@ -140,6 +148,14 @@ export default function AdminPayouts() {
           renderItem={renderPayoutItem}
           keyExtractor={(item) => item._id}
           contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={['#A855F7']}
+              tintColor="#A855F7"
+            />
+          }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Ionicons name="cash-outline" size={64} color="#333" />

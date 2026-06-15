@@ -200,12 +200,21 @@ export default function ProfileScreen() {
 
   const confirmLogout = async () => {
     try {
+      // Clear keys first
+      await AsyncStorage.multiRemove(['userToken', 'token', 'user', 'listenerStatus', 'isAdmin', 'userGender', 'userAvatarIndex', 'userName']);
       // Disconnect socket
-      socketService.disconnect();
-      await authAPI.logout();
-      await AsyncStorage.multiRemove(['userToken', 'token', 'user', 'listenerStatus', 'isAdmin']);
+      try {
+        socketService.disconnect();
+      } catch (e) {}
+      try {
+        await authAPI.logout();
+      } catch (apiErr) {
+        console.warn('API logout failed, proceeding with local logout:', apiErr);
+      }
       setShowLogoutPopup(false);
-      router.replace('/welcome');
+      setTimeout(() => {
+        router.replace('/welcome');
+      }, 300);
     } catch (error) {
       console.error('Logout error:', error);
       setShowLogoutPopup(false);

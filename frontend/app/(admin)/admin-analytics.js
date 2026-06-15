@@ -11,6 +11,7 @@ import {
   Modal,
   Animated,
   Platform,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -118,6 +119,7 @@ export default function AdminAnalytics() {
 
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [timeline, setTimeline] = useState('7');
 
   // PDF Export States
@@ -151,17 +153,23 @@ export default function AdminAnalytics() {
     { id: '365', label: '1Y' },
   ];
 
-  const loadData = async () => {
+  const loadData = async (isRefresher = false) => {
     try {
-      setLoading(true);
+      if (!isRefresher) setLoading(true);
       const res = await adminAPI.getStats({ timeline });
       setStats(res.data);
     } catch (e) {
       console.error('Failed to load analytics:', e);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadData(true);
+  }, [timeline]);
 
   useFocusEffect(
     useCallback(() => {
@@ -564,7 +572,17 @@ export default function AdminAnalytics() {
         <Text style={styles.headerTitle}>Platform Analytics</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#A855F7']}
+            tintColor="#A855F7"
+          />
+        }
+      >
         {/* PDF Export Section */}
         <Text style={styles.sectionTitle}>Export Report (PDF)</Text>
         <View style={styles.chartCard}>

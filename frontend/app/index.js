@@ -101,8 +101,22 @@ export default function SplashScreenPage() {
       let hasDismissedRejection = false;
       try {
         listenerStatus = await AsyncStorage.getItem('listenerStatus');
+        const userStr = await AsyncStorage.getItem('user');
+        let userId = null;
+        if (userStr) {
+          try {
+            const user = JSON.parse(userStr);
+            userId = user._id || user.id;
+          } catch (e) {}
+        }
         const dismissed = await AsyncStorage.getItem('hasDismissedRejection');
-        hasDismissedRejection = dismissed === 'true';
+        const userDismissed = userId ? await AsyncStorage.getItem(`hasDismissedRejection_${userId}`) : null;
+        hasDismissedRejection = dismissed === 'true' || userDismissed === 'true';
+
+        // Migrate legacy global key to user-specific key for consistency
+        if (dismissed === 'true' && userId && userDismissed !== 'true') {
+          await AsyncStorage.setItem(`hasDismissedRejection_${userId}`, 'true');
+        }
       } catch (e) {}
 
       if (userToken) {
@@ -125,6 +139,17 @@ export default function SplashScreenPage() {
               listenerStatus = null;
               await AsyncStorage.removeItem('listenerStatus');
             }
+
+            // Recheck rejection dismissal status with fresh user data
+            try {
+              const freshUserId = meRes.data._id || meRes.data.id;
+              if (freshUserId) {
+                const userDismissed = await AsyncStorage.getItem(`hasDismissedRejection_${freshUserId}`);
+                if (userDismissed === 'true') {
+                  hasDismissedRejection = true;
+                }
+              }
+            } catch (e) {}
           }
         } catch (authErr) {
           console.log('Error verifying user during splash check:', authErr);

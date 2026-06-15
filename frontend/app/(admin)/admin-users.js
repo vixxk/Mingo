@@ -11,6 +11,7 @@ import {
   Modal,
   Pressable,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -60,6 +61,7 @@ export default function AdminUsersScreen() {
   const [showDetail, setShowDetail] = useState(false);
   const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
   const FILTER_CONFIG = {
     all: { icon: 'layers', color: '#8B5CF6', bg: 'rgba(139,92,246,0.1)' },
@@ -68,9 +70,9 @@ export default function AdminUsersScreen() {
     deleted: { icon: 'trash', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
   };
 
-  const loadUsers = async (statusFilter = filter) => {
+  const loadUsers = async (statusFilter = filter, isRefresher = false) => {
     try {
-      setLoading(true);
+      if (!isRefresher) setLoading(true);
       const params = { limit: 100 };
       if (statusFilter === 'active') params.status = 'active';
       if (statusFilter === 'inactive') params.status = 'inactive';
@@ -97,8 +99,14 @@ export default function AdminUsersScreen() {
       console.log('Failed to fetch users:', e);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadUsers(filter, true);
+  }, [filter]);
 
   useEffect(() => {
     loadUsers(filter);
@@ -215,6 +223,14 @@ export default function AdminUsersScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#A855F7']}
+            tintColor="#A855F7"
+          />
+        }
       >
         {filteredUsers.length === 0 ? (
           <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: hp(10) }}>

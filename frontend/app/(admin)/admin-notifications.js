@@ -9,6 +9,7 @@ import {
   TextInput,
   Alert,
   Modal,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -54,6 +55,7 @@ export default function AdminNotifications() {
   const [searchingUsers, setSearchingUsers] = useState(false);
   const [campaigns, setCampaigns] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Custom premium modal popup state
   const [popupVisible, setPopupVisible] = useState(false);
@@ -68,16 +70,23 @@ export default function AdminNotifications() {
     setPopupVisible(true);
   };
 
-  const loadHistory = async () => {
+  const loadHistory = async (isRefresher = false) => {
     try {
+      if (!isRefresher) setLoadingHistory(true);
       const res = await adminAPI.getCampaigns();
       setCampaigns(res.data || []);
     } catch (e) {
       console.log('Error loading campaigns:', e);
     } finally {
       setLoadingHistory(false);
+      setRefreshing(false);
     }
   };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadHistory(true);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -175,7 +184,18 @@ export default function AdminNotifications() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        contentContainerStyle={styles.scroll} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#A855F7']}
+            tintColor="#A855F7"
+          />
+        }
+      >
 
         {/* Campaign Title */}
         <Text style={styles.sectionLabel}>CAMPAIGN TITLE</Text>

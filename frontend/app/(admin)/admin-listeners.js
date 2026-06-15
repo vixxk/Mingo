@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, Dimensions, Modal, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, Dimensions, Modal, Alert, ActivityIndicator, RefreshControl } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -84,6 +84,7 @@ export default function AdminListenersScreen() {
   const [selectedListener, setSelectedListener] = useState(null);
   const [showDetail, setShowDetail] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Message State
   const [isMessaging, setIsMessaging] = useState(false);
@@ -112,9 +113,9 @@ export default function AdminListenersScreen() {
     }
   }, [initialFilter]);
 
-  const loadListeners = async () => {
+  const loadListeners = async (isRefresher = false) => {
     try {
-      setLoading(true);
+      if (!isRefresher) setLoading(true);
       const res = await adminAPI.getListeners({ limit: 100 });
       if (res?.data) {
         const listenersList = res.data.listeners || (Array.isArray(res.data) ? res.data : []);
@@ -143,8 +144,14 @@ export default function AdminListenersScreen() {
       console.log('Failed to fetch listeners:', e);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadListeners(true);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -182,6 +189,7 @@ export default function AdminListenersScreen() {
         // Optimistically update UI immediately
         updateListenerState(id, { status: 'approved' });
         setConfirmAction(null);
+        setShowDetail(false);
         setToast({ visible: true, message: 'Listener approved successfully', type: 'success' });
         
         try {
@@ -204,6 +212,7 @@ export default function AdminListenersScreen() {
         // Optimistically update UI immediately
         updateListenerState(id, { status: 'rejected' });
         setConfirmAction(null);
+        setShowDetail(false);
         setToast({ visible: true, message: 'Listener rejected successfully', type: 'success' });
         
         try {
@@ -585,7 +594,19 @@ export default function AdminListenersScreen() {
       </View>
 
       {}
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: s(16), paddingBottom: SH * 0.05 }} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={{ flex: 1 }} 
+        contentContainerStyle={{ paddingHorizontal: s(16), paddingBottom: SH * 0.05 }} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#A855F7']}
+            tintColor="#A855F7"
+          />
+        }
+      >
         {filtered.length === 0 ? (
           <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: SH * 0.1 }}>
             <Ionicons name="headset-outline" size={64} color="#333" />
@@ -614,17 +635,11 @@ export default function AdminListenersScreen() {
                   </View>
                 )}
               </View>
-              {listener.status === 'pending' && !listener.isDeleted && (
-                <View style={{ flexDirection: 'row', gap: s(6) }}>
-                  <TouchableOpacity style={[st.quickBtn, { backgroundColor: 'rgba(16,185,129,0.2)' }]} onPress={() => handleApprove(listener.id)}>
-                    <Ionicons name="checkmark" size={16} color="#10B981" />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[st.quickBtn, { backgroundColor: 'rgba(239,68,68,0.2)' }]} onPress={() => handleReject(listener.id)}>
-                    <Ionicons name="close" size={16} color="#EF4444" />
-                  </TouchableOpacity>
-                </View>
+              {listener.status === 'pending' && !listener.isDeleted ? (
+                <Ionicons name="time" size={18} color="#F59E0B" />
+              ) : (
+                <Ionicons name="chevron-forward" size={18} color="#4B5563" />
               )}
-              {(listener.status !== 'pending' || listener.isDeleted) && <Ionicons name="chevron-forward" size={18} color="#4B5563" />}
             </TouchableOpacity>
           ))
         )}

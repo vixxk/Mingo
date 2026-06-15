@@ -207,6 +207,9 @@ export default function ListenerProfileScreen() {
 
   const confirmLogout = async () => {
     try {
+      // Clear keys first
+      await AsyncStorage.multiRemove(['userToken', 'token', 'user', 'listenerStatus', 'isAdmin', 'userGender', 'userAvatarIndex', 'userName']);
+      
       // Set listener offline before logging out
       try {
         await listenerAPI.goOffline();
@@ -214,13 +217,24 @@ export default function ListenerProfileScreen() {
         console.log('Go offline on logout error (non-critical):', e);
       }
       // Disconnect socket so backend detects disconnect
-      socketService.disconnect();
-      await AsyncStorage.multiRemove(['userToken', 'token', 'user', 'listenerStatus', 'isAdmin']);
+      try {
+        socketService.disconnect();
+      } catch (e) {}
+      try {
+        await authAPI.logout();
+      } catch (apiErr) {
+        console.warn('API logout failed:', apiErr);
+      }
       setShowLogoutPopup(false);
-      router.replace('/welcome');
+      setTimeout(() => {
+        router.replace('/welcome');
+      }, 300);
     } catch (e) {
       console.error('Logout error:', e);
       setShowLogoutPopup(false);
+      setTimeout(() => {
+        router.replace('/welcome');
+      }, 300);
     }
   };
 
@@ -334,18 +348,23 @@ export default function ListenerProfileScreen() {
         onConfirm={async (reason) => {
           setIsDeleting(true);
           try {
+            await AsyncStorage.multiRemove(['userToken', 'token', 'user', 'listenerStatus', 'isAdmin', 'userGender', 'userAvatarIndex', 'userName']);
             await userAPI.deleteAccount(reason);
             try {
               await listenerAPI.goOffline();
             } catch (e) {
               console.log('Go offline on delete account error (non-critical):', e);
             }
-            socketService.disconnect();
-            await AsyncStorage.multiRemove(['userToken', 'token', 'user', 'listenerStatus', 'isAdmin']);
+            try {
+              socketService.disconnect();
+            } catch (e) {}
             setShowDeletePopup(false);
-            router.replace('/welcome');
+            setTimeout(() => {
+              router.replace('/welcome');
+            }, 300);
           } catch (err) {
             console.error('Delete account error:', err);
+            setShowDeletePopup(false);
           } finally {
             setIsDeleting(false);
           }

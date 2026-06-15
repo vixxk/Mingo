@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,12 +18,28 @@ export default function VerificationFailedScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const handleBecomeCustomer = async () => {
+  const handleBecomeUser = async () => {
     try {
+      const userStr = await AsyncStorage.getItem('user');
+      if (userStr) {
+        try {
+          const user = JSON.parse(userStr);
+          const userId = user._id || user.id;
+          if (userId) {
+            await AsyncStorage.setItem(`hasDismissedRejection_${userId}`, 'true');
+          }
+        } catch (parseErr) {}
+      }
       await AsyncStorage.setItem('hasDismissedRejection', 'true');
       await AsyncStorage.setItem('listenerStatus', 'user');
     } catch (e) {}
     router.replace('/(tabs)');
+  };
+
+  const handleSupportEmailPress = () => {
+    Linking.openURL('mailto:support@talkmingo.com').catch(err => {
+      console.log('Failed to open mail link:', err);
+    });
   };
 
   return (
@@ -65,11 +82,11 @@ export default function VerificationFailedScreen() {
           </LinearGradient>
         </View>
 
-        {/* Become a Customer Button styled with Mingo's Signature Gradient */}
+        {/* Become a User Button styled with Mingo's Signature Gradient */}
         <TouchableOpacity
           style={styles.buttonContainer}
           activeOpacity={0.85}
-          onPress={handleBecomeCustomer}
+          onPress={handleBecomeUser}
         >
           <LinearGradient
             colors={['#3B82F6', '#EC4899', '#F59E0B']}
@@ -77,14 +94,16 @@ export default function VerificationFailedScreen() {
             end={{ x: 1, y: 0.5 }}
             style={styles.button}
           >
-            <Text style={styles.buttonText}>Become a Customer</Text>
+            <Text style={styles.buttonText}>Become a User</Text>
           </LinearGradient>
         </TouchableOpacity>
 
         {/* Contact Support Footer */}
         <Text style={styles.supportText}>
           For any queries please contact{' '}
-          <Text style={styles.supportEmail}>support@talkmingo.com</Text>
+          <Text style={styles.supportEmail} onPress={handleSupportEmailPress}>
+            support@talkmingo.com
+          </Text>
         </Text>
       </ScrollView>
     </View>

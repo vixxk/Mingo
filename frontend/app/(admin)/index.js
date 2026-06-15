@@ -16,6 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { ms, s, vs, wp, hp } from '../../utils/responsive';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatCard, SectionTitle, ActivityItem } from '../../components/admin/AdminComponents';
 import { adminAPI, authAPI } from '../../utils/api';
 import { useFocusEffect } from 'expo-router';
@@ -56,9 +57,20 @@ export default function AdminDashboard() {
   const handleLogout = () => setShowLogoutPopup(true);
 
   const handleConfirmLogout = async () => {
+    try {
+      await AsyncStorage.multiRemove(['isAdmin', 'userToken', 'token', 'user', 'listenerStatus', 'userGender', 'userAvatarIndex', 'userName']);
+      try {
+        await authAPI.logout();
+      } catch (err) {
+        console.warn('Backend logout failed:', err);
+      }
+    } catch (e) {
+      console.error('Logout storage error:', e);
+    }
     setShowLogoutPopup(false);
-    await authAPI.logout();
-    router.replace('/login');
+    setTimeout(() => {
+      router.replace('/welcome');
+    }, 300);
   };
 
   const [stats, setStats] = useState({

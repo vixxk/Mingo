@@ -25,6 +25,7 @@ const FloatingCoin = ({ style, delay }) => {
 
   return (
     <Animated.View
+      pointerEvents="none"
       style={[
         styles.floatingCoin,
         style,

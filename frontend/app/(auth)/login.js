@@ -70,12 +70,16 @@ export default function LoginScreen() {
           const user = JSON.parse(userStr);
           const role = user.role || 'USER';
 
-          let listenerStatus = null;
+          let listenerStatus = user.listener?.status || null;
           let hasDismissedRejection = false;
           try {
-            listenerStatus = await AsyncStorage.getItem('listenerStatus');
+            if (!listenerStatus) {
+              listenerStatus = await AsyncStorage.getItem('listenerStatus');
+            }
+            const userId = user._id || user.id;
             const dismissed = await AsyncStorage.getItem('hasDismissedRejection');
-            hasDismissedRejection = dismissed === 'true';
+            const userDismissed = userId ? await AsyncStorage.getItem(`hasDismissedRejection_${userId}`) : null;
+            hasDismissedRejection = dismissed === 'true' || userDismissed === 'true';
           } catch (e) {}
 
           if (role === 'ADMIN') {
@@ -176,7 +180,6 @@ export default function LoginScreen() {
       } else {
         await AsyncStorage.removeItem('listenerStatus');
       }
-      await AsyncStorage.removeItem('hasDismissedRejection');
       
       setUserName(result.data.user.name);
       setShowWelcomePopup(true);
@@ -265,19 +268,25 @@ export default function LoginScreen() {
                   
                   const userStr = await AsyncStorage.getItem('user');
                   let role = 'USER';
+                  let listenerStatus = null;
+                  let userId = null;
                   if (userStr) {
                     try {
                       const user = JSON.parse(userStr);
                       if (user.role) role = user.role;
+                      if (user.listener) listenerStatus = user.listener.status;
+                      userId = user._id || user.id;
                     } catch(e) {}
                   }
                   
-                  let listenerStatus = null;
                   let hasDismissedRejection = false;
                   try {
-                    listenerStatus = await AsyncStorage.getItem('listenerStatus');
+                    if (!listenerStatus) {
+                      listenerStatus = await AsyncStorage.getItem('listenerStatus');
+                    }
                     const dismissed = await AsyncStorage.getItem('hasDismissedRejection');
-                    hasDismissedRejection = dismissed === 'true';
+                    const userDismissed = userId ? await AsyncStorage.getItem(`hasDismissedRejection_${userId}`) : null;
+                    hasDismissedRejection = dismissed === 'true' || userDismissed === 'true';
                   } catch (e) {}
 
                   if (role === 'ADMIN') {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Switch, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Switch, Dimensions, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -13,6 +13,7 @@ export default function SystemConfigScreen() {
   const router = useRouter();
   
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState({
     coinToDiamondRatio: '1',
@@ -23,8 +24,9 @@ export default function SystemConfigScreen() {
     otpSettingsEnabled: true,
   });
 
-  const loadSettings = async () => {
+  const loadSettings = async (isRefresher = false) => {
     try {
+      if (!isRefresher) setLoading(true);
       const res = await adminAPI.getSettings();
       if (res?.data) {
         setSettings({
@@ -42,6 +44,12 @@ export default function SystemConfigScreen() {
       setLoading(false);
     }
   };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadSettings(true);
+    setRefreshing(false);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -88,7 +96,18 @@ export default function SystemConfigScreen() {
         <Text style={styles.headerTitle}>System Config</Text>
       </View>
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+      <ScrollView 
+        style={styles.scrollView} 
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#A855F7']}
+            tintColor="#A855F7"
+          />
+        }
+      >
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Conversion Rates</Text>
           <View style={styles.inputGroup}>

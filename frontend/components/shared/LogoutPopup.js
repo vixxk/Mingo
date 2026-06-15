@@ -1,12 +1,12 @@
 import React, { useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ms, s, vs } from '../../utils/responsive';
 
 const { height: SH } = Dimensions.get('window');
 
-export default function LogoutPopup({ visible, onConfirm, onCancel }) {
+export default function LogoutPopup({ visible, onConfirm, onCancel, loading = false }) {
   const slideAnim = useRef(new Animated.Value(400)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
 
@@ -43,6 +43,7 @@ export default function LogoutPopup({ visible, onConfirm, onCancel }) {
             style={st.closeBtn} 
             activeOpacity={0.7} 
             onPress={onCancel}
+            disabled={loading}
           >
             <Ionicons name="close" size={24} color="rgba(255,255,255,0.6)" />
           </TouchableOpacity>
@@ -58,10 +59,11 @@ export default function LogoutPopup({ visible, onConfirm, onCancel }) {
           </Text>
 
           <View style={st.buttonRow}>
-            <TouchableOpacity 
+             <TouchableOpacity 
               style={st.cancelBtn} 
               activeOpacity={0.7} 
               onPress={onCancel}
+              disabled={loading}
             >
               <Text style={st.cancelText}>Cancel</Text>
             </TouchableOpacity>
@@ -70,6 +72,7 @@ export default function LogoutPopup({ visible, onConfirm, onCancel }) {
               style={st.logoutBtn} 
               activeOpacity={0.85} 
               onPress={onConfirm}
+              disabled={loading}
             >
               <LinearGradient
                 colors={['#EF4444', '#B91C1C']}
@@ -77,7 +80,11 @@ export default function LogoutPopup({ visible, onConfirm, onCancel }) {
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
               >
-                <Text style={st.logoutText}>Logout</Text>
+                {loading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={st.logoutText}>Logout</Text>
+                )}
               </LinearGradient>
             </TouchableOpacity>
           </View>

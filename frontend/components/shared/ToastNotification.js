@@ -79,9 +79,16 @@ export default function ToastNotification({
       case 'info':
         return {
           icon: 'information-circle',
-          iconColor: '#3B82F6',
-          borderColor: '#3B82F6',
-          bgColor: '#0B132B',
+          iconColor: '#A855F7',
+          borderColor: '#A855F7',
+          bgColor: '#120B1A',
+        };
+      case 'warning':
+        return {
+          icon: 'alert-circle',
+          iconColor: '#F59E0B',
+          borderColor: '#F59E0B',
+          bgColor: '#1A120B',
         };
       case 'success':
       default:
