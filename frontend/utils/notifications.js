@@ -10,6 +10,7 @@ import { router } from 'expo-router';
 let OneSignal = null;
 let LogLevel = null;
 let isClickListenerRegistered = false;
+let isOneSignalInitialized = false;
 
 try {
   // Use require instead of ES6 import to prevent Expo Go from crashing on startup due to missing native binary
@@ -50,6 +51,7 @@ export async function initializeOneSignal(userId, role) {
       OneSignal.Debug.setLogLevel(LogLevel.Verbose);
     }
     OneSignal.initialize(ONESIGNAL_APP_ID);
+    isOneSignalInitialized = true;
 
     // Request permissions dynamically
     console.log('[OneSignal] Requesting push notification permissions...');
@@ -113,6 +115,10 @@ export async function initializeOneSignal(userId, role) {
 export async function logoutOneSignal() {
   if (!OneSignal) {
     console.log('[OneSignal] SDK native library is not loaded. Bypassing OneSignal logout.');
+    return;
+  }
+  if (!isOneSignalInitialized) {
+    console.log('[OneSignal] SDK is not initialized. Bypassing OneSignal logout.');
     return;
   }
   try {

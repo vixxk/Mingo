@@ -221,14 +221,16 @@ export default function VideoCallScreen() {
         }
       } catch (e) {}
 
-      if (role === 'LISTENER') {
-        router.replace('/(listener)');
-      } else {
-        router.replace({
-          pathname: '/(call)/call-feedback',
-          params: { name, sessionId: callId, listenerId, callType: 'video' },
-        });
-      }
+      setTimeout(() => {
+        if (role === 'LISTENER') {
+          router.replace('/(listener)');
+        } else {
+          router.replace({
+            pathname: '/(call)/call-feedback',
+            params: { name, sessionId: callId, listenerId, callType: 'video' },
+          });
+        }
+      }, 800);
     };
 
     const handleAutoEnded = async (data) => {
@@ -346,14 +348,16 @@ export default function VideoCallScreen() {
     } catch (error) {
       console.log('Failed to end call on backend:', error);
     } finally {
-      if (isListener) {
-        router.replace('/(listener)');
-      } else {
-        router.replace({
-          pathname: '/(call)/call-feedback',
-          params: { name, sessionId: callId, listenerId, callType: 'video' },
-        });
-      }
+      setTimeout(() => {
+        if (isListener) {
+          router.replace('/(listener)');
+        } else {
+          router.replace({
+            pathname: '/(call)/call-feedback',
+            params: { name, sessionId: callId, listenerId, callType: 'video' },
+          });
+        }
+      }, 800);
     }
   }, [callId, name, listenerId, isListener, roomId]);
 
