@@ -65,7 +65,6 @@ export default function WelcomePopup({ visible, onAgree, onClose }) {
 
           <Text style={styles.termsText}>
             By Using Mingo, you're agreeing to adhere to our values as well as our{' '}
-            <Text style={styles.termsLink}>Guidelines</Text>,{' '}
             <Text style={styles.termsLink} onPress={() => Linking.openURL('https://app.notion.com/p/TERMS-CONDITIONS-37aa4992143b80c0a4c6fd5a8b4618df')}>Terms</Text> and{' '}
             <Text style={styles.termsLink} onPress={() => Linking.openURL('https://app.notion.com/p/Privacy-Policy-of-Mingo-37aa4992143b8022948fc9122e441308')}>Privacy Policy</Text>
           </Text>

@@ -73,21 +73,13 @@ export default function CallFeedbackScreen() {
   };
 
   const handleSubmit = async () => {
-    let target = '/(tabs)';
-    try {
-      const userStr = await AsyncStorage.getItem('user');
-      if (userStr) {
-        const user = JSON.parse(userStr);
-        if (user.role === 'LISTENER') {
-          target = '/(listener)';
-        }
-      }
-    } catch (e) {
-      console.log('Error checking role for redirect:', e);
-    }
+    let target = '/';
 
     if (!sessionId) {
       allowNavigationRef.current = true;
+      try {
+        router.dismissAll();
+      } catch (e) {}
       router.replace(target);
       return;
     }
@@ -104,6 +96,9 @@ export default function CallFeedbackScreen() {
     } finally {
       setIsSubmitting(false);
       allowNavigationRef.current = true;
+      try {
+        router.dismissAll();
+      } catch (e) {}
       router.replace(target);
     }
   };

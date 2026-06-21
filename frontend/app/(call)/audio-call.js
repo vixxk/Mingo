@@ -223,7 +223,10 @@ export default function AudioCallScreen() {
 
       setTimeout(() => {
         if (role === 'LISTENER') {
-          router.replace('/(listener)');
+          try {
+            router.dismissAll();
+          } catch (e) {}
+          router.replace('/');
         } else {
           router.replace({
             pathname: '/(call)/call-feedback',
@@ -351,7 +354,10 @@ export default function AudioCallScreen() {
     } finally {
       setTimeout(() => {
         if (isListener) {
-          router.replace('/(listener)');
+          try {
+            router.dismissAll();
+          } catch (e) {}
+          router.replace('/');
         } else {
           router.replace({
             pathname: '/(call)/call-feedback',

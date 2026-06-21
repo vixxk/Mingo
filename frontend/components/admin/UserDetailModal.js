@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,8 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -26,6 +28,8 @@ const UserDetailModal = ({ visible, user, onClose, onDelete, onBan }) => {
   const [isEditingInterests, setIsEditingInterests] = useState(false);
   const [newInterest, setNewInterest] = useState('');
   const [savingInterests, setSavingInterests] = useState(false);
+
+  const scrollViewRef = useRef(null);
 
   // Message State
   const [isMessaging, setIsMessaging] = useState(false);
@@ -123,22 +127,27 @@ const UserDetailModal = ({ visible, user, onClose, onDelete, onBan }) => {
   return (
     <Modal transparent visible={visible} animationType="slide" statusBarTranslucent>
       <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          {/* Header Close */}
-          <TouchableOpacity style={styles.modalClose} onPress={onClose}>
-            <Ionicons name="close" size={22} color="#fff" />
-          </TouchableOpacity>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 20}
+          style={{ width: '100%' }}
+        >
+          <View style={styles.modalContent}>
+            {/* Header Close */}
+            <TouchableOpacity style={styles.modalClose} onPress={onClose}>
+              <Ionicons name="close" size={22} color="#fff" />
+            </TouchableOpacity>
 
-          <Image source={user.avatar} style={styles.modalAvatar} />
-          <Text style={styles.modalName}>{user.name}</Text>
-          <Text style={styles.modalPhone}>{user.phone}</Text>
-          <View style={[styles.modalStatusBadge, { backgroundColor: user.isBanned ? 'rgba(239, 68, 68, 0.15)' : (user.isOnline ? 'rgba(16, 185, 129, 0.15)' : 'rgba(107, 114, 128, 0.15)') }]}>
-            <Text style={[styles.modalStatusText, { color: user.isBanned ? '#EF4444' : (user.isOnline ? '#10B981' : '#6B7280') }]}>
-              {user.isBanned ? 'Banned' : (user.isOnline ? 'Online' : 'Offline')}
-            </Text>
-          </View>
+            <Image source={user.avatar} style={styles.modalAvatar} />
+            <Text style={styles.modalName}>{user.name}</Text>
+            <Text style={styles.modalPhone}>{user.phone}</Text>
+            <View style={[styles.modalStatusBadge, { backgroundColor: user.isBanned ? 'rgba(239, 68, 68, 0.15)' : (user.isOnline ? 'rgba(16, 185, 129, 0.15)' : 'rgba(107, 114, 128, 0.15)') }]}>
+              <Text style={[styles.modalStatusText, { color: user.isBanned ? '#EF4444' : (user.isOnline ? '#10B981' : '#6B7280') }]}>
+                {user.isBanned ? 'Banned' : (user.isOnline ? 'Online' : 'Offline')}
+              </Text>
+            </View>
 
-          <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
+            <ScrollView ref={scrollViewRef} style={styles.modalScroll} showsVerticalScrollIndicator={false}>
             {/* Stats Row */}
             <View style={styles.modalStatsRow}>
               <View style={styles.modalStatBox}>
@@ -182,7 +191,12 @@ const UserDetailModal = ({ visible, user, onClose, onDelete, onBan }) => {
             <View style={styles.interestsHeader}>
               <Text style={styles.modalSubtitle}>Interests</Text>
               {!isEditingInterests ? (
-                <TouchableOpacity onPress={() => setIsEditingInterests(true)}>
+                <TouchableOpacity onPress={() => {
+                  setIsEditingInterests(true);
+                  setTimeout(() => {
+                    scrollViewRef.current?.scrollToEnd({ animated: true });
+                  }, 100);
+                }}>
                   <Text style={styles.editBtnText}>Edit</Text>
                 </TouchableOpacity>
               ) : (
@@ -209,6 +223,11 @@ const UserDetailModal = ({ visible, user, onClose, onDelete, onBan }) => {
                   placeholderTextColor="#4B5563"
                   value={newInterest}
                   onChangeText={setNewInterest}
+                  onFocus={() => {
+                    setTimeout(() => {
+                      scrollViewRef.current?.scrollToEnd({ animated: true });
+                    }, 100);
+                  }}
                 />
                 <TouchableOpacity style={styles.addInterestBtn} onPress={handleAddInterest}>
                   <Ionicons name="add" size={20} color="#fff" />
@@ -266,10 +285,16 @@ const UserDetailModal = ({ visible, user, onClose, onDelete, onBan }) => {
             <View style={{ height: SCREEN_HEIGHT * 0.04 }} />
           </ScrollView>
         </View>
+      </KeyboardAvoidingView>
 
-        {/* MESSAGE OVERLAY (100% consistent styling using screen width/height percentages) */}
-        {isMessaging && (
-          <View style={styles.overlayContainer}>
+      {/* MESSAGE OVERLAY (100% consistent styling using screen width/height percentages) */}
+      {isMessaging && (
+        <View style={styles.overlayContainer}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 20}
+            style={{ width: '100%', alignItems: 'center' }}
+          >
             <View style={styles.dialogBox}>
               <View style={[styles.confirmIconContainer, { backgroundColor: 'rgba(168, 85, 247, 0.1)' }]}>
                 <Ionicons name="chatbubble" size={28} color="#A855F7" />
@@ -313,8 +338,9 @@ const UserDetailModal = ({ visible, user, onClose, onDelete, onBan }) => {
                 </TouchableOpacity>
               </View>
             </View>
-          </View>
-        )}
+          </KeyboardAvoidingView>
+        </View>
+      )}
 
         {/* CUSTOM CONFIRMATION DIALOG (Theme matched and consistent on all screen sizes) */}
         {confirmAction && (
