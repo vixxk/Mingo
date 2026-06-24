@@ -29,6 +29,11 @@ module.exports = {
     serviceSid: process.env.TWILIO_SERVICE_SID || '',
   },
 
+  fast2sms: {
+    apiKey: process.env.FAST2SMS_API_KEY || '',
+    otpId: process.env.FAST2SMS_OTP_ID || '',
+  },
+
   test: {
     adminPhone: process.env.TEST_ADMIN_PHONE,
     adminOtp: process.env.TEST_ADMIN_OTP,

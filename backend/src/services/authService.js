@@ -1,11 +1,16 @@
 
 const jwt = require('jsonwebtoken');
-const twilio = require('twilio');
+const axios = require('axios');
 const config = require('../config/env');
 const { redis } = require('../config/redis');
 const User = require('../models/userModel');
 const Listener = require('../models/listenerModel');
 const AppError = require('../utils/appError');
+
+const getTenDigitPhone = (phone) => {
+  const digits = phone.replace(/\D/g, '');
+  return digits.length > 10 ? digits.slice(-10) : digits;
+};
 
 
 class AuthService {
@@ -22,22 +27,35 @@ class AuthService {
     }
 
     try {
-      // BYPASS: Skip Twilio SMS sending for now
-      console.log(`[BYPASS] OTP send requested for: ${phone}. Skipping Twilio call.`);
-      return { message: 'OTP sent successfully (Bypassed for testing)' };
-
-      /* 
-      const client = twilio(config.twilio.accountSid, config.twilio.authToken);
-      const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
-
-      await client.verify.v2.services(config.twilio.serviceSid)
-        .verifications
-        .create({ to: formattedPhone, channel: 'sms' });
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const redisKey = `otp:${phone}`;
       
+      // Store in Redis with a 5-minute (300 seconds) expiration
+      await redis.set(redisKey, otp, 'EX', 300);
+
+      const cleanedPhone = getTenDigitPhone(phone);
+      
+      console.log(`Sending OTP ${otp} via Fast2SMS to: ${cleanedPhone}`);
+      const response = await axios.post('https://www.fast2sms.com/dev/otp/send', {
+        mobile: cleanedPhone,
+        otp_id: config.fast2sms.otpId,
+        otp: otp
+      }, {
+        headers: {
+          'authorization': config.fast2sms.apiKey,
+          'accept': 'application/json',
+          'content-type': 'application/json'
+        }
+      });
+
+      if (!response.data || response.data.return !== true) {
+        const errorMsg = response.data?.message || 'Fast2SMS did not return success';
+        throw new Error(errorMsg);
+      }
+
       return { message: 'OTP sent successfully' };
-      */
     } catch (error) {
-      console.error('Twilio Verify Send Error:', error.message);
+      console.error('Fast2SMS Send OTP Error:', error.response?.data || error.message);
       throw new AppError('Failed to send OTP SMS', 500);
     }
   }
@@ -75,27 +93,20 @@ class AuthService {
     const isTestListener = phone === config.test.listenerPhone && otp === config.test.listenerOtp;
 
     if (!isTestAdmin && !isTestListener) {
-      // BYPASS: Skip Twilio verification check for now
-      console.log(`[BYPASS] OTP verification skipped for signup: ${phone}`);
-      
-      /*
       try {
-        const client = twilio(config.twilio.accountSid, config.twilio.authToken);
-        const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
-        
-        const verificationCheck = await client.verify.v2.services(config.twilio.serviceSid)
-          .verificationChecks
-          .create({ to: formattedPhone, code: otp });
+        const redisKey = `otp:${phone}`;
+        const storedOtp = await redis.get(redisKey);
 
-        if (verificationCheck.status !== 'approved') {
+        if (!storedOtp || storedOtp !== otp) {
           throw new AppError('Invalid or expired OTP', 400);
         }
+
+        await redis.del(redisKey);
       } catch (error) {
         if (error instanceof AppError) throw error;
-        console.error('Twilio Verify Check Error:', error.message);
+        console.error('OTP Verification Error:', error.message);
         throw new AppError('Invalid or expired OTP', 400);
       }
-      */
     }
 
     
@@ -161,27 +172,20 @@ class AuthService {
     const isTestListener = phone === config.test.listenerPhone && otp === config.test.listenerOtp;
 
     if (!isTestAdmin && !isTestListener) {
-      // BYPASS: Skip Twilio verification check for now
-      console.log(`[BYPASS] OTP verification skipped for login: ${phone}`);
-
-      /*
       try {
-        const client = twilio(config.twilio.accountSid, config.twilio.authToken);
-        const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
-        
-        const verificationCheck = await client.verify.v2.services(config.twilio.serviceSid)
-          .verificationChecks
-          .create({ to: formattedPhone, code: otp });
+        const redisKey = `otp:${phone}`;
+        const storedOtp = await redis.get(redisKey);
 
-        if (verificationCheck.status !== 'approved') {
+        if (!storedOtp || storedOtp !== otp) {
           throw new AppError('Invalid or expired OTP', 400);
         }
+
+        await redis.del(redisKey);
       } catch (error) {
         if (error instanceof AppError) throw error;
-        console.error('Twilio Verify Check Error:', error.message);
+        console.error('OTP Verification Error:', error.message);
         throw new AppError('Invalid or expired OTP', 400);
       }
-      */
     }
 
     let user = await User.findByPhone(phone);
