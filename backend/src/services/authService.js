@@ -26,6 +26,21 @@ class AuthService {
       return { message: 'OTP sent successfully (Test Account)' };
     }
 
+    // Rate limiting: maximum 5 OTPs per hour per phone number
+    const now = Date.now();
+    const limitKey = `otp_limit:${phone}`;
+    const oneHourAgo = now - 3600 * 1000;
+
+    // Clean up requests older than 1 hour
+    await redis.zremrangebyscore(limitKey, 0, oneHourAgo);
+
+    // Count the requests in the last hour
+    const otpCount = await redis.zcard(limitKey);
+
+    if (otpCount >= 5) {
+      throw new AppError('Too many OTP requests. You can only request up to 5 OTPs per hour.', 429);
+    }
+
     try {
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
       const redisKey = `otp:${phone}`;
@@ -52,6 +67,10 @@ class AuthService {
         const errorMsg = response.data?.message || 'Fast2SMS did not return success';
         throw new Error(errorMsg);
       }
+
+      // Record successful OTP request in rate limit set
+      await redis.zadd(limitKey, now, now);
+      await redis.expire(limitKey, 3600);
 
       return { message: 'OTP sent successfully' };
     } catch (error) {

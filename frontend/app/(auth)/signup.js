@@ -71,7 +71,7 @@ export default function SignupScreen() {
   }, [showOtpStep, countdown]);
 
   // Validation
-  const validateForm = () => {
+  const validateForm = (isOtpVerification = false) => {
     const newErrors = {};
     
     if (!name.trim()) {
@@ -94,10 +94,12 @@ export default function SignupScreen() {
       newErrors.phone = 'Please enter a valid phone number';
     }
 
-    if (showOtpStep && !otp.trim()) {
-      newErrors.otp = 'OTP is required';
-    } else if (showOtpStep && otp.trim().length !== 6) {
-      newErrors.otp = 'OTP must be 6 digits';
+    if (isOtpVerification) {
+      if (!otp.trim()) {
+        newErrors.otp = 'OTP is required';
+      } else if (otp.trim().length !== 6) {
+        newErrors.otp = 'OTP must be 6 digits';
+      }
     }
 
     setErrors(newErrors);
@@ -106,7 +108,7 @@ export default function SignupScreen() {
 
   
   const handleSendOtp = async () => {
-    if (!validateForm()) return;
+    if (!validateForm(false)) return;
 
     setIsLoading(true);
     setErrors({});
@@ -130,7 +132,7 @@ export default function SignupScreen() {
 
   
   const handleSignup = async () => {
-    if (!validateForm()) return;
+    if (!validateForm(true)) return;
 
     setIsLoading(true);
     setErrors({});

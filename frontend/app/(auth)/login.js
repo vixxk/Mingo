@@ -112,7 +112,7 @@ export default function LoginScreen() {
   }, [showOtpStep, countdown]);
 
   // Validation
-  const validateForm = () => {
+  const validateForm = (isOtpVerification = false) => {
     const newErrors = {};
     
     if (!phone.trim()) {
@@ -124,10 +124,12 @@ export default function LoginScreen() {
     const isAdmin = phone.trim() === ADMIN_PHONE;
     const requiredOtpLength = isAdmin ? 4 : 6;
 
-    if (showOtpStep && !otp.trim()) {
-      newErrors.otp = 'OTP is required';
-    } else if (showOtpStep && otp.trim().length !== requiredOtpLength) {
-      newErrors.otp = `OTP must be ${requiredOtpLength} digits`;
+    if (isOtpVerification) {
+      if (!otp.trim()) {
+        newErrors.otp = 'OTP is required';
+      } else if (otp.trim().length !== requiredOtpLength) {
+        newErrors.otp = `OTP must be ${requiredOtpLength} digits`;
+      }
     }
 
     setErrors(newErrors);
@@ -136,7 +138,7 @@ export default function LoginScreen() {
 
   
   const handleSendOtp = async () => {
-    if (!validateForm()) return;
+    if (!validateForm(false)) return;
 
     
     setIsLoading(true);
@@ -157,7 +159,7 @@ export default function LoginScreen() {
 
   
   const handleLogin = async () => {
-    if (!validateForm()) return;
+    if (!validateForm(true)) return;
 
     
     setIsLoading(true);
