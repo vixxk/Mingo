@@ -23,7 +23,11 @@ class AuthService {
     const isTestListener = phone === config.test.listenerPhone;
     
     if (isTestAdmin || isTestListener) {
-      return { message: 'OTP sent successfully (Test Account)' };
+      const mockOtp = isTestAdmin ? (config.test.adminOtp || '0000') : (config.test.listenerOtp || '000000');
+      const redisKey = `otp:${phone}`;
+      await redis.set(redisKey, mockOtp, 'EX', 300);
+      console.log(`[Test Mode] Generated mock OTP ${mockOtp} for phone: ${phone}`);
+      return { message: 'OTP sent successfully (Test Mock Mode)' };
     }
 
     // Rate limiting: maximum 5 OTPs per hour per phone number

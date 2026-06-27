@@ -34,6 +34,7 @@ const MENU_ITEMS = [
   { id: '6', label: 'Account Settings', icon: 'person-outline', route: '/edit-profile' },
   { id: '8', label: 'Privacy Policy', icon: 'shield-checkmark-outline', action: 'privacy' },
   { id: '10', label: 'Terms & Conditions', icon: 'document-text-outline', action: 'terms' },
+  { id: '11', label: 'Community Guidelines', icon: 'information-circle-outline', action: 'guidelines' },
   { id: '9', label: 'Delete Account', icon: 'trash-outline', action: 'delete', danger: true },
 ];
 
@@ -145,11 +146,7 @@ export default function ProfileScreen() {
           const avatars = normalizedGender === 'Male' ? maleAvatars : femaleAvatars;
           setUserAvatar(avatars[parseInt(avatarIndex, 10)] || avatars[0]);
 
-          if (normalizedGender === 'Male') {
-            setActiveMenuItems(MENU_ITEMS.filter(item => item.id !== '4'));
-          } else {
-            setActiveMenuItems(MENU_ITEMS);
-          }
+          setActiveMenuItems(MENU_ITEMS);
         }
       }
     } catch (e) {
@@ -182,9 +179,11 @@ export default function ProfileScreen() {
     if (item.action === 'issue') {
       setShowIssuePopup(true);
     } else if (item.action === 'privacy') {
-      Linking.openURL('https://app.notion.com/p/Privacy-Policy-of-Mingo-37aa4992143b8022948fc9122e441308');
+      Linking.openURL('https://www.talkmingo.com/privacy-policy');
     } else if (item.action === 'terms') {
-      Linking.openURL('https://app.notion.com/p/TERMS-CONDITIONS-37aa4992143b80c0a4c6fd5a8b4618df');
+      Linking.openURL('https://www.talkmingo.com/terms');
+    } else if (item.action === 'guidelines') {
+      Linking.openURL('https://www.talkmingo.com/community-guidelines');
     } else if (item.action === 'delete') {
       setShowDeletePopup(true);
     } else if (item.route) {

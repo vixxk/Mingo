@@ -38,6 +38,7 @@ const transactionSchema = new mongoose.Schema(
       discount: Number,
       originalPrice: Number,
       isFirstPurchase: Boolean,
+      purchaseToken: String,
     },
   },
   {

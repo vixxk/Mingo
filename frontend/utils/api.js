@@ -333,10 +333,11 @@ export const walletAPI = {
     return apiRequest('/wallet/packages');
   },
 
-  purchaseCoins: async (packageId) => {
+  purchaseCoins: async (payload) => {
+    const bodyData = typeof payload === 'string' ? { packageId: payload } : payload;
     return apiRequest('/wallet/purchase', {
       method: 'POST',
-      body: JSON.stringify({ packageId }),
+      body: JSON.stringify(bodyData),
     });
   },
 

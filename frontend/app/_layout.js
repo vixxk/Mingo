@@ -16,7 +16,9 @@ import {
 import { View, ActivityIndicator } from 'react-native';
 import { addNotificationResponseReceivedListener } from '../utils/notifications';
 
-export default function RootLayout() {
+
+
+function RootLayout() {
   const router = useRouter();
   const [loaded] = useFonts({
     Inter_900Black,
@@ -101,3 +103,5 @@ export default function RootLayout() {
     </ThemeProvider>
   );
 }
+
+export default RootLayout;

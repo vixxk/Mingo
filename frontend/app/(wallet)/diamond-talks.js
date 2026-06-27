@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Animated } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Animated, Linking } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -201,16 +201,28 @@ export default function DiamondToTalksScreen() {
           </View>
         </View>
 
-        {isFemale && (
-          <TouchableOpacity style={styles.listenerBtn} activeOpacity={0.85} onPress={() => router.push('/listener')}>
-            <Text style={styles.listenerBtnText}>Become a Listener</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity style={styles.listenerBtn} activeOpacity={0.85} onPress={() => router.push('/listener')}>
+          <Text style={styles.listenerBtnText}>Become a Listener</Text>
+        </TouchableOpacity>
 
         <Text style={styles.supportText}>
           For any queries please contact{' '}
-          <Text style={styles.supportEmail}>support@talkmingo.com</Text>
+          <Text style={styles.supportEmail} onPress={() => Linking.openURL('mailto:support@talkmingo.com')}>support@talkmingo.com</Text>
         </Text>
+
+        <View style={styles.linksContainer}>
+          <TouchableOpacity activeOpacity={0.7} onPress={() => Linking.openURL('https://www.talkmingo.com/terms')}>
+            <Text style={styles.policyLink}>Terms</Text>
+          </TouchableOpacity>
+          <Text style={styles.policyDivider}>|</Text>
+          <TouchableOpacity activeOpacity={0.7} onPress={() => Linking.openURL('https://www.talkmingo.com/privacy-policy')}>
+            <Text style={styles.policyLink}>Privacy</Text>
+          </TouchableOpacity>
+          <Text style={styles.policyDivider}>|</Text>
+          <TouchableOpacity activeOpacity={0.7} onPress={() => Linking.openURL('https://www.talkmingo.com/community-guidelines')}>
+            <Text style={styles.policyLink}>Guidelines</Text>
+          </TouchableOpacity>
+        </View>
         <View style={{ height: hp(4) }} />
       </ScrollView>
     </View>
@@ -419,5 +431,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontFamily: 'Inter_400Regular',
   },
-  supportEmail: { color: '#9CA3AF', textDecorationLine: 'underline' },
+  supportEmail: { color: '#3B82F6', textDecorationLine: 'underline' },
+  linksContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: hp(2),
+    gap: wp(3),
+  },
+  policyLink: {
+    fontSize: wp(3.2),
+    color: '#9CA3AF',
+    textDecorationLine: 'underline',
+    fontFamily: 'Inter_400Regular',
+  },
+  policyDivider: {
+    fontSize: wp(3.2),
+    color: '#374151',
+  },
 });

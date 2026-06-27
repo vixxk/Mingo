@@ -7,6 +7,25 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:554534642750:android:13820c7c43c4eba3c09d6f",
+        "android_client_info": {
+          "package_name": "app.themingo"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAc4cfAFMPynBeiNznBfS3qTZM2rMXQDok"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:554534642750:android:df729d3cedf430ffc09d6f",
         "android_client_info": {
           "package_name": "com.vixxk.mingo"

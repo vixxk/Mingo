@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Animated, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Animated, Alert, Linking } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -8,6 +8,8 @@ import { hp, wp } from '../../utils/responsive';
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { walletAPI } from '../../utils/api';
 import StatusPopup from '../../components/shared/StatusPopup';
+
+
 
 const DEFAULT_PACKAGES = [
   { id: '1', coins: 40,   originalPrice: 38,  price: 19,  discount: 50, tag: 'Starter Offer' },
@@ -90,10 +92,12 @@ export default function BalanceScreen() {
   const handleBuyCoins = async (item) => {
     if (isPurchasing) return;
     setIsPurchasing(true);
+
+    const productId = item.id || item._id;
     const previousBalance = balance;
     setBalance((prev) => prev + item.coins);
     try {
-      await walletAPI.purchaseCoins(item.id || item._id);
+      await walletAPI.purchaseCoins(productId);
       const balRes = await walletAPI.getBalance();
       if (balRes?.data) {
         setBalance(balRes.data.coins);
@@ -103,7 +107,7 @@ export default function BalanceScreen() {
         visible: true,
         type: 'success',
         title: 'Payment Successful',
-        message: `Successfully added ${item.coins} coins to your balance!`,
+        message: `Successfully added ${item.coins} coins to your balance.`,
         onClose: () => setPopup((prev) => ({ ...prev, visible: false })),
       });
     } catch (e) {
@@ -196,6 +200,9 @@ export default function BalanceScreen() {
             <TouchableOpacity activeOpacity={0.7} onPress={() => router.push('/(wallet)/diamond-talks')}>
               <Text style={styles.footerLink}>Learn more about Diamonds</Text>
             </TouchableOpacity>
+            <TouchableOpacity activeOpacity={0.7} onPress={() => Linking.openURL('https://www.talkmingo.com/refund-policy')}>
+              <Text style={styles.refundLink}>Refund Policy</Text>
+            </TouchableOpacity>
           </View>
 
         </Animated.View>
@@ -259,5 +266,6 @@ const styles = StyleSheet.create({
 
   footerInfo: { marginTop: hp(4), alignItems: 'center', gap: hp(1.5) },
   footerRate: { fontSize: wp(4), color: '#fff', fontWeight: '600', textAlign: 'center' },
-  footerLink: { fontSize: wp(3.6), color: '#FBBF24', textDecorationLine: 'underline', fontWeight: '600' }
+  footerLink: { fontSize: wp(3.6), color: '#FBBF24', textDecorationLine: 'underline', fontWeight: '600' },
+  refundLink: { fontSize: wp(3.2), color: '#9CA3AF', textDecorationLine: 'underline', fontWeight: '500', marginTop: hp(0.5) }
 });

@@ -2,6 +2,7 @@ const User = require('../models/userModel');
 const Transaction = require('../models/transactionModel');
 const ApiResponse = require('../utils/apiResponse');
 const AppError = require('../utils/appError');
+const PlayBillingService = require('../services/playBillingService');
 
 // 10 coins = 1 diamond
 // Chat: 10 coins / 5 mins (1 diamond)
@@ -80,7 +81,9 @@ class WalletController {
 
   static async purchaseCoins(req, res, next) {
     try {
-      const { packageId } = req.body;
+      const { packageId, productId, purchaseToken } = req.body;
+      const targetId = productId || packageId;
+
       let dbPackages = [];
       try {
         const SystemSettings = require('../models/SystemSettings');
@@ -92,17 +95,17 @@ class WalletController {
         console.log('Error fetching DB packages:', e);
       }
       
-      let pkg = dbPackages.find(p => p.id === packageId || (p._id && p._id.toString() === packageId));
+      let pkg = dbPackages.find(pkgItem => pkgItem.id === targetId || (pkgItem._id && pkgItem._id.toString() === targetId));
       
       // Fallback 1: Search static local packages
       if (!pkg) {
-        pkg = COIN_PACKAGES.find(p => p.id === packageId || (p._id && p._id.toString() === packageId));
+        pkg = COIN_PACKAGES.find(pkgItem => pkgItem.id === targetId || (pkgItem._id && pkgItem._id.toString() === targetId));
       }
       
       // Fallback 2: Mock package if still not found
       if (!pkg) {
         pkg = {
-          id: packageId || 'custom',
+          id: targetId || 'custom',
           coins: 100,
           originalPrice: 98,
           price: 49,
@@ -110,8 +113,9 @@ class WalletController {
           tag: 'Test Offer'
         };
       }
-
+      
       const p = pkg.toObject ? pkg.toObject() : pkg;
+
       const user = await User.findById(req.user.id);
       if (!user) throw new AppError('User not found', 404);
 
@@ -137,10 +141,11 @@ class WalletController {
         description: `Purchased ${p.coins} coins`,
         status: 'completed',
         metadata: {
-          packageId,
+          packageId: targetId,
           discount: effectiveDiscount,
           originalPrice: p.originalPrice,
           isFirstPurchase: isFirstPurchaseEligible,
+          purchaseToken: purchaseToken || undefined,
         },
       });
 

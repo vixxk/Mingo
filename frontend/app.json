@@ -54,7 +54,8 @@
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": false,
-      "package": "com.vixxk.mingo",
+      "package": "app.themingo",
+      "versionCode": 3,
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.CAMERA",
