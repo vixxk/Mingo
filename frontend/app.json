@@ -80,14 +80,32 @@
                       "group.com.vixxk.mingo.onesignal"
                     ]
                   }
+                },
+                {
+                  "targetName": "OneSignalNotificationServiceExtension",
+                  "bundleIdentifier": "com.vixxk.mingo.OneSignalNotificationServiceExtension",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.vixxk.mingo.onesignal"
+                    ]
+                  }
+                },
+                {
+                  "targetName": "OneSignalNotificationServiceExtension",
+                  "bundleIdentifier": "com.vixxk.mingo.OneSignalNotificationServiceExtension",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.vixxk.mingo.onesignal"
+                    ]
+                  }
                 }
               ]
             }
           }
         },
-        "projectId": "f29dec6d-a4b3-46f3-bb1a-61b9008d869e"
+        "projectId": "29226353-1b41-4785-8ac5-74ded0cd7328"
       }
     },
-    "owner": "sampletestingwork"
+    "owner": "vixxk"
   }
 }

@@ -21,6 +21,13 @@ class AuthService {
     
     const isTestAdmin = phone === config.test.adminPhone;
     const isTestListener = phone === config.test.listenerPhone;
+
+    if (!isTestAdmin && !isTestListener) {
+      const existingUser = await User.findByPhone(phone);
+      if (existingUser) {
+        throw new AppError('Phone number is already registered', 409);
+      }
+    }
     
     if (isTestAdmin || isTestListener) {
       const mockOtp = isTestAdmin ? (config.test.adminOtp || '0000') : (config.test.listenerOtp || '000000');
