@@ -121,7 +121,7 @@ export default function SignupScreen() {
       setTimeout(() => setShowSuccessPopup(false), 3000);
     } catch (error) {
       if (error.status === 409) {
-        setErrors({ general: 'Email, username, or phone already exists' });
+        setErrors({ general: 'Username or phone already exists' });
       } else {
         setErrors({ general: error.message || 'Failed to send OTP. Please try again.' });
       }
@@ -161,7 +161,7 @@ export default function SignupScreen() {
       setShowWelcomePopup(true);
     } catch (error) {
       if (error.status === 409) {
-        setErrors({ general: 'Email, username, or phone already exists' });
+        setErrors({ general: 'Username or phone already exists' });
       } else if (error.errors) {
         
         const backendErrors = {};
