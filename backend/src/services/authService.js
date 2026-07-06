@@ -14,7 +14,7 @@ const getTenDigitPhone = (phone) => {
 
 
 class AuthService {
-    static async sendOtp(phone) {
+    static async sendOtp(phone, isSignup = true) {
     if (!phone) {
       throw new AppError('Phone number is required', 400);
     }
@@ -22,7 +22,7 @@ class AuthService {
     const isTestAdmin = phone === config.test.adminPhone;
     const isTestListener = phone === config.test.listenerPhone;
 
-    if (!isTestAdmin && !isTestListener) {
+    if (isSignup && !isTestAdmin && !isTestListener) {
       const existingUser = await User.findByPhone(phone);
       if (existingUser) {
         throw new AppError('Phone number is already registered', 409);
@@ -111,7 +111,7 @@ class AuthService {
       throw new AppError('This account has been deleted. Please sign up again if you wish to use Mingo.', 410);
     }
 
-    return await AuthService.sendOtp(phone);
+    return await AuthService.sendOtp(phone, false);
   }
 
     static async signup({ name, username, phone, otp, gender, language, avatarIndex }) {
