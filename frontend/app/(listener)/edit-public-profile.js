@@ -23,6 +23,7 @@ const AVAILABLE_TAGS = [
 const AVAILABLE_LANGUAGES = [
   'English', 'Hindi', 'Tamil', 'Telugu', 'Kannada',
   'Malayalam', 'Bengali', 'Marathi', 'Gujarati', 'Punjabi',
+  'Odia', 'Assamese',
 ];
 
 const STATUS_CONFIG = {

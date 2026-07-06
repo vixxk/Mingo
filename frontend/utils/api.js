@@ -417,6 +417,12 @@ export const userAPI = {
       body: JSON.stringify({ reason }),
     });
   },
+
+  switchRole: async () => {
+    return apiRequest('/user/switch-role', {
+      method: 'POST',
+    });
+  },
 };
 
 export const adminAPI = {

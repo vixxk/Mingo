@@ -10,6 +10,7 @@ import {
   Alert,
   Modal,
   BackHandler,
+  DevSettings,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,6 +24,7 @@ import FloatingCoin from '../../components/shared/FloatingCoin';
 import { userAPI, authAPI } from '../../utils/api';
 import LogoutPopup from '../../components/shared/LogoutPopup';
 import ToastNotification from '../../components/shared/ToastNotification';
+import ConfirmSwitchRolePopup from '../../components/shared/ConfirmSwitchRolePopup';
 
 
 const COIN_POSITIONS = [
@@ -68,9 +70,35 @@ export default function ListenerScreen() {
   const [showLogoutPopup, setShowLogoutPopup] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
+  const [showSwitchRolePopup, setShowSwitchRolePopup] = useState(false);
+  const [isSwitching, setIsSwitching] = useState(false);
 
   const showToast = (message, type = 'success') => {
     setToast({ visible: true, message, type });
+  };
+
+  const confirmSwitchRole = async () => {
+    setIsSwitching(true);
+    try {
+      const res = await userAPI.switchRole();
+      if (res?.data?.user) {
+        await AsyncStorage.setItem('user', JSON.stringify(res.data.user));
+        await AsyncStorage.setItem('listenerStatus', 'approved');
+      }
+      setShowSwitchRolePopup(false);
+      setTimeout(() => {
+        if (DevSettings && typeof DevSettings.reload === 'function') {
+          DevSettings.reload();
+        } else {
+          router.replace('/');
+        }
+      }, 300);
+    } catch (err) {
+      console.error('Error switching role to listener:', err);
+      showToast(err.message || 'Failed to switch role.', 'error');
+    } finally {
+      setIsSwitching(false);
+    }
   };
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -80,7 +108,17 @@ export default function ListenerScreen() {
       try {
         const status = await AsyncStorage.getItem('listenerStatus');
         setListenerStatus(status);
-        if (status === 'approved') {
+
+        const userStr = await AsyncStorage.getItem('user');
+        let role = 'USER';
+        if (userStr) {
+          try {
+            const userObj = JSON.parse(userStr);
+            role = userObj.role || 'USER';
+          } catch (e) {}
+        }
+
+        if (status === 'approved' && role === 'LISTENER') {
           router.replace('/(listener)');
           return;
         } else if (status === 'rejected') {
@@ -114,7 +152,7 @@ export default function ListenerScreen() {
         const status = userObj.listener?.status;
         const role = userObj.role;
 
-        if (status === 'approved' || role === 'LISTENER') {
+        if (role === 'LISTENER') {
           await AsyncStorage.setItem('listenerStatus', 'approved');
           await AsyncStorage.setItem('user', JSON.stringify(userObj));
           router.replace('/(listener)');
@@ -333,6 +371,18 @@ export default function ListenerScreen() {
               </TouchableOpacity>
             </View>
           </>
+        ) : listenerStatus === 'approved' ? (
+          <>
+            <View style={{ width: '100%' }}>
+              <TouchableOpacity 
+                style={[styles.becomeBtn, { backgroundColor: '#7C3AED' }]} 
+                activeOpacity={0.85} 
+                onPress={() => setShowSwitchRolePopup(true)}
+              >
+                <Text style={[styles.becomeBtnText, { color: '#fff' }]}>Switch to Listener Profile</Text>
+              </TouchableOpacity>
+            </View>
+          </>
         ) : (
           <>
             <View style={{ width: '100%' }}>
@@ -409,6 +459,13 @@ export default function ListenerScreen() {
         message={toast.message}
         type={toast.type}
         onDismiss={() => setToast(prev => ({ ...prev, visible: false }))}
+      />
+      <ConfirmSwitchRolePopup
+        visible={showSwitchRolePopup}
+        targetRole="LISTENER"
+        onConfirm={confirmSwitchRole}
+        onCancel={() => setShowSwitchRolePopup(false)}
+        loading={isSwitching}
       />
     </View>
   );

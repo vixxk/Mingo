@@ -19,4 +19,7 @@ router.get('/blocked', authenticate, UserController.getBlockedUsers);
 // Account Deletion
 router.delete('/delete-account', authenticate, UserController.deleteAccount);
 
+// Role Switching
+router.post('/switch-role', authenticate, UserController.switchRole);
+
 module.exports = router;

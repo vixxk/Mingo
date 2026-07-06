@@ -407,7 +407,11 @@ export default function SignupScreen() {
               {}
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Phone Number</Text>
-                <View style={[styles.inputWrapper, errors.phone && styles.inputError]}>
+                <View style={[
+                  styles.inputWrapper,
+                  errors.phone && styles.inputError,
+                  showOtpStep && { opacity: 0.5 }
+                ]}>
                   <Ionicons name="call-outline" size={18} color="#6B7280" style={styles.inputIcon} />
                   <TextInput 
                     style={styles.input}

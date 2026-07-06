@@ -10,6 +10,7 @@ import {
   Animated,
   Linking,
   AppState,
+  DevSettings,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +24,7 @@ import RaiseIssuePopup from '../../components/shared/RaiseIssuePopup';
 import LogoutPopup from '../../components/shared/LogoutPopup';
 import SkeletonProfile from '../../components/SkeletonProfile';
 import DeleteAccountPopup from '../../components/shared/DeleteAccountPopup';
+import ConfirmSwitchRolePopup from '../../components/shared/ConfirmSwitchRolePopup';
 
 const MENU_ITEMS = [
   { id: '1', label: 'Wallet', icon: 'wallet-outline', route: '/balance' },
@@ -60,6 +62,9 @@ export default function ProfileScreen() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(null);
+  const [showSwitchRolePopup, setShowSwitchRolePopup] = useState(false);
+  const [isSwitching, setIsSwitching] = useState(false);
 
   
   const profileCardAnim = useRef(new Animated.Value(0)).current;
@@ -111,6 +116,7 @@ export default function ProfileScreen() {
       }
 
       if (userObj) {
+        setUser(userObj);
         setUsername(userObj.name || userObj.username || 'User');
         if (userObj.createdAt) {
           const d = new Date(userObj.createdAt);
@@ -175,7 +181,7 @@ export default function ProfileScreen() {
     };
   }, [loadProfile]);
 
-  const handleMenuPress = (item) => {
+  const handleMenuPress = async (item) => {
     if (item.action === 'issue') {
       setShowIssuePopup(true);
     } else if (item.action === 'privacy') {
@@ -187,9 +193,40 @@ export default function ProfileScreen() {
     } else if (item.action === 'delete') {
       setShowDeletePopup(true);
     } else if (item.route) {
+      if (item.id === '4') {
+        const storedStatus = await AsyncStorage.getItem('listenerStatus');
+        if (storedStatus === 'approved' || user?.listener?.status === 'approved') {
+          setShowSwitchRolePopup(true);
+          return;
+        }
+      }
       router.push(item.route);
     } else {
       console.log('Navigate to:', item.label);
+    }
+  };
+
+  const confirmSwitchRole = async () => {
+    setIsSwitching(true);
+    try {
+      const res = await userAPI.switchRole();
+      if (res?.data?.user) {
+        await AsyncStorage.setItem('user', JSON.stringify(res.data.user));
+        await AsyncStorage.setItem('listenerStatus', 'approved');
+      }
+      setShowSwitchRolePopup(false);
+      setTimeout(() => {
+        if (DevSettings && typeof DevSettings.reload === 'function') {
+          DevSettings.reload();
+        } else {
+          router.replace('/');
+        }
+      }, 300);
+    } catch (err) {
+      console.error('Error switching role to listener:', err);
+      Alert.alert('Error', err.message || 'Failed to switch role.');
+    } finally {
+      setIsSwitching(false);
     }
   };
 
@@ -287,6 +324,13 @@ export default function ProfileScreen() {
         visible={showLogoutPopup}
         onCancel={() => setShowLogoutPopup(false)}
         onConfirm={confirmLogout}
+      />
+      <ConfirmSwitchRolePopup
+        visible={showSwitchRolePopup}
+        targetRole="LISTENER"
+        onConfirm={confirmSwitchRole}
+        onCancel={() => setShowSwitchRolePopup(false)}
+        loading={isSwitching}
       />
       <DeleteAccountPopup
         visible={showDeletePopup}

@@ -268,19 +268,30 @@ export default function ListenerHomeScreen() {
         console.log('Error refreshing auth inside listener onRefresh:', meErr);
       }
 
-      const profileRes = await listenerAPI.getMyProfile();
-      if (profileRes?.data) {
-        setEarnings(profileRes.data.earnings || 0);
-        setTotalCalls({ audio: profileRes.data.audioCalls || 0, video: profileRes.data.videoCalls || 0 });
-        setTotalChats(profileRes.data.todayChats || 0);
-        setIsOnline(profileRes.data.isOnline);
-        setAudioEnabled(profileRes.data.audioEnabled !== false);
-        setVideoEnabled(profileRes.data.videoEnabled === true);
-        setChatEnabled(profileRes.data.chatEnabled !== false);
+      const userStr = await AsyncStorage.getItem('user');
+      let role = 'LISTENER';
+      if (userStr) {
+        try {
+          const userObj = JSON.parse(userStr);
+          role = userObj.role || 'LISTENER';
+        } catch (e) {}
       }
 
-      const balRes = await walletAPI.getBalance();
-      if (balRes?.data) setBalance(balRes.data.coins);
+      if (role === 'LISTENER') {
+        const profileRes = await listenerAPI.getMyProfile();
+        if (profileRes?.data) {
+          setEarnings(profileRes.data.earnings || 0);
+          setTotalCalls({ audio: profileRes.data.audioCalls || 0, video: profileRes.data.videoCalls || 0 });
+          setTotalChats(profileRes.data.todayChats || 0);
+          setIsOnline(profileRes.data.isOnline);
+          setAudioEnabled(profileRes.data.audioEnabled !== false);
+          setVideoEnabled(profileRes.data.videoEnabled === true);
+          setChatEnabled(profileRes.data.chatEnabled !== false);
+        }
+
+        const balRes = await walletAPI.getBalance();
+        if (balRes?.data) setBalance(balRes.data.coins);
+      }
     } catch (e) {
       console.error('Error refreshing listener data:', e);
     } finally {
@@ -375,12 +386,14 @@ export default function ListenerHomeScreen() {
 
           const userStr = await AsyncStorage.getItem('user');
           let userId = null;
+          let role = 'LISTENER';
           if (userStr) {
             const userObj = JSON.parse(userStr);
             userId = userObj.id || userObj._id;
+            role = userObj.role || 'LISTENER';
           }
 
-          if (userId) {
+          if (userId && role === 'LISTENER') {
             const profileRes = await listenerAPI.getMyProfile();
             if (profileRes?.data) {
               setEarnings(profileRes.data.earnings || 0);
@@ -392,10 +405,10 @@ export default function ListenerHomeScreen() {
               setVideoEnabled(profileRes.data.videoEnabled === true);
               setChatEnabled(profileRes.data.chatEnabled !== false);
             }
-          }
 
-          const balRes = await walletAPI.getBalance();
-          if (balRes?.data) setBalance(balRes.data.coins);
+            const balRes = await walletAPI.getBalance();
+            if (balRes?.data) setBalance(balRes.data.coins);
+          }
 
         } catch (e) {
           console.error('Error fetching listener data:', e);

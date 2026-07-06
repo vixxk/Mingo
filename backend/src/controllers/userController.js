@@ -334,6 +334,62 @@ class UserController {
       next(err);
     }
   }
+
+  static async switchRole(req, res, next) {
+    try {
+      const user = await User.findById(req.user.id);
+      if (!user) throw new AppError('User not found', 404);
+
+      if (user.role === 'LISTENER') {
+        user.role = 'USER';
+        await user.save();
+
+        // Make listener offline
+        await Listener.findOneAndUpdate(
+          { userId: user._id },
+          { isOnline: false, isBusy: false }
+        );
+
+        return ApiResponse.success(res, {
+          id: user._id,
+          name: user.name,
+          username: user.username,
+          phone: user.phone,
+          role: user.role,
+          gender: user.gender,
+          language: user.language,
+          avatarIndex: user.avatarIndex,
+          coins: user.coins,
+          interests: user.interests,
+        }, 'Role switched to USER successfully');
+      } else if (user.role === 'USER') {
+        const listener = await Listener.findOne({ userId: user._id });
+        if (!listener || listener.status !== 'approved') {
+          throw new AppError('You must be an approved listener to switch to listener role', 400);
+        }
+
+        user.role = 'LISTENER';
+        await user.save();
+
+        return ApiResponse.success(res, {
+          id: user._id,
+          name: user.name,
+          username: user.username,
+          phone: user.phone,
+          role: user.role,
+          gender: user.gender,
+          language: user.language,
+          avatarIndex: user.avatarIndex,
+          coins: user.coins,
+          interests: user.interests,
+        }, 'Role switched to LISTENER successfully');
+      } else {
+        throw new AppError('Only USER and LISTENER roles can switch', 400);
+      }
+    } catch (err) {
+      next(err);
+    }
+  }
 }
 
 module.exports = UserController;

@@ -10,6 +10,7 @@ import {
   RefreshControl,
   Animated,
   Linking,
+  DevSettings,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,6 +23,7 @@ import { ms, s, vs } from '../../utils/responsive';
 import RaiseIssuePopup from '../../components/shared/RaiseIssuePopup';
 import LogoutPopup from '../../components/shared/LogoutPopup';
 import DeleteAccountPopup from '../../components/shared/DeleteAccountPopup';
+import ConfirmSwitchRolePopup from '../../components/shared/ConfirmSwitchRolePopup';
 
 const MENU_ITEMS = [
   { id: '2', label: 'Transactions', icon: 'receipt-outline', route: '/transactions' },
@@ -29,6 +31,7 @@ const MENU_ITEMS = [
   { id: '5', label: 'Help & Support', icon: 'headset-outline', route: '/help-support' },
   { id: '7', label: 'Raise an Issue', icon: 'flag-outline', action: 'issue' },
   { id: '8', label: 'Edit Public Profile', icon: 'id-card-outline', route: '/(listener)/edit-public-profile' },
+  { id: '13', label: 'Become a User', icon: 'people-outline', action: 'become-user' },
   { id: '6', label: 'Account Settings', icon: 'person-outline', route: '/edit-profile' },
   { id: '10', label: 'Privacy Policy', icon: 'shield-checkmark-outline', action: 'privacy' },
   { id: '11', label: 'Terms & Conditions', icon: 'document-text-outline', action: 'terms' },
@@ -55,6 +58,8 @@ export default function ListenerProfileScreen() {
   const [showLogoutPopup, setShowLogoutPopup] = useState(false);
   const [showDeletePopup, setShowDeletePopup] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showSwitchRolePopup, setShowSwitchRolePopup] = useState(false);
+  const [isSwitching, setIsSwitching] = useState(false);
   const [userAvatar, setUserAvatar] = useState(require('../../images/user_avatar.png'));
   const [username, setUsername] = useState('Listener');
   const [joinDate, setJoinDate] = useState('Member');
@@ -199,8 +204,43 @@ export default function ListenerProfileScreen() {
       Linking.openURL('https://www.talkmingo.com/community-guidelines');
     } else if (item.action === 'delete') {
       setShowDeletePopup(true);
+    } else if (item.action === 'become-user') {
+      setShowSwitchRolePopup(true);
     } else if (item.route) {
       router.push(item.route);
+    }
+  };
+
+  const confirmSwitchRole = async () => {
+    setIsSwitching(true);
+    try {
+      try {
+        await listenerAPI.goOffline();
+      } catch (e) {
+        console.log('Go offline on switch role error (non-critical):', e);
+      }
+      try {
+        socketService.disconnect();
+      } catch (e) {}
+
+      const res = await userAPI.switchRole();
+      if (res?.data?.user) {
+        await AsyncStorage.setItem('user', JSON.stringify(res.data.user));
+        await AsyncStorage.removeItem('listenerStatus');
+      }
+      setShowSwitchRolePopup(false);
+      setTimeout(() => {
+        if (DevSettings && typeof DevSettings.reload === 'function') {
+          DevSettings.reload();
+        } else {
+          router.replace('/');
+        }
+      }, 300);
+    } catch (err) {
+      console.error('Error switching role to user:', err);
+      Alert.alert('Error', err.message || 'Failed to switch role.');
+    } finally {
+      setIsSwitching(false);
     }
   };
 
@@ -343,6 +383,13 @@ export default function ListenerProfileScreen() {
         visible={showLogoutPopup}
         onCancel={() => setShowLogoutPopup(false)}
         onConfirm={confirmLogout}
+      />
+      <ConfirmSwitchRolePopup
+        visible={showSwitchRolePopup}
+        targetRole="USER"
+        onConfirm={confirmSwitchRole}
+        onCancel={() => setShowSwitchRolePopup(false)}
+        loading={isSwitching}
       />
       <DeleteAccountPopup
         visible={showDeletePopup}
