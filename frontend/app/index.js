@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, Animated, Image, TouchableOpacity, Linking, AppState, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -13,6 +13,7 @@ import { authAPI } from '../utils/api';
 
 export default function SplashScreenPage() {
   const router = useRouter();
+  const { _restart } = useLocalSearchParams();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
   const [showPermissionScreen, setShowPermissionScreen] = useState(false);
@@ -185,6 +186,10 @@ export default function SplashScreenPage() {
   };
 
   useEffect(() => {
+    // Reset animations for re-entry
+    fadeAnim.setValue(0);
+    scaleAnim.setValue(0.8);
+
     // Start animation
     Animated.parallel([
       Animated.timing(fadeAnim, {
@@ -205,7 +210,7 @@ export default function SplashScreenPage() {
     }, 1500);
 
     return () => clearTimeout(timer);
-  }, []);
+  }, [_restart]);
 
   // Listen for AppState changes to re-check permissions when user comes back from Settings
   useEffect(() => {

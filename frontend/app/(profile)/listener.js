@@ -10,7 +10,6 @@ import {
   Alert,
   Modal,
   BackHandler,
-  DevSettings,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,6 +24,8 @@ import { userAPI, authAPI } from '../../utils/api';
 import LogoutPopup from '../../components/shared/LogoutPopup';
 import ToastNotification from '../../components/shared/ToastNotification';
 import ConfirmSwitchRolePopup from '../../components/shared/ConfirmSwitchRolePopup';
+import { socketService } from '../../utils/socket';
+import { restartApp } from '../../utils/restartApp';
 
 
 const COIN_POSITIONS = [
@@ -80,18 +81,18 @@ export default function ListenerScreen() {
   const confirmSwitchRole = async () => {
     setIsSwitching(true);
     try {
+      try {
+        socketService.disconnect();
+      } catch (e) {}
+
       const res = await userAPI.switchRole();
-      if (res?.data?.user) {
-        await AsyncStorage.setItem('user', JSON.stringify(res.data.user));
+      if (res?.data) {
+        await AsyncStorage.setItem('user', JSON.stringify(res.data));
         await AsyncStorage.setItem('listenerStatus', 'approved');
       }
       setShowSwitchRolePopup(false);
-      setTimeout(() => {
-        if (DevSettings && typeof DevSettings.reload === 'function') {
-          DevSettings.reload();
-        } else {
-          router.replace('/');
-        }
+      setTimeout(async () => {
+        await restartApp();
       }, 300);
     } catch (err) {
       console.error('Error switching role to listener:', err);

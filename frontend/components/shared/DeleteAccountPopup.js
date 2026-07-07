@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform, ScrollView, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ms, s, vs } from '../../utils/responsive';
@@ -16,10 +16,12 @@ const DELETION_REASONS = [
 ];
 
 export default function DeleteAccountPopup({ visible, onClose, onConfirm, isDeleting = false }) {
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const [selectedReason, setSelectedReason] = useState(null);
   const [customReason, setCustomReason] = useState('');
   const [step, setStep] = useState(1); // 1 = reason selection, 2 = confirmation
 
+  const scrollViewRef = useRef(null);
   const slideAnim = useRef(new Animated.Value(SH)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
 
@@ -40,6 +42,14 @@ export default function DeleteAccountPopup({ visible, onClose, onConfirm, isDele
     }
   }, [visible]);
 
+  useEffect(() => {
+    if (selectedReason === 'other') {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 150);
+    }
+  }, [selectedReason]);
+
   const handleNext = () => {
     if (!selectedReason) return;
     setStep(2);
@@ -59,135 +69,150 @@ export default function DeleteAccountPopup({ visible, onClose, onConfirm, isDele
       <Animated.View style={[st.overlay, { opacity: overlayAnim }]}>
         <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
       </Animated.View>
-      <Animated.View style={[st.popupContainer, { transform: [{ translateY: slideAnim }] }]}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
-        >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="box-none"
+      >
+        <Animated.View style={[st.popupContainer, { transform: [{ translateY: slideAnim }], maxHeight: '85%' }]}>
           <LinearGradient
             colors={['#1A0505', '#0D0D10', '#000']}
             start={{ x: 0.5, y: 0 }}
             end={{ x: 0.5, y: 1 }}
-            style={st.popup}
+            style={[st.popup, { maxHeight: '100%' }]}
           >
             {/* Close Button */}
             <TouchableOpacity style={st.closeBtn} activeOpacity={0.7} onPress={onClose}>
               <Ionicons name="close" size={24} color="rgba(255,255,255,0.6)" />
             </TouchableOpacity>
 
-            {/* Icon */}
-            <View style={st.iconCircle}>
-              <Ionicons name={step === 1 ? "trash" : "alert-circle"} size={32} color="#EF4444" />
-            </View>
+            <ScrollView
+              ref={scrollViewRef}
+              style={{ width: '100%' }}
+              contentContainerStyle={{ alignItems: 'center', paddingBottom: windowHeight * 0.03 }}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {/* Icon */}
+              <View style={st.iconCircle}>
+                <Ionicons name={step === 1 ? "trash" : "alert-circle"} size={32} color="#EF4444" />
+              </View>
 
-            {step === 1 ? (
-              <>
-                <Text style={st.title}>Delete Account</Text>
-                <Text style={st.description}>
-                  We're sorry to see you go. Please tell us why you want to delete your account.
-                </Text>
-
-                {/* Reasons */}
-                <View style={st.reasonsList}>
-                  {DELETION_REASONS.map((reason) => (
-                    <TouchableOpacity
-                      key={reason.id}
-                      style={[st.reasonItem, selectedReason === reason.id && st.reasonItemActive]}
-                      onPress={() => setSelectedReason(reason.id)}
-                      activeOpacity={0.7}
-                    >
-                      <View style={[st.radioOuter, selectedReason === reason.id && st.radioOuterActive]}>
-                        {selectedReason === reason.id && <View style={st.radioInner} />}
-                      </View>
-                      <Text style={[st.reasonLabel, selectedReason === reason.id && st.reasonLabelActive]}>
-                        {reason.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                {/* Custom reason input */}
-                {selectedReason === 'other' && (
-                  <View style={st.inputBox}>
-                    <TextInput
-                      style={st.input}
-                      placeholder="Please specify..."
-                      placeholderTextColor="#4B5563"
-                      value={customReason}
-                      onChangeText={setCustomReason}
-                      multiline
-                      maxLength={300}
-                      textAlignVertical="top"
-                    />
-                  </View>
-                )}
-
-                {/* Next Button */}
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={handleNext}
-                  disabled={!selectedReason}
-                  style={[st.btnWrap, !selectedReason && { opacity: 0.4 }]}
-                >
-                  <LinearGradient
-                    colors={['#EF4444', '#B91C1C']}
-                    style={st.actionBtn}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                  >
-                    <Text style={st.actionBtnText}>Continue</Text>
-                    <Ionicons name="arrow-forward" size={SW * 0.04} color="#fff" />
-                  </LinearGradient>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                <Text style={st.title}>Are you sure?</Text>
-                <Text style={st.description}>
-                  This action is permanent. You will lose your profile, chat history, favourite listeners, and any remaining coins. This cannot be undone.
-                </Text>
-
-                <View style={st.warningBox}>
-                  <Ionicons name="warning" size={SW * 0.045} color="#F59E0B" />
-                  <Text style={st.warningText}>
-                    All your data will be permanently removed from Mingo.
+              {step === 1 ? (
+                <>
+                  <Text style={st.title}>Delete Account</Text>
+                  <Text style={st.description}>
+                    We're sorry to see you go. Please tell us why you want to delete your account.
                   </Text>
-                </View>
 
-                <View style={st.buttonRow}>
-                  <TouchableOpacity
-                    style={st.cancelBtn}
-                    activeOpacity={0.7}
-                    onPress={onClose}
-                  >
-                    <Text style={st.cancelText}>Cancel</Text>
-                  </TouchableOpacity>
+                  {/* Reasons */}
+                  <View style={st.reasonsList}>
+                    {DELETION_REASONS.map((reason) => (
+                      <TouchableOpacity
+                        key={reason.id}
+                        style={[st.reasonItem, selectedReason === reason.id && st.reasonItemActive]}
+                        onPress={() => setSelectedReason(reason.id)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[st.radioOuter, selectedReason === reason.id && st.radioOuterActive]}>
+                          {selectedReason === reason.id && <View style={st.radioInner} />}
+                        </View>
+                        <Text style={[st.reasonLabel, selectedReason === reason.id && st.reasonLabelActive]}>
+                          {reason.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
 
+                  {/* Custom reason input */}
+                  {selectedReason === 'other' && (
+                    <View style={st.inputBox}>
+                      <TextInput
+                        style={st.input}
+                        placeholder="Please specify..."
+                        placeholderTextColor="#4B5563"
+                        value={customReason}
+                        onChangeText={setCustomReason}
+                        multiline
+                        maxLength={300}
+                        textAlignVertical="top"
+                        onFocus={() => {
+                          setTimeout(() => {
+                            scrollViewRef.current?.scrollToEnd({ animated: true });
+                          }, 150);
+                        }}
+                      />
+                    </View>
+                  )}
+
+                  {/* Next Button */}
                   <TouchableOpacity
-                    style={st.deleteBtn}
-                    activeOpacity={0.85}
-                    onPress={handleConfirm}
-                    disabled={isDeleting}
+                    activeOpacity={0.8}
+                    onPress={handleNext}
+                    disabled={!selectedReason}
+                    style={[st.btnWrap, !selectedReason && { opacity: 0.4 }]}
                   >
                     <LinearGradient
-                      colors={['#EF4444', '#991B1B']}
-                      style={st.deleteBtnGradient}
+                      colors={['#EF4444', '#B91C1C']}
+                      style={st.actionBtn}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 0 }}
                     >
-                      {isDeleting ? (
-                        <ActivityIndicator size="small" color="#fff" />
-                      ) : (
-                        <Text style={st.deleteBtnText}>Delete Forever</Text>
-                      )}
+                      <Text style={st.actionBtnText}>Continue</Text>
+                      <Ionicons name="arrow-forward" size={SW * 0.04} color="#fff" />
                     </LinearGradient>
                   </TouchableOpacity>
-                </View>
-              </>
-            )}
+                </>
+              ) : (
+                <>
+                  <Text style={st.title}>Are you sure?</Text>
+                  <Text style={st.description}>
+                    This action is permanent. You will lose your profile, chat history, favourite listeners, and any remaining coins. This cannot be undone.
+                  </Text>
+
+                  <View style={st.warningBox}>
+                    <Ionicons name="warning" size={SW * 0.045} color="#F59E0B" />
+                    <Text style={st.warningText}>
+                      All your data will be permanently removed from Mingo.
+                    </Text>
+                  </View>
+
+                  <View style={st.buttonRow}>
+                    <TouchableOpacity
+                      style={st.cancelBtn}
+                      activeOpacity={0.7}
+                      onPress={onClose}
+                    >
+                      <Text style={st.cancelText}>Cancel</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={st.deleteBtn}
+                      activeOpacity={0.85}
+                      onPress={handleConfirm}
+                      disabled={isDeleting}
+                    >
+                      <LinearGradient
+                        colors={['#EF4444', '#991B1B']}
+                        style={st.deleteBtnGradient}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                      >
+                        {isDeleting ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <Text style={st.deleteBtnText}>Delete Forever</Text>
+                        )}
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </ScrollView>
           </LinearGradient>
-        </KeyboardAvoidingView>
-      </Animated.View>
+        </Animated.View>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -210,7 +235,7 @@ const st = StyleSheet.create({
     borderTopRightRadius: 32,
     paddingHorizontal: SW * 0.06,
     paddingTop: SH * 0.035,
-    paddingBottom: SH * 0.05,
+    paddingBottom: SH * 0.02,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(239, 68, 68, 0.15)',

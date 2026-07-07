@@ -10,7 +10,6 @@ import {
   Animated,
   Linking,
   AppState,
-  DevSettings,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,6 +24,7 @@ import LogoutPopup from '../../components/shared/LogoutPopup';
 import SkeletonProfile from '../../components/SkeletonProfile';
 import DeleteAccountPopup from '../../components/shared/DeleteAccountPopup';
 import ConfirmSwitchRolePopup from '../../components/shared/ConfirmSwitchRolePopup';
+import { restartApp } from '../../utils/restartApp';
 
 const MENU_ITEMS = [
   { id: '1', label: 'Wallet', icon: 'wallet-outline', route: '/balance' },
@@ -209,18 +209,18 @@ export default function ProfileScreen() {
   const confirmSwitchRole = async () => {
     setIsSwitching(true);
     try {
+      try {
+        socketService.disconnect();
+      } catch (e) {}
+
       const res = await userAPI.switchRole();
-      if (res?.data?.user) {
-        await AsyncStorage.setItem('user', JSON.stringify(res.data.user));
+      if (res?.data) {
+        await AsyncStorage.setItem('user', JSON.stringify(res.data));
         await AsyncStorage.setItem('listenerStatus', 'approved');
       }
       setShowSwitchRolePopup(false);
-      setTimeout(() => {
-        if (DevSettings && typeof DevSettings.reload === 'function') {
-          DevSettings.reload();
-        } else {
-          router.replace('/');
-        }
+      setTimeout(async () => {
+        await restartApp();
       }, 300);
     } catch (err) {
       console.error('Error switching role to listener:', err);

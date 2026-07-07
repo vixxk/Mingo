@@ -4,6 +4,9 @@
     "slug": "frontend",
     "scheme": "mingo",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "orientation": "portrait",
     "icon": "./images/logo.png",
     "userInterfaceStyle": "dark",
