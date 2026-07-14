@@ -23,12 +23,6 @@ module.exports = {
     appSign: process.env.ZEGO_APP_SIGN || '',
   },
 
-  twilio: {
-    accountSid: process.env.TWILIO_ACCOUNT_SID || '',
-    authToken: process.env.TWILIO_AUTH_TOKEN || '',
-    serviceSid: process.env.TWILIO_SERVICE_SID || '',
-  },
-
   fast2sms: {
     apiKey: process.env.FAST2SMS_API_KEY || '',
     otpId: process.env.FAST2SMS_OTP_ID || '',
