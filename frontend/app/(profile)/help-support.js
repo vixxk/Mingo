@@ -25,7 +25,7 @@ const FAQ_DATA = [
     id: '1',
     question: 'Why am I unable to connect with any listener?',
     answer:
-      'Currently online only, which makes it accessible to patients in any city or country without needing to travel.',
+      'All available listeners may be busy or offline at the moment. Please check your internet connection, app permissions, and coin balance, then try again after a few minutes. If the issue continues, contact Mingo Support.',
   },
   {
     id: '2',
@@ -43,13 +43,13 @@ const FAQ_DATA = [
     id: '4',
     question: 'How much coins cost for audio call?',
     answer:
-      '1 coin per minute for audio calls. You can purchase coins from the Wallet section in your profile.',
+      '10 coins per minute for audio calls. You can purchase coins from the Wallet section in your profile.',
   },
   {
     id: '5',
     question: 'How much coins cost for video call?',
     answer:
-      '6 coins per minute for video calls. Check the Wallet section for the best coin packages.',
+      '40 coins per minute for video calls. Check the Wallet section for the best coin packages.',
   },
 ];
 

@@ -257,8 +257,8 @@ class WalletController {
       const user = await User.findById(req.user.id).select('coins');
       if (!user) throw new AppError('User not found', 404);
 
-      // Costs: chat=10 coins/5min, audio=10 coins/min, video=30 coins/min
-      const costs = { chat: 10, audio: 10, video: 30 };
+      // Costs: chat=10 coins/5min, audio=10 coins/min, video=40 coins/min
+      const costs = { chat: 10, audio: 10, video: 40 };
       const requiredCoins = costs[feature] || 10;
       const hasSufficient = user.coins >= requiredCoins;
 

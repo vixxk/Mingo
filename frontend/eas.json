@@ -19,16 +19,16 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://13.60.51.35/api",
-        "EXPO_PUBLIC_SOCKET_URL": "http://13.60.51.35",
+        "EXPO_PUBLIC_API_URL": "https://13.53.197.13.sslip.io/api",
+        "EXPO_PUBLIC_SOCKET_URL": "https://13.53.197.13.sslip.io",
         "EXPO_PUBLIC_ONESIGNAL_APP_ID": "bad2f484-7d7b-4e83-af71-78a7cba15242"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://13.60.51.35/api",
-        "EXPO_PUBLIC_SOCKET_URL": "http://13.60.51.35",
+        "EXPO_PUBLIC_API_URL": "https://13.53.197.13.sslip.io/api",
+        "EXPO_PUBLIC_SOCKET_URL": "https://13.53.197.13.sslip.io",
         "EXPO_PUBLIC_ONESIGNAL_APP_ID": "bad2f484-7d7b-4e83-af71-78a7cba15242"
       }
     }
