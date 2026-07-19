@@ -12,7 +12,6 @@ const userSchema = new mongoose.Schema(
     username: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
       lowercase: true,
       minlength: 3,
@@ -22,7 +21,6 @@ const userSchema = new mongoose.Schema(
     phone: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
     },
     isVerified: {
@@ -111,6 +109,20 @@ const userSchema = new mongoose.Schema(
 userSchema.index({ role: 1 });
 userSchema.index({ isBanned: 1 });
 userSchema.index({ isDeleted: 1 });
+userSchema.index(
+  { phone: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { isDeleted: false }
+  }
+);
+userSchema.index(
+  { username: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { isDeleted: false }
+  }
+);
 
 userSchema.statics.findByPhone = function (phone) {
   return this.findOne({ phone });
@@ -118,8 +130,8 @@ userSchema.statics.findByPhone = function (phone) {
 
 userSchema.statics.exists = async function (username, phone) {
   const query = [];
-  if (username) query.push({ username });
-  if (phone) query.push({ phone });
+  if (username) query.push({ username, isDeleted: { $ne: true } });
+  if (phone) query.push({ phone, isDeleted: { $ne: true } });
   
   if (query.length === 0) return false;
 

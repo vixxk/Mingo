@@ -95,7 +95,7 @@ class ListenerService {
       isOnline: listener.isOnline,
       verified: listener.verified,
       bestChoice: listener.bestChoice,
-      introVideoUrl: listener.introVideoUrl,
+      introAudioUrl: listener.introAudioUrl,
       gradientColors: listener.gradientColors,
       earnings: listener.earnings,
       audioCalls: listener.audioCalls,

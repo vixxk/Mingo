@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useVideoPlayer, VideoView } from 'expo-video';
+import { Audio } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -59,20 +59,54 @@ const formatTime = (dateStr) => {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
-const IntroVideo = ({ url }) => {
+const IntroAudio = ({ url }) => {
+  const [sound, setSound] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [error, setError] = useState(false);
-  const player = useVideoPlayer(url, (p) => { p.loop = true; p.pause(); });
+
+  useEffect(() => {
+    return () => {
+      if (sound) { sound.unloadAsync(); }
+    };
+  }, [sound]);
+
+  const handlePlay = async () => {
+    if (sound) {
+      if (isPlaying) {
+        await sound.pauseAsync();
+        setIsPlaying(false);
+      } else {
+        await sound.playAsync();
+        setIsPlaying(true);
+      }
+      return;
+    }
+    try {
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: url },
+        { shouldPlay: true },
+        (status) => {
+          if (status.didJustFinish) setIsPlaying(false);
+        }
+      );
+      setSound(newSound);
+      setIsPlaying(true);
+    } catch (e) {
+      setError(true);
+    }
+  };
+
   if (!url) return null;
   return (
-    <View style={styles.videoContainer}>
-      <VideoView style={styles.video} player={player} fullscreenOptions={{ enabled: true }} allowsPictureInPicture onError={() => setError(true)} />
+    <View style={styles.audioContainer}>
+      <TouchableOpacity onPress={handlePlay} style={styles.audioPlayBtn}>
+        <Ionicons name={isPlaying ? 'pause-circle' : 'play-circle'} size={42} color="#A855F7" />
+      </TouchableOpacity>
+      <Text style={styles.audioLabel}>Voice Sample</Text>
       {error && (
-        <View style={styles.videoError}>
-          <Ionicons name="alert-circle-outline" size={24} color="#EF4444" />
-          <Text style={styles.errorText}>Video failed to load</Text>
-          <TouchableOpacity onPress={() => Linking.openURL(url)}>
-            <Text style={styles.linkText}>Open in browser</Text>
-          </TouchableOpacity>
+        <View style={styles.audioError}>
+          <Ionicons name="alert-circle-outline" size={18} color="#EF4444" />
+          <Text style={styles.errorText}>Audio failed to load</Text>
         </View>
       )}
     </View>
@@ -359,10 +393,10 @@ export default function ProfileApprovalsScreen() {
                   <ImagesDiff label="Gallery Images" current={cur.galleryImages} draft={draft.galleryImages} onImagePress={setPreviewImage} />
                 </View>
 
-                {req.introVideoUrl && (
+                {req.introAudioUrl && (
                   <View style={{ marginBottom: 12 }}>
-                    <Text style={styles.changeLabel}>Intro Video</Text>
-                    <IntroVideo url={req.introVideoUrl} />
+                    <Text style={styles.changeLabel}>Intro Audio</Text>
+                    <IntroAudio url={req.introAudioUrl} />
                   </View>
                 )}
 
@@ -610,10 +644,11 @@ const styles = StyleSheet.create({
   approveBtn: { borderColor: '#22C55E', backgroundColor: '#22C55E' },
   btnText: { color: '#fff', fontSize: SW * 0.036, fontWeight: '600', marginLeft: 6 },
 
-  // Video
-  videoContainer: { marginTop: 8, width: '100%', height: SW * 0.5, borderRadius: 8, overflow: 'hidden', backgroundColor: '#000' },
-  video: { width: '100%', height: '100%' },
-  videoError: { ...StyleSheet.absoluteFillObject, backgroundColor: '#111', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  // Audio
+  audioContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 8, padding: 12, backgroundColor: '#1A1A1A', borderRadius: 12, gap: 12 },
+  audioPlayBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(168,85,247,0.15)', alignItems: 'center', justifyContent: 'center' },
+  audioLabel: { color: '#E5E7EB', fontSize: 14, fontFamily: 'Inter_500Medium', flex: 1 },
+  audioError: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   errorText: { color: '#9CA3AF', fontSize: 14, marginTop: 8, fontFamily: 'Inter_400Regular' },
   linkText: { color: '#A855F7', fontSize: 14, marginTop: 12, fontFamily: 'Inter_700Bold', textDecorationLine: 'underline' },
 

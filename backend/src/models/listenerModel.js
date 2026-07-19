@@ -57,7 +57,7 @@ const listenerSchema = new mongoose.Schema(
       default: '',
       maxlength: 500,
     },
-    introVideoUrl: {
+    introAudioUrl: {
       type: String,
       default: null,
     },
@@ -186,7 +186,6 @@ const listenerSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
-
 
 listenerSchema.index({ isOnline: 1 });
 listenerSchema.index({ rating: -1 });

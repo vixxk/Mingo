@@ -321,7 +321,7 @@ class AdminController {
         avatarIndex: l.userId?.avatarIndex || 0,
         gender: l.userId?.gender,
         isOnline: l.isOnline,
-        introVideoUrl: l.introVideoUrl,
+        introAudioUrl: l.introAudioUrl,
         audioCalls: l.audioCalls || 0,
         videoCalls: l.videoCalls || 0,
         isDeleted: l.userId?.isDeleted || false,
@@ -882,7 +882,7 @@ class AdminController {
         profileAdminNotes: l.profileAdminNotes,
         currentProfile: l.publicProfile,
         draftProfile: l.draftProfile,
-        introVideoUrl: l.introVideoUrl,
+        introAudioUrl: l.introAudioUrl,
         gradientColors: l.gradientColors,
       }));
 

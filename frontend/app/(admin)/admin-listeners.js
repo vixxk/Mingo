@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useLocalSearchParams, useFocusEffect, useRouter } from 'expo-router';
-import { useVideoPlayer, VideoView } from 'expo-video';
+import { Audio } from 'expo-av';
 import { Linking } from 'react-native';
 import { ms, s, vs, wp, hp } from '../../utils/responsive';
 import { adminAPI } from '../../utils/api';
@@ -43,31 +43,54 @@ const getAvatarImage = (gender, index) => {
   }
 };
 
-const IntroVideo = ({ url }) => {
+const IntroAudio = ({ url }) => {
+  const [sound, setSound] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [error, setError] = useState(false);
-  const player = useVideoPlayer(url, (p) => {
-    p.loop = true;
-    p.pause();
-  });
+
+  useEffect(() => {
+    return () => {
+      if (sound) { sound.unloadAsync(); }
+    };
+  }, [sound]);
+
+  const handlePlay = async () => {
+    if (sound) {
+      if (isPlaying) {
+        await sound.pauseAsync();
+        setIsPlaying(false);
+      } else {
+        await sound.playAsync();
+        setIsPlaying(true);
+      }
+      return;
+    }
+    try {
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: url },
+        { shouldPlay: true },
+        (status) => {
+          if (status.didJustFinish) setIsPlaying(false);
+        }
+      );
+      setSound(newSound);
+      setIsPlaying(true);
+    } catch (e) {
+      setError(true);
+    }
+  };
 
   if (!url) return null;
-
   return (
-    <View style={st.videoContainer}>
-      <VideoView 
-        style={st.video} 
-        player={player} 
-        fullscreenOptions={{ enabled: true }}
-        allowsPictureInPicture 
-        onError={() => setError(true)}
-      />
+    <View style={st.audioContainer}>
+      <TouchableOpacity onPress={handlePlay} style={st.audioPlayBtn}>
+        <Ionicons name={isPlaying ? 'pause-circle' : 'play-circle'} size={36} color="#A855F7" />
+      </TouchableOpacity>
+      <Text style={st.audioLabel}>Voice Sample</Text>
       {error && (
-        <View style={st.videoError}>
-          <Ionicons name="alert-circle-outline" size={24} color="#EF4444" />
-          <Text style={st.errorText}>Video failed to load</Text>
-          <TouchableOpacity onPress={() => Linking.openURL(url)}>
-            <Text style={st.linkText}>Open link in browser</Text>
-          </TouchableOpacity>
+        <View style={st.audioError}>
+          <Ionicons name="alert-circle-outline" size={16} color="#EF4444" />
+          <Text style={st.errorText}>Audio failed to load</Text>
         </View>
       )}
     </View>
@@ -134,7 +157,7 @@ export default function AdminListenersScreen() {
           videoCalls: l.videoCalls || 0,
           earnings: typeof l.earnings === 'string' ? l.earnings : `₹${l.earnings || 0}`,
           rating: l.rating,
-          introVideoUrl: l.introVideoUrl,
+          introAudioUrl: l.introAudioUrl,
           isDeleted: l.isDeleted || false,
           deletionReason: l.deletionReason || ''
         }));
@@ -381,10 +404,10 @@ export default function AdminListenersScreen() {
                   </View>
                 )}
  
-                {selectedListener.introVideoUrl && (
+                {selectedListener.introAudioUrl && (
                   <View style={{ width: '100%', marginBottom: SH * 0.02 }}>
-                    <Text style={st.sectionLabel}>Introductory Video</Text>
-                    <IntroVideo url={selectedListener.introVideoUrl} />
+                    <Text style={st.sectionLabel}>Introductory Audio</Text>
+                    <IntroAudio url={selectedListener.introAudioUrl} />
                   </View>
                 )}
 
@@ -737,25 +760,34 @@ const st = StyleSheet.create({
     fontFamily: 'Inter_500Medium',
     alignSelf: 'flex-start',
   },
-  videoContainer: {
-    width: '100%',
-    height: SH * 0.25,
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: '#111',
+  audioContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    backgroundColor: '#1A1A1A',
+    borderRadius: 14,
+    gap: 12,
     borderWidth: 1,
     borderColor: '#222',
   },
-  video: {
-    width: '100%',
-    height: '100%',
-  },
-  videoError: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#111',
-    justifyContent: 'center',
+  audioPlayBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(168,85,247,0.15)',
     alignItems: 'center',
-    padding: 20,
+    justifyContent: 'center',
+  },
+  audioLabel: {
+    color: '#E5E7EB',
+    fontSize: ms(14, 0.3),
+    fontFamily: 'Inter_500Medium',
+    flex: 1,
+  },
+  audioError: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   errorText: {
     color: '#9CA3AF',

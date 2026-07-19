@@ -103,7 +103,7 @@ class UserController {
 
   static async applyAsListener(req, res, next) {
     try {
-      const { displayName, bio, audioEnabled, videoEnabled, introVideoUrl } = req.body;
+      const { displayName, bio, audioEnabled, videoEnabled, introAudioUrl } = req.body;
       
       const existing = await Listener.findOne({ userId: req.user.id });
       if (existing) {
@@ -118,15 +118,15 @@ class UserController {
         existing.bio = bio || '';
         existing.audioEnabled = audioEnabled !== false;
         existing.videoEnabled = videoEnabled === true;
-        if (introVideoUrl) {
-          existing.introVideoUrl = introVideoUrl;
+        if (introAudioUrl) {
+          existing.introAudioUrl = introAudioUrl;
         }
         await existing.save();
         return ApiResponse.success(res, existing, 'Application resubmitted');
       }
 
-      if (!introVideoUrl) {
-        throw new AppError('Introductory video is required to become a listener', 400);
+      if (!introAudioUrl) {
+        throw new AppError('Introductory audio is required to become a listener', 400);
       }
 
       const listener = await Listener.create({
@@ -135,7 +135,7 @@ class UserController {
         bio: bio || '',
         audioEnabled: audioEnabled !== false,
         videoEnabled: videoEnabled === true,
-        introVideoUrl,
+        introAudioUrl,
         status: 'pending',
       });
 
