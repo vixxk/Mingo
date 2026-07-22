@@ -163,6 +163,12 @@ const listenerSchema = new mongoose.Schema(
       default: null,
     },
 
+    // Snapshot of publicProfile at the time of submission (used for diff display)
+    previousProfile: {
+      type: publicProfileSchema,
+      default: null,
+    },
+
     // Profile approval status
     profileStatus: {
       type: String,
@@ -181,6 +187,36 @@ const listenerSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    // History of all past profile change submissions
+    profileChangeHistory: [
+      {
+        previousProfile: {
+          type: publicProfileSchema,
+          default: null,
+        },
+        requestedProfile: {
+          type: publicProfileSchema,
+          default: null,
+        },
+        status: {
+          type: String,
+          enum: ['pending', 'approved', 'rejected'],
+        },
+        adminNotes: {
+          type: String,
+          default: '',
+        },
+        submittedAt: {
+          type: Date,
+          default: null,
+        },
+        reviewedAt: {
+          type: Date,
+          default: null,
+        },
+      }
+    ],
   },
   {
     timestamps: true,

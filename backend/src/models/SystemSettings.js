@@ -14,7 +14,7 @@ const systemSettingsSchema = new mongoose.Schema(
     ],
     coinToDiamondRatio: {
       type: Number,
-      default: 1, // 1 coin = 1 diamond (as per previous convos maybe different, but let's stick to 1:1 or whatever the user wants)
+      default: 10, // 10 coins = 1 diamond
     },
     diamondToInrRatio: {
       type: Number,

@@ -1,0 +1,215 @@
+:root {
+  --bg-primary: #0D0D0D;
+  --bg-secondary: #171717;
+  --bg-tertiary: #1F1F1F;
+  --bg-hover: #232323;
+  --border: #2A2A2A;
+  --border-light: #333;
+  --accent: #8B5CF6;
+  --accent-hover: #7C3AED;
+  --accent-light: rgba(139, 92, 246, 0.1);
+  --accent-mid: rgba(139, 92, 246, 0.15);
+  --accent-gradient: linear-gradient(135deg, #A855F7, #8B5CF6, #C084FC, #EC4899, #F59E0B, #F97316);
+  --text-primary: #F3F4F6;
+  --text-secondary: #A3A3A3;
+  --text-muted: #6B7280;
+  --success: #34D399;
+  --success-light: rgba(52, 211, 153, 0.1);
+  --warning: #FBBF24;
+  --warning-light: rgba(251, 191, 36, 0.1);
+  --error: #F87171;
+  --error-light: rgba(248, 113, 113, 0.1);
+  --info: #60A5FA;
+  --info-light: rgba(96, 165, 250, 0.1);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+  --font-display: 'DM Sans', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 4px 24px rgba(0, 0, 0, 0.4);
+  /* Responsive spacing vars */
+  --page-padding: 24px;
+  --card-padding: 24px;
+  --header-font-size: 24px;
+  --container-max-width: 1280px;
+  --section-gap: 24px;
+}
+
+/* Tablet */
+@media (max-width: 900px) {
+  :root {
+    --page-padding: 16px;
+    --card-padding: 20px;
+    --header-font-size: 20px;
+    --section-gap: 18px;
+  }
+}
+
+/* Mobile */
+@media (max-width: 600px) {
+  :root {
+    --page-padding: 10px;
+    --card-padding: 14px;
+    --header-font-size: 17px;
+    --section-gap: 14px;
+  }
+}
+
+/* Utility classes for responsive behavior */
+@media (max-width: 600px) {
+  .hide-mobile { display: none !important; }
+  .stack-mobile { flex-direction: column !important; }
+  .full-width-mobile { width: 100% !important; }
+  .text-sm-mobile { font-size: 13px !important; }
+  
+  h1 {
+    font-size: var(--header-font-size) !important;
+  }
+  
+  .grid-3-mobile {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .grid-2-mobile {
+    grid-template-columns: 1fr !important;
+  }
+
+  .responsive-table thead {
+    display: none;
+  }
+  .responsive-table tr {
+    display: block;
+    margin-bottom: 12px;
+  }
+  .responsive-table td {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 12px;
+  }
+  .responsive-table td::before {
+    content: attr(data-label);
+    font-weight: 700;
+    color: var(--text-muted);
+    font-size: 11px;
+    text-transform: uppercase;
+  }
+
+  /* Mobile login card */
+  .login-card {
+    padding: 24px !important;
+    margin: 10px !important;
+  }
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
+html, body {
+  height: 100%;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+}
+
+input, textarea, select {
+  font-family: var(--font-body);
+  outline: none;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  line-height: 1.2;
+}
+
+input:focus, textarea:focus, select:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px var(--accent-light) !important;
+}
+
+::selection {
+  background: var(--accent-light);
+  color: var(--text-primary);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-light);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.8; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}

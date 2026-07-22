@@ -11,6 +11,7 @@ router.get('/stats', AdminController.getStats);
 router.get('/export-data', AdminController.getExportData);
 router.get('/users', AdminController.getUsers);
 router.get('/listeners', AdminController.getListeners);
+router.get('/listeners/:id', AdminController.getListenerDetail);
 router.patch('/listeners/:id/approve', AdminController.approveListener);
 router.patch('/listeners/:id/reject', AdminController.rejectListener);
 router.patch('/listeners/:id/best-choice', AdminController.toggleBestChoice);
@@ -27,6 +28,10 @@ router.get('/banned', AdminController.getBannedMembers);
 // Wallet & Coins
 router.get('/coin-packages', AdminController.getCoinPackages);
 router.put('/coin-packages', AdminController.updateCoinPackages);
+router.post('/coin-packages', AdminController.addCoinPackage);
+router.post('/coin-packages/reset', AdminController.resetCoinPackages);
+router.patch('/coin-packages/:id', AdminController.updateCoinPackage);
+router.delete('/coin-packages/:id', AdminController.deleteCoinPackage);
 
 // Payouts
 router.get('/payouts', AdminController.getPayouts);

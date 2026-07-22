@@ -39,7 +39,7 @@ const memberReportSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['pending', 'reviewed', 'resolved'],
+      enum: ['pending', 'resolved', 'dismissed'],
       default: 'pending',
     },
     adminNotes: {

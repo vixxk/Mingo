@@ -111,7 +111,7 @@ class AdminController {
 
       const revenueAgg = await Transaction.aggregate([
         { $match: { type: 'purchase', status: 'completed' } },
-        { $group: { _id: null, total: { $sum: '$amount' } } },
+        { $group: { _id: null, total: { $sum: '$coins' } } },
       ]);
       const totalRevenue = revenueAgg.length > 0 ? revenueAgg[0].total : 0;
       const coinsPurchasedToday = coinsPurchasedTodayAgg.length > 0 ? coinsPurchasedTodayAgg[0].total : 0;
@@ -123,7 +123,7 @@ class AdminController {
       startDate.setDate(startDate.getDate() - days + 1);
       startDate.setHours(0, 0, 0, 0);
 
-      const groupByFormat = days > 90 ? "%Y-%m" : "%Y-%m-%d";
+      const groupByFormat = days >= 90 ? "%Y-%m" : "%Y-%m-%d";
 
       // Helper to fill missing dates with 0
       const fillMissingDates = (data, daysCount, valueField) => {
@@ -152,8 +152,8 @@ class AdminController {
         },
         {
           $group: {
-            _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-            amount: { $sum: "$amount" }
+            _id: { $dateToString: { format: groupByFormat, date: "$createdAt" } },
+            amount: { $sum: "$coins" }
           }
         },
         { $sort: { _id: 1 } }
@@ -169,15 +169,76 @@ class AdminController {
         },
         {
           $group: {
-            _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+            _id: { $dateToString: { format: groupByFormat, date: "$createdAt" } },
             count: { $sum: 1 }
           }
         },
         { $sort: { _id: 1 } }
       ]);
 
-      const dailyRevenue = fillMissingDates(dailyRevenueRaw, days, 'amount');
-      const dailyRegistrations = fillMissingDates(dailyRegistrationsRaw, days, 'count');
+      const dailyApprovedListenersRaw = await Listener.aggregate([
+        {
+          $match: {
+            status: 'approved',
+            createdAt: { $gte: startDate }
+          }
+        },
+        {
+          $group: {
+            _id: { $dateToString: { format: groupByFormat, date: "$createdAt" } },
+            count: { $sum: 1 }
+          }
+        },
+        { $sort: { _id: 1 } }
+      ]);
+
+      const dailyGiftsRaw = await Transaction.aggregate([
+        {
+          $match: {
+            type: { $in: ['gift_send', 'gift_receive'] },
+            status: 'completed',
+            createdAt: { $gte: startDate }
+          }
+        },
+        {
+          $group: {
+            _id: { $dateToString: { format: groupByFormat, date: "$createdAt" } },
+            amount: { $sum: "$coins" }
+          }
+        },
+        { $sort: { _id: 1 } }
+      ]);
+
+      let dailyRevenue, dailyRegistrations, dailyApprovedListeners, dailyGifts;
+
+      // For monthly grouping, fill missing months instead of days
+      if (days >= 90) {
+        const fillMissingMonths = (data, monthsCount, valueField) => {
+          const result = [];
+          const dataMap = new Map(data.map(i => [i._id, i[valueField]]));
+          
+          for (let i = monthsCount - 1; i >= 0; i--) {
+            const d = new Date();
+            d.setMonth(d.getMonth() - i);
+            const monthStr = d.toISOString().slice(0, 7); // YYYY-MM
+            result.push({
+              _id: monthStr,
+              [valueField]: dataMap.get(monthStr) || 0
+            });
+          }
+          return result;
+        };
+        const months = Math.ceil(days / 30);
+        dailyRevenue = fillMissingMonths(dailyRevenueRaw, months, 'amount');
+        dailyRegistrations = fillMissingMonths(dailyRegistrationsRaw, months, 'count');
+        dailyApprovedListeners = fillMissingMonths(dailyApprovedListenersRaw, months, 'count');
+        dailyGifts = fillMissingMonths(dailyGiftsRaw, months, 'amount');
+      } else {
+        dailyRevenue = fillMissingDates(dailyRevenueRaw, days, 'amount');
+        dailyRegistrations = fillMissingDates(dailyRegistrationsRaw, days, 'count');
+        dailyApprovedListeners = fillMissingDates(dailyApprovedListenersRaw, days, 'count');
+        dailyGifts = fillMissingDates(dailyGiftsRaw, days, 'amount');
+      }
 
       return ApiResponse.success(res, {
         totalUsers,
@@ -197,7 +258,9 @@ class AdminController {
         pendingListeners: pendingListenersCount,
         charts: {
           dailyRevenue,
-          dailyRegistrations
+          dailyRegistrations,
+          dailyApprovedListeners,
+          dailyGifts
         }
       }, 'Admin stats retrieved');
     } catch (err) {
@@ -270,6 +333,7 @@ class AdminController {
         const formattedTimeSpent = `${hours}h ${minutes}m`;
 
         return {
+          id: user._id,
           ...user.toObject(),
           totalCalls: callCount,
           isOnline,
@@ -312,11 +376,11 @@ class AdminController {
         name: l.userId?.name || l.displayName,
         phone: l.userId?.phone,
         status: l.status,
-        verified: l.verified,
-        bestChoice: l.bestChoice,
+        isVerified: l.verified,
+        isBestChoice: l.bestChoice,
         totalCalls: l.totalSessions,
-        earnings: `₹${l.earnings.toLocaleString()}`,
-        rating: l.rating,
+        earnings: l.earnings,
+        avgRating: l.rating,
         isBanned: l.userId?.isBanned || false,
         avatarIndex: l.userId?.avatarIndex || 0,
         gender: l.userId?.gender,
@@ -326,6 +390,7 @@ class AdminController {
         videoCalls: l.videoCalls || 0,
         isDeleted: l.userId?.isDeleted || false,
         deletionReason: l.userId?.deletionReason || '',
+        createdAt: l.createdAt,
       }));
 
       return ApiResponse.success(res, { listeners: result, total, page: parseInt(page), limit: parseInt(limit) }, 'Listeners retrieved');
@@ -490,6 +555,59 @@ class AdminController {
     }
   }
 
+  static async getListenerDetail(req, res, next) {
+    try {
+      const listener = await Listener.findById(req.params.id)
+        .populate('userId', 'name username phone email gender avatarIndex isBanned isDeleted deletionReason language coins interests createdAt lastActive')
+        .lean();
+
+      if (!listener) throw new AppError('Listener not found', 404);
+
+      const user = listener.userId || {};
+      const detail = {
+        id: listener._id,
+        userId: user._id,
+        name: user.name || listener.displayName,
+        phone: user.phone,
+        email: user.email,
+        gender: user.gender,
+        age: user.age || null,
+        language: user.language || 'English',
+        coins: user.coins || 0,
+        interests: user.interests || [],
+        status: listener.status,
+        isVerified: listener.verified,
+        isBestChoice: listener.bestChoice,
+        bio: listener.bio,
+        skills: (listener.publicProfile?.expertiseTags || []),
+        avgRating: listener.rating,
+        totalSessions: listener.totalSessions,
+        totalEarnings: listener.earnings,
+        isOnline: listener.isOnline,
+        isBusy: listener.isBusy,
+        isBanned: user.isBanned || false,
+        isDeleted: user.isDeleted || false,
+        deletionReason: user.deletionReason || '',
+        avatarIndex: user.avatarIndex || 0,
+        introAudioUrl: listener.introAudioUrl,
+        audioCalls: listener.audioCalls || 0,
+        videoCalls: listener.videoCalls || 0,
+        totalChats: listener.totalChats || 0,
+        audioEnabled: listener.audioEnabled,
+        videoEnabled: listener.videoEnabled,
+        chatEnabled: listener.chatEnabled,
+        createdAt: listener.createdAt,
+        lastActive: user.lastActive || listener.updatedAt,
+        joinedDate: listener.createdAt,
+        profileImage: listener.profileImage,
+      };
+
+      return ApiResponse.success(res, detail, 'Listener detail retrieved');
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async toggleBestChoice(req, res, next) {
     try {
       const listener = await Listener.findById(req.params.id);
@@ -498,7 +616,7 @@ class AdminController {
       listener.bestChoice = !listener.bestChoice;
       await listener.save();
 
-      return ApiResponse.success(res, { bestChoice: listener.bestChoice }, `Best choice ${listener.bestChoice ? 'enabled' : 'disabled'}`);
+      return ApiResponse.success(res, { isBestChoice: listener.bestChoice }, `Best choice ${listener.bestChoice ? 'enabled' : 'disabled'}`);
     } catch (err) {
       next(err);
     }
@@ -512,7 +630,7 @@ class AdminController {
       listener.verified = !listener.verified;
       await listener.save();
 
-      return ApiResponse.success(res, { verified: listener.verified }, `Verification ${listener.verified ? 'granted' : 'revoked'}`);
+      return ApiResponse.success(res, { isVerified: listener.verified }, `Verification ${listener.verified ? 'granted' : 'revoked'}`);
     } catch (err) {
       next(err);
     }
@@ -536,7 +654,7 @@ class AdminController {
 
   static async getReports(req, res, next) {
     try {
-      const { status = 'pending', reportType, page = 1, limit = 20 } = req.query;
+      const { status = 'all', reportType, page = 1, limit = 20 } = req.query;
       const filter = {};
       if (status !== 'all') filter.status = status;
       if (reportType && reportType !== 'all') filter.reportType = reportType;
@@ -550,7 +668,17 @@ class AdminController {
 
       const total = await MemberReport.countDocuments(filter);
 
-      return ApiResponse.success(res, { reports, total }, 'Reports retrieved');
+      const [pendingCount, resolvedCount, dismissedCount] = await Promise.all([
+        MemberReport.countDocuments({ status: 'pending' }),
+        MemberReport.countDocuments({ status: 'resolved' }),
+        MemberReport.countDocuments({ status: 'dismissed' }),
+      ]);
+
+      return ApiResponse.success(res, {
+        reports,
+        total,
+        counts: { pending: pendingCount, resolved: resolvedCount, dismissed: dismissedCount }
+      }, 'Reports retrieved');
     } catch (err) {
       next(err);
     }
@@ -562,7 +690,7 @@ class AdminController {
       const report = await MemberReport.findByIdAndUpdate(
         req.params.id,
         { status, adminNotes },
-        { new: true }
+        { new: true, runValidators: true }
       );
       if (!report) throw new AppError('Report not found', 404);
 
@@ -603,6 +731,89 @@ class AdminController {
       settings.coinPricing = packages;
       await settings.save();
       return ApiResponse.success(res, settings.coinPricing, 'Coin packages updated');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async addCoinPackage(req, res, next) {
+    try {
+      const SystemSettings = require('../models/SystemSettings');
+      const settings = await SystemSettings.getSettings();
+      const packages = settings.coinPricing || [];
+      const maxId = packages.reduce((max, p) => Math.max(max, parseInt(p.id) || 0), 0);
+      const newPkg = {
+        id: String(maxId + 1),
+        coins: req.body.coins,
+        price: req.body.price,
+        originalPrice: req.body.originalPrice,
+        discount: req.body.discount,
+        tag: req.body.tag,
+        name: req.body.name,
+        isPopular: req.body.isPopular || false,
+      };
+      Object.keys(newPkg).forEach(k => newPkg[k] === undefined && delete newPkg[k]);
+      settings.coinPricing = [...packages, newPkg];
+      await settings.save();
+      return ApiResponse.success(res, newPkg, 'Coin package added');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async updateCoinPackage(req, res, next) {
+    try {
+      const SystemSettings = require('../models/SystemSettings');
+      const settings = await SystemSettings.getSettings();
+      const index = (settings.coinPricing || []).findIndex(p => p.id === req.params.id);
+      if (index === -1) {
+        throw new AppError('Coin package not found', 404);
+      }
+      const allowed = ['name', 'coins', 'price', 'originalPrice', 'discount', 'tag', 'isPopular'];
+      allowed.forEach(field => {
+        if (req.body[field] !== undefined) {
+          settings.coinPricing[index][field] = req.body[field];
+        }
+      });
+      await settings.save();
+      return ApiResponse.success(res, settings.coinPricing[index], 'Coin package updated');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async deleteCoinPackage(req, res, next) {
+    try {
+      const SystemSettings = require('../models/SystemSettings');
+      const settings = await SystemSettings.getSettings();
+      const index = (settings.coinPricing || []).findIndex(p => p.id === req.params.id);
+      if (index === -1) {
+        throw new AppError('Coin package not found', 404);
+      }
+      settings.coinPricing.splice(index, 1);
+      await settings.save();
+      return ApiResponse.success(res, null, 'Coin package deleted');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async resetCoinPackages(req, res, next) {
+    try {
+      const SystemSettings = require('../models/SystemSettings');
+      const defaults = [
+        { id: '1', coins: 40,   originalPrice: 38, price: 19,  discount: 50, tag: 'Starter Offer' },
+        { id: '2', coins: 100,  originalPrice: 98, price: 49,  discount: 50, tag: 'Flat 50% Off' },
+        { id: '3', coins: 220,  originalPrice: 198, price: 99,  discount: 50, tag: 'Most Popular' },
+        { id: '4', coins: 350,  originalPrice: 373, price: 149, discount: 60, tag: 'Flat 60% Off' },
+        { id: '5', coins: 850,  originalPrice: 873, price: 349, discount: 60, tag: 'Best Value' },
+        { id: '6', coins: 1500, originalPrice: 1198, price: 599, discount: 50, tag: 'Super Saver' },
+        { id: '7', coins: 3000, originalPrice: 2497, price: 999, discount: 60, tag: 'Limited Offer' },
+      ];
+      const settings = await SystemSettings.getSettings();
+      settings.coinPricing = defaults;
+      await settings.save();
+      return ApiResponse.success(res, defaults, 'Coin packages reset to defaults');
     } catch (err) {
       next(err);
     }
@@ -880,8 +1091,17 @@ class AdminController {
         profileStatus: l.profileStatus,
         profileSubmittedAt: l.profileSubmittedAt,
         profileAdminNotes: l.profileAdminNotes,
-        currentProfile: l.publicProfile,
-        draftProfile: l.draftProfile,
+        // For pending: compare previousProfile vs draftProfile (the requested changes)
+        currentProfile: l.previousProfile || l.publicProfile,
+        requestedProfile: l.draftProfile,
+        profileChangeHistory: (l.profileChangeHistory || []).map(h => ({
+          previousProfile: h.previousProfile,
+          requestedProfile: h.requestedProfile,
+          status: h.status,
+          adminNotes: h.adminNotes,
+          submittedAt: h.submittedAt,
+          reviewedAt: h.reviewedAt,
+        })),
         introAudioUrl: l.introAudioUrl,
         gradientColors: l.gradientColors,
       }));
@@ -910,11 +1130,21 @@ class AdminController {
         throw new AppError('No draft profile to approve', 400);
       }
 
+      // Record in history before overwriting
+      listener.profileChangeHistory.push({
+        previousProfile: listener.previousProfile || listener.publicProfile,
+        requestedProfile: { ...listener.draftProfile.toObject() },
+        status: 'approved',
+        adminNotes: '',
+        submittedAt: listener.profileSubmittedAt,
+        reviewedAt: new Date(),
+      });
+
       // Copy draft to public profile
       listener.publicProfile = { ...listener.draftProfile.toObject() };
       listener.profileStatus = 'approved';
       listener.profileAdminNotes = '';
-      listener.draftProfile = null;
+      // Keep draftProfile and previousProfile for accurate diff display in admin UI
       await listener.save();
 
       // Send notification to listener
@@ -954,6 +1184,16 @@ class AdminController {
       const { adminNotes } = req.body;
       const listener = await Listener.findById(req.params.id);
       if (!listener) throw new AppError('Listener not found', 404);
+
+      // Record in history
+      listener.profileChangeHistory.push({
+        previousProfile: listener.previousProfile || listener.publicProfile,
+        requestedProfile: listener.draftProfile ? { ...listener.draftProfile.toObject() } : null,
+        status: 'rejected',
+        adminNotes: adminNotes || 'Your profile changes did not meet our guidelines.',
+        submittedAt: listener.profileSubmittedAt,
+        reviewedAt: new Date(),
+      });
 
       listener.profileStatus = 'rejected';
       listener.profileAdminNotes = adminNotes || 'Your profile changes did not meet our guidelines.';
@@ -1026,15 +1266,15 @@ class AdminController {
 
       const total = await Session.countDocuments(filter);
 
-      const Transaction = require('../models/transactionModel');
       const result = await Promise.all(sessions.map(async (s) => {
         const startTime = s.startTime;
         const endTime = s.endTime || new Date();
 
         let giftsWorth = 0;
         let giftEarnings = 0;
+        let sendGifts = [];
         try {
-          const sendGifts = await Transaction.find({
+          sendGifts = await Transaction.find({
             $or: [
               { 'metadata.sessionId': s._id.toString(), type: 'gift_send' },
               { 'metadata.sessionId': s._id, type: 'gift_send' },
@@ -1069,26 +1309,44 @@ class AdminController {
           console.error('Error fetching session gift transactions:', e);
         }
 
+        const isCallerDeleted = !s.userId;
+        const isListenerDeleted = !s.listenerId;
+
+        // Build gifts array for frontend display from already-fetched sendGifts
+        const gifts = sendGifts.map(tx => {
+          const giftData = tx.metadata?.gift || {};
+          return {
+            name: giftData.name || 'Gift',
+            price: Math.abs(tx.coins || 0),
+            quantity: giftData.quantity || 1,
+          };
+        });
+
         return {
           id: s._id,
           userId: s.userId?._id,
-          userName: s.userId?.name || 'Unknown',
+          callerName: s.userId?.name || (isCallerDeleted ? 'Deleted Caller' : 'Unknown'),
+          userName: s.userId?.name || (isCallerDeleted ? 'Deleted Caller' : 'Unknown'),
           userPhone: s.userId?.phone,
+          isCallerDeleted,
           listenerId: s.listenerId?._id,
-          listenerName: s.listenerId?.name || 'Unknown',
+          listenerName: s.listenerId?.name || (isListenerDeleted ? 'Deleted Listener' : 'Unknown'),
           listenerPhone: s.listenerId?.phone,
+          isListenerDeleted,
+          type: s.callType,
           callType: s.callType,
           status: s.status,
           roomId: s.roomId,
           startTime: s.startTime,
           endTime: s.endTime,
           duration: s.duration,
-          coinsDeducted: s.coinsDeducted || 0, // Coins spent by user
-          giftsWorth: giftsWorth, // Gifts worth in coins
-          giftEarnings: giftEarnings, // Gift earnings in Rupees (separated!)
-          listenerEarnings: s.listenerEarnings || 0, // Pure call/chat earnings (separated!)
-          rating: s.rating,
-          feedback: s.feedback,
+          coinsSpent: s.coinsDeducted || 0,
+          gifts,
+          earnings: {
+            call: s.listenerEarnings || 0,
+            gift: giftEarnings || 0,
+          },
+          rating: s.rating ? { stars: s.rating, feedback: s.feedback } : null,
           createdAt: s.createdAt,
         };
       }));

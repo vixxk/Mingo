@@ -165,7 +165,9 @@ export default function SplashScreenPage() {
       }
 
       if (role === 'ADMIN') {
-        router.replace('/(admin)');
+        // Admin moved to standalone web app
+        Linking.openURL('http://192.168.1.100:5173/login');
+        return;
       } else if (role === 'LISTENER') {
         router.replace('/(listener)');
       } else if (userToken) {

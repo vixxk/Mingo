@@ -1,14 +1,18 @@
 const User = require('../models/userModel');
 const Transaction = require('../models/transactionModel');
+const SystemSettings = require('../models/SystemSettings');
 const ApiResponse = require('../utils/apiResponse');
 const AppError = require('../utils/appError');
 const PlayBillingService = require('../services/playBillingService');
 
-// 10 coins = 1 diamond
-// Chat: 10 coins / 5 mins (1 diamond)
-// Audio Call: 10 coins / min (1 diamond)
-// Video Call: 40 coins / min (4 diamonds)
-const COINS_PER_DIAMOND = 10;
+const getCoinsPerDiamond = async () => {
+  try {
+    const settings = await SystemSettings.findOne();
+    return settings?.coinToDiamondRatio ?? 10;
+  } catch {
+    return 10;
+  }
+};
 
 const COIN_PACKAGES = [
   { id: '1', coins: 40,   originalPrice: 38, price: 19,  discount: 50, tag: 'Starter Offer' },
@@ -29,9 +33,10 @@ class WalletController {
       const isFirstPurchaseEligible = user.isFirstSignup && user.signupTimestamp &&
         (Date.now() - new Date(user.signupTimestamp).getTime()) < 6 * 3600 * 1000;
 
+      const rate = await getCoinsPerDiamond();
       return ApiResponse.success(res, {
         coins: user.coins,
-        diamonds: Math.floor(user.coins / COINS_PER_DIAMOND),
+        diamonds: Math.floor(user.coins / rate),
         isFirstPurchaseEligible,
         signupTimestamp: user.signupTimestamp,
       }, 'Balance retrieved');
@@ -41,7 +46,6 @@ class WalletController {
   }
 
   static async _getPackages() {
-    const SystemSettings = require('../models/SystemSettings');
     const settings = await SystemSettings.getSettings();
     return settings.coinPricing;
   }

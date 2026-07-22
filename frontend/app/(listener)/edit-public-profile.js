@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity,
-  Dimensions, Alert, Image, ActivityIndicator, Platform,
+  Dimensions, Alert, Image, ActivityIndicator, Platform, RefreshControl,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Skeleton } from '../../components/admin/Skeleton';
@@ -33,14 +33,25 @@ const STATUS_CONFIG = {
   draft: { color: '#3B82F6', bg: 'rgba(59,130,246,0.1)', icon: 'create-outline', label: 'Draft', msg: 'You have unsaved draft changes.' },
 };
 
+function arraysEqualIgnoringOrder(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b)) return false
+  if (a.length !== b.length) return false
+  const sortedA = [...a].map(String).sort()
+  const sortedB = [...b].map(String).sort()
+  return sortedA.every((value, index) => value === sortedB[index])
+}
+
 export default function EditPublicProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [uploadingProfile, setUploadingProfile] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [uploadingGallery, setUploadingGallery] = useState(false);
 
   // Popup state
   const [popup, setPopup] = useState({
@@ -72,12 +83,59 @@ export default function EditPublicProfileScreen() {
   const [coverImage, setCoverImage] = useState(null);
   const [galleryImages, setGalleryImages] = useState([]);
   const [displayName, setDisplayName] = useState('');
+  const originalRef = useRef(null);
+
+  const hasChanges = (() => {
+    if (!originalRef.current) return false
+    const o = originalRef.current
+    return o.hookline !== hookline
+      || o.aboutMe !== aboutMe
+      || o.displayName !== displayName
+      || !arraysEqualIgnoringOrder(o.selectedTags, selectedTags)
+      || !arraysEqualIgnoringOrder(o.selectedLanguages, selectedLanguages)
+      || o.profileImage !== profileImage
+      || o.coverImage !== coverImage
+      || !arraysEqualIgnoringOrder(o.galleryImages, galleryImages)
+  })()
 
   useFocusEffect(
     useCallback(() => {
       loadProfile();
     }, [])
   );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const res = await listenerAPI.getMyProfile();
+      const d = res.data;
+      setProfileStatus(d.profileStatus || 'none');
+      setAdminNotes(d.profileAdminNotes || '');
+      setDisplayName(d.displayName || '');
+      const src = d.draftProfile || d.publicProfile || {};
+      setHookline(src.hookline || '');
+      setAboutMe(src.aboutMe || '');
+      setSelectedTags(src.expertiseTags || []);
+      setSelectedLanguages(src.languages?.length ? src.languages : ['English']);
+      setProfileImage(src.profileImage || null);
+      setCoverImage(src.coverImage || null);
+      setGalleryImages(src.galleryImages || []);
+      originalRef.current = {
+        hookline: src.hookline || '',
+        aboutMe: src.aboutMe || '',
+        displayName: d.displayName || '',
+        selectedTags: src.expertiseTags || [],
+        selectedLanguages: src.languages?.length ? src.languages : ['English'],
+        profileImage: src.profileImage || null,
+        coverImage: src.coverImage || null,
+        galleryImages: src.galleryImages || [],
+      }
+    } catch (err) {
+      console.error('Refresh failed:', err);
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
 
   const loadProfile = async () => {
     try {
@@ -98,6 +156,16 @@ export default function EditPublicProfileScreen() {
       setProfileImage(src.profileImage || null);
       setCoverImage(src.coverImage || null);
       setGalleryImages(src.galleryImages || []);
+      originalRef.current = {
+        hookline: src.hookline || '',
+        aboutMe: src.aboutMe || '',
+        displayName: d.displayName || '',
+        selectedTags: src.expertiseTags || [],
+        selectedLanguages: src.languages?.length ? src.languages : ['English'],
+        profileImage: src.profileImage || null,
+        coverImage: src.coverImage || null,
+        galleryImages: src.galleryImages || [],
+      }
     } catch (err) {
       console.error('Failed to load profile:', err);
       showPopup('error', 'Load Failed', 'Failed to load profile data. Please try again.');
@@ -150,14 +218,14 @@ export default function EditPublicProfileScreen() {
 
     if (!result.canceled && result.assets[0]) {
       try {
-        setUploading(true);
+        setUploadingProfile(true);
         const fileUrl = await uploadFileToS3(result.assets[0].uri, 'profile_image');
         setProfileImage(fileUrl);
       } catch (err) {
         console.error('Profile image upload failed:', err);
         showPopup('error', 'Upload Failed', 'Could not upload profile image. Please check your connection and try again.');
       } finally {
-        setUploading(false);
+        setUploadingProfile(false);
       }
     }
   };
@@ -172,14 +240,14 @@ export default function EditPublicProfileScreen() {
 
     if (!result.canceled && result.assets[0]) {
       try {
-        setUploading(true);
+        setUploadingCover(true);
         const fileUrl = await uploadFileToS3(result.assets[0].uri, 'cover_image');
         setCoverImage(fileUrl);
       } catch (err) {
         console.error('Cover image upload failed:', err);
         showPopup('error', 'Upload Failed', 'Could not upload cover image. Please check your connection and try again.');
       } finally {
-        setUploading(false);
+        setUploadingCover(false);
       }
     }
   };
@@ -199,14 +267,14 @@ export default function EditPublicProfileScreen() {
 
     if (!result.canceled && result.assets[0]) {
       try {
-        setUploading(true);
+        setUploadingGallery(true);
         const fileUrl = await uploadFileToS3(result.assets[0].uri, 'gallery_image');
         setGalleryImages((prev) => [...prev, fileUrl]);
       } catch (err) {
         console.error('Gallery upload failed:', err);
         showPopup('error', 'Upload Failed', 'Could not upload gallery image.');
       } finally {
-        setUploading(false);
+        setUploadingGallery(false);
       }
     }
   };
@@ -242,7 +310,7 @@ export default function EditPublicProfileScreen() {
       return;
     }
 
-    showPopup('confirm', 'Submit Profile?', 'Your changes will be reviewed by our admin team before going live. Continue?', async () => {
+    showPopup('confirm', 'Submit Profile', 'Your changes will be reviewed by our admin team before going live. Continue?', async () => {
       closePopup();
       try {
         setSubmitting(true);
@@ -276,7 +344,8 @@ export default function EditPublicProfileScreen() {
         <Text style={styles.headerTitle}>Edit Public Profile</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" colors={['#8B5CF6']} />}>
         {/* Status Banner */}
         {statusConf && (
           <View style={[styles.statusBanner, { backgroundColor: statusConf.bg, borderColor: statusConf.color }]}>
@@ -303,7 +372,7 @@ export default function EditPublicProfileScreen() {
         {/* Profile Image */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Profile Photo</Text>
-          <TouchableOpacity style={styles.profileImagePicker} onPress={pickProfileImage} disabled={uploading} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.profileImagePicker} onPress={pickProfileImage} disabled={uploadingProfile} activeOpacity={0.7}>
             {profileImage ? (
               <Image source={{ uri: profileImage }} style={styles.profileImagePreview} />
             ) : (
@@ -312,7 +381,7 @@ export default function EditPublicProfileScreen() {
                 <Text style={styles.uploadHint}>Tap to upload</Text>
               </View>
             )}
-            {uploading && (
+            {uploadingProfile && (
               <View style={styles.uploadOverlay}>
                 <ActivityIndicator size="small" color="#fff" />
               </View>
@@ -324,7 +393,7 @@ export default function EditPublicProfileScreen() {
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Cover Photo</Text>
           <Text style={[styles.charCount, { textAlign: 'left', marginTop: 0, marginBottom: 8 }]}>Banner image displayed at the top of your profile (16:9)</Text>
-          <TouchableOpacity style={styles.coverImagePicker} onPress={pickCoverImage} disabled={uploading} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.coverImagePicker} onPress={pickCoverImage} disabled={uploadingCover} activeOpacity={0.7}>
             {coverImage ? (
               <Image source={{ uri: coverImage }} style={styles.coverImagePreview} />
             ) : (
@@ -333,7 +402,7 @@ export default function EditPublicProfileScreen() {
                 <Text style={styles.uploadHint}>Tap to upload cover photo</Text>
               </View>
             )}
-            {uploading && (
+            {uploadingCover && (
               <View style={styles.uploadOverlay}>
                 <ActivityIndicator size="small" color="#fff" />
               </View>
@@ -444,8 +513,8 @@ export default function EditPublicProfileScreen() {
               </View>
             ))}
             {galleryImages.length < 6 && (
-              <TouchableOpacity style={styles.addGalleryBtn} onPress={pickGalleryImage} disabled={uploading}>
-                {uploading ? (
+              <TouchableOpacity style={styles.addGalleryBtn} onPress={pickGalleryImage} disabled={uploadingGallery}>
+                {uploadingGallery ? (
                   <ActivityIndicator size="small" color="#8B5CF6" />
                 ) : (
                   <>
@@ -479,11 +548,11 @@ export default function EditPublicProfileScreen() {
           <TouchableOpacity
             style={styles.submitBtnContainer}
             onPress={handleSubmit}
-            disabled={saving || submitting || profileStatus === 'pending'}
+            disabled={saving || submitting || profileStatus === 'pending' || !hasChanges}
             activeOpacity={0.8}
           >
             <LinearGradient
-              colors={profileStatus === 'pending' ? ['#4B5563', '#374151'] : ['#8B5CF6', '#EC4899']}
+              colors={profileStatus === 'pending' || !hasChanges ? ['#4B5563', '#374151'] : ['#8B5CF6', '#EC4899']}
               start={{ x: 0, y: 0.5 }}
               end={{ x: 1, y: 0.5 }}
               style={styles.submitBtn}

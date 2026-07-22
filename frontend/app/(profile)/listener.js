@@ -256,6 +256,7 @@ export default function ListenerScreen() {
           const dismissed = await AsyncStorage.getItem('hasDismissedRejection');
           const userDismissed = userId ? await AsyncStorage.getItem(`hasDismissedRejection_${userId}`) : null;
           if (dismissed !== 'true' && userDismissed !== 'true') { router.replace('/(auth)/verification-failed'); return; }
+          showToast('Your previous application was rejected. You can try again with a new voice sample.', 'error');
         }
       } catch (e) {}
       setLoading(false);
@@ -269,6 +270,7 @@ export default function ListenerScreen() {
       if (res?.data) {
         const userObj = res.data;
         if (userObj.role === 'LISTENER') { await AsyncStorage.setItem('listenerStatus', 'approved'); await AsyncStorage.setItem('user', JSON.stringify(userObj)); router.replace('/(listener)'); }
+        else if (userObj.listener?.status === 'rejected') { await AsyncStorage.setItem('listenerStatus', 'rejected'); await AsyncStorage.setItem('user', JSON.stringify(userObj)); router.replace('/(auth)/verification-failed'); }
         else { if (userObj.listener?.status) { await AsyncStorage.setItem('listenerStatus', userObj.listener.status); setListenerStatus(userObj.listener.status); } showToast('Application still under review.', 'warning'); }
       }
     } catch (err) { showToast('Failed to refresh.', 'error'); }

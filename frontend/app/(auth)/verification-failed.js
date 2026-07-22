@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,11 +12,17 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import ToastNotification from '../../components/shared/ToastNotification';
 import { ms, s, vs, SCREEN_WIDTH, SCREEN_HEIGHT } from '../../utils/responsive';
 
 export default function VerificationFailedScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
+
+  useEffect(() => {
+    setToast({ visible: true, message: 'Your application was not approved.', type: 'error' });
+  }, []);
 
   const handleBecomeUser = async () => {
     try {
@@ -34,6 +40,23 @@ export default function VerificationFailedScreen() {
       await AsyncStorage.setItem('listenerStatus', 'user');
     } catch (e) {}
     router.replace('/(tabs)');
+  };
+
+  const handleRetry = async () => {
+    try {
+      const userStr = await AsyncStorage.getItem('user');
+      if (userStr) {
+        try {
+          const user = JSON.parse(userStr);
+          const userId = user._id || user.id;
+          if (userId) {
+            await AsyncStorage.setItem(`hasDismissedRejection_${userId}`, 'true');
+          }
+        } catch (parseErr) {}
+      }
+      await AsyncStorage.setItem('hasDismissedRejection', 'true');
+    } catch (e) {}
+    router.replace('/(profile)/listener');
   };
 
   const handleSupportEmailPress = () => {
@@ -82,20 +105,31 @@ export default function VerificationFailedScreen() {
           </LinearGradient>
         </View>
 
-        {/* Become a User Button styled with Mingo's Signature Gradient */}
+        {/* Try Again Button */}
         <TouchableOpacity
           style={styles.buttonContainer}
           activeOpacity={0.85}
-          onPress={handleBecomeUser}
+          onPress={handleRetry}
         >
           <LinearGradient
-            colors={['#3B82F6', '#EC4899', '#F59E0B']}
+            colors={['#8B5CF6', '#7C3AED', '#6D28D9']}
             start={{ x: 0, y: 0.5 }}
             end={{ x: 1, y: 0.5 }}
             style={styles.button}
           >
-            <Text style={styles.buttonText}>Become a User</Text>
+            <Text style={styles.buttonText}>Try Again</Text>
           </LinearGradient>
+        </TouchableOpacity>
+
+        {/* Become a User Button */}
+        <TouchableOpacity
+          style={styles.secondaryButtonContainer}
+          activeOpacity={0.85}
+          onPress={handleBecomeUser}
+        >
+          <View style={styles.secondaryButton}>
+            <Text style={styles.secondaryButtonText}>Become a User</Text>
+          </View>
         </TouchableOpacity>
 
         {/* Contact Support Footer */}
@@ -106,6 +140,13 @@ export default function VerificationFailedScreen() {
           </Text>
         </Text>
       </ScrollView>
+
+      <ToastNotification
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+        onDismiss={() => setToast(prev => ({ ...prev, visible: false }))}
+      />
     </View>
   );
 }
@@ -230,6 +271,28 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontFamily: 'Inter_700Bold',
+  },
+  secondaryButtonContainer: {
+    width: '100%',
+    borderRadius: 30,
+    overflow: 'hidden',
+    marginBottom: vs(16),
+  },
+  secondaryButton: {
+    width: '100%',
+    paddingVertical: vs(14),
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 30,
+    borderWidth: 1.5,
+    borderColor: '#3F3F46',
+    backgroundColor: 'transparent',
+  },
+  secondaryButtonText: {
+    fontSize: ms(15, 0.3),
+    color: '#A1A1AA',
+    fontWeight: '600',
+    fontFamily: 'Inter_600SemiBold',
   },
   supportText: {
     fontSize: ms(13, 0.3),

@@ -49,7 +49,7 @@ const userSchema = new mongoose.Schema(
     },
     coins: {
       type: Number,
-      default: 50,
+      default: 0,
       min: 0,
     },
     interests: [{

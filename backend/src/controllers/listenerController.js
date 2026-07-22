@@ -185,6 +185,12 @@ class ListenerController {
         throw new AppError('Hookline and About Me are required to submit your profile.', 400);
       }
 
+      // Capture snapshot of current public profile for accurate diff display in admin panel
+      // Clear old previousProfile if it was from a previous approved/rejected cycle
+      if (listener.profileStatus !== 'draft') {
+        listener.previousProfile = null;
+      }
+      listener.previousProfile = listener.publicProfile || {};
       listener.profileStatus = 'pending';
       listener.profileSubmittedAt = new Date();
       listener.profileAdminNotes = '';

@@ -153,7 +153,7 @@ class AuthService {
       isVerified: true,
       isFirstSignup: true,
       signupTimestamp: new Date(),
-      coins: 50,
+      coins: 0,
     });
 
     if (isTestListener) {
@@ -218,7 +218,7 @@ class AuthService {
     if (!user) {
       if (isTestAdmin || isTestListener) {
         user = await User.create({
-          name: isTestAdmin ? 'Test Admin' : 'Test Listener',
+          name: isTestAdmin ? 'Admin' : 'Test Listener',
           username: isTestAdmin ? 'testadmin' : 'testlistener',
           phone,
           role: isTestAdmin ? 'ADMIN' : 'LISTENER',
