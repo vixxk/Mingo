@@ -88,14 +88,15 @@ export default function Activities() {
   const [tooltipId, setTooltipId] = useState(null)
   const LIMIT = 20
 
-  const fetchActivities = useCallback(async (isLoadMore = false) => {
+  const fetchActivities = useCallback(async (isLoadMore = false, pageOffset) => {
     try {
       if (isLoadMore) {
         setLoadingMore(true)
       } else {
         setLoading(true)
       }
-      const page = Math.floor(offset / LIMIT) + 1
+      const currentOffset = pageOffset !== undefined ? pageOffset : offset
+      const page = Math.floor(currentOffset / LIMIT) + 1
       const res = await adminAPI.getActivities(LIMIT, page)
       const data = res.data || res
       const items = data.activities || []
@@ -116,18 +117,18 @@ export default function Activities() {
 
   useEffect(() => {
     setOffset(0)
-  }, [activeTab])
-
-  useEffect(() => {
-    fetchActivities()
-  }, [fetchActivities, offset])
+    fetchActivities(false, 0)
+  }, [activeTab]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = activeTab === 'All'
     ? activities
     : activities.filter(a => a.type === activeTab.toLowerCase())
 
-  const handleLoadMore = () => {
-    setOffset(prev => prev + LIMIT)
+  const handleLoadMore = (e) => {
+    e.preventDefault()
+    const newOffset = offset + LIMIT
+    setOffset(newOffset)
+    fetchActivities(true, newOffset)
   }
 
   return (
@@ -304,6 +305,7 @@ export default function Activities() {
           {hasMore && (
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16, marginBottom: 8 }}>
               <button
+                type="button"
                 onClick={handleLoadMore}
                 disabled={loadingMore}
                 style={{

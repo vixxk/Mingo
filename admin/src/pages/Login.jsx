@@ -66,26 +66,46 @@ export default function Login() {
       position: 'relative',
       overflow: 'hidden',
     }}>
-      <div style={{
-        position: 'absolute',
-        top: '-50%',
-        right: '-30%',
-        width: 600,
-        height: 600,
-        borderRadius: '50%',
-        background: 'radial-gradient(circle, var(--accent-light) 0%, transparent 70%)',
-        pointerEvents: 'none',
-      }} />
-      <div style={{
-        position: 'absolute',
-        bottom: '-40%',
-        left: '-20%',
-        width: 500,
-        height: 500,
-        borderRadius: '50%',
-        background: 'radial-gradient(circle, var(--accent-light) 0%, transparent 70%)',
-        pointerEvents: 'none',
-      }} />
+      <style>{`
+        .login-blob {
+          position: absolute;
+          border-radius: 50%;
+          pointer-events: none;
+        }
+        .login-blob--top {
+          top: -50%;
+          right: -30%;
+          width: 600px;
+          height: 600px;
+          background: radial-gradient(circle, var(--accent-light) 0%, transparent 70%);
+        }
+        .login-blob--bottom {
+          bottom: -40%;
+          left: -20%;
+          width: 500px;
+          height: 500px;
+          background: radial-gradient(circle, var(--accent-light) 0%, transparent 70%);
+        }
+        @media (max-width: 600px) {
+          .page-wrap {
+            min-height: 100vh !important;
+          }
+          .login-blob--top {
+            width: 300px;
+            height: 300px;
+            top: -30%;
+            right: -40%;
+          }
+          .login-blob--bottom {
+            width: 250px;
+            height: 250px;
+            bottom: -20%;
+            left: -30%;
+          }
+        }
+      `}</style>
+      <div className="login-blob login-blob--top" />
+      <div className="login-blob login-blob--bottom" />
 
       <div className="login-card" style={{
         width: '100%',
@@ -125,7 +145,7 @@ export default function Login() {
             fontSize: 14,
             margin: 0,
           }}>
-            {step === 'phone' ? 'Sign in to your admin account' : 'Enter the verification code'}
+            {step === 'phone' ? 'Enter the digits' : 'Enter the passcode'}
           </p>
         </div>
 

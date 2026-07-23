@@ -190,18 +190,6 @@ export default function Users() {
             </button>
           )}
         </div>
-        <button
-          onClick={handleSearch}
-          className="search-btn"
-          style={{
-            height: 42, padding: '0 18px',             borderRadius: 'var(--radius-md)', border: 'none',
-            background: 'var(--accent-gradient)',
-            color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          Search
-        </button>
       </div>
 
       {/* Filter Tabs */}
