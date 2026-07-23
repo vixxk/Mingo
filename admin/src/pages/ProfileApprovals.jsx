@@ -105,7 +105,7 @@ function ImageDiff({ label, currentUrl, newUrl, onImageClick }) {
   if (!hasChange) return null
 
   return (
-    <div style={{ marginBottom: 14 }}>
+    <div className="report-detail-section" style={{ marginBottom: 14 }}>
       <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
         <IoPerson size={12} />
         {label}
@@ -202,7 +202,7 @@ function DiffField({ fieldKey, current, requested, onImageClick }) {
     if (added.length === 0 && removed.length === 0) return null
 
     return (
-      <div style={{ marginBottom: 14 }}>
+      <div className="report-detail-section" style={{ marginBottom: 14 }}>
         <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', marginBottom: 8 }}>
           {label}
         </div>
@@ -244,7 +244,7 @@ function DiffField({ fieldKey, current, requested, onImageClick }) {
     if (curArr.length === 0 && reqArr.length === 0) return null
 
     return (
-      <div style={{ marginBottom: 14 }}>
+      <div className="report-detail-section" style={{ marginBottom: 14 }}>
         <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
           <IoImageOutline size={12} />
           {label}
@@ -310,7 +310,7 @@ function DiffField({ fieldKey, current, requested, onImageClick }) {
   if (curText === reqText) return null
 
   return (
-    <div style={{ marginBottom: 14 }}>
+    <div className="report-detail-section" style={{ marginBottom: 14 }}>
       <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
         <IoDocumentText size={12} />
         {label}
@@ -435,10 +435,11 @@ export default function ProfileApprovals() {
   const navigate = useNavigate()
 
   return (
-    <div style={{ flex: 1, backgroundColor: 'var(--bg-primary)', minHeight: '100%', padding: 'var(--page-padding)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 24 }}>
+    <div className="page-wrap" style={{ flex: 1, backgroundColor: 'var(--bg-primary)', minHeight: '100%', padding: 'var(--page-padding)' }}>
+      <div className="page-hdr-row" style={{ display: 'flex', alignItems: 'center', marginBottom: 24 }}>
         <button
           onClick={() => navigate(-1)}
+          className="back-btn"
           style={{
             width: 36, height: 36, borderRadius: 10,
             backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
@@ -449,17 +450,17 @@ export default function ProfileApprovals() {
           <IoChevronBack size={20} />
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
-          <div style={{
+          <div className="icon-box" style={{
             width: 36, height: 36, borderRadius: 10,
             background: 'var(--accent-gradient)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             <IoShieldCheckmark size={18} color="#fff" />
           </div>
-          <h1 style={{ color: 'var(--text-primary)', fontSize: 'var(--header-font-size)', fontWeight: 800, margin: 0, letterSpacing: '-0.3px' }}>
+          <h1 className="page-header-title" style={{ color: 'var(--text-primary)', fontSize: 'var(--header-font-size)', fontWeight: 800, margin: 0, letterSpacing: '-0.3px' }}>
             Profile Approvals
           </h1>
-          <div style={{
+          <div className="page-header-count" style={{
             padding: '2px 10px', borderRadius: 10,
             backgroundColor: 'var(--accent-mid)',
           }}>
@@ -474,7 +475,7 @@ export default function ProfileApprovals() {
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16,
       }}>
-        <div style={{
+        <div className="search-bar" style={{
           flex: 1, display: 'flex', alignItems: 'center', gap: 10,
           backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
           borderRadius: 'var(--radius-md)', padding: '0 14px', height: 42,
@@ -504,7 +505,7 @@ export default function ProfileApprovals() {
       </div>
 
       {/* Filter Tabs */}
-      <div style={{
+      <div className="filter-tabs tabs-scroll" style={{
         display: 'flex', gap: 8, marginBottom: 20, overflowX: 'auto',
       }}>
         {TABS.map(tab => (
@@ -544,18 +545,18 @@ export default function ProfileApprovals() {
             const isExpanded = expandedCards.has(approval._id)
 
             return (
-              <div key={approval._id} style={{
+              <div key={approval._id} className="section-card" style={{
                 backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border)',
                 overflow: 'hidden',
               }}>
                 {/* Card Header */}
-                <div style={{
+                <div className="approval-card-header" style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   padding: '14px 16px', borderBottom: '1px solid var(--border)',
                 }}>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ color: '#fff', fontSize: 15, fontWeight: 700 }}>
+                      <span className="approval-name" style={{ color: '#fff', fontSize: 15, fontWeight: 700 }}>
                         {approval.listenerName || 'Unknown'}
                       </span>
                       {approval.verified && (
@@ -591,7 +592,7 @@ export default function ProfileApprovals() {
                 </div>
 
                 {/* Card Body */}
-                <div style={{ padding: '14px 16px' }}>
+                <div className="approval-card-body" style={{ padding: '14px 16px' }}>
                   {changedFields.length === 0 ? (
                     <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 8 }}>
                       No changed fields detected
@@ -776,7 +777,7 @@ export default function ProfileApprovals() {
 
                 {/* Action Buttons */}
                 {approval.status === 'pending' && (
-                  <div style={{
+                  <div className="approval-actions" style={{
                     padding: '12px 16px', borderTop: '1px solid var(--border)',
                     display: 'flex', gap: 8, flexDirection: 'column',
                   }}>

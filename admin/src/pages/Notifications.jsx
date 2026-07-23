@@ -189,7 +189,7 @@ export default function Notifications() {
   const isFormValid = message.trim() && (target === 'everyone' || selectedTargets.length > 0)
 
   return (
-    <div style={{ backgroundColor: 'var(--bg-primary)', minHeight: '100vh', padding: 'var(--page-padding)' }}>
+    <div className="page-wrap" style={{ backgroundColor: 'var(--bg-primary)', minHeight: '100vh', padding: 'var(--page-padding)' }}>
       <style>{`
         @keyframes modalOverlayIn {
           from { opacity: 0; }
@@ -206,8 +206,8 @@ export default function Notifications() {
       `}</style>
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20 }}>
-        <button
+      <div className="page-hdr-row" style={{ display: 'flex', alignItems: 'center', marginBottom: 20 }}>
+        <button className="back-btn"
           onClick={() => navigate(-1)}
           style={{
             width: 36, height: 36, borderRadius: 10,
@@ -219,15 +219,15 @@ export default function Notifications() {
           <IoChevronBack size={20} />
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
-          <div style={{
+          <div className="icon-box" style={{
             width: 36, height: 36, borderRadius: 10,
             background: 'var(--accent-gradient)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             <IoMegaphone size={18} color="#fff" />
           </div>
-          <h1 style={{ fontSize: 'var(--header-font-size)', fontWeight: 800, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.3px' }}>Notifications</h1>
-          <div style={{
+          <h1 className="page-header-title" style={{ fontSize: 'var(--header-font-size)', fontWeight: 800, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.3px' }}>Notifications</h1>
+          <div className="page-header-count" style={{
             padding: '2px 10px', borderRadius: 10,
             backgroundColor: 'var(--accent-mid)',
           }}>
@@ -270,7 +270,7 @@ export default function Notifications() {
 
       {/* Campaign Creation Form */}
       {showForm && (
-        <div style={{
+        <div className="campaign-form" style={{
           backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)',
           borderRadius: 'var(--radius-xl)', padding: 20, marginBottom: 24,
         }}>
@@ -329,7 +329,7 @@ export default function Notifications() {
               const Icon = t.icon
               const isActive = target === t.key
               return (
-                <button
+                <button className="notif-target-btn"
                   key={t.key}
                   onClick={() => handleTargetChange(t.key)}
                   style={{
@@ -470,7 +470,7 @@ export default function Notifications() {
             display: 'flex', gap: 8, marginBottom: 20,
           }}>
             {deliveryMethods.map(dm => (
-              <button
+              <button className="notif-delivery-btn"
                 key={dm}
                 onClick={() => setDeliveryMethod(dm)}
                 style={{
@@ -538,7 +538,7 @@ export default function Notifications() {
             const tColor = targetColors[camp.target] || 'var(--accent)'
             const tLabel = camp.target ? camp.target.charAt(0).toUpperCase() + camp.target.slice(1) : 'Everyone'
             return (
-              <div
+              <div className="notif-history-item"
                 key={camp._id || camp.id}
                 style={{
                 backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)',
@@ -548,7 +548,7 @@ export default function Notifications() {
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ fontSize: 15, fontWeight: 800, color: '#fff', display: 'block' }}>
+                    <span className="notif-campaign-title" style={{ fontSize: 15, fontWeight: 800, color: '#fff', display: 'block' }}>
                       {camp.title || 'Untitled Campaign'}
                     </span>
                   </div>

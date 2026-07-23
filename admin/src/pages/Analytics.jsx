@@ -293,11 +293,12 @@ export default function Analytics() {
   }
 
   return (
-    <div style={{ backgroundColor: 'var(--bg-primary)', minHeight: '100vh', padding: 'var(--page-padding)' }}>
+    <div className="page-wrap" style={{ backgroundColor: 'var(--bg-primary)', padding: 'var(--page-padding)' }}>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
 
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20, gap: 12 }}>
+      <div className="page-hdr-row" style={{ display: 'flex', alignItems: 'center', marginBottom: 20, gap: 12 }}>
         <button onClick={() => navigate(-1)}
+          className="back-btn"
           style={{
             background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 12,
             width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -307,14 +308,14 @@ export default function Analytics() {
         </button>
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{
-              width: 36, height: 36, borderRadius: 10,
-              background: 'var(--accent-gradient)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <IoBarChart size={18} color="#fff" />
-            </div>
-            <h1 style={{ color: 'var(--text-primary)', fontSize: 'var(--header-font-size)', fontWeight: 800, margin: 0, letterSpacing: '-0.3px' }}>Analytics</h1>
+          <div className="icon-box" style={{
+            width: 36, height: 36, borderRadius: 10,
+            background: 'var(--accent-gradient)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <IoBarChart size={18} color="#fff" />
+          </div>
+          <h1 className="page-header-title" style={{ color: 'var(--text-primary)', fontSize: 'var(--header-font-size)', fontWeight: 800, margin: 0, letterSpacing: '-0.3px' }}>Analytics</h1>
           </div>
         </div>
         <button
@@ -340,7 +341,7 @@ export default function Analytics() {
       </div>
 
       {/* Quick Stats Grid */}
-      <div style={{
+      <div className="mini-cards" style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
         gap: 10, marginBottom: 20,
@@ -403,7 +404,7 @@ export default function Analytics() {
       </div>
 
       {/* Stat Cards Row */}
-      <div style={{
+      <div className="stat-cards hide-mobile-row" style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
         gap: 12, marginBottom: 24,
@@ -414,7 +415,7 @@ export default function Analytics() {
       </div>
 
       {/* Period Selector */}
-      <div style={{
+      <div className="period-selector" style={{
         display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16,
         padding: '12px 16px', backgroundColor: 'var(--bg-secondary)',
         borderRadius: 'var(--radius-xl)', border: '1px solid var(--border)',
@@ -451,7 +452,7 @@ export default function Analytics() {
       </div>
 
       {/* User Distribution + Stats */}
-      <div style={{
+      <div className="two-col" style={{
         display: 'grid',
         gridTemplateColumns: '1fr 1fr',
         gap: 16, marginBottom: 20,
@@ -573,7 +574,7 @@ export default function Analytics() {
       </div>
 
       {/* Section Toggles */}
-      <div style={{
+      <div className="tabs-scroll" style={{
         display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16,
       }}>
         {Object.entries(sectionLabels).map(([key, label]) => {
@@ -609,7 +610,7 @@ export default function Analytics() {
           : 1
 
         return (
-          <div key={key} style={{
+          <div key={key} className="section-card" style={{
             backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border)',
             padding: 24, marginBottom: 14,
           }}>

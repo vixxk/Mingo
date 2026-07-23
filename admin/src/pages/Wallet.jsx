@@ -245,11 +245,12 @@ export default function Wallet() {
   }
 
   return (
-    <div style={{ backgroundColor: 'var(--bg-primary)', minHeight: '100vh', padding: 'var(--page-padding)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
+    <div className="page-wrap" style={{ backgroundColor: 'var(--bg-primary)', minHeight: '100vh', padding: 'var(--page-padding)' }}>
+      <div className="page-hdr-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button
             onClick={() => navigate(-1)}
+            className="back-btn"
             style={{
               width: 36, height: 36, borderRadius: 10,
               backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
@@ -259,14 +260,14 @@ export default function Wallet() {
           >
             <IoChevronBack size={20} />
           </button>
-          <div style={{
+          <div className="icon-box" style={{
             width: 36, height: 36, borderRadius: 10,
             background: 'var(--accent-gradient)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             <IoWallet size={18} color="#fff" />
           </div>
-          <h1 style={{ fontSize: 'var(--header-font-size)', fontWeight: 800, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.3px' }}>Wallet</h1>
+          <h1 className="page-header-title" style={{ fontSize: 'var(--header-font-size)', fontWeight: 800, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.3px' }}>Wallet</h1>
         </div>
       </div>
 
@@ -310,7 +311,7 @@ export default function Wallet() {
               <IoAdd size={18} style={{ marginRight: 6, verticalAlign: 'middle' }} />
               New Package
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="wallet-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               {['name', 'coins', 'price', 'originalPrice', 'tag', 'discount'].map(field => (
                 <div key={field}>
                   <label style={{ color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 4, textTransform: 'capitalize' }}>
@@ -378,6 +379,7 @@ export default function Wallet() {
           packages.map(pkg => (
             <div
               key={pkg._id}
+              className="wallet-package-card"
               style={{
                 backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border)',
                 padding: 'var(--card-padding)', marginBottom: 12,
@@ -391,7 +393,7 @@ export default function Wallet() {
                       <IoClose size={20} />
                     </button>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div className="wallet-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                     {['name', 'coins', 'price', 'originalPrice', 'tag', 'discount'].map(field => (
                       <div key={field}>
                         <label style={{ color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 3, textTransform: 'capitalize' }}>
@@ -530,7 +532,7 @@ export default function Wallet() {
               <IoDiamond size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
               Coin to Diamond Conversion
             </label>
-            <div style={{
+            <div className="wallet-conversion-row" style={{
               display: 'flex', alignItems: 'center', gap: 12,
               padding: '14px 16px', borderRadius: 12,
               backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
@@ -619,7 +621,7 @@ export default function Wallet() {
               <IoVideocam size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
               Video Call Payout Rate
             </label>
-            <div style={{
+            <div className="wallet-earnings-row" style={{
               display: 'flex', alignItems: 'center', gap: 8,
             }}>
               <input
@@ -647,7 +649,7 @@ export default function Wallet() {
               <IoCall size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
               Audio Call Payout Rate
             </label>
-            <div style={{
+            <div className="wallet-earnings-row" style={{
               display: 'flex', alignItems: 'center', gap: 8,
             }}>
               <input
@@ -675,7 +677,7 @@ export default function Wallet() {
               <IoChatbubbles size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
               Chat Payout Rate
             </label>
-            <div style={{
+            <div className="wallet-earnings-row" style={{
               display: 'flex', alignItems: 'center', gap: 8,
             }}>
               <input
@@ -725,6 +727,7 @@ export default function Wallet() {
         >
           <div
             onClick={e => e.stopPropagation()}
+            className="confirm-dialog"
             style={{
               backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border)',
               padding: 28, maxWidth: 360, width: '100%',

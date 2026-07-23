@@ -107,6 +107,7 @@ export default function AdminLayout() {
       minHeight: '100vh',
       backgroundColor: 'var(--bg-primary)',
     }}>
+      <style>{`@media (max-width: 600px) { .mobile-sidebar-open { width: 280px !important; } .mobile-main { margin-left: 0 !important; padding-top: 56px !important; } }`}</style>
       {/* Mobile menu toggle */}
       <button
         onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -135,6 +136,7 @@ export default function AdminLayout() {
 
       {/* Sidebar */}
       <aside
+        className={isDesktop ? '' : (sidebarOpen ? 'mobile-sidebar-open' : '')}
         style={{
           width: sidebarWidth,
           backgroundColor: 'var(--bg-secondary)',
@@ -152,7 +154,8 @@ export default function AdminLayout() {
           overflow: 'hidden',
         }}
       >
-        {/* Logo / Header */}
+        {
+}
         <div style={{
           padding: collapsed ? '0' : '0 14px',
           marginBottom: collapsed ? 8 : 20,
@@ -515,7 +518,7 @@ export default function AdminLayout() {
       )}
 
       {/* Main content */}
-      <main style={{
+      <main className="mobile-main" style={{
         flex: 1,
         marginLeft: isDesktop ? sidebarWidth : 0,
         paddingTop: isDesktop ? 0 : 60,

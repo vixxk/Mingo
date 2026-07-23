@@ -99,12 +99,12 @@ export default function UserDetailModal({ visible, user, onClose, onDelete, onBa
 
   return (
     <>
-      <div style={{
+      <div className="modal-overlay" style={{
         position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
         backgroundColor: 'rgba(0,0,0,0.9)',
         zIndex: 1000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
       }} onClick={onClose}>
-        <div style={{
+        <div className="modal-content" style={{
           width: '100%', maxWidth: 500,
           backgroundColor: 'var(--bg-secondary)', borderTopLeftRadius: 32, borderTopRightRadius: 32,
           padding: '20px 20px 0',
@@ -112,7 +112,7 @@ export default function UserDetailModal({ visible, user, onClose, onDelete, onBa
           maxHeight: '85vh', overflowY: 'auto',
           display: 'flex', flexDirection: 'column', alignItems: 'center',
         }} onClick={e => e.stopPropagation()}>
-          <button onClick={onClose} style={{
+          <button className="modal-close-btn" onClick={onClose} style={{
             position: 'absolute', top: 16, right: 20, width: 32, height: 32,
             borderRadius: 16, backgroundColor: 'var(--bg-tertiary)', border: 'none',
             display: 'flex', alignItems: 'center', justifyContent: 'center',

@@ -90,7 +90,7 @@ function StatusBadge({ status }) {
 function ParticipantAvatar({ name, avatar, isDeleted }) {
   const initial = (name?.[0] || '?').toUpperCase()
   return (
-    <div style={{
+    <div className="session-participant-avatar" style={{
       width: 40, height: 40, borderRadius: 20,
       backgroundColor: isDeleted ? '#2A1A1A' : 'var(--border)',
       overflow: 'hidden', flexShrink: 0,
@@ -192,10 +192,10 @@ export default function Sessions() {
   const navigate = useNavigate()
 
   return (
-    <div style={{ padding: 'var(--page-padding)' }}>
+    <div className="page-wrap" style={{ padding: 'var(--page-padding)' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 24 }}>
-        <button
+      <div className="page-hdr-row" style={{ display: 'flex', alignItems: 'center', marginBottom: 24 }}>
+        <button className="back-btn"
           onClick={() => navigate(-1)}
           style={{
             width: 36, height: 36, borderRadius: 10,
@@ -207,15 +207,15 @@ export default function Sessions() {
           <IoChevronBack size={20} />
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
-          <div style={{
+          <div className="icon-box" style={{
             width: 36, height: 36, borderRadius: 10,
             background: 'var(--accent-gradient)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             <IoCall size={18} color="#fff" />
           </div>
-          <h1 style={{ fontSize: 'var(--header-font-size)', fontWeight: 800, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.3px' }}>Sessions</h1>
-          <div style={{
+          <h1 className="page-header-title" style={{ fontSize: 'var(--header-font-size)', fontWeight: 800, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.3px' }}>Sessions</h1>
+          <div className="page-header-count" style={{
             padding: '2px 10px', borderRadius: 10,
             backgroundColor: 'var(--accent-mid)',
           }}>
@@ -225,7 +225,7 @@ export default function Sessions() {
       </div>
 
       {/* Search */}
-      <div style={{
+      <div className="search-bar" style={{
         display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16,
       }}>
         <div style={{
@@ -259,7 +259,7 @@ export default function Sessions() {
       </div>
 
       {/* Status Filter Tabs */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20, overflowX: 'auto' }}>
+      <div className="filter-tabs tabs-scroll" style={{ display: 'flex', gap: 8, marginBottom: 20, overflowX: 'auto' }}>
         {STATUSES.map(s => {
           const isActive = status === s
           return (
@@ -298,7 +298,7 @@ export default function Sessions() {
       ) : (
         <>
           {sessions.map(session => (
-            <div
+            <div className="session-card"
               key={session.id || session._id}
               style={{
                 backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)',
@@ -315,7 +315,7 @@ export default function Sessions() {
               </div>
 
               {/* Participants */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <div className="session-participants" style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
                   <ParticipantAvatar
                     name={session.callerName || session.userName}
@@ -323,7 +323,7 @@ export default function Sessions() {
                     isDeleted={session.isCallerDeleted}
                   />
                   <div style={{ minWidth: 0 }}>
-                    <div style={{
+                    <div className="session-participant-name" style={{
                       fontSize: 14, fontWeight: 700, color: session.isCallerDeleted ? '#EF4444' : '#fff',
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}>
@@ -341,7 +341,7 @@ export default function Sessions() {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, justifyContent: 'flex-end' }}>
                   <div style={{ textAlign: 'right', minWidth: 0 }}>
-                    <div style={{
+                    <div className="session-participant-name" style={{
                       fontSize: 14, fontWeight: 700, color: session.isListenerDeleted ? '#EF4444' : '#fff',
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}>
@@ -358,11 +358,11 @@ export default function Sessions() {
               </div>
 
               {/* Stats row */}
-              <div style={{
+              <div className="session-stats-row" style={{
                 display: 'flex', gap: 8, flexWrap: 'wrap',
                 padding: '14px 0', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', marginBottom: 12,
               }}>
-                <div style={{
+                <div className="session-stat-item" style={{
                   display: 'flex', alignItems: 'center', gap: 8,
                   backgroundColor: 'var(--bg-tertiary)', borderRadius: 8, padding: '8px 12px',
                 }}>
@@ -372,7 +372,7 @@ export default function Sessions() {
                     <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{formatDuration(session.duration)}</div>
                   </div>
                 </div>
-                <div style={{
+                <div className="session-stat-item" style={{
                   display: 'flex', alignItems: 'center', gap: 8,
                   backgroundColor: 'var(--bg-tertiary)', borderRadius: 8, padding: '8px 12px',
                 }}>
@@ -383,7 +383,7 @@ export default function Sessions() {
                   </div>
                 </div>
                 {session.gifts && session.gifts.length > 0 && (
-                  <div style={{
+                  <div className="session-stat-item" style={{
                     display: 'flex', alignItems: 'center', gap: 8,
                     backgroundColor: 'var(--bg-tertiary)', borderRadius: 8, padding: '8px 12px',
                   }}>
@@ -417,8 +417,8 @@ export default function Sessions() {
           ))}
 
           {hasMore && (
-            <div key="load-more" style={{ textAlign: 'center', padding: '20px 0' }}>
-              <button
+            <div className="pagination" key="load-more" style={{ textAlign: 'center', padding: '20px 0' }}>
+              <button className="load-more-btn"
                 onClick={handleLoadMore}
                 disabled={loadingMore}
                 style={{

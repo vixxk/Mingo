@@ -301,8 +301,8 @@ export default function Dashboard() {
   const totalAcquired = dailyRegistrations.reduce((a, b) => a + b.count, 0)
 
   return (
-    <div style={{ backgroundColor: 'var(--bg-primary)', minHeight: '100vh', padding: 'var(--page-padding)' }}>
-      {/* Header */}        <div style={{
+    <div className="page-wrap" style={{ backgroundColor: 'var(--bg-primary)', padding: 'var(--page-padding)' }}>
+      {/* Header */}        <div className="page-header" style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -311,7 +311,7 @@ export default function Dashboard() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <h1 style={{
+              <h1 className="page-header-title" style={{
                 fontFamily: 'var(--font-display)',
                 fontSize: 'var(--header-font-size)',
                 fontWeight: 800,
@@ -324,12 +324,12 @@ export default function Dashboard() {
 
             </div>
             <p style={{
-              fontSize: 14,
-              color: 'var(--text-muted)',
-              margin: '4px 0 0',
-            }}>
-              System Overview
-            </p>
+                fontSize: 14,
+                color: 'var(--text-muted)',
+                margin: '4px 0 0',
+              }} className="page-header-sub">
+                System Overview
+              </p>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -367,7 +367,7 @@ export default function Dashboard() {
       )}
 
       {/* Stats Grid */}
-      <div style={{
+      <div className="stat-cards" style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
         gap: 16,
@@ -397,7 +397,7 @@ export default function Dashboard() {
 
       {/* Revenue Analysis */}
       {revenueData.length > 0 && (
-      <div style={{
+      <div className="section-card" style={{
         backgroundColor: 'var(--bg-secondary)',
         borderRadius: 'var(--radius-xl)',
         border: '1px solid var(--border)',
@@ -405,9 +405,9 @@ export default function Dashboard() {
         marginBottom: 'var(--section-gap)',
         borderTop: '3px solid var(--accent)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div className="section-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <SectionTitle>Revenue Analysis</SectionTitle>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div className="chart-controls" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
               <select
                 value={revenueGranularity}
@@ -433,7 +433,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div style={{ height: 320, marginBottom: 14 }}>
+        <div className="chart-container" style={{ height: 320, marginBottom: 14 }}>
           <ResponsiveContainer width="100%" height="100%">
             {revenueChartMode === 'area' ? (
               <AreaChart data={mergedRevenueData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
@@ -466,7 +466,7 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+        <div className="insight-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
           <InsightBox icon={<IoTrendingUp size={16} color="var(--success)" />} label="Peak Revenue" value={formatCurrency(peakRevenue)} />
           <InsightBox icon={<IoCalendarOutline size={16} color="var(--info)" />} label="Daily Average" value={formatCurrency(dailyAvgRevenue)} />
           <InsightBox icon={<IoTimeOutline size={16} color="var(--warning)" />} label="Active Days" value={activeDays.toLocaleString() || '-'} />
@@ -476,7 +476,7 @@ export default function Dashboard() {
 
       {/* Registration Analysis */}
       {registrationData.length > 0 && (
-      <div style={{
+      <div className="section-card" style={{
         backgroundColor: 'var(--bg-secondary)',
         borderRadius: 'var(--radius-xl)',
         border: '1px solid var(--border)',
@@ -484,7 +484,7 @@ export default function Dashboard() {
         marginBottom: 'var(--section-gap)',
         borderTop: '3px solid var(--accent)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div className="section-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <SectionTitle>Registration Analysis</SectionTitle>
           <div style={{ position: 'relative' }}>
             <select
@@ -516,7 +516,7 @@ export default function Dashboard() {
             </select>
           </div>
         </div>
-        <div style={{ height: 260, marginBottom: 20 }}>
+        <div className="chart-container-sm" style={{ height: 260, marginBottom: 20 }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={transformedRegistrationData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="4 5" stroke="var(--border)" vertical={false} horizontal={true} />
@@ -557,7 +557,7 @@ export default function Dashboard() {
             </BarChart>
           </ResponsiveContainer>
         </div>
-        <div style={{
+        <div className="insight-grid" style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(3, 1fr)',
           gap: 12,
@@ -570,7 +570,7 @@ export default function Dashboard() {
       )}
 
       {/* Management Modules */}
-      <div style={{
+      <div className="section-card" style={{
         backgroundColor: 'var(--bg-secondary)',
         borderRadius: 'var(--radius-xl)',
         border: '1px solid var(--border)',
@@ -578,7 +578,7 @@ export default function Dashboard() {
         marginBottom: 'var(--section-gap)',
       }}>
         <SectionTitle>Management</SectionTitle>
-        <div style={{
+        <div className="modules-grid" style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
           gap: 12,
@@ -589,6 +589,7 @@ export default function Dashboard() {
             return (
               <button
                 key={mod.label}
+                className="module-btn"
                 onClick={() => navigateTo(navigate, mod.path)}
                 style={{
                   display: 'flex',
@@ -662,7 +663,7 @@ export default function Dashboard() {
       </div>
 
       {/* Recent Activities */}
-      <div style={{
+      <div className="section-card" style={{
         backgroundColor: 'var(--bg-secondary)',
         borderRadius: 'var(--radius-xl)',
         border: '1px solid var(--border)',
@@ -738,7 +739,7 @@ export default function Dashboard() {
 
 function InsightBox({ icon, label, value }) {
   return (
-    <div style={{
+    <div className="insight-box" style={{
       display: 'flex',
       alignItems: 'center',          gap: 10,
       padding: '12px 14px',
@@ -746,7 +747,7 @@ function InsightBox({ icon, label, value }) {
       backgroundColor: 'var(--bg-tertiary)',
       border: '1px solid var(--border)',
     }}>
-      <div style={{
+      <div className="insight-box-icon" style={{
         width: 36,
         height: 36,
         borderRadius: 'var(--radius-sm)',
@@ -759,7 +760,7 @@ function InsightBox({ icon, label, value }) {
         {icon}
       </div>
       <div>
-        <div style={{
+        <div className="insight-label" style={{
           fontSize: 10,
           color: 'var(--text-muted)',
           fontWeight: 600,
@@ -768,7 +769,7 @@ function InsightBox({ icon, label, value }) {
         }}>
           {label}
         </div>
-        <div style={{
+        <div className="insight-value" style={{
           fontSize: 15,
           fontWeight: 800,
           color: 'var(--text-primary)',

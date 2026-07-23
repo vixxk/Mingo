@@ -45,10 +45,10 @@ export default function Settings() {
   }
 
 return (
-    <div style={{ backgroundColor: 'var(--bg-primary)', minHeight: '100vh', padding: 'var(--page-padding)' }}>
+    <div className="page-wrap" style={{ backgroundColor: 'var(--bg-primary)', minHeight: '100vh', padding: 'var(--page-padding)' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16, gap: 12 }}>
-        <button onClick={() => navigate(-1)}
+      <div className="page-hdr-row" style={{ display: 'flex', alignItems: 'center', marginBottom: 16, gap: 12 }}>
+        <button className="back-btn" onClick={() => navigate(-1)}
           style={{
             background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 12,
             width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -58,18 +58,18 @@ return (
         </button>
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <h1 style={{ color: 'var(--text-primary)', fontSize: 'var(--header-font-size)', fontWeight: 800, margin: 0, letterSpacing: '-0.3px' }}>Settings</h1>
+            <h1 className="page-header-title" style={{ color: 'var(--text-primary)', fontSize: 'var(--header-font-size)', fontWeight: 800, margin: 0, letterSpacing: '-0.3px' }}>Settings</h1>
           </div>
         </div>
       </div>
 
       {/* User Profile Card */}
-      <div style={{
+      <div className="profile-card" style={{
         backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border)',
         padding: 'var(--card-padding)', marginBottom: 'var(--section-gap)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{
+          <div className="profile-avatar" style={{
             width: 64, height: 64, borderRadius: 32,
             backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -78,7 +78,7 @@ return (
             <IoPersonCircleOutline size={36} color="var(--text-muted)" />
           </div>
           <div>
-            <h2 style={{
+            <h2 className="profile-name" style={{
               fontSize: 20, fontWeight: 800, color: '#fff', margin: 0,
             }}>
               {user?.name || 'Admin'}
@@ -115,7 +115,7 @@ return (
           {platformLinks.map((link) => {
             const Icon = link.icon
             return (
-              <button
+              <button className="settings-link-btn"
                 key={link.label}
                 onClick={() => navigateTo(link.path)}
                 style={{
@@ -134,7 +134,7 @@ return (
                   e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'
                 }}
               >
-                <div style={{
+                <div className="settings-icon" style={{
                   width: 40, height: 40, borderRadius: 12,
                   backgroundColor: 'var(--accent-light)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -142,7 +142,7 @@ return (
                 }}>
                   <Icon size={20} color="var(--accent)" />
                 </div>
-                <span style={{
+                <span className="settings-label" style={{
                   flex: 1, fontSize: 15, fontWeight: 600, color: '#E5E7EB',
                 }}>
                   {link.label}
@@ -169,7 +169,7 @@ return (
           {managementLinks.map((link) => {
             const Icon = link.icon
             return (
-              <button
+              <button className="settings-link-btn"
                 key={link.label}
                 onClick={() => navigateTo(link.path)}
                 style={{
@@ -188,7 +188,7 @@ return (
                   e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'
                 }}
               >
-                <div style={{
+                <div className="settings-icon" style={{
                   width: 40, height: 40, borderRadius: 12,
                   backgroundColor: 'var(--accent-light)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -196,7 +196,7 @@ return (
                 }}>
                   <Icon size={20} color="var(--accent)" />
                 </div>
-                <span style={{
+                <span className="settings-label" style={{
                   flex: 1, fontSize: 15, fontWeight: 600, color: '#E5E7EB',
                 }}>
                   {link.label}
@@ -209,7 +209,7 @@ return (
       </div>
 
       {/* Logout */}
-      <button
+      <button className="logout-btn"
         onClick={() => setShowLogoutPopup(true)}
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,

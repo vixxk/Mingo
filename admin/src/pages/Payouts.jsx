@@ -217,7 +217,7 @@ export default function Payouts() {
           padding: 'var(--page-padding)', overflowY: 'auto',
         }}
       >
-        <div
+        <div className="modal-content"
           onClick={e => e.stopPropagation()}
           style={{
             backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border)',
@@ -395,10 +395,10 @@ export default function Payouts() {
   }
 
   return (
-    <div style={{ backgroundColor: 'var(--bg-primary)', minHeight: '100vh', paddingBottom: 40 }}>
+    <div className="page-wrap" style={{ backgroundColor: 'var(--bg-primary)', minHeight: '100vh', paddingBottom: 40 }}>
       <div style={{ padding: '16px 16px 0' }}>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 24 }}>
-          <button
+        <div className="page-hdr-row" style={{ display: 'flex', alignItems: 'center', marginBottom: 24 }}>
+          <button className="back-btn"
             onClick={() => navigate(-1)}
             style={{
               width: 36, height: 36, borderRadius: 10,
@@ -410,15 +410,15 @@ export default function Payouts() {
             <IoChevronBack size={20} />
           </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
-            <div style={{
+            <div className="icon-box" style={{
               width: 36, height: 36, borderRadius: 10,
               background: 'var(--accent-gradient)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               <IoWallet size={18} color="#fff" />
             </div>
-            <h1 style={{ fontSize: 'var(--header-font-size)', fontWeight: 800, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.3px' }}>Payouts</h1>
-            <div style={{
+            <h1 className="page-header-title" style={{ fontSize: 'var(--header-font-size)', fontWeight: 800, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.3px' }}>Payouts</h1>
+            <div className="page-header-count" style={{
               padding: '2px 10px', borderRadius: 10,
               backgroundColor: 'var(--accent-mid)',
             }}>
@@ -431,7 +431,7 @@ export default function Payouts() {
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16,
         }}>
-          <div style={{
+          <div className="search-bar" style={{
             flex: 1, display: 'flex', alignItems: 'center', gap: 10,
             backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
             borderRadius: 'var(--radius-md)', padding: '0 14px', height: 42,
@@ -460,7 +460,7 @@ export default function Payouts() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, marginBottom: 20, overflowX: 'auto' }}>
+        <div className="filter-tabs tabs-scroll" style={{ display: 'flex', gap: 8, marginBottom: 20, overflowX: 'auto' }}>
           {FILTERS.map(filter => {
             const isActive = activeFilter === filter.key
             const count = getFilterCount(filter.key)
@@ -513,7 +513,7 @@ export default function Payouts() {
           </div>
         ) : (
           filteredPayouts.map(payout => (
-            <div
+            <div className="payout-card list-item"
               key={payout._id}
               onClick={() => handleSelectPayout(payout)}
               style={{
@@ -554,7 +554,7 @@ export default function Payouts() {
       </div>
 
       {totalPages > 1 && (
-        <div style={{
+        <div className="pagination" style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           gap: 16, marginTop: 24, paddingBottom: 20,
         }}>

@@ -56,7 +56,7 @@ export default function Login() {
   }
 
   return (
-    <div style={{
+    <div className="page-wrap" style={{
       minHeight: '100vh',
       display: 'flex',
       alignItems: 'center',
@@ -110,7 +110,7 @@ export default function Login() {
               objectFit: 'contain',
             }}
           />
-          <h1 style={{
+          <h1 className="page-header-title" style={{
             fontFamily: 'var(--font-display)',
             fontSize: 22,
             fontWeight: 800,

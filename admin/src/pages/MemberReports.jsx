@@ -180,7 +180,7 @@ export default function MemberReports() {
           padding: 'var(--page-padding)', overflowY: 'auto',
         }}
       >
-        <div
+        <div className="modal-content"
           onClick={e => e.stopPropagation()}
           style={{
             backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border)',
@@ -204,7 +204,7 @@ export default function MemberReports() {
             </button>
           </div>
 
-          <div style={{ marginBottom: 12 }}>
+          <div className="report-detail-section" style={{ marginBottom: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
               <div>
                 <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, marginBottom: 2 }}>Reporter</div>
@@ -215,7 +215,7 @@ export default function MemberReports() {
             </div>
           </div>
 
-          <div style={{
+          <div className="report-detail-section" style={{
             backgroundColor: 'var(--bg-tertiary)', borderRadius: 12, border: '1px solid var(--border)',
             padding: 16, marginBottom: 16,
           }}>
@@ -233,7 +233,7 @@ export default function MemberReports() {
             </div>
           </div>
 
-          <div style={{
+          <div className="report-detail-section" style={{
             backgroundColor: 'var(--bg-tertiary)', borderRadius: 12, border: '1px solid var(--border)',            padding: 'var(--card-padding)', marginBottom: 16,
           }}
         >
@@ -338,10 +338,10 @@ export default function MemberReports() {
   }
 
   return (
-    <div style={{ backgroundColor: 'var(--bg-primary)', minHeight: '100vh', paddingBottom: 40 }}>
+    <div className="page-wrap" style={{ backgroundColor: 'var(--bg-primary)', minHeight: '100vh', paddingBottom: 40 }}>
       <div style={{ padding: '16px 16px 0' }}>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 24 }}>
-          <button
+        <div className="page-hdr-row" style={{ display: 'flex', alignItems: 'center', marginBottom: 24 }}>
+          <button className="back-btn"
             onClick={() => navigate(-1)}
             style={{
               width: 36, height: 36, borderRadius: 10,
@@ -353,15 +353,15 @@ export default function MemberReports() {
             <IoChevronBack size={20} />
           </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
-            <div style={{
+            <div className="icon-box" style={{
               width: 36, height: 36, borderRadius: 10,
               background: 'var(--accent-gradient)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               <IoFlag size={18} color="#fff" />
             </div>
-            <h1 style={{ fontSize: 'var(--header-font-size)', fontWeight: 800, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.3px' }}>Member Reports</h1>
-            <div style={{
+            <h1 className="page-header-title" style={{ fontSize: 'var(--header-font-size)', fontWeight: 800, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.3px' }}>Member Reports</h1>
+            <div className="page-header-count" style={{
               padding: '2px 10px', borderRadius: 10,
               backgroundColor: 'var(--accent-mid)',
             }}>
@@ -374,7 +374,7 @@ export default function MemberReports() {
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16,
         }}>
-          <div style={{
+          <div className="search-bar" style={{
             flex: 1, display: 'flex', alignItems: 'center', gap: 10,
             backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
             borderRadius: 'var(--radius-md)', padding: '0 14px', height: 42,
@@ -403,7 +403,7 @@ export default function MemberReports() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, marginBottom: 20, overflowX: 'auto' }}>
+        <div className="filter-tabs tabs-scroll" style={{ display: 'flex', gap: 8, marginBottom: 20, overflowX: 'auto' }}>
           {FILTERS.map(filter => {
             const isActive = activeFilter === filter.key
             const count = getFilterCount(filter.key)
@@ -456,7 +456,7 @@ export default function MemberReports() {
           </div>
         ) : (
           filteredReports.map(report => (
-            <div
+            <div className="report-card list-item"
               key={report._id}
               onClick={() => handleSelectReport(report)}
               style={{
@@ -513,7 +513,7 @@ export default function MemberReports() {
       </div>
 
       {totalPages > 1 && (
-        <div style={{
+        <div className="pagination" style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           gap: 16, marginTop: 24, paddingBottom: 20,
         }}>

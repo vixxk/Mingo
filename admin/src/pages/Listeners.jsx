@@ -158,10 +158,10 @@ export default function Listeners() {
   })
 
   return (
-    <div style={{ flex: 1, backgroundColor: 'var(--bg-primary)', minHeight: '100%', padding: 'var(--page-padding)' }}>
+    <div className="page-wrap" style={{ flex: 1, backgroundColor: 'var(--bg-primary)', minHeight: '100%', padding: 'var(--page-padding)' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 24 }}>
-        <button onClick={() => navigate(-1)}
+      <div className="page-hdr-row" style={{ display: 'flex', alignItems: 'center', marginBottom: 24 }}>
+        <button className="back-btn" onClick={() => navigate(-1)}
           style={{
             width: 36, height: 36, borderRadius: 10,
             backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
@@ -171,15 +171,15 @@ export default function Listeners() {
           <IoChevronBack size={20} />
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
-          <div style={{
+          <div className="icon-box" style={{
             width: 36, height: 36, borderRadius: 10,
             background: 'var(--accent-gradient)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             <IoMic size={18} color="#fff" />
           </div>
-          <h1 style={{ fontSize: 'var(--header-font-size)', fontWeight: 800, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.3px' }}>Listeners</h1>
-          <div style={{
+          <h1 className="page-header-title" style={{ fontSize: 'var(--header-font-size)', fontWeight: 800, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.3px' }}>Listeners</h1>
+          <div className="page-header-count" style={{
             padding: '2px 10px', borderRadius: 10,
             backgroundColor: 'var(--accent-mid)',
           }}>
@@ -192,7 +192,7 @@ export default function Listeners() {
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16,
       }}>
-        <div style={{
+        <div className="search-bar" style={{
           flex: 1, display: 'flex', alignItems: 'center', gap: 10,
           backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
           borderRadius: 'var(--radius-md)', padding: '0 14px', height: 42,
@@ -222,7 +222,7 @@ export default function Listeners() {
       </div>
 
       {/* Filter Tabs */}
-      <div style={{
+      <div className="filter-tabs tabs-scroll" style={{
         display: 'flex', gap: 8, marginBottom: 20, overflowX: 'auto',
       }}>
         {TABS.map(tab => (
@@ -263,22 +263,22 @@ export default function Listeners() {
             const badge = getStatusBadge(listener)
             const tags = getTags(listener)
             return (
-              <button key={listener._id || listener.id} onClick={() => handleOpenDetail(listener)}
+              <button key={listener._id || listener.id} className="list-item" onClick={() => handleOpenDetail(listener)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 12, padding: 12,
                   backgroundColor: 'var(--bg-tertiary)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border)',
                   cursor: 'pointer', textAlign: 'left', width: '100%',
                 }}>
-                <div style={avatarStyle(listener.name)}>
+                <div className="list-item-avatar" style={avatarStyle(listener.name)}>
                   <span style={{ color: '#fff', fontSize: 17, fontWeight: 700 }}>
                     {getInitials(listener.name)}
                   </span>
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                    <span style={{ color: '#fff', fontSize: 15, fontWeight: 700 }}>{listener.name || 'Unknown'}</span>
+                    <span className="list-item-name" style={{ color: '#fff', fontSize: 15, fontWeight: 700 }}>{listener.name || 'Unknown'}</span>
                     {tags.map(t => (
-                      <span key={t.label} style={{
+                      <span key={t.label} className="list-item-tag" style={{
                         color: t.color, fontSize: 10, fontWeight: 700, padding: '1px 6px',
                         borderRadius: 10, backgroundColor: t.color + '1a',
                       }}>
@@ -300,7 +300,7 @@ export default function Listeners() {
                     </div>
                   )}
                 </div>
-                <span style={{
+                <span className="list-item-badge" style={{
                   fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 12,
                   color: badge.color, backgroundColor: badge.bg, border: `1px solid ${badge.color}33`,
                   whiteSpace: 'nowrap', flexShrink: 0,

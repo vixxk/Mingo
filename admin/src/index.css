@@ -58,6 +58,13 @@
   }
 }
 
+/* Tablet */
+@media (max-width: 900px) and (min-width: 601px) {
+  .tablet-grid-2 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
 /* Utility classes for responsive behavior */
 @media (max-width: 600px) {
   .hide-mobile { display: none !important; }
@@ -101,6 +108,598 @@
   .login-card {
     padding: 24px !important;
     margin: 10px !important;
+  }
+
+  /* ========= COMPREHENSIVE MOBILE OVERRIDES ========= */
+
+  /* Page wrapper - remove min-height forcing full screen */
+  .page-wrap {
+    min-height: auto !important;
+    padding: var(--page-padding) !important;
+  }
+
+  /* Headers */
+  .page-header {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    margin-bottom: 12px !important;
+  }
+  .page-header-title {
+    font-size: 17px !important;
+  }
+  .page-header-sub {
+    font-size: 12px !important;
+  }
+  .page-header-count {
+    font-size: 10px !important;
+    padding: 1px 7px !important;
+  }
+
+  /* Back button + title area */
+  .page-hdr-row {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    margin-bottom: 12px !important;
+  }
+  .page-hdr-row .back-btn {
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+  }
+  .page-hdr-row .back-btn svg {
+    width: 16px !important;
+    height: 16px !important;
+  }
+  .page-hdr-row .icon-box {
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+    border-radius: 8px !important;
+  }
+  .page-hdr-row .icon-box svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+  .page-hdr-row h1 {
+    font-size: 17px !important;
+  }
+
+  /* Search bars */
+  .search-bar {
+    height: 36px !important;
+    margin-bottom: 12px !important;
+    padding: 0 10px !important;
+  }
+  .search-bar input {
+    font-size: 13px !important;
+  }
+  .search-bar svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+  .search-btn {
+    height: 36px !important;
+    padding: 0 12px !important;
+    font-size: 12px !important;
+  }
+
+  /* Filter tabs - smaller & scrollable */
+  .filter-tabs {
+    gap: 6px !important;
+    margin-bottom: 12px !important;
+  }
+  .filter-tabs button {
+    padding: 5px 12px !important;
+    font-size: 11px !important;
+    border-radius: 14px !important;
+  }
+
+  /* Stat cards grid - 2 columns */
+  .stat-cards {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+    margin-bottom: var(--section-gap) !important;
+  }
+  .stat-card {
+    padding: 14px !important;
+  }
+  .stat-card-value {
+    font-size: 20px !important;
+  }
+
+  /* Mini cards - 2 columns */
+  .mini-cards {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+  .mini-card {
+    padding: 10px 12px !important;
+  }
+  .mini-card-title {
+    font-size: 9px !important;
+  }
+  .mini-card-value {
+    font-size: 16px !important;
+  }
+  .mini-card-sub {
+    font-size: 9px !important;
+  }
+  .mini-card-icon {
+    width: 22px !important;
+    height: 22px !important;
+  }
+  .mini-card-icon svg {
+    width: 12px !important;
+    height: 12px !important;
+  }
+
+  /* Section containers */
+  .section-card {
+    padding: var(--card-padding) !important;
+    margin-bottom: var(--section-gap) !important;
+    border-radius: var(--radius-lg) !important;
+  }
+  .section-title {
+    font-size: 15px !important;
+  }
+  .section-header {
+    margin-bottom: 10px !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  /* List items (users, listeners, etc.) */
+  .list-item {
+    padding: 10px !important;
+    border-radius: var(--radius-lg) !important;
+    gap: 10px !important;
+  }
+  .list-item-avatar {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+    font-size: 14px !important;
+    border-radius: 18px !important;
+  }
+  .list-item-name {
+    font-size: 13px !important;
+  }
+  .list-item-detail {
+    font-size: 11px !important;
+  }
+  .list-item-tag {
+    font-size: 9px !important;
+    padding: 1px 5px !important;
+  }
+  .list-item-stats svg {
+    width: 11px !important;
+    height: 11px !important;
+  }
+  .list-item-stats span {
+    font-size: 11px !important;
+  }
+  .list-item-badge {
+    font-size: 10px !important;
+    padding: 3px 7px !important;
+  }
+
+  /* Section stat item rows */
+  .stat-row-item {
+    padding: 8px 10px !important;
+  }
+  .stat-row-item svg {
+    width: 12px !important;
+    height: 12px !important;
+  }
+  .stat-row-label {
+    font-size: 11px !important;
+  }
+  .stat-row-value {
+    font-size: 13px !important;
+  }
+
+  /* Insight boxes (3-col below charts) */
+  .insight-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+  .insight-box {
+    padding: 8px 10px !important;
+    gap: 8px !important;
+  }
+  .insight-box-icon {
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px !important;
+  }
+  .insight-box-icon svg {
+    width: 12px !important;
+    height: 12px !important;
+  }
+  .insight-label {
+    font-size: 8px !important;
+  }
+  .insight-value {
+    font-size: 13px !important;
+  }
+
+  /* Management modules grid */
+  .modules-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+  .module-btn {
+    padding: 14px 8px !important;
+    gap: 6px !important;
+  }
+  .module-btn .module-icon {
+    width: 34px !important;
+    height: 34px !important;
+  }
+  .module-btn .module-icon svg {
+    width: 17px !important;
+    height: 17px !important;
+  }
+  .module-btn .module-label {
+    font-size: 11px !important;
+  }
+
+  /* Activity items */
+  .activity-item {
+    padding: 10px !important;
+    gap: 10px !important;
+  }
+  .activity-item-icon {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+  }
+  .activity-item-icon svg {
+    width: 15px !important;
+    height: 15px !important;
+  }
+  .activity-item-text {
+    font-size: 12px !important;
+  }
+  .activity-item-time {
+    font-size: 10px !important;
+    min-width: 80px !important;
+  }
+
+  /* Two column layouts */
+  .two-col {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  /* Pagination */
+  .pagination {
+    gap: 10px !important;
+    margin-top: 16px !important;
+  }
+  .pagination button {
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+  }
+  .pagination button svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+  .pagination span {
+    font-size: 12px !important;
+  }
+
+  /* Chart containers */
+  .chart-container {
+    height: 200px !important;
+  }
+  .chart-container-sm {
+    height: 180px !important;
+  }
+  .chart-controls {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+  .chart-controls select {
+    font-size: 11px !important;
+    padding: 5px 8px !important;
+  }
+  .chart-controls button {
+    font-size: 11px !important;
+    padding: 5px 8px !important;
+  }
+  .chart-controls label {
+    font-size: 11px !important;
+  }
+
+  /* Session card */
+  .session-card {
+    padding: 14px !important;
+  }
+  .session-participants {
+    gap: 8px !important;
+  }
+  .session-participant-avatar {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+  }
+  .session-participant-name {
+    font-size: 12px !important;
+  }
+  .session-stats-row {
+    gap: 6px !important;
+    padding: 10px 0 !important;
+  }
+  .session-stat-item {
+    padding: 6px 10px !important;
+    gap: 6px !important;
+  }
+  .session-stat-item svg {
+    width: 13px !important;
+    height: 13px !important;
+  }
+  .session-stat-label {
+    font-size: 8px !important;
+  }
+  .session-stat-value {
+    font-size: 12px !important;
+  }
+
+  /* Modal/overlay */
+  .modal-overlay {
+    padding: var(--page-padding) !important;
+    align-items: flex-end !important;
+  }
+  .modal-content {
+    max-width: 100% !important;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0 !important;
+    max-height: 85vh !important;
+  }
+  .modal-content h2 {
+    font-size: 16px !important;
+  }
+
+  /* Confirm dialogs */
+  .confirm-dialog {
+    max-width: 300px !important;
+    padding: 20px !important;
+  }
+  .confirm-dialog h2 {
+    font-size: 16px !important;
+  }
+  .confirm-dialog p {
+    font-size: 12px !important;
+  }
+
+  /* Settings page */
+  .settings-link-btn {
+    padding: 12px 14px !important;
+    gap: 10px !important;
+  }
+  .settings-link-btn .settings-icon {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+  }
+  .settings-link-btn .settings-icon svg {
+    width: 16px !important;
+    height: 16px !important;
+  }
+  .settings-link-btn .settings-label {
+    font-size: 13px !important;
+  }
+
+  /* Wallet page */
+  .wallet-package-card {
+    padding: 14px !important;
+  }
+  .wallet-form-grid {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+  .wallet-conversion-row {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+  .wallet-conversion-row input {
+    width: 60px !important;
+    font-size: 14px !important;
+  }
+  .wallet-earnings-row {
+    flex-wrap: wrap !important;
+  }
+
+  /* Profile approval cards */
+  .approval-card-header {
+    padding: 10px 12px !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+  .approval-card-body {
+    padding: 10px 12px !important;
+  }
+  .approval-name {
+    font-size: 13px !important;
+  }
+  .approval-actions {
+    padding: 10px 12px !important;
+    gap: 6px !important;
+  }
+  .approval-actions button {
+    font-size: 12px !important;
+    padding: 8px 0 !important;
+  }
+
+  /* Best choice / Banned list items */
+  .member-card {
+    padding: 10px !important;
+    gap: 10px !important;
+  }
+  .member-card .member-avatar {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+    font-size: 14px !important;
+  }
+  .member-name {
+    font-size: 13px !important;
+  }
+  .member-detail {
+    font-size: 11px !important;
+  }
+
+  /* Payout / Report cards */
+  .report-card, .payout-card {
+    padding: 12px !important;
+  }
+
+  /* Notifications */
+  .notif-history-item {
+    padding: var(--card-padding) !important;
+  }
+  .notif-campaign-title {
+    font-size: 13px !important;
+  }
+  .notif-target-btn {
+    font-size: 11px !important;
+    padding: 8px 4px !important;
+    gap: 4px !important;
+  }
+  .notif-target-btn svg {
+    width: 13px !important;
+    height: 13px !important;
+  }
+  .notif-delivery-btn {
+    font-size: 11px !important;
+    padding: 8px 4px !important;
+  }
+
+  /* Tables & data rows */
+  .data-row-item {
+    padding: 8px 10px !important;
+    gap: 6px !important;
+  }
+
+  /* Toggle section buttons */
+  .section-toggle-btn {
+    font-size: 10px !important;
+    padding: 5px 10px !important;
+  }
+
+  /* Period / date selectors */
+  .period-selector {
+    padding: 10px 12px !important;
+    gap: 6px !important;
+  }
+  .period-selector button {
+    font-size: 11px !important;
+    padding: 4px 10px !important;
+  }
+  .period-selector span {
+    font-size: 10px !important;
+  }
+
+  /* Load more button */
+  .load-more-btn {
+    padding: 10px 20px !important;
+    font-size: 12px !important;
+  }
+
+  /* User profile card in settings */
+  .profile-card {
+    padding: var(--card-padding) !important;
+  }
+  .profile-card .profile-avatar {
+    width: 48px !important;
+    height: 48px !important;
+    min-width: 48px !important;
+  }
+  .profile-card .profile-avatar svg {
+    width: 26px !important;
+    height: 26px !important;
+  }
+  .profile-card .profile-name {
+    font-size: 17px !important;
+  }
+
+  /* Logout button */
+  .logout-btn {
+    padding: 14px !important;
+    font-size: 14px !important;
+  }
+
+  /* Tabs bar - guarantee horizontal scroll */
+  .tabs-scroll {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    gap: 6px !important;
+    padding-bottom: 4px !important;
+  }
+  .tabs-scroll::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  /* Hide stat card rows that are redundant on mobile */
+  .hide-mobile-row {
+    display: none !important;
+  }
+
+  /* Full-width action buttons on mobile */
+  .mobile-full-btn {
+    width: 100% !important;
+  }
+
+  /* Smaller gap for action button groups */
+  .action-btn-group {
+    gap: 6px !important;
+  }
+  .action-btn-group button {
+    font-size: 11px !important;
+    padding: 8px 0 !important;
+  }
+
+  /* Report detail fields */
+  .report-detail-section {
+    padding: 12px !important;
+  }
+
+  /* Duration/coins stat groupings */
+  .session-stat-compact svg {
+    width: 12px !important;
+    height: 12px !important;
+  }
+
+  /* Add/list package modal */
+  .add-package-form {
+    padding: 14px !important;
+  }
+
+  /* Empty state */
+  .empty-state {
+    padding: 40px 16px !important;
+  }
+  .empty-state svg {
+    width: 36px !important;
+    height: 36px !important;
+  }
+  .empty-state p {
+    font-size: 13px !important;
+  }
+
+  /* New campaign form */
+  .campaign-form {
+    padding: 14px !important;
+  }
+  .campaign-form textarea {
+    font-size: 13px !important;
+  }
+  .campaign-form input {
+    font-size: 13px !important;
   }
 }
 

@@ -101,10 +101,10 @@ export default function BestChoice() {
   })
 
   return (
-    <div style={{ backgroundColor: 'var(--bg-primary)', minHeight: '100vh', padding: 'var(--page-padding)' }}>
+    <div className="page-wrap" style={{ backgroundColor: 'var(--bg-primary)', minHeight: '100vh', padding: 'var(--page-padding)' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16, gap: 12 }}>
-        <button onClick={() => navigate(-1)}
+      <div className="page-hdr-row" style={{ display: 'flex', alignItems: 'center', marginBottom: 16, gap: 12 }}>
+        <button className="back-btn" onClick={() => navigate(-1)}
           style={{
             background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 12,
             width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -114,7 +114,7 @@ export default function BestChoice() {
         </button>
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <h1 style={{ color: 'var(--text-primary)', fontSize: 'var(--header-font-size)', fontWeight: 800, margin: 0, letterSpacing: '-0.3px' }}>Best Choice</h1>
+            <h1 className="page-header-title" style={{ color: 'var(--text-primary)', fontSize: 'var(--header-font-size)', fontWeight: 800, margin: 0, letterSpacing: '-0.3px' }}>Best Choice</h1>
             <span style={{
               background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600,
               padding: '2px 10px', borderRadius: 20, border: '1px solid var(--border)',
@@ -123,7 +123,7 @@ export default function BestChoice() {
             </span>
           </div>
         </div>
-        <button onClick={() => setShowModal(true)}
+        <button className="search-btn" onClick={() => setShowModal(true)}
           style={{
             padding: '10px 18px', borderRadius: 12, border: 'none',
             backgroundColor: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 700,
@@ -141,7 +141,7 @@ export default function BestChoice() {
           ))}
         </div>
       ) : listeners.length === 0 ? (
-        <div style={{
+        <div className="empty-state" style={{
           textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontSize: 14,
         }}>
           <div style={{ fontSize: 40, marginBottom: 12, opacity: 0.5 }}>&#9734;</div>
@@ -156,18 +156,18 @@ export default function BestChoice() {
             const id = listener._id || listener.id
             const loading = actionLoading === id
             return (
-              <div key={id} style={{
+              <div key={id} className="list-item" style={{
                 display: 'flex', alignItems: 'center', gap: 12, padding: 12,
                 backgroundColor: 'var(--bg-tertiary)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border)',
               }}>
-                <div style={avatarStyle(listener.name)}>
+                <div className="list-item-avatar" style={avatarStyle(listener.name)}>
                   <span style={{ color: '#fff', fontSize: 17, fontWeight: 700 }}>
                     {getInitials(listener.name)}
                   </span>
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                    <span style={{ color: '#fff', fontSize: 15, fontWeight: 700 }}>
+                    <span className="list-item-name" style={{ color: '#fff', fontSize: 15, fontWeight: 700 }}>
                       {listener.name || 'Unknown'}
                     </span>
                     <span style={{
@@ -177,7 +177,7 @@ export default function BestChoice() {
                       Best Choice
                     </span>
                   </div>
-                  <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>{listener.phone || '—'}</span>
+                  <span className="list-item-detail" style={{ color: 'var(--text-muted)', fontSize: 13 }}>{listener.phone || '—'}</span>
                   <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
                     {(listener.rating ?? listener.avgRating) != null && (
                       <span style={{ color: '#F59E0B', fontSize: 12, display: 'flex', alignItems: 'center', gap: 3 }}>
@@ -214,7 +214,7 @@ export default function BestChoice() {
             display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
             overflow: 'auto', padding: 20,
           }}>
-          <div onClick={e => e.stopPropagation()} style={{
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{
             width: '100%', maxWidth: 520, backgroundColor: 'var(--bg-secondary)',
             borderRadius: 24, border: '1px solid var(--border)', marginTop: 20,
             overflow: 'hidden',
@@ -237,7 +237,7 @@ export default function BestChoice() {
             </div>
 
             <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ position: 'relative' }}>
+              <div className="search-bar" style={{ position: 'relative' }}>
                 <IoSearch size={16} color="var(--text-muted)"
                   style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
                 <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
@@ -272,7 +272,7 @@ export default function BestChoice() {
                   const alreadyBestChoice = listeners.some(l => (l._id || l.id) === id)
                   const loading = actionLoading === id
                   return (
-                    <div key={id} style={{
+                    <div key={id} className="list-item" style={{
                       display: 'flex', alignItems: 'center', gap: 12, padding: 10,
                       borderRadius: 'var(--radius-md)', marginBottom: 6,
                       backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',

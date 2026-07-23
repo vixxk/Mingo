@@ -4,7 +4,7 @@ export default function LogoutPopup({ visible, onConfirm, onCancel, loading = fa
   if (!visible) return null
 
   return (
-    <div
+    <div className="modal-overlay"
       onClick={onCancel}
       style={{
         position: 'fixed',
@@ -21,7 +21,7 @@ export default function LogoutPopup({ visible, onConfirm, onCancel, loading = fa
         animation: 'fadeIn 0.2s ease',
       }}
     >
-      <div
+      <div className="modal-content"
         onClick={e => e.stopPropagation()}
         style={{
           width: '100%',
@@ -37,7 +37,7 @@ export default function LogoutPopup({ visible, onConfirm, onCancel, loading = fa
           position: 'relative',
         }}
       >
-        <button
+        <button className="modal-close-btn"
           onClick={onCancel}
           disabled={loading}
           style={{

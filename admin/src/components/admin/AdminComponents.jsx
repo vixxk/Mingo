@@ -2,6 +2,7 @@ export function StatCard({ title, value, icon, trend, subtitle, onClick }) {
   return (
     <div
       onClick={onClick}
+      className="stat-card"
       style={{
         borderRadius: 'var(--radius-xl)',
         padding: '20px',
@@ -30,7 +31,7 @@ export function StatCard({ title, value, icon, trend, subtitle, onClick }) {
         justifyContent: 'space-between',
         marginBottom: 12,
       }}>
-        <span style={{
+        <span className="stat-card-label" style={{
           fontSize: 12,
           color: 'var(--text-muted)',
           fontWeight: 600,
@@ -54,7 +55,7 @@ export function StatCard({ title, value, icon, trend, subtitle, onClick }) {
           </span>
         )}
       </div>
-      <div style={{
+      <div className="stat-card-value" style={{
         fontFamily: 'var(--font-display)',
         fontSize: 26,
         fontWeight: 800,
@@ -144,7 +145,7 @@ export function StatusBadge({ status, color }) {
 
 export function SectionTitle({ children }) {
   return (
-    <h2 style={{
+    <h2 className="section-title" style={{
       fontFamily: 'var(--font-display)',
       fontSize: 17,
       fontWeight: 700,
@@ -160,8 +161,8 @@ export function SectionTitle({ children }) {
 export function ActivityItem({ activity, isLast }) {
   const color = activity.color || 'var(--info)'
   return (
-    <div>
-      <div style={{
+    <div className="activity-item">
+      <div className="activity-item-row" style={{
         display: 'flex',
         alignItems: 'center',
         padding: '12px 0',

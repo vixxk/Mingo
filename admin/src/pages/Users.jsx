@@ -125,11 +125,12 @@ export default function Users() {
   }
 
   return (
-    <div style={{ backgroundColor: 'var(--bg-primary)', minHeight: '100vh', padding: 'var(--page-padding)' }}>
+    <div className="page-wrap" style={{ backgroundColor: 'var(--bg-primary)', padding: 'var(--page-padding)' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 24 }}>
+      <div className="page-hdr-row" style={{ display: 'flex', alignItems: 'center', marginBottom: 24 }}>
         <button
           onClick={() => navigate(-1)}
+          className="back-btn"
           style={{
             width: 36, height: 36, borderRadius: 10,
             backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
@@ -140,15 +141,15 @@ export default function Users() {
           <IoChevronBack size={20} />
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
-          <div style={{
+          <div className="icon-box" style={{
             width: 36, height: 36, borderRadius: 10,
             background: 'var(--accent-gradient)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             <IoPeople size={18} color="#fff" />
           </div>
-          <h1 style={{ fontSize: 'var(--header-font-size)', fontWeight: 800, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.3px' }}>Users</h1>
-          <div style={{
+          <h1 className="page-header-title" style={{ fontSize: 'var(--header-font-size)', fontWeight: 800, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.3px' }}>Users</h1>
+          <div className="page-header-count" style={{
             padding: '2px 10px', borderRadius: 10,
             backgroundColor: 'var(--accent-mid)',
           }}>
@@ -158,7 +159,7 @@ export default function Users() {
       </div>
 
       {/* Search */}
-      <div style={{
+      <div className="search-bar" style={{
         display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16,
       }}>
         <div style={{
@@ -191,6 +192,7 @@ export default function Users() {
         </div>
         <button
           onClick={handleSearch}
+          className="search-btn"
           style={{
             height: 42, padding: '0 18px',             borderRadius: 'var(--radius-md)', border: 'none',
             background: 'var(--accent-gradient)',
@@ -203,7 +205,7 @@ export default function Users() {
       </div>
 
       {/* Filter Tabs */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20, overflowX: 'auto' }}>
+      <div className="filter-tabs tabs-scroll" style={{ display: 'flex', gap: 8, marginBottom: 20, overflowX: 'auto' }}>
         {filters.map(filter => {
           const isActive = activeFilter === filter
           return (
@@ -243,6 +245,7 @@ export default function Users() {
           {users.map((user, index) => (
             <div
               key={user.id || index}
+              className="list-item"
               onClick={() => setSelectedUser(user)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 12,
@@ -254,7 +257,7 @@ export default function Users() {
               onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
             >
               {/* Avatar */}
-              <div style={{
+              <div className="list-item-avatar" style={{
                 width: 48, height: 48, borderRadius: 24, flexShrink: 0,
                 backgroundColor: getAvatarColor(user.name),
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
