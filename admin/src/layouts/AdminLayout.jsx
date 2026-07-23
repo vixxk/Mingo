@@ -200,18 +200,18 @@ export default function AdminLayout() {
               src="/logo.png"
               alt="Mingo"
               style={{
-                width: collapsed ? 34 : 40,
-                height: collapsed ? 34 : 40,
+                width: collapsed ? 40 : 50,
+                height: collapsed ? 40 : 50,
                 borderRadius: 12,
                 objectFit: 'contain',
                 flexShrink: 0,
-                marginBottom: collapsed ? 4 : 10,
+                marginBottom: collapsed ? 6 : 12,
                 transition: 'all 0.3s',
               }}
             />
             <div style={{
               fontFamily: 'var(--font-display)',
-              fontSize: collapsed ? 0 : 18,
+              fontSize: collapsed ? 0 : 22,
               fontWeight: 800,
               color: 'var(--text-primary)',
               letterSpacing: '-0.3px',
@@ -223,7 +223,7 @@ export default function AdminLayout() {
               Mingo
             </div>
             <div style={{
-              fontSize: collapsed ? 0 : 11,
+              fontSize: collapsed ? 0 : 14,
               color: 'var(--accent)',
               fontWeight: 600,
               opacity: collapsed ? 0 : 1,
