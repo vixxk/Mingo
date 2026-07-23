@@ -637,7 +637,7 @@ export default function Dashboard() {
                     {badge > 99 ? '99+' : badge}
                   </div>
                 )}
-                <div style={{
+                <div className="module-icon" style={{
                   width: 44,
                   height: 44,
                   borderRadius: 'var(--radius-md)',
@@ -648,14 +648,14 @@ export default function Dashboard() {
                 }}>
                   <Icon size={22} color={mod.color} />
                 </div>
-                <span style={{
+                <span className="module-label" style={{
                   fontSize: 12,
                   fontWeight: 700,
                   color: 'var(--text-secondary)',
                 }}>
                   {mod.label}
                 </span>
-                <IoArrowForward size={14} color="var(--text-muted)" />
+                <IoArrowForward className="module-arrow" size={14} color="var(--text-muted)" />
               </button>
             )
           })}

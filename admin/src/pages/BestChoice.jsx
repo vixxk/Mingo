@@ -60,7 +60,7 @@ export default function BestChoice() {
     const timer = setTimeout(async () => {
       setSearching(true)
       try {
-        const res = await adminAPI.getListeners({ status: 'approved', search: searchQuery })
+        const res = await adminAPI.getListeners({ search: searchQuery, limit: 50 })
         const data = res.data || res.listeners || res || []
         setSearchResults(Array.isArray(data) ? data : [])
       } catch {
@@ -123,10 +123,10 @@ export default function BestChoice() {
             </span>
           </div>
         </div>
-        <button className="search-btn" onClick={() => setShowModal(true)}
+        <button onClick={() => setShowModal(true)}
           style={{
             padding: '10px 18px', borderRadius: 12, border: 'none',
-            backgroundColor: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 700,
+            background: 'var(--accent-gradient)', color: '#fff', fontSize: 13, fontWeight: 700,
             cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
           }}>
           <IoAdd size={18} />
@@ -221,9 +221,9 @@ export default function BestChoice() {
           }}>
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '16px 20px', borderBottom: '1px solid var(--border)',
+              padding: '14px 16px', borderBottom: '1px solid var(--border)',
             }}>
-              <span style={{ color: '#fff', fontSize: 17, fontWeight: 700 }}>
+              <span style={{ color: '#fff', fontSize: 16, fontWeight: 700 }}>
                 Add Best Choice Listener
               </span>
               <button onClick={() => setShowModal(false)}
@@ -236,21 +236,22 @@ export default function BestChoice() {
               </button>
             </div>
 
-            <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)' }}>
-              <div className="search-bar" style={{ position: 'relative' }}>
+            <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                 <IoSearch size={16} color="var(--text-muted)"
-                  style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
+                  style={{ position: 'absolute', left: 12, pointerEvents: 'none' }} />
                 <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                  placeholder="Search approved listeners..." autoFocus
+                  placeholder="Search listeners..." autoFocus
                   style={{
                     width: '100%', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
-                    borderRadius: 'var(--radius-md)', color: '#fff', padding: '10px 12px 10px 36px',
-                    fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                    borderRadius: 'var(--radius-md)', color: '#fff',
+                    padding: '10px 12px 10px 36px',
+                    fontSize: 14, outline: 'none', boxSizing: 'border-box',
                   }} />
               </div>
             </div>
 
-            <div style={{ padding: 12, maxHeight: 400, overflow: 'auto' }}>
+            <div style={{ padding: 12, maxHeight: 360, overflow: 'auto' }}>
               {searching ? (
                 <div style={{ padding: 20 }}>
                   {[1, 2, 3].map(i => (
@@ -260,16 +261,21 @@ export default function BestChoice() {
                 </div>
               ) : !searchQuery.trim() ? (
                 <div style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)', fontSize: 13 }}>
-                  Type to search approved listeners
+                  Type to search listeners
                 </div>
               ) : searchResults.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)', fontSize: 13 }}>
                   No listeners found
                 </div>
+              ) : searchResults.every(listener => listeners.some(l => (l._id || l.id) === (listener._id || listener.id))) ? (
+                <div style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)', fontSize: 13 }}>
+                  All matching listeners are already in Best Choice
+                </div>
               ) : (
-                searchResults.map(listener => {
+                  searchResults
+                    .filter(listener => !listeners.some(l => (l._id || l.id) === (listener._id || listener.id)))
+                    .map(listener => {
                   const id = listener._id || listener.id
-                  const alreadyBestChoice = listeners.some(l => (l._id || l.id) === id)
                   const loading = actionLoading === id
                   return (
                     <div key={id} className="list-item" style={{
@@ -305,18 +311,17 @@ export default function BestChoice() {
                         )}
                       </div>
                       <button onClick={() => handleToggleBestChoice(listener)}
-                        disabled={loading || alreadyBestChoice}
+                        disabled={loading}
                         style={{
                           padding: '8px 14px', borderRadius: 10, border: 'none',
-                          backgroundColor: alreadyBestChoice
-                            ? 'var(--border)' : loading ? 'var(--text-muted)' : '#10B981',
-                          color: alreadyBestChoice ? 'var(--text-muted)' : '#fff',
+                          backgroundColor: loading ? 'var(--text-muted)' : '#10B981',
+                          color: '#fff',
                           fontSize: 12, fontWeight: 700,
-                          cursor: (loading || alreadyBestChoice) ? 'not-allowed' : 'pointer',
-                          opacity: (loading || alreadyBestChoice) ? 0.6 : 1,
+                          cursor: loading ? 'not-allowed' : 'pointer',
+                          opacity: loading ? 0.6 : 1,
                           whiteSpace: 'nowrap', flexShrink: 0,
                         }}>
-                        {loading ? '...' : alreadyBestChoice ? 'Added' : 'Add'}
+                        {loading ? 'Adding...' : 'Add'}
                       </button>
                     </div>
                   )

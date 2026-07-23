@@ -167,7 +167,7 @@ export function ActivityItem({ activity, isLast }) {
         alignItems: 'center',
         padding: '12px 0',
       }}>
-        <div style={{
+        <div className="activity-item-icon" style={{
           width: 36,
           height: 36,
           borderRadius: '50%',
@@ -182,15 +182,15 @@ export function ActivityItem({ activity, isLast }) {
             <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
           </svg>
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{
+        <div className="activity-item-text" style={{ flex: 1, minWidth: 0 }}>
+          <div className="activity-item-user" style={{
             fontSize: 14,
             fontWeight: 700,
             color: 'var(--text-primary)',
           }}>
             {activity.user}
           </div>
-          <div style={{
+          <div className="activity-item-action" style={{
             fontSize: 12,
             color: 'var(--text-muted)',
             marginTop: 1,
@@ -198,7 +198,7 @@ export function ActivityItem({ activity, isLast }) {
             {activity.action}
           </div>
         </div>
-        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+        <div className="activity-item-time" style={{ textAlign: 'right', flexShrink: 0 }}>
           <div style={{
             fontSize: 11,
             color: 'var(--text-muted)',

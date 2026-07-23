@@ -108,9 +108,9 @@ export default function AdminLayout() {
       backgroundColor: 'var(--bg-primary)',
     }}>
       <style>{`@media (max-width: 600px) { .mobile-sidebar-open { width: 280px !important; } .mobile-main { margin-left: 0 !important; padding-top: 56px !important; } }`}</style>
-      {/* Mobile menu toggle */}
+      {/* Mobile menu toggle (hidden when sidebar open) */}
       <button
-        onClick={() => setSidebarOpen(!sidebarOpen)}
+        onClick={() => setSidebarOpen(true)}
         style={{
           position: 'fixed',
           top: 12,
@@ -121,7 +121,7 @@ export default function AdminLayout() {
           borderRadius: 'var(--radius-md)',
           backgroundColor: 'var(--bg-secondary)',
           border: '1px solid var(--border)',
-          display: isDesktop ? 'none' : 'flex',
+          display: isDesktop || sidebarOpen ? 'none' : 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           cursor: 'pointer',
@@ -131,7 +131,7 @@ export default function AdminLayout() {
         onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'}
         onMouseLeave={e => e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'}
       >
-        {sidebarOpen ? <IoChevronBack size={28} /> : <IoMenu size={28} />}
+        <IoMenu size={28} />
       </button>
 
       {/* Sidebar */}
@@ -163,6 +163,7 @@ export default function AdminLayout() {
           flexDirection: collapsed ? 'column' : 'row',
           alignItems: collapsed ? 'center' : 'center',
           gap: collapsed ? 0 : 0,
+          position: 'relative',
         }}>
           <div style={{
             display: 'flex',
@@ -268,6 +269,41 @@ export default function AdminLayout() {
               }}
 >
                 <IoChevronBack size={18} />
+            </button>
+          )}
+          {/* Mobile close button inside sidebar */}
+          {!isDesktop && sidebarOpen && (
+            <button
+              onClick={() => setSidebarOpen(false)}
+              style={{
+                position: 'absolute',
+                top: 4,
+                right: 4,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 44,
+                height: 44,
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border)',
+                background: 'var(--bg-tertiary)',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                flexShrink: 0,
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.color = 'var(--accent)'
+                e.currentTarget.style.borderColor = 'var(--accent)'
+                e.currentTarget.style.background = 'var(--accent-light)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.color = 'var(--text-muted)'
+                e.currentTarget.style.borderColor = 'var(--border)'
+                e.currentTarget.style.background = 'var(--bg-tertiary)'
+              }}
+            >
+              <IoChevronBack size={24} />
             </button>
           )}
         </div>
@@ -528,7 +564,7 @@ export default function AdminLayout() {
         <div style={{
           maxWidth: 'var(--container-max-width)',
           margin: '0 auto',
-          padding: 'var(--page-padding)',
+          padding: isDesktop ? 'var(--page-padding)' : '0',
         }}>
           <Outlet />
         </div>

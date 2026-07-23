@@ -628,7 +628,7 @@ export default function Analytics() {
             </div>
             {sectionItems.length > 0 ? (
               <div>
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 120, marginBottom: 16 }}>
+                <div className="bar-chart" style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 120, marginBottom: 16 }}>
                   {sectionItems.map((item, i) => {
                     const height = Math.max((item.value / maxVal) * 100, 4)
                     return (
@@ -653,7 +653,7 @@ export default function Analytics() {
                           }}
                           title={`${item.label}: ${formatNumber(item.value)}`}
                         />
-                        <span style={{
+                        <span className="bar-label" style={{
                           fontSize: 8, color: '#4B5563', fontWeight: 600,
                           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                           maxWidth: '100%', textAlign: 'center',
@@ -728,7 +728,7 @@ export default function Analytics() {
 
 function MiniCard({ title, value, icon, color, bg, subtitle }) {
   return (
-    <div style={{
+    <div className="mini-card" style={{
       borderRadius: 'var(--radius-lg)',
       padding: '14px 16px',
       backgroundColor: 'var(--bg-secondary)',
@@ -740,27 +740,27 @@ function MiniCard({ title, value, icon, color, bg, subtitle }) {
       onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <span style={{
+        <span className="mini-card-title" style={{
           fontSize: 10, color: 'var(--text-muted)', fontWeight: 600,
           textTransform: 'uppercase', letterSpacing: '0.3px',
         }}>
           {title}
         </span>
-        <div style={{
+        <div className="mini-card-icon" style={{
           width: 28, height: 28, borderRadius: 8,
           backgroundColor: bg, display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           {icon}
         </div>
       </div>
-      <div style={{
+      <div className="mini-card-value" style={{
         fontSize: 20, fontWeight: 800, color: 'var(--text-primary)',
         letterSpacing: '-0.3px',
       }}>
         {value}
       </div>
       {subtitle && (
-        <div style={{
+        <div className="mini-card-sub" style={{
           fontSize: 10, color: 'var(--text-muted)', fontWeight: 500, marginTop: 4,
         }}>
           {subtitle}

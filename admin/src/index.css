@@ -116,6 +116,9 @@
   .page-wrap {
     min-height: auto !important;
     padding: var(--page-padding) !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
   }
 
   /* Headers */
@@ -211,27 +214,32 @@
   /* Mini cards - 2 columns */
   .mini-cards {
     grid-template-columns: repeat(2, 1fr) !important;
-    gap: 8px !important;
+    gap: 6px !important;
+    margin-bottom: 12px !important;
   }
   .mini-card {
-    padding: 10px 12px !important;
+    padding: 8px 10px !important;
+    border-left-width: 2px !important;
   }
   .mini-card-title {
-    font-size: 9px !important;
+    font-size: 8px !important;
   }
   .mini-card-value {
-    font-size: 16px !important;
+    font-size: 14px !important;
   }
   .mini-card-sub {
-    font-size: 9px !important;
+    font-size: 8px !important;
+    margin-top: 2px !important;
   }
   .mini-card-icon {
-    width: 22px !important;
-    height: 22px !important;
+    width: 20px !important;
+    height: 20px !important;
+    min-width: 20px !important;
+    border-radius: 6px !important;
   }
   .mini-card-icon svg {
-    width: 12px !important;
-    height: 12px !important;
+    width: 11px !important;
+    height: 11px !important;
   }
 
   /* Section containers */
@@ -282,6 +290,10 @@
   .list-item-badge {
     font-size: 10px !important;
     padding: 3px 7px !important;
+    max-width: 80px !important;
+    white-space: normal !important;
+    text-align: center !important;
+    line-height: 1.2 !important;
   }
 
   /* Section stat item rows */
@@ -327,44 +339,56 @@
   /* Management modules grid */
   .modules-grid {
     grid-template-columns: repeat(2, 1fr) !important;
-    gap: 8px !important;
-  }
-  .module-btn {
-    padding: 14px 8px !important;
     gap: 6px !important;
   }
+  .module-btn {
+    padding: 10px 6px !important;
+    gap: 4px !important;
+  }
   .module-btn .module-icon {
-    width: 34px !important;
-    height: 34px !important;
+    width: 28px !important;
+    height: 28px !important;
+    border-radius: 8px !important;
   }
   .module-btn .module-icon svg {
-    width: 17px !important;
-    height: 17px !important;
+    width: 14px !important;
+    height: 14px !important;
   }
   .module-btn .module-label {
-    font-size: 11px !important;
+    font-size: 10px !important;
+  }
+  .module-btn .module-arrow {
+    display: none !important;
   }
 
   /* Activity items */
   .activity-item {
-    padding: 10px !important;
-    gap: 10px !important;
+    padding: 6px !important;
+    gap: 6px !important;
   }
   .activity-item-icon {
-    width: 32px !important;
-    height: 32px !important;
-    min-width: 32px !important;
+    width: 24px !important;
+    height: 24px !important;
+    min-width: 24px !important;
+    margin-right: 6px !important;
   }
   .activity-item-icon svg {
-    width: 15px !important;
-    height: 15px !important;
+    width: 11px !important;
+    height: 11px !important;
   }
   .activity-item-text {
-    font-size: 12px !important;
+    font-size: 10px !important;
+  }
+  .activity-item-text .activity-item-user {
+    font-size: 10px !important;
+  }
+  .activity-item-text .activity-item-action {
+    font-size: 9px !important;
+    margin-top: 0 !important;
   }
   .activity-item-time {
-    font-size: 10px !important;
-    min-width: 80px !important;
+    font-size: 8px !important;
+    min-width: 50px !important;
   }
 
   /* Two column layouts */
@@ -378,12 +402,12 @@
     gap: 10px !important;
     margin-top: 16px !important;
   }
-  .pagination button {
+  .pagination .page-btn {
     width: 30px !important;
     height: 30px !important;
     min-width: 30px !important;
   }
-  .pagination button svg {
+  .pagination .page-btn svg {
     width: 14px !important;
     height: 14px !important;
   }
@@ -397,6 +421,23 @@
   }
   .chart-container-sm {
     height: 180px !important;
+  }
+
+  /* Bar chart (custom analytics bars) */
+  .bar-chart {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    height: 100px !important;
+    gap: 2px !important;
+    padding-bottom: 4px !important;
+    scrollbar-width: none !important;
+  }
+  .bar-chart::-webkit-scrollbar {
+    display: none !important;
+  }
+  .bar-label {
+    font-size: 6px !important;
+    max-width: 24px !important;
   }
   .chart-controls {
     flex-wrap: wrap !important;
@@ -509,7 +550,16 @@
     font-size: 14px !important;
   }
   .wallet-earnings-row {
-    flex-wrap: wrap !important;
+    flex-wrap: nowrap !important;
+    gap: 6px !important;
+  }
+  .wallet-earnings-row input {
+    padding: 8px 10px !important;
+    font-size: 13px !important;
+  }
+  .wallet-earnings-row span {
+    padding: 8px 10px !important;
+    font-size: 11px !important;
   }
 
   /* Profile approval cards */
@@ -604,8 +654,13 @@
 
   /* Load more button */
   .load-more-btn {
-    padding: 10px 20px !important;
-    font-size: 12px !important;
+    width: 100% !important;
+    padding: 12px 16px !important;
+    font-size: 13px !important;
+    border-radius: var(--radius-md) !important;
+  }
+  .load-more-btn:active {
+    transform: scale(0.98) !important;
   }
 
   /* User profile card in settings */
@@ -629,6 +684,11 @@
   .logout-btn {
     padding: 14px !important;
     font-size: 14px !important;
+  }
+
+  /* Main content area */
+  .mobile-main {
+    overflow-x: hidden !important;
   }
 
   /* Tabs bar - guarantee horizontal scroll */

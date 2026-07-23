@@ -640,64 +640,64 @@ export default function Wallet() {
                 backgroundColor: 'var(--accent-light)', color: 'var(--accent)',
                 fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
               }}>
-                coins / min
-              </span>
-            </div>
+              coins / min
+            </span>
           </div>
-          <div style={{ marginBottom: 20 }}>
-            <label style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>
-              <IoCall size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
-              Audio Call Payout Rate
-            </label>
-            <div className="wallet-earnings-row" style={{
-              display: 'flex', alignItems: 'center', gap: 8,
+        </div>
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>
+            <IoCall size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
+            Audio Call Payout Rate
+          </label>
+          <div className="wallet-earnings-row" style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+          }}>
+            <input
+              value={earningRates.audioPayoutRate}
+              onChange={e => setEarningRates({ ...earningRates, audioPayoutRate: e.target.value })}
+              placeholder="e.g. 10"
+              type="number"
+              style={{
+                flex: 1, backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+                borderRadius: 10, color: '#fff', padding: '12px 14px', fontSize: 14,
+                outline: 'none', boxSizing: 'border-box',
+              }}
+            />
+            <span style={{
+              padding: '10px 14px', borderRadius: 10,
+              backgroundColor: 'var(--accent-light)', color: 'var(--accent)',
+              fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
             }}>
-              <input
-                value={earningRates.audioPayoutRate}
-                onChange={e => setEarningRates({ ...earningRates, audioPayoutRate: e.target.value })}
-                placeholder="e.g. 10"
-                type="number"
-                style={{
-                  flex: 1, backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
-                  borderRadius: 10, color: '#fff', padding: '12px 14px', fontSize: 14,
-                  outline: 'none', boxSizing: 'border-box',
-                }}
-              />
-              <span style={{
-                padding: '10px 14px', borderRadius: 10,
-                backgroundColor: 'var(--accent-light)', color: 'var(--accent)',
-                fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
-              }}>
-                coins / min
-              </span>
-            </div>
+              coins / min
+            </span>
           </div>
-          <div style={{ marginBottom: 20 }}>
-            <label style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>
-              <IoChatbubbles size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
-              Chat Payout Rate
-            </label>
-            <div className="wallet-earnings-row" style={{
-              display: 'flex', alignItems: 'center', gap: 8,
+        </div>
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>
+            <IoChatbubbles size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
+            Chat Payout Rate
+          </label>
+          <div className="wallet-earnings-row" style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+          }}>
+            <input
+              value={earningRates.chatPayoutRate}
+              onChange={e => setEarningRates({ ...earningRates, chatPayoutRate: e.target.value })}
+              placeholder="e.g. 10"
+              type="number"
+              style={{
+                flex: 1, backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+                borderRadius: 10, color: '#fff', padding: '12px 14px', fontSize: 14,
+                outline: 'none', boxSizing: 'border-box',
+              }}
+            />
+            <span style={{
+              padding: '10px 14px', borderRadius: 10,
+              backgroundColor: 'var(--accent-light)', color: 'var(--accent)',
+              fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
             }}>
-              <input
-                value={earningRates.chatPayoutRate}
-                onChange={e => setEarningRates({ ...earningRates, chatPayoutRate: e.target.value })}
-                placeholder="e.g. 10"
-                type="number"
-                style={{
-                  flex: 1, backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
-                  borderRadius: 10, color: '#fff', padding: '12px 14px', fontSize: 14,
-                  outline: 'none', boxSizing: 'border-box',
-                }}
-              />
-              <span style={{
-                padding: '10px 14px', borderRadius: 10,
-                backgroundColor: 'var(--accent-light)', color: 'var(--accent)',
-                fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
-              }}>
-                coins / 5 min
-              </span>
+              coins / 5 min
+            </span>
             </div>
           </div>
           <button
@@ -778,9 +778,6 @@ export default function Wallet() {
 
 function IoCashIcon({ size, style }) {
   return (
-    <svg width={size} height={size} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="12" y1="1" x2="12" y2="23" />
-      <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-    </svg>
+    <span style={{ fontSize: size, lineHeight: 1, ...style }}>₹</span>
   )
 }
