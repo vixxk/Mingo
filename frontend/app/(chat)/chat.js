@@ -16,34 +16,9 @@ import { socketService } from '../../utils/socket';
 import GiftPopup from '../../components/shared/GiftPopup';
 import GiftAnimationOverlay from '../../components/call/GiftAnimationOverlay';
 import EndChatPopup from '../../components/shared/EndChatPopup';
+import { getAvatarUrl } from '../../utils/avatars';
 
-const getAvatarImage = (gender, index) => {
-  const parsedIndex = parseInt(index, 10) || 0;
-  if (gender === 'Male') {
-    const m = [
-      require('../../images/male_avatar_1_1776972918440.png'),
-      require('../../images/male_avatar_2_1776972933241.png'),
-      require('../../images/male_avatar_3_1776972950218.png'),
-      require('../../images/male_avatar_4_1776972963577.png'),
-      require('../../images/male_avatar_5_1776972978900.png'),
-      require('../../images/male_avatar_6_1776972993180.png'),
-      require('../../images/male_avatar_7_1776973008143.png'),
-      require('../../images/male_avatar_8_1776973021635.png'),
-    ];
-    return m[parsedIndex] || m[0];
-  }
-  const f = [
-    require('../../images/female_avatar_1_1776973035859.png'),
-    require('../../images/female_avatar_2_1776973050039.png'),
-    require('../../images/female_avatar_3_1776973063471.png'),
-    require('../../images/female_avatar_4_1776973077539.png'),
-    require('../../images/female_avatar_5_1776973090730.png'),
-    require('../../images/female_avatar_6_1776973108100.png'),
-    require('../../images/female_avatar_7_1776973124018.png'),
-    require('../../images/female_avatar_8_1776973138772.png'),
-  ];
-  return f[parsedIndex] || f[0];
-};
+
 
 const formatDateLabel = (dateStr) => {
   const d = new Date(dateStr);
@@ -289,7 +264,7 @@ export default function ChatScreen() {
   const [otherAvatarIndex, setOtherAvatarIndex] = useState(paramAvatarIndex);
   const [otherGender, setOtherGender] = useState(paramGender);
 
-  const avatarSource = getAvatarImage(otherGender, otherAvatarIndex);
+  const avatarSource = { uri: getAvatarUrl(otherGender, otherAvatarIndex) };
 
   const formatDuration = (secs) => {
     const m = Math.floor(secs / 60);

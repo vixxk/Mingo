@@ -17,29 +17,10 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, SCREEN_WIDTH } from '../../utils/responsive';
 import { userAPI, authAPI } from '../../utils/api';
+import { getAvatarUrl, AVATAR_COUNT } from '../../utils/avatars';
 import StatusPopup from '../../components/shared/StatusPopup';
 
-const MALE_AVATARS = [
-  require('../../images/male_avatar_1_1776972918440.png'),
-  require('../../images/male_avatar_2_1776972933241.png'),
-  require('../../images/male_avatar_3_1776972950218.png'),
-  require('../../images/male_avatar_4_1776972963577.png'),
-  require('../../images/male_avatar_5_1776972978900.png'),
-  require('../../images/male_avatar_6_1776972993180.png'),
-  require('../../images/male_avatar_7_1776973008143.png'),
-  require('../../images/male_avatar_8_1776973021635.png'),
-];
 
-const FEMALE_AVATARS = [
-  require('../../images/female_avatar_1_1776973035859.png'),
-  require('../../images/female_avatar_2_1776973050039.png'),
-  require('../../images/female_avatar_3_1776973063471.png'),
-  require('../../images/female_avatar_4_1776973077539.png'),
-  require('../../images/female_avatar_5_1776973090730.png'),
-  require('../../images/female_avatar_6_1776973108100.png'),
-  require('../../images/female_avatar_7_1776973124018.png'),
-  require('../../images/female_avatar_8_1776973138772.png'),
-];
 
 const INTERESTS = [
   { id: '1', label: 'Culture & Regional', icon: 'diamond-outline' },
@@ -200,7 +181,7 @@ export default function EditProfileScreen() {
     }
   };
 
-  const currentAvatars = gender === 'Male' ? MALE_AVATARS : FEMALE_AVATARS;
+  const avatarCount = AVATAR_COUNT;
 
   const toggleInterest = (id) => {
     setSelectedInterests((prev) => {
@@ -246,12 +227,12 @@ export default function EditProfileScreen() {
         <Text style={styles.sectionLabel}>Your Avatar</Text>
         <View style={styles.chosenAvatarContainer}>
           <Image 
-            source={currentAvatars[parseInt(selectedAvatar)] || currentAvatars[0]} 
+            source={{ uri: getAvatarUrl(gender, selectedAvatar) }}
             style={styles.chosenAvatar} 
           />
         </View>
         <FlatList
-          data={currentAvatars}
+          data={Array.from({ length: avatarCount }, (_, i) => i)}
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.avatarList}
@@ -267,7 +248,7 @@ export default function EditProfileScreen() {
               ]}
             >
               <Image
-                source={item}
+                source={{ uri: getAvatarUrl(gender, index) }}
                 style={[styles.avatarImage, { width: AVATAR_SIZE - 8, height: AVATAR_SIZE * 1.15 - 8 }]}
                 resizeMode="cover"
               />

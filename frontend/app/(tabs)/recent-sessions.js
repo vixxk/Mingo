@@ -21,35 +21,9 @@ import FavouriteListenerPopup from '../../components/shared/FavouriteListenerPop
 import NotificationsPopup from '../../components/shared/NotificationsPopup';
 import StatusPopup from '../../components/shared/StatusPopup';
 import { useFocusEffect } from 'expo-router';
+import { getAvatarUrl } from '../../utils/avatars';
 
-const getAvatarImage = (gender, index) => {
-  const parsedIndex = parseInt(index, 10) || 0;
-  if (gender === 'Male') {
-    const maleAvatars = [
-      require('../../images/male_avatar_1_1776972918440.png'),
-      require('../../images/male_avatar_2_1776972933241.png'),
-      require('../../images/male_avatar_3_1776972950218.png'),
-      require('../../images/male_avatar_4_1776972963577.png'),
-      require('../../images/male_avatar_5_1776972978900.png'),
-      require('../../images/male_avatar_6_1776972993180.png'),
-      require('../../images/male_avatar_7_1776973008143.png'),
-      require('../../images/male_avatar_8_1776973021635.png'),
-    ];
-    return maleAvatars[parsedIndex] || maleAvatars[0];
-  } else {
-    const femaleAvatars = [
-      require('../../images/female_avatar_1_1776973035859.png'),
-      require('../../images/female_avatar_2_1776973050039.png'),
-      require('../../images/female_avatar_3_1776973063471.png'),
-      require('../../images/female_avatar_4_1776973077539.png'),
-      require('../../images/female_avatar_5_1776973090730.png'),
-      require('../../images/female_avatar_6_1776973108100.png'),
-      require('../../images/female_avatar_7_1776973124018.png'),
-      require('../../images/female_avatar_8_1776973138772.png'),
-    ];
-    return femaleAvatars[parsedIndex] || femaleAvatars[0];
-  }
-};
+
 
 const formatCallTime = (dateStr) => {
   if (!dateStr) return '';
@@ -141,7 +115,7 @@ const SessionItem = ({ item, onShowOfflinePopup }) => {
           end={{ x: 1, y: 0.5 }}
           style={styles.callItem}
         >
-          <Image source={item.image || getAvatarImage(item.gender, item.avatarIndex)} style={styles.callAvatar} />
+          <Image source={{ uri: item.image || getAvatarUrl(item.gender, item.avatarIndex) }} style={styles.callAvatar} />
           <View style={styles.callInfo}>
             <Text style={styles.callName}>{item.name}</Text>
             {item.diamonds !== undefined ? (

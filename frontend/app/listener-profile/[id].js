@@ -9,36 +9,11 @@ import { listenersAPI, userAPI } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SkeletonProfile from '../../components/SkeletonProfile';
 import ReportUserPopup from '../../components/shared/ReportUserPopup';
+import { getAvatarUrl } from '../../utils/avatars';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
-const getAvatarImage = (gender, index) => {
-  const parsedIndex = parseInt(index, 10) || 0;
-  if (gender === 'Male') {
-    const m = [
-      require('../../images/male_avatar_1_1776972918440.png'),
-      require('../../images/male_avatar_2_1776972933241.png'),
-      require('../../images/male_avatar_3_1776972950218.png'),
-      require('../../images/male_avatar_4_1776972963577.png'),
-      require('../../images/male_avatar_5_1776972978900.png'),
-      require('../../images/male_avatar_6_1776972993180.png'),
-      require('../../images/male_avatar_7_1776973008143.png'),
-      require('../../images/male_avatar_8_1776973021635.png'),
-    ];
-    return m[parsedIndex] || m[0];
-  }
-  const f = [
-    require('../../images/female_avatar_1_1776973035859.png'),
-    require('../../images/female_avatar_2_1776973050039.png'),
-    require('../../images/female_avatar_3_1776973063471.png'),
-    require('../../images/female_avatar_4_1776973077539.png'),
-    require('../../images/female_avatar_5_1776973090730.png'),
-    require('../../images/female_avatar_6_1776973108100.png'),
-    require('../../images/female_avatar_7_1776973124018.png'),
-    require('../../images/female_avatar_8_1776973138772.png'),
-  ];
-  return f[parsedIndex] || f[0];
-};
+
 
 export default function ListenerProfileScreen() {
   const { id } = useLocalSearchParams();
@@ -219,7 +194,7 @@ export default function ListenerProfileScreen() {
   const pub = profile.publicProfile || {};
   const avatarSource = pub.profileImage || profile.profileImage
     ? { uri: pub.profileImage || profile.profileImage }
-    : getAvatarImage(profile.gender, profile.avatarIndex);
+    : { uri: getAvatarUrl(profile.gender, profile.avatarIndex) };
   const coverImage = pub.coverImage || null;
   const gradientColors = profile.gradientColors?.length >= 2
     ? profile.gradientColors

@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, SCREEN_HEIGHT, SCREEN_WIDTH } from '../../utils/responsive';
+import { getAvatarUrl, AVATAR_COUNT } from '../../utils/avatars';
 
 export default function GenderSelectionScreen() {
   const router = useRouter();
@@ -22,29 +23,7 @@ export default function GenderSelectionScreen() {
   const [selectedGender, setSelectedGender] = useState('Male');
   const [selectedAvatar, setSelectedAvatar] = useState(0);
 
-  const maleAvatars = [
-    require('../../images/male_avatar_1_1776972918440.png'),
-    require('../../images/male_avatar_2_1776972933241.png'),
-    require('../../images/male_avatar_3_1776972950218.png'),
-    require('../../images/male_avatar_4_1776972963577.png'),
-    require('../../images/male_avatar_5_1776972978900.png'),
-    require('../../images/male_avatar_6_1776972993180.png'),
-    require('../../images/male_avatar_7_1776973008143.png'),
-    require('../../images/male_avatar_8_1776973021635.png'),
-  ];
-
-  const femaleAvatars = [
-    require('../../images/female_avatar_1_1776973035859.png'),
-    require('../../images/female_avatar_2_1776973050039.png'),
-    require('../../images/female_avatar_3_1776973063471.png'),
-    require('../../images/female_avatar_4_1776973077539.png'),
-    require('../../images/female_avatar_5_1776973090730.png'),
-    require('../../images/female_avatar_6_1776973108100.png'),
-    require('../../images/female_avatar_7_1776973124018.png'),
-    require('../../images/female_avatar_8_1776973138772.png'),
-  ];
-
-  const avatars = selectedGender === 'Male' ? maleAvatars : femaleAvatars;
+  const avatarCount = AVATAR_COUNT;
 
   const handleContinue = async () => {
     try {
@@ -86,7 +65,7 @@ export default function GenderSelectionScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.avatarScrollContent}
           >
-            {avatars.map((avatar, index) => (
+            {Array.from({ length: avatarCount }, (_, i) => i).map((index) => (
               <TouchableOpacity
                 key={index}
                 activeOpacity={0.8}
@@ -97,7 +76,7 @@ export default function GenderSelectionScreen() {
                 ]}
               >
                 <Image 
-                  source={avatar} 
+                  source={{ uri: getAvatarUrl(selectedGender, index) }}
                   style={styles.avatarImage}
                   resizeMode="cover"
                 />

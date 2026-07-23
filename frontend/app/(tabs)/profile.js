@@ -18,6 +18,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs } from '../../utils/responsive';
 import { authAPI, userAPI } from '../../utils/api';
+import { getAvatarUrl } from '../../utils/avatars';
 import { socketService } from '../../utils/socket';
 import RaiseIssuePopup from '../../components/shared/RaiseIssuePopup';
 import LogoutPopup from '../../components/shared/LogoutPopup';
@@ -55,7 +56,7 @@ const MenuItem = ({ item, onPress }) => (
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const [userAvatar, setUserAvatar] = useState(require('../../images/user_avatar.png'));
+  const [userAvatar, setUserAvatar] = useState(null);
   const [showIssuePopup, setShowIssuePopup] = useState(false);
   const [showLogoutPopup, setShowLogoutPopup] = useState(false);
   const [showDeletePopup, setShowDeletePopup] = useState(false);
@@ -129,28 +130,7 @@ export default function ProfileScreen() {
         const avatarIndex = userObj.avatarIndex !== undefined ? userObj.avatarIndex.toString() : (await AsyncStorage.getItem('userAvatarIndex') || '0');
         
         if (normalizedGender && avatarIndex !== null) {
-          const maleAvatars = [
-            require('../../images/male_avatar_1_1776972918440.png'),
-            require('../../images/male_avatar_2_1776972933241.png'),
-            require('../../images/male_avatar_3_1776972950218.png'),
-            require('../../images/male_avatar_4_1776972963577.png'),
-            require('../../images/male_avatar_5_1776972978900.png'),
-            require('../../images/male_avatar_6_1776972993180.png'),
-            require('../../images/male_avatar_7_1776973008143.png'),
-            require('../../images/male_avatar_8_1776973021635.png'),
-          ];
-          const femaleAvatars = [
-            require('../../images/female_avatar_1_1776973035859.png'),
-            require('../../images/female_avatar_2_1776973050039.png'),
-            require('../../images/female_avatar_3_1776973063471.png'),
-            require('../../images/female_avatar_4_1776973077539.png'),
-            require('../../images/female_avatar_5_1776973090730.png'),
-            require('../../images/female_avatar_6_1776973108100.png'),
-            require('../../images/female_avatar_7_1776973124018.png'),
-            require('../../images/female_avatar_8_1776973138772.png'),
-          ];
-          const avatars = normalizedGender === 'Male' ? maleAvatars : femaleAvatars;
-          setUserAvatar(avatars[parseInt(avatarIndex, 10)] || avatars[0]);
+          setUserAvatar(getAvatarUrl(normalizedGender, avatarIndex));
 
           setActiveMenuItems(MENU_ITEMS);
         }
@@ -280,7 +260,7 @@ export default function ProfileScreen() {
           {}
           <View style={styles.avatarRing}>
             <Image
-              source={userAvatar}
+              source={userAvatar ? { uri: userAvatar } : require('../../images/user_avatar.png')}
               style={styles.avatar}
             />
           </View>

@@ -18,37 +18,11 @@ import { useRouter } from 'expo-router';
 import { ms, s, vs, SCREEN_WIDTH } from '../../utils/responsive';
 import { chatAPI } from '../../utils/api';
 import { LinearGradient } from 'expo-linear-gradient';
+import { getAvatarUrl } from '../../utils/avatars';
 
 const { height: SH } = Dimensions.get('window');
 
-const getAvatarImage = (gender, index) => {
-  const parsedIndex = parseInt(index, 10) || 0;
-  if (gender === 'Male') {
-    const maleAvatars = [
-      require('../../images/male_avatar_1_1776972918440.png'),
-      require('../../images/male_avatar_2_1776972933241.png'),
-      require('../../images/male_avatar_3_1776972950218.png'),
-      require('../../images/male_avatar_4_1776972963577.png'),
-      require('../../images/male_avatar_5_1776972978900.png'),
-      require('../../images/male_avatar_6_1776972993180.png'),
-      require('../../images/male_avatar_7_1776973008143.png'),
-      require('../../images/male_avatar_8_1776973021635.png'),
-    ];
-    return maleAvatars[parsedIndex] || maleAvatars[0];
-  } else {
-    const femaleAvatars = [
-      require('../../images/female_avatar_1_1776973035859.png'),
-      require('../../images/female_avatar_2_1776973050039.png'),
-      require('../../images/female_avatar_3_1776973063471.png'),
-      require('../../images/female_avatar_4_1776973077539.png'),
-      require('../../images/female_avatar_5_1776973090730.png'),
-      require('../../images/female_avatar_6_1776973108100.png'),
-      require('../../images/female_avatar_7_1776973124018.png'),
-      require('../../images/female_avatar_8_1776973138772.png'),
-    ];
-    return femaleAvatars[parsedIndex] || femaleAvatars[0];
-  }
-};
+
 
 const formatTime = (dateStr) => {
   if (!dateStr) return '';
@@ -80,7 +54,7 @@ const ConversationItem = ({ item, onPress }) => (
         <Ionicons name="shield-checkmark" size={24} color="#D4AF37" />
       </LinearGradient>
     ) : (
-      <Image source={getAvatarImage(item.gender, item.avatarIndex)} style={styles.convAvatar} />
+      <Image source={{ uri: getAvatarUrl(item.gender, item.avatarIndex) }} style={styles.convAvatar} />
     )}
     <View style={styles.convInfo}>
       <Text style={[styles.convName, item.isAdmin && { color: '#D4AF37' }]}>{item.name}</Text>

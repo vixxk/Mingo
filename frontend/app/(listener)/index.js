@@ -21,6 +21,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, hp, wp, SCREEN_HEIGHT, SCREEN_WIDTH } from '../../utils/responsive';
+import { getAvatarUrl } from '../../utils/avatars';
 import { listenerAPI, userAPI, walletAPI, authAPI, listenersAPI } from '../../utils/api';
 import { useFocusEffect, useRouter, useNavigation } from 'expo-router';
 import { useStatusSSE } from '../../utils/useStatusSSE';
@@ -228,7 +229,7 @@ export default function ListenerHomeScreen() {
   const [videoEnabled, setVideoEnabled] = useState(false);
   const [chatEnabled, setChatEnabled] = useState(true);
   const [isOnline, setIsOnline] = useState(false);
-  const [userAvatar, setUserAvatar] = useState(require('../../images/user_avatar.png'));
+  const [userAvatar, setUserAvatar] = useState(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showCantGoOnline, setShowCantGoOnline] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -360,28 +361,7 @@ export default function ListenerHomeScreen() {
           const gender = await AsyncStorage.getItem('userGender');
           const avatarIndex = await AsyncStorage.getItem('userAvatarIndex');
           if (gender && avatarIndex) {
-            const maleAvatars = [
-              require('../../images/male_avatar_1_1776972918440.png'),
-              require('../../images/male_avatar_2_1776972933241.png'),
-              require('../../images/male_avatar_3_1776972950218.png'),
-              require('../../images/male_avatar_4_1776972963577.png'),
-              require('../../images/male_avatar_5_1776972978900.png'),
-              require('../../images/male_avatar_6_1776972993180.png'),
-              require('../../images/male_avatar_7_1776973008143.png'),
-              require('../../images/male_avatar_8_1776973021635.png'),
-            ];
-            const femaleAvatars = [
-              require('../../images/female_avatar_1_1776973035859.png'),
-              require('../../images/female_avatar_2_1776973050039.png'),
-              require('../../images/female_avatar_3_1776973063471.png'),
-              require('../../images/female_avatar_4_1776973077539.png'),
-              require('../../images/female_avatar_5_1776973090730.png'),
-              require('../../images/female_avatar_6_1776973108100.png'),
-              require('../../images/female_avatar_7_1776973124018.png'),
-              require('../../images/female_avatar_8_1776973138772.png'),
-            ];
-            const avatars = gender === 'Male' ? maleAvatars : femaleAvatars;
-            setUserAvatar(avatars[parseInt(avatarIndex, 10)] || avatars[0]);
+            setUserAvatar(getAvatarUrl(gender, avatarIndex));
           }
 
           const userStr = await AsyncStorage.getItem('user');
@@ -562,7 +542,7 @@ export default function ListenerHomeScreen() {
             onPress={() => router.push('/(listener)/listener-profile')}
           >
             <Image
-              source={userAvatar}
+              source={userAvatar ? { uri: userAvatar } : require('../../images/user_avatar.png')}
               style={styles.headerAvatar}
             />
           </TouchableOpacity>

@@ -3,11 +3,11 @@ import { IoClose, IoChatbubble, IoTrashOutline, IoBan, IoCheckmarkCircle, IoPers
 import { adminAPI } from '../../utils/api'
 import ToastNotification from '../shared/ToastNotification'
 
+const CLOUDFRONT_URL = 'https://d3arutsevouzgm.cloudfront.net';
 const getAvatarUrl = (gender, index) => {
-  const i = parseInt(index, 10) || 0
-  const base = gender === 'Male' ? 'male_avatar_' : 'female_avatar_'
-  const num = i + 1
-  return `/images/${base}${num}_17769729${gender === 'Male' ? 1 : 3}${8440 + (num - 1) * 10000 || 5840 + (num - 1) * 10000}.png`
+  const i = Math.min(Math.max(parseInt(index, 10) || 0, 0), 49);
+  const g = gender === 'Male' ? 'male' : 'female';
+  return `${CLOUDFRONT_URL}/avatars/${g}_${i + 1}.png`;
 }
 
 export default function UserDetailModal({ visible, user, onClose, onDelete, onBan }) {
