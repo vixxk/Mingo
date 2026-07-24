@@ -124,8 +124,12 @@ userSchema.index(
   }
 );
 
-userSchema.statics.findByPhone = function (phone) {
-  return this.findOne({ phone });
+userSchema.statics.findByPhone = function (phone, includeDeleted = false) {
+  const query = { phone };
+  if (!includeDeleted) {
+    query.isDeleted = { $ne: true };
+  }
+  return this.findOne(query);
 };
 
 userSchema.statics.exists = async function (username, phone) {
