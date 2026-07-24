@@ -1,8 +1,10 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, ScrollView, Animated } from 'react-native';
+import { View, StyleSheet, ScrollView, Animated, Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { wp, hp } from '../utils/responsive';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const ShimmerBlock = ({ style, opacity }) => {
   return (
@@ -165,64 +167,64 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: wp(4),
-    paddingVertical: hp(1.5),
+    paddingHorizontal: ss(4),
+    paddingVertical: vss(1.5),
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: wp(2),
+    gap: ss(2),
   },
   headerAvatar: {
-    width: wp(10),
-    height: wp(10),
-    borderRadius: wp(5),
+    width: ss(10),
+    height: ss(10),
+    borderRadius: ss(5),
   },
   headerCoinBadge: {
-    width: wp(16),
-    height: hp(3.2),
-    borderRadius: wp(5),
+    width: ss(16),
+    height: vss(3.2),
+    borderRadius: ss(5),
   },
   headerTimer: {
-    width: wp(20),
-    height: hp(3.2),
-    borderRadius: wp(5),
+    width: ss(20),
+    height: vss(3.2),
+    borderRadius: ss(5),
   },
   headerNotification: {
-    width: wp(10),
-    height: wp(10),
-    borderRadius: wp(5),
+    width: ss(10),
+    height: ss(10),
+    borderRadius: ss(5),
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: hp(10),
+    paddingBottom: vss(10),
   },
   sectionTitle: {
-    width: wp(35),
-    height: hp(3),
+    width: ss(35),
+    height: vss(3),
     borderRadius: 8,
-    marginHorizontal: wp(4),
-    marginTop: hp(2.5),
-    marginBottom: hp(1.5),
+    marginHorizontal: ss(4),
+    marginTop: vss(2.5),
+    marginBottom: vss(1.5),
   },
   sectionTitleSecondary: {
-    width: wp(55),
-    marginTop: hp(3),
+    width: ss(55),
+    marginTop: vss(3),
   },
   carouselContainer: {
-    paddingHorizontal: wp(4),
-    gap: wp(4),
+    paddingHorizontal: ss(4),
+    gap: ss(4),
   },
   bestChoiceCardOuter: {
-    width: wp(85),
+    width: ss(85),
   },
   bestChoiceCardInner: {
-    borderRadius: wp(5),
+    borderRadius: ss(5),
     overflow: 'hidden',
     backgroundColor: '#111',
-    height: hp(25),
+    height: vss(25),
     borderWidth: 1,
     borderColor: '#1C1C1C',
   },
@@ -310,24 +312,24 @@ const styles = StyleSheet.create({
     left: wp(2.5),
     right: wp(2.5),
   },
-  peopleNameText: {
-    width: wp(25),
-    height: hp(1.8),
-    borderRadius: 4,
-  },
-  peopleActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: hp(1.2),
-    paddingHorizontal: wp(3),
-    backgroundColor: '#111',
-  },
-  peopleActionBtn: {
-    width: wp(9),
-    height: wp(9),
-    borderRadius: wp(4.5),
-    borderWidth: 1,
-    borderColor: '#1C1C1C',
-  },
+   peopleNameText: {
+     width: ss(25),
+     height: vss(1.8),
+     borderRadius: 4,
+   },
+   peopleActions: {
+     flexDirection: 'row',
+     justifyContent: 'space-between',
+     alignItems: 'center',
+     paddingVertical: vss(1.2),
+     paddingHorizontal: ss(3),
+     backgroundColor: '#111',
+   },
+   peopleActionBtn: {
+     width: ss(9),
+     height: ss(9),
+     borderRadius: ss(4.5),
+     borderWidth: 1,
+     borderColor: '#1C1C1C',
+   },
 });

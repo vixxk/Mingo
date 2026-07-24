@@ -1,10 +1,9 @@
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, ScrollView, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, ScrollView, FlatList, ActivityIndicator } from 'react-native';
 import { useRef, useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { notificationAPI } from '../../utils/api';
-
-const { width: SW, height: SH } = Dimensions.get('window');
+import { wp, hp, SCREEN_WIDTH, SCREEN_HEIGHT } from '../../utils/responsive';
 
 export default function NotificationsPopup({ visible, onClose }) {
   const slideAnim = useRef(new Animated.Value(SH)).current;

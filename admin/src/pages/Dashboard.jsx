@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { adminAPI, authAPI } from '../utils/api'
 
@@ -7,36 +7,14 @@ const navigateTo = (navigate, path) => {
   navigate(path)
 }
 import {
-  IoMegaphone, IoTrendingUp, IoCalendarOutline,
-  IoTimeOutline, IoShieldCheckmark, IoFlag, IoCall, IoWallet,
+  IoMegaphone, IoShieldCheckmark, IoFlag, IoCall, IoWallet,
   IoCash, IoStatsChart, IoArrowForward, IoPeople, IoHeadset,
-  IoRefresh, IoClose,
+  IoRefresh, IoClose, IoPulse,
 } from 'react-icons/io5'
 import { StatCard, SectionTitle, ActivityItem } from '../components/admin/AdminComponents'
 import { AdminPageSkeleton } from '../components/admin/Skeleton'
 import LogoutPopup from '../components/shared/LogoutPopup'
-import {
-  AreaChart, Area, LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, Legend,
-  ReferenceLine,
-  CartesianGrid, ResponsiveContainer,
-} from 'recharts'
-
-// Format date as YYYY-MM-DD using local timezone (avoids UTC date shifts from toISOString)
-const formatLocalDate = (d) => {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
-// Parse YYYY-MM-DD or YYYY-MM as local midnight (avoids UTC date shift from new Date())
-const parseLocalDate = (dateStr) => {
-  const parts = dateStr.split('-')
-  const year = parseInt(parts[0])
-  const month = parseInt(parts[1]) - 1
-  const day = parts.length > 2 ? parseInt(parts[2]) : 1
-  return new Date(year, month, day)
-}
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, AreaChart, Area, XAxis, YAxis } from 'recharts'
 
 const formatNumber = (n) => {
   if (!n && n !== 0) return '0'
@@ -50,27 +28,6 @@ const formatCurrency = (n) => {
   if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M coins'
   if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'K coins'
   return Math.round(n).toLocaleString() + ' coins'
-}
-
-const formatChartLabel = (value, granularity) => {
-  if (!value) return ''
-  const date = parseLocalDate(value)
-  if (date.toString() === 'Invalid Date') return value
-  if (granularity === 'monthly') return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
-
-const formatTooltipLabel = (value, granularity) => {
-  if (!value) return ''
-  const date = parseLocalDate(value)
-  if (date.toString() === 'Invalid Date') return value
-  if (granularity === 'weekly') {
-    const end = new Date(date)
-    end.setDate(date.getDate() + 6)
-    return `Week of ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-  }
-  if (granularity === 'monthly') return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-  return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
 const getRelativeTime = (dateStr) => {
@@ -95,6 +52,39 @@ const formatActivityTime = (dateStr) => {
     time: getRelativeTime(dateStr),
     exactTime: d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
   }
+}
+
+function AnimatedNumber({ value, format, duration = 1200 }) {
+  const [animated, setAnimated] = useState(0)
+  const prevRef = useRef(0)
+  const rafRef = useRef()
+
+  useEffect(() => {
+    const startVal = prevRef.current
+    const diff = value - startVal
+    if (diff === 0) {
+      setAnimated(value)
+      return
+    }
+    const startTime = performance.now()
+
+    const step = (now) => {
+      const elapsed = now - startTime
+      const progress = Math.min(elapsed / duration, 1)
+      const eased = 1 - Math.pow(1 - progress, 3)
+      setAnimated(startVal + diff * eased)
+      if (progress < 1) {
+        rafRef.current = requestAnimationFrame(step)
+      } else {
+        prevRef.current = value
+      }
+    }
+
+    rafRef.current = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(rafRef.current)
+  }, [value, duration])
+
+  return format ? format(animated) : Math.round(animated).toLocaleString()
 }
 
 const modules = [
@@ -184,67 +174,20 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [showLogoutPopup, setShowLogoutPopup] = useState(false)
   const [error, setError] = useState(null)
+  const [animateIn, setAnimateIn] = useState(false)
   const [revenueData, setRevenueData] = useState([])
   const [registrationData, setRegistrationData] = useState([])
-  const [revenueGranularity, setRevenueGranularity] = useState('weekly')
-  const [registrationGranularity, setRegistrationGranularity] = useState('weekly')
-  const [revenueChartMode, setRevenueChartMode] = useState('area') // 'area' or 'line'
-  const [showMovingAvg, setShowMovingAvg] = useState(true)
   const [retrying, setRetrying] = useState(false)
 
-  // Helper to aggregate daily data to weekly/monthly
-  const aggregateData = useCallback((data, granularity, valueKey) => {
-    if (!data || data.length === 0) return []
-    const grouped = {}
-    data.forEach(item => {
-      const date = parseLocalDate(item.month)
-      let key
-      if (granularity === 'weekly') {
-        const weekStart = new Date(date)
-        weekStart.setDate(date.getDate() - date.getDay())
-        key = formatLocalDate(weekStart)
-      } else if (granularity === 'daily') {
-        key = formatLocalDate(date)
-      } else {
-        key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-      }
-      if (!grouped[key]) {
-        grouped[key] = { month: key, [valueKey]: 0 }
-      }
-      grouped[key][valueKey] += item[valueKey]
-    })
-    return Object.values(grouped).sort((a, b) => a.month.localeCompare(b.month))
-  }, [])
+  const safeRevenueData = useMemo(() => revenueData || [], [revenueData])
+  const safeRegistrationData = useMemo(() => registrationData || [], [registrationData])
 
-  // Transform data based on selected granularity
-  const transformedRevenueData = useMemo(() => aggregateData(revenueData, revenueGranularity, 'revenue'), [revenueData, revenueGranularity, aggregateData])
-  const transformedRegistrationData = useMemo(() => aggregateData(registrationData, registrationGranularity, 'signups'), [registrationData, registrationGranularity, aggregateData])
-
-  const movingAvgWindow = 3
-  const movingAvgData = useMemo(() => {
-    if (!transformedRevenueData || transformedRevenueData.length === 0) return []
-    return transformedRevenueData.map((d, i) => {
-      const start = Math.max(0, i - (movingAvgWindow - 1))
-      const slice = transformedRevenueData.slice(start, i + 1)
-      const avg = slice.reduce((s, x) => s + (x.revenue || 0), 0) / slice.length
-      return { month: d.month, avg }
-    })
-  }, [transformedRevenueData])
-
-  // merge avg into primary data so series are on same x-axis and share tooltip
-  const mergedRevenueData = useMemo(() => {
-    if (!transformedRevenueData) return []
-    const avgMap = new Map(movingAvgData.map(d => [d.month, d.avg]))
-    return transformedRevenueData.map(d => ({ ...d, avg: avgMap.get(d.month) ?? null }))
-  }, [transformedRevenueData, movingAvgData])
-
-  const fetchData = useCallback(async () => {
+    const fetchData = useCallback(async () => {
     try {
       setLoading(true)
       const res = await adminAPI.getStats()
       const data = res.data || res
       setStats(data)
-      // Transform chart data to match recharts expected format
       const revData = (data.charts?.dailyRevenue || []).map(d => ({ month: d._id, revenue: d.amount }))
       const regData = (data.charts?.dailyRegistrations || []).map(d => ({ month: d._id, signups: d.count }))
       setRevenueData(revData)
@@ -270,47 +213,254 @@ export default function Dashboard() {
     fetchData()
   }, [fetchData])
 
-  const handleLogout = async () => {
-    try {
-      await authAPI.logout()
-    } catch {
-      // ignore
+  useEffect(() => {
+    if (!loading) {
+      const t = setTimeout(() => setAnimateIn(true), 80)
+      return () => clearTimeout(t)
     }
+  }, [loading])
+
+  const handleLogout = async () => {
+    try { await authAPI.logout() } catch {}
     setShowLogoutPopup(false)
     navigate('/login')
   }
 
-  if (loading) {
-    return <AdminPageSkeleton type="dashboard" />
-  }
-
   const s = stats || {}
 
-  // Compute derived stats from charts data
   const dailyRevenue = s.charts?.dailyRevenue || []
   const dailyRegistrations = s.charts?.dailyRegistrations || []
+
+  const totalUsers = s.totalUsers || 0
+  const totalListeners = s.totalListeners || 0
+  const totalRevenue = s.totalRevenue || 0
+  const totalSessions = s.totalCalls || 0
+
+  const listenerShare = totalUsers ? (totalListeners / totalUsers) * 100 : 0
+  const nonListenerUsers = Math.max(0, totalUsers - totalListeners)
+  const sessionRate = totalUsers ? totalSessions / totalUsers : 0
+  const revenuePerUser = totalUsers ? totalRevenue / totalUsers : 0
+  const userGrowth = dailyRegistrations.reduce((a, b) => a + b.count, 0)
+
+  const audienceData = [
+    { name: 'Listeners', value: totalListeners, color: '#A855F7' },
+    { name: 'Other members', value: nonListenerUsers, color: '#10B981' },
+  ]
+
   const peakRevenue = dailyRevenue.length > 0 ? Math.max(...dailyRevenue.map(d => d.amount)) : 0
-  const dailyAvgRevenue = dailyRevenue.length > 0 
-    ? dailyRevenue.reduce((a, b) => a + b.amount, 0) / dailyRevenue.length 
+  const dailyAvgRevenue = dailyRevenue.length > 0
+    ? dailyRevenue.reduce((a, b) => a + b.amount, 0) / dailyRevenue.length
     : 0
-  const activeDays = dailyRevenue.filter(d => d.amount > 0).length
   const peakSignups = dailyRegistrations.length > 0 ? Math.max(...dailyRegistrations.map(d => d.count)) : 0
   const dailyAvgSignups = dailyRegistrations.length > 0
     ? dailyRegistrations.reduce((a, b) => a + b.count, 0) / dailyRegistrations.length
     : 0
-  const totalAcquired = dailyRegistrations.reduce((a, b) => a + b.count, 0)
+
+    const pulseData = [
+    {
+      name: 'Revenue Flow',
+      value: Math.round(Math.min(100, peakRevenue ? (dailyAvgRevenue / peakRevenue) * 120 : 0)),
+      display: formatCurrency(Math.round(dailyAvgRevenue)),
+      color: '#A855F7',
+    },
+    {
+      name: 'Signup Surge',
+      value: Math.round(Math.min(100, peakSignups ? (dailyAvgSignups / peakSignups) * 120 : 0)),
+      display: formatNumber(Math.round(dailyAvgSignups)),
+      color: '#F59E0B',
+    },
+    {
+      name: 'Session Pace',
+      value: Math.round(Math.min(100, sessionRate * 10)),
+      display: `${sessionRate.toFixed(1)} / user`,
+      color: '#10B981',
+    },
+  ]
+
+  const sparkRevenue = useMemo(() => {
+    const rev = safeRevenueData.slice(-14)
+    return rev.length > 0 ? rev : [{ month: '', revenue: 0 }]
+  }, [safeRevenueData])
+
+  const sparkRegistrations = useMemo(() => {
+    const reg = safeRegistrationData.slice(-14)
+    return reg.length > 0 ? reg : [{ month: '', signups: 0 }]
+  }, [safeRegistrationData])
+
+  const sectionStyle = (delay) => ({
+    animation: animateIn ? `slideUp 0.5s ${delay}s ease-out both` : 'none',
+  })
+
+  if (loading) return <AdminPageSkeleton type="dashboard" />
 
   return (
     <div className="page-wrap" style={{ backgroundColor: 'var(--bg-primary)', padding: 'var(--page-padding)' }}>
-      {/* Header */}        <div className="page-header" style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 'var(--section-gap)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <style>{`
+        @keyframes glowPulse {
+          0%, 100% { box-shadow: 0 0 4px rgba(16, 185, 129, 0.3); }
+          50% { box-shadow: 0 0 12px rgba(16, 185, 129, 0.6); }
+        }
+        @keyframes float {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-4px); }
+        }
+        .dashboard-momentum-rings {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(120px, 1fr));
+          gap: 16px;
+        }
+        .momentum-ring {
+          padding: 18px;
+          border-radius: var(--radius-xl);
+          background-color: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 14px;
+        }
+        .momentum-ring-graphic {
+          width: 120px;
+          height: 120px;
+          border-radius: 50%;
+          display: grid;
+          place-items: center;
+          position: relative;
+          box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+        }
+        .momentum-ring-center {
+          width: 72px;
+          height: 72px;
+          border-radius: 50%;
+          background: var(--bg-secondary);
+          display: grid;
+          place-items: center;
+          border: 1px solid rgba(255,255,255,0.08);
+          box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
+        }
+        .momentum-ring-label {
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.8px;
+          color: var(--text-muted);
+          text-transform: uppercase;
+          text-align: center;
+        }
+        .momentum-ring-display {
+          font-size: 18px;
+          font-weight: 800;
+          color: var(--text-primary);
+          text-align: center;
+        }
+        @media (max-width: 600px) {
+          .dashboard-momentum-rings {
+            grid-template-columns: repeat(3, 1fr) !important;
+            gap: 8px;
+          }
+          .momentum-ring {
+            padding: 10px;
+            gap: 8px;
+          }
+          .momentum-ring-graphic {
+            width: 72px;
+            height: 72px;
+          }
+          .momentum-ring-center {
+            width: 44px;
+            height: 44px;
+          }
+          .momentum-ring-center div {
+            font-size: 13px !important;
+          }
+          .momentum-ring-label {
+            font-size: 9px;
+          }
+          .momentum-ring-display {
+            font-size: 12px;
+          }
+          .dashboard-audience-pulse .ap-flex {
+            gap: 10px !important;
+          }
+          .dashboard-audience-pulse .ap-chart {
+            min-height: 180px !important;
+            min-width: 180px !important;
+          }
+          .dashboard-audience-pulse .ap-chart .recharts-responsive-container {
+            height: 180px !important;
+          }
+          .dashboard-audience-pulse .ap-chart > div:last-child div:first-child {
+            font-size: 20px !important;
+          }
+          .dashboard-audience-pulse .ap-chart > div:last-child div:last-child {
+            font-size: 11px !important;
+          }
+          .dashboard-audience-pulse .ap-chart > div:nth-child(2) {
+            top: 8px !important;
+          }
+          .dashboard-audience-pulse .ap-stats {
+            gap: 6px !important;
+          }
+          .dashboard-audience-pulse .ap-stats > div {
+            padding: 8px 10px !important;
+            gap: 8px !important;
+          }
+          .dashboard-audience-pulse .ap-stats > div > div:first-child div:first-child {
+            font-size: 9px !important;
+          }
+          .dashboard-audience-pulse .ap-stats > div > div:first-child div:nth-child(2) {
+            font-size: 13px !important;
+            margin-top: 3px !important;
+          }
+          .dashboard-audience-pulse .ap-stats > div > div:first-child div:nth-child(3) {
+            font-size: 9px !important;
+            margin-top: 2px !important;
+          }
+          .dashboard-audience-pulse .ap-stats > div > div:last-child {
+            width: 12px !important;
+            height: 12px !important;
+          }
+          .dashboard-audience-pulse .ap-stats > div > div:last-child > div {
+            width: 5px !important;
+            height: 5px !important;
+          }
+          .dashboard-sparkline-column .section-card {
+            padding: 10px !important;
+          }
+          .dashboard-sparkline-column .section-card > div:first-child > div:first-child {
+            font-size: 9px !important;
+          }
+          .dashboard-sparkline-column .section-card > div:first-child > div:nth-child(2) {
+            font-size: 15px !important;
+            margin-top: 1px !important;
+          }
+          .dashboard-sparkline-column .section-card > div:first-child > div:nth-child(3) {
+            font-size: 9px !important;
+          }
+          .dashboard-sparkline-column .section-card > div:last-child {
+            height: 40px !important;
+          }
+        }
+      `}</style>
+
+      {/* Header */}
+      <div style={sectionStyle(0)}>
+        <div className="page-header" style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 'var(--section-gap)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{
+              width: 40, height: 40, borderRadius: 12,
+              background: 'linear-gradient(135deg, var(--accent), #A855F7)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              animation: 'float 3s ease-in-out infinite',
+            }}>
+              <IoPulse size={20} color="#fff" />
+            </div>
+            <div>
               <h1 className="page-header-title" style={{
                 fontFamily: 'var(--font-display)',
                 fontSize: 'var(--header-font-size)',
@@ -321,411 +471,426 @@ export default function Dashboard() {
               }}>
                 Dashboard
               </h1>
-
-            </div>
-            <p style={{
-                fontSize: 14,
-                color: 'var(--text-muted)',
-                margin: '4px 0 0',
-              }} className="page-header-sub">
-                System Overview
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+                Platform overview &amp; key metrics
               </p>
+            </div>
           </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button
-            onClick={() => navigate('/notifications')}
-            style={{
-              width: 40, height: 40, borderRadius: 'var(--radius-sm)',
-              backgroundColor: 'var(--bg-secondary)',
-              border: '1px solid var(--border)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', color: 'var(--text-muted)',
-              transition: 'border-color 0.2s, color 0.2s',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.borderColor = 'var(--accent)'
-              e.currentTarget.style.color = 'var(--accent)'
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.borderColor = 'var(--border)'
-              e.currentTarget.style.color = 'var(--text-muted)'
-            }}
-          >
-            <IoMegaphone size={18} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              onClick={() => navigate('/notifications')}
+              style={{
+                width: 38, height: 38, borderRadius: 'var(--radius-sm)',
+                backgroundColor: 'var(--bg-secondary)',
+                border: '1px solid var(--border)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', color: 'var(--text-muted)',
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)' }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)' }}
+            >
+              <IoMegaphone size={17} />
+            </button>
+            <button
+              onClick={() => { setLoading(true); fetchData() }}
+              style={{
+                width: 38, height: 38, borderRadius: 'var(--radius-sm)',
+                backgroundColor: 'var(--bg-secondary)',
+                border: '1px solid var(--border)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', color: 'var(--text-muted)',
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)' }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)' }}
+            >
+              <IoRefresh size={17} />
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Error Banner */}
       {error && (
-        <ErrorBanner
-          message={error}
-          onRetry={() => { setLoading(true); setError(null); setRetrying(true); fetchData(); }}
-          onDismiss={() => setError(null)}
-        />
+        <div style={sectionStyle(0.05)}>
+          <ErrorBanner
+            message={error}
+            onRetry={() => { setLoading(true); setError(null); setRetrying(true); fetchData() }}
+            onDismiss={() => setError(null)}
+          />
+        </div>
       )}
 
-      {/* Stats Grid */}
-      <div className="stat-cards" style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-        gap: 16,
-        marginBottom: 'var(--section-gap)',
-      }}>
-        <StatCard
-          title="Total Users"
-          value={formatNumber(s.totalUsers)}
-          icon={<IoPeople size={16} color="var(--accent)" />}
-        />
-        <StatCard
-          title="Listeners"
-          value={formatNumber(s.totalListeners)}
-          icon={<IoHeadset size={16} color="var(--info)" />}
-        />
-        <StatCard
-          title="Revenue"
-          value={formatCurrency(s.totalRevenue)}
-          icon={<IoWallet size={16} color="var(--success)" />}
-        />
-        <StatCard
-          title="Total Sessions"
-          value={formatNumber(s.totalCalls)}
-          icon={<IoCall size={16} color="var(--warning)" />}
-        />
+      {/* Animated Stats Grid */}
+      <div style={sectionStyle(0.1)}>
+        <div className="stat-cards" style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: 16,
+          marginBottom: 'var(--section-gap)',
+        }}>
+          <StatCard
+            title="Total Users"
+            value={<AnimatedNumber value={totalUsers} format={formatNumber} />}
+            icon={<IoPeople size={16} color="var(--accent)" />}
+            subtitle="Registered accounts"
+          />
+          <StatCard
+            title="Listeners"
+            value={<AnimatedNumber value={totalListeners} format={formatNumber} />}
+            icon={<IoHeadset size={16} color="#A855F7" />}
+            subtitle="Active voice agents"
+          />
+          <StatCard
+            title="Revenue"
+            value={<AnimatedNumber value={totalRevenue} format={formatCurrency} />}
+            icon={<IoWallet size={16} color="#10B981" />}
+            subtitle="Total earnings"
+          />
+          <StatCard
+            title="Sessions"
+            value={<AnimatedNumber value={totalSessions} format={formatNumber} />}
+            icon={<IoCall size={16} color="#F59E0B" />}
+            subtitle="Completed calls"
+          />
+        </div>
       </div>
 
-      {/* Revenue Analysis */}
-      {revenueData.length > 0 && (
-      <div className="section-card" style={{
-        backgroundColor: 'var(--bg-secondary)',
-        borderRadius: 'var(--radius-xl)',
-        border: '1px solid var(--border)',
-        padding: 'var(--card-padding)',
+      {/* Audience Pulse + Sparkline Row */}
+      <div className="dashboard-audience-row grid-2-mobile" style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: 'var(--section-gap)',
         marginBottom: 'var(--section-gap)',
-        borderTop: '3px solid var(--accent)',
       }}>
-        <div className="section-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <SectionTitle>Revenue Analysis</SectionTitle>
-          <div className="chart-controls" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <select
-                value={revenueGranularity}
-                onChange={(e) => setRevenueGranularity(e.target.value)}
-                style={{
-                  padding: '8px 12px', borderRadius: '8px', backgroundColor: 'var(--bg-tertiary)',
-                  border: '1px solid var(--border)', color: 'var(--text-primary)', fontWeight: 700, cursor: 'pointer'
-                }}
-              >
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-                <option value="daily">Daily</option>
-              </select>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={() => setRevenueChartMode('area')} style={{ padding: '8px 10px', borderRadius: 8, backgroundColor: revenueChartMode === 'area' ? 'var(--accent-mid)' : 'transparent', border: '1px solid var(--border)', color: revenueChartMode === 'area' ? 'var(--accent)' : 'var(--text-secondary)', cursor: 'pointer' }}>Area</button>
-                <button onClick={() => setRevenueChartMode('line')} style={{ padding: '8px 10px', borderRadius: 8, backgroundColor: revenueChartMode === 'line' ? 'var(--accent-mid)' : 'transparent', border: '1px solid var(--border)', color: revenueChartMode === 'line' ? 'var(--accent)' : 'var(--text-secondary)', cursor: 'pointer' }}>Line</button>
+        {/* Audience Pulse */}
+        <div className="dashboard-audience-pulse" style={sectionStyle(0.15)}>
+          <div className="section-card" style={{
+            backgroundColor: 'var(--bg-secondary)',
+            borderRadius: 'var(--radius-xl)',
+            border: '1px solid var(--border)',
+            padding: 'var(--card-padding)',
+            borderTop: '3px solid var(--accent)',
+            height: '100%',
+          }}>
+            <SectionTitle>Audience Pulse</SectionTitle>
+            <div className="ap-flex" style={{ display: 'flex', gap: 18, alignItems: 'center' }}>
+              <div className="ap-chart" style={{ minHeight: 200, minWidth: 200, position: 'relative', flexShrink: 0 }}>
+                <ResponsiveContainer width="100%" height={200}>
+                  <PieChart>
+                    <Pie
+                      data={audienceData}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius="60%"
+                      outerRadius="90%"
+                      paddingAngle={4}
+                      stroke="transparent"
+                      isAnimationActive={true}
+                      animationBegin={200}
+                      animationDuration={800}
+                    >
+                      {audienceData.map((entry) => (
+                        <Cell key={entry.name} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip content={<CustomTooltip formatter={(v) => formatNumber(v)} />} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)' }}>{Math.round(listenerShare)}%</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Listeners</div>
+                  </div>
+                </div>
+              </div>
+              <div className="ap-stats" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <PulseStat label="Total listeners" value={formatNumber(totalListeners)} accent="#A855F7" subtext={`${listenerShare.toFixed(1)}% of users`} />
+                <PulseStat label="Non-listeners" value={formatNumber(nonListenerUsers)} accent="#10B981" subtext={`${(100 - listenerShare).toFixed(1)}% of users`} />
+                <PulseStat label="Avg sessions/user" value={sessionRate.toFixed(1)} accent="#F59E0B" subtext="Engagement metric" />
               </div>
             </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-secondary)' }}>
-              <input type="checkbox" checked={showMovingAvg} onChange={e => setShowMovingAvg(e.target.checked)} />
-              <span>Moving avg</span>
-            </label>
           </div>
         </div>
 
-        <div className="chart-container" style={{ height: 320, marginBottom: 14 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            {revenueChartMode === 'area' ? (
-              <AreaChart data={mergedRevenueData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="revG" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#A855F7" stopOpacity={0.6} />
-                    <stop offset="60%" stopColor="#8B5CF6" stopOpacity={0.25} />
-                    <stop offset="100%" stopColor="#7C3AED" stopOpacity={0.05} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="4 5" stroke="var(--border)" vertical={false} horizontal={true} />
-                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: 11 }} tickFormatter={(v) => formatChartLabel(v, revenueGranularity)} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? (v/1000).toFixed(1) + 'K' : v} width={60} />
-                <Tooltip content={<CustomTooltip formatter={(v) => formatCurrency(v)} color="#A855F7" />} labelFormatter={(value) => formatTooltipLabel(value, revenueGranularity)} />
-                <Area type="monotone" dataKey="revenue" name="Revenue" stroke="#A855F7" strokeWidth={2} fill="url(#revG)" dot={{ r: 3 }} />
-                {showMovingAvg && <Line type="monotone" dataKey="avg" name="Moving Avg" stroke="#10B981" dot={false} strokeWidth={2} />}
-                <Legend verticalAlign="top" align="right" wrapperStyle={{ paddingTop: 6 }} />
-              </AreaChart>
-            ) : (
-              <LineChart data={mergedRevenueData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="4 5" stroke="var(--border)" vertical={false} horizontal={true} />
-                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: 11 }} tickFormatter={(v) => formatChartLabel(v, revenueGranularity)} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? (v/1000).toFixed(1) + 'K' : v} width={60} />
-                <Tooltip content={<CustomTooltip formatter={(v) => formatCurrency(v)} color="#A855F7" />} labelFormatter={(value) => formatTooltipLabel(value, revenueGranularity)} />
-                <Line type="monotone" dataKey="revenue" name="Revenue" stroke="#A855F7" strokeWidth={2.5} dot={{ r: 3 }} />
-                {showMovingAvg && <Line type="monotone" dataKey="avg" name="Moving Avg" stroke="#10B981" dot={false} strokeWidth={2} />}
-                <Legend verticalAlign="top" align="right" wrapperStyle={{ paddingTop: 6 }} />
-              </LineChart>
-            )}
-          </ResponsiveContainer>
-        </div>
+        {/* Sparkline Cards */}
+        <div className="dashboard-sparkline-column" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--section-gap)' }}>
+          <div style={sectionStyle(0.2)}>
+            <div className="section-card" style={{
+              backgroundColor: 'var(--bg-secondary)',
+              borderRadius: 'var(--radius-xl)',
+              border: '1px solid var(--border)',
+              padding: 'var(--card-padding)',
+              borderTop: '3px solid #A855F7',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Revenue Trend</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-display)', marginTop: 4 }}>
+                    <AnimatedNumber value={dailyAvgRevenue} format={formatCurrency} />
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Daily average</div>
+                </div>
+                <div style={{ padding: '4px 10px', borderRadius: 12, backgroundColor: 'rgba(168, 85, 247, 0.1)', color: '#A855F7', fontSize: 11, fontWeight: 700 }}>
+                  {sparkRevenue.length}d
+                </div>
+              </div>
+              <div style={{ height: 80 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={sparkRevenue}>
+                    <defs>
+                      <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#A855F7" stopOpacity={0.4} />
+                        <stop offset="100%" stopColor="#A855F7" stopOpacity={0.05} />
+                      </linearGradient>
+                    </defs>
+                    <Area type="monotone" dataKey="revenue" stroke="#A855F7" strokeWidth={2} fill="url(#revGrad)" dot={false} isAnimationActive={true} animationDuration={1000} />
+                    <XAxis dataKey="month" hide />
+                    <YAxis hide domain={['dataMin - 10', 'dataMax + 10']} />
+                    <Tooltip content={<CustomTooltip formatter={(v) => formatCurrency(v)} color="#A855F7" />} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
 
-        <div className="insight-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-          <InsightBox icon={<IoTrendingUp size={16} color="var(--success)" />} label="Peak Revenue" value={formatCurrency(peakRevenue)} />
-          <InsightBox icon={<IoCalendarOutline size={16} color="var(--info)" />} label="Daily Average" value={formatCurrency(dailyAvgRevenue)} />
-          <InsightBox icon={<IoTimeOutline size={16} color="var(--warning)" />} label="Active Days" value={activeDays.toLocaleString() || '-'} />
+          <div style={sectionStyle(0.25)}>
+            <div className="section-card" style={{
+              backgroundColor: 'var(--bg-secondary)',
+              borderRadius: 'var(--radius-xl)',
+              border: '1px solid var(--border)',
+              padding: 'var(--card-padding)',
+              borderTop: '3px solid #F59E0B',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Signups Trend</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-display)', marginTop: 4 }}>
+                    <AnimatedNumber value={dailyAvgSignups} format={formatNumber} />
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Daily average</div>
+                </div>
+                <div style={{ padding: '4px 10px', borderRadius: 12, backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#F59E0B', fontSize: 11, fontWeight: 700 }}>
+                  +{formatNumber(userGrowth)} total
+                </div>
+              </div>
+              <div style={{ height: 80 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={sparkRegistrations}>
+                    <defs>
+                      <linearGradient id="regGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#F59E0B" stopOpacity={0.4} />
+                        <stop offset="100%" stopColor="#F59E0B" stopOpacity={0.05} />
+                      </linearGradient>
+                    </defs>
+                    <Area type="monotone" dataKey="signups" stroke="#F59E0B" strokeWidth={2} fill="url(#regGrad)" dot={false} isAnimationActive={true} animationDuration={1000} />
+                    <XAxis dataKey="month" hide />
+                    <YAxis hide domain={['dataMin - 1', 'dataMax + 1']} />
+                    <Tooltip content={<CustomTooltip formatter={(v) => formatNumber(v)} color="#F59E0B" />} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-      )}
-
-      {/* Registration Analysis */}
-      {registrationData.length > 0 && (
-      <div className="section-card" style={{
-        backgroundColor: 'var(--bg-secondary)',
-        borderRadius: 'var(--radius-xl)',
-        border: '1px solid var(--border)',
-        padding: 'var(--card-padding)',
-        marginBottom: 'var(--section-gap)',
-        borderTop: '3px solid var(--accent)',
-      }}>
-        <div className="section-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <SectionTitle>Registration Analysis</SectionTitle>
-          <div style={{ position: 'relative' }}>
-            <select
-              value={registrationGranularity}
-              onChange={(e) => setRegistrationGranularity(e.target.value)}
-              style={{
-                padding: '8px 36px 8px 14px',
-                borderRadius: 'var(--radius-md)',
-                backgroundColor: 'var(--bg-tertiary)',
-                border: '1px solid var(--border)',
-                color: 'var(--text-primary)',
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer',
-                outline: 'none',
-                appearance: 'none',
-                backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")",
-                backgroundRepeat: 'no-repeat',
-                backgroundPosition: 'right 10px center',
-                paddingRight: 40,
-                transition: 'all 0.2s ease',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.backgroundColor = 'var(--bg-hover)' }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)' }}
-            >
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-              <option value="daily">Daily</option>
-            </select>
-          </div>
-        </div>
-        <div className="chart-container-sm" style={{ height: 260, marginBottom: 20 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={transformedRegistrationData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="4 5" stroke="var(--border)" vertical={false} horizontal={true} />
-              <XAxis 
-                dataKey="month" 
-                axisLine={false} 
-                tickLine={false} 
-                tick={{ fill: '#6B7280', fontSize: 11, fontWeight: 500 }}
-                tickFormatter={(value) => {
-                  const isMonthly = value.split('-').length === 2
-                  const date = parseLocalDate(value)
-                  if (date.toString() === 'Invalid Date') return value
-                  return date.toLocaleDateString('en-US', isMonthly ? { month: 'short' } : { month: 'short', day: 'numeric' })
-                }}
-                interval={'preserveStartEnd'}
-                minTickGap={30}
-              />
-              <YAxis 
-                axisLine={false} 
-                tickLine={false} 
-                tick={{ fill: '#6B7280', fontSize: 11, fontWeight: 500 }} 
-                tickFormatter={(v) => v >= 1000 ? formatNumber(v) : v}
-                tickCount={5}
-                width={40}
-              />
-              <Tooltip content={<CustomTooltip formatter={(v) => formatNumber(v)} color="#A855F7" />} />
-              <Bar 
-                dataKey="signups" 
-                radius={[6, 6, 0, 0]} 
-                fill="#A855F7"
-                stroke="#C084FC"
-                strokeWidth={2}
-                maxBarSize={60}
-                minPointSize={8}
-                isAnimationActive={false}
-                background={{ fill: 'rgba(168, 85, 247, 0.1)' }}
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="insight-grid" style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: 12,
+      {/* Momentum Dashboard section separator */}
+      <div style={sectionStyle(0.3)}>
+        <div className="section-card" style={{
+          backgroundColor: 'var(--bg-secondary)',
+          borderRadius: 'var(--radius-xl)',
+          border: '1px solid var(--border)',
+          padding: 'var(--card-padding)',
+          marginBottom: 'var(--section-gap)',
+          borderTop: '3px solid var(--accent)',
         }}>
-          <InsightBox icon={<IoTrendingUp size={16} color="var(--success)" />} label="Peak Signups" value={formatNumber(peakSignups)} />
-          <InsightBox icon={<IoCalendarOutline size={16} color="var(--info)" />} label="Daily Average" value={formatNumber(dailyAvgSignups)} />
-          <InsightBox icon={<IoTimeOutline size={16} color="var(--warning)" />} label="Total Acquired" value={formatNumber(totalAcquired)} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 12 }}>
+            <SectionTitle>Momentum Dashboard</SectionTitle>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>Trend scores relative to peak performance</span>
+          </div>
+          <div className="grid-2-mobile" style={{ display: 'grid', gridTemplateColumns: '1.25fr minmax(260px, 1fr)', gap: 18, alignItems: 'center' }}>
+            <div className="momentum-rings-wrapper" style={{ minHeight: 300 }}>
+              <div className="dashboard-momentum-rings">
+                {pulseData.map((item) => (
+                  <div key={item.name} className="momentum-ring">
+                    <div
+                      className="momentum-ring-graphic"
+                      style={{
+                        background: `conic-gradient(${item.color} ${item.value * 3.6}deg, rgba(255,255,255,0.08) 0deg)`,
+                      }}
+                    >
+                      <div className="momentum-ring-center">
+                        <div style={{ fontSize: 18, fontWeight: 800, color: item.color }}>{item.value}%</div>
+                      </div>
+                    </div>
+                    <div className="momentum-ring-label">{item.name}</div>
+                    <div className="momentum-ring-display">{item.display}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: 'grid', gap: 12 }}>
+              {pulseData.map((item) => (
+                <div
+                  key={item.name}
+                  style={{
+                    padding: '16px 18px', borderRadius: 'var(--radius-md)',
+                    backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = `${item.color}50`; e.currentTarget.style.backgroundColor = '#232323' }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)' }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.8px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>{item.name}</div>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', marginTop: 8 }}>{item.display}</div>
+                    </div>
+                    <div style={{ width: 38, height: 38, borderRadius: '50%', backgroundColor: `${item.color}20`, display: 'grid', placeItems: 'center', color: item.color, fontWeight: 800, fontSize: 13 }}>
+                      {item.value}%
+                    </div>
+                  </div>
+                  <div style={{ marginTop: 8, width: '100%', height: 4, borderRadius: 2, backgroundColor: 'var(--bg-hover)', overflow: 'hidden' }}>
+                    <div style={{
+                      width: `${item.value}%`, height: '100%', borderRadius: 2,
+                      background: `linear-gradient(90deg, ${item.color}, ${item.color}80)`,
+                      transition: 'width 1s ease-out',
+                    }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
-      )}
 
       {/* Management Modules */}
-      <div className="section-card" style={{
-        backgroundColor: 'var(--bg-secondary)',
-        borderRadius: 'var(--radius-xl)',
-        border: '1px solid var(--border)',
-        padding: 'var(--card-padding)',
-        marginBottom: 'var(--section-gap)',
-      }}>
-        <SectionTitle>Management</SectionTitle>
-        <div className="modules-grid" style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-          gap: 12,
+      <div style={sectionStyle(0.4)}>
+        <div className="section-card" style={{
+          backgroundColor: 'var(--bg-secondary)',
+          borderRadius: 'var(--radius-xl)',
+          border: '1px solid var(--border)',
+          padding: 'var(--card-padding)',
+          marginBottom: 'var(--section-gap)',
         }}>
-          {modules.map((mod) => {
-            const Icon = mod.icon
-            const badge = mod.badgeKey ? s[mod.badgeKey] : null
-            return (
-              <button
-                key={mod.label}
-                className="module-btn"
-                onClick={() => navigateTo(navigate, mod.path)}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 8,
-                  padding: '20px 12px',
-                  borderRadius: 'var(--radius-lg)',
-                  backgroundColor: 'var(--bg-tertiary)',
-                  border: '1px solid var(--border)',
-                  cursor: 'pointer',
-                  position: 'relative',
-                  transition: 'border-color 0.2s, background-color 0.2s, transform 0.2s',
-                  fontFamily: 'var(--font-body)',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = mod.color + '50'
-                  e.currentTarget.style.backgroundColor = '#232323'
-                  e.currentTarget.style.transform = 'translateY(-2px)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--border)'
-                  e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'
-                  e.currentTarget.style.transform = 'translateY(0)'
-                }}
-              >
-                {badge !== null && badge > 0 && (
-                  <div style={{
-                    position: 'absolute',
-                    top: 10,
-                    right: 10,
-                    minWidth: 20,
-                    height: 20,
-                    borderRadius: 10,
-                    backgroundColor: mod.color,
-                    color: '#fff',
-                    fontSize: 10,
-                    fontWeight: 800,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: '0 5px',
+          <SectionTitle>Management</SectionTitle>
+          <div className="modules-grid" style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+            gap: 12,
+          }}>
+            {modules.map((mod) => {
+              const Icon = mod.icon
+              const badge = mod.badgeKey ? s[mod.badgeKey] : null
+              return (
+                <button
+                  key={mod.label}
+                  className="module-btn"
+                  onClick={() => navigateTo(navigate, mod.path)}
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center',
+                    justifyContent: 'center', gap: 8, padding: '20px 12px',
+                    borderRadius: 'var(--radius-lg)', backgroundColor: 'var(--bg-tertiary)',
+                    border: '1px solid var(--border)', cursor: 'pointer',
+                    position: 'relative', fontFamily: 'var(--font-body)',
+                    transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = mod.color + '50'
+                    e.currentTarget.style.backgroundColor = '#232323'
+                    e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)'
+                    e.currentTarget.style.boxShadow = `0 8px 25px ${mod.color}15`
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--border)'
+                    e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'
+                    e.currentTarget.style.transform = 'translateY(0) scale(1)'
+                    e.currentTarget.style.boxShadow = 'none'
+                  }}
+                >
+                  {badge !== null && badge > 0 && (
+                    <div className="module-badge" style={{
+                      position: 'absolute', top: 8, right: 8,
+                      minWidth: 20, height: 20, borderRadius: 10,
+                      backgroundColor: mod.color, color: '#fff',
+                      fontSize: 10, fontWeight: 800,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      padding: '0 5px',
+                    }}>
+                      {badge > 99 ? '99+' : badge}
+                    </div>
+                  )}
+                  <div className="module-icon" style={{
+                    width: 44, height: 44, borderRadius: 'var(--radius-md)',
+                    backgroundColor: mod.color + '15',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'transform 0.2s',
                   }}>
-                    {badge > 99 ? '99+' : badge}
+                    <Icon size={22} color={mod.color} />
                   </div>
-                )}
-                <div className="module-icon" style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: 'var(--radius-md)',
-                  backgroundColor: mod.color + '15',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}>
-                  <Icon size={22} color={mod.color} />
-                </div>
-                <span className="module-label" style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: 'var(--text-secondary)',
-                }}>
-                  {mod.label}
-                </span>
-                <IoArrowForward className="module-arrow" size={14} color="var(--text-muted)" />
-              </button>
-            )
-          })}
+                  <span className="module-label" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>
+                    {mod.label}
+                  </span>
+                  <IoArrowForward className="module-arrow" size={13} color="var(--text-muted)" style={{ opacity: 0.6 }} />
+                </button>
+              )
+            })}
+          </div>
         </div>
       </div>
 
       {/* Recent Activities */}
-      <div className="section-card" style={{
-        backgroundColor: 'var(--bg-secondary)',
-        borderRadius: 'var(--radius-xl)',
-        border: '1px solid var(--border)',
-        padding: 'var(--card-padding)',
-        marginBottom: 20,
-      }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: 8,
+      <div style={sectionStyle(0.45)}>
+        <div className="section-card" style={{
+          backgroundColor: 'var(--bg-secondary)',
+          borderRadius: 'var(--radius-xl)',
+          border: '1px solid var(--border)',
+          padding: 'var(--card-padding)',
+          marginBottom: 20,
         }}>
-          <SectionTitle>Recent Activities</SectionTitle>
-          <button
-            onClick={() => navigateTo(navigate, '/activities')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              padding: '6px 12px',
-              borderRadius: 'var(--radius-sm)',
-              backgroundColor: 'var(--accent-light)',
-              border: '1px solid var(--accent)',
-              cursor: 'pointer',
-              color: 'var(--accent)',
-              fontSize: 11,
-              fontWeight: 600,
-              transition: 'background-color 0.2s',
-            }}
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--accent-mid)'}
-            onMouseLeave={e => e.currentTarget.style.backgroundColor = 'var(--accent-light)'}
-          >
-            View All <IoArrowForward size={12} />
-          </button>
-        </div>
-        {activities.length > 0 ? (
-          activities.map((act, i) => {
-            const { time, exactTime } = formatActivityTime(act.createdAt || act.timestamp)
-            return (
-              <ActivityItem
-                key={act._id || act.id || i}
-                activity={{
-                  user: act.userName || act.user?.name || act.user || 'Unknown',
-                  action: act.action || act.description || act.message || 'No details',
-                  time,
-                  exactTime,
-                  color: act.color || 'var(--info)',
-                }}
-                isLast={i === activities.length - 1}
-              />
-            )
-          })
-        ) : (
-          <div style={{
-            padding: 24,
-            textAlign: 'center',
-            color: 'var(--text-muted)',
-            fontSize: 13,
-          }}>
-            No recent activities
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <SectionTitle>Recent Activities</SectionTitle>
+            <button
+              onClick={() => navigateTo(navigate, '/activities')}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 4,
+                padding: '6px 14px', borderRadius: 'var(--radius-sm)',
+                backgroundColor: 'var(--accent-light)', border: '1px solid var(--accent)',
+                cursor: 'pointer', color: 'var(--accent)',
+                fontSize: 11, fontWeight: 600,
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--accent-mid)'}
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = 'var(--accent-light)'}
+            >
+              View All <IoArrowForward size={12} />
+            </button>
           </div>
-        )}
+          {activities.length > 0 ? (
+            activities.map((act, i) => {
+              const { time, exactTime } = formatActivityTime(act.createdAt || act.timestamp)
+              return (
+                <div key={act._id || act.id || i} style={{ animation: `slideUp 0.3s ${0.5 + i * 0.08}s ease-out both` }}>
+                  <ActivityItem
+                    activity={{
+                      user: act.userName || act.user?.name || act.user || 'Unknown',
+                      action: act.action || act.description || act.message || 'No details',
+                      time,
+                      exactTime,
+                      color: act.color || 'var(--info)',
+                    }}
+                    isLast={i === activities.length - 1}
+                  />
+                </div>
+              )
+            })
+          ) : (
+            <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+              No recent activities
+            </div>
+          )}
+        </div>
       </div>
 
       <LogoutPopup
@@ -737,47 +902,25 @@ export default function Dashboard() {
   )
 }
 
-function InsightBox({ icon, label, value }) {
+function PulseStat({ label, value, accent, subtext }) {
   return (
-    <div className="insight-box" style={{
+    <div style={{
       display: 'flex',
-      alignItems: 'center',          gap: 10,
-      padding: '12px 14px',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: 14,
+      padding: '14px 16px',
       borderRadius: 'var(--radius-md)',
       backgroundColor: 'var(--bg-tertiary)',
       border: '1px solid var(--border)',
     }}>
-      <div className="insight-box-icon" style={{
-        width: 36,
-        height: 36,
-        borderRadius: 'var(--radius-sm)',
-        backgroundColor: 'rgba(255,255,255,0.03)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexShrink: 0,
-      }}>
-        {icon}
-      </div>
       <div>
-        <div className="insight-label" style={{
-          fontSize: 10,
-          color: 'var(--text-muted)',
-          fontWeight: 600,
-          textTransform: 'uppercase',
-          letterSpacing: '0.5px',
-        }}>
-          {label}
-        </div>
-        <div className="insight-value" style={{
-          fontSize: 15,
-          fontWeight: 800,
-          color: 'var(--text-primary)',
-          fontFamily: 'var(--font-display)',
-          marginTop: 2,
-        }}>
-          {value}
-        </div>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.9px' }}>{label}</div>
+        <div style={{ marginTop: 6, fontSize: 17, fontWeight: 800, color: 'var(--text-primary)' }}>{value}</div>
+        {subtext && <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text-secondary)' }}>{subtext}</div>}
+      </div>
+      <div style={{ width: 18, height: 18, borderRadius: '50%', backgroundColor: `${accent}20`, border: `2px solid ${accent}`, display: 'grid', placeItems: 'center' }}>
+        <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: accent }} />
       </div>
     </div>
   )

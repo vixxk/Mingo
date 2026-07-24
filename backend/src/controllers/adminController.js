@@ -753,9 +753,10 @@ class AdminController {
         isPopular: req.body.isPopular || false,
       };
       Object.keys(newPkg).forEach(k => newPkg[k] === undefined && delete newPkg[k]);
-      settings.coinPricing = [...packages, newPkg];
+      settings.coinPricing.push(newPkg);
       await settings.save();
-      return ApiResponse.success(res, newPkg, 'Coin package added');
+      const saved = settings.coinPricing[settings.coinPricing.length - 1];
+      return ApiResponse.success(res, saved, 'Coin package added');
     } catch (err) {
       next(err);
     }
@@ -765,7 +766,7 @@ class AdminController {
     try {
       const SystemSettings = require('../models/SystemSettings');
       const settings = await SystemSettings.getSettings();
-      const index = (settings.coinPricing || []).findIndex(p => p.id === req.params.id);
+      const index = (settings.coinPricing || []).findIndex(p => String(p._id) === req.params.id);
       if (index === -1) {
         throw new AppError('Coin package not found', 404);
       }
@@ -786,7 +787,7 @@ class AdminController {
     try {
       const SystemSettings = require('../models/SystemSettings');
       const settings = await SystemSettings.getSettings();
-      const index = (settings.coinPricing || []).findIndex(p => p.id === req.params.id);
+      const index = (settings.coinPricing || []).findIndex(p => String(p._id) === req.params.id);
       if (index === -1) {
         throw new AppError('Coin package not found', 404);
       }

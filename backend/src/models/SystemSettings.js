@@ -78,11 +78,8 @@ systemSettingsSchema.statics.getSettings = async function () {
       coinPricing: defaults,
       activePackagesCount: 7,
     });
-  } else if (!settings.coinPricing || settings.coinPricing.length < 7) {
+  } else if (!settings.coinPricing) {
     settings.coinPricing = defaults;
-    if (!settings.activePackagesCount || settings.activePackagesCount < 7) {
-      settings.activePackagesCount = 7;
-    }
     await settings.save();
   }
   return settings;

@@ -257,6 +257,111 @@
     gap: 8px !important;
   }
 
+  /* Admin dashboard mobile-specific compaction */
+  .dashboard-audience-row {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  .dashboard-sparkline-column {
+    gap: 12px !important;
+  }
+  .dashboard-audience-pulse .section-card,
+  .dashboard-sparkline-column .section-card,
+  .dashboard-momentum-grid .section-card {
+    padding: 18px !important;
+  }
+  .dashboard-momentum-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  .dashboard-momentum-rings {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 8px !important;
+  }
+  .momentum-rings-wrapper {
+    min-height: auto !important;
+  }
+  .momentum-ring {
+    padding: 10px !important;
+    gap: 8px !important;
+  }
+  .momentum-ring-graphic {
+    width: 72px !important;
+    height: 72px !important;
+  }
+  .momentum-ring-center {
+    width: 44px !important;
+    height: 44px !important;
+  }
+  .momentum-ring-label {
+    font-size: 9px !important;
+  }
+  .momentum-ring-display {
+    font-size: 12px !important;
+  }
+  .dashboard-audience-pulse .ap-flex {
+    gap: 10px !important;
+  }
+  .dashboard-audience-pulse .ap-chart {
+    min-height: 180px !important;
+    min-width: 180px !important;
+  }
+  .dashboard-audience-pulse .ap-chart .recharts-responsive-container {
+    height: 180px !important;
+  }
+  .dashboard-audience-pulse .ap-chart > div:last-child div:first-child {
+    font-size: 20px !important;
+  }
+  .dashboard-audience-pulse .ap-chart > div:last-child div:last-child {
+    font-size: 11px !important;
+  }
+  .dashboard-audience-pulse .ap-chart > div:nth-child(2) {
+    top: 8px !important;
+  }
+  .dashboard-audience-pulse .ap-stats {
+    gap: 6px !important;
+  }
+  .dashboard-audience-pulse .ap-stats > div {
+    padding: 8px 10px !important;
+    gap: 8px !important;
+  }
+  .dashboard-audience-pulse .ap-stats > div > div:first-child div:first-child {
+    font-size: 9px !important;
+  }
+  .dashboard-audience-pulse .ap-stats > div > div:first-child div:nth-child(2) {
+    font-size: 13px !important;
+    margin-top: 3px !important;
+  }
+  .dashboard-audience-pulse .ap-stats > div > div:first-child div:nth-child(3) {
+    font-size: 9px !important;
+    margin-top: 2px !important;
+  }
+  .dashboard-audience-pulse .ap-stats > div > div:last-child {
+    width: 12px !important;
+    height: 12px !important;
+  }
+  .dashboard-audience-pulse .ap-stats > div > div:last-child > div {
+    width: 5px !important;
+    height: 5px !important;
+  }
+
+  .dashboard-sparkline-column .section-card {
+    padding: 10px !important;
+  }
+  .dashboard-sparkline-column .section-card > div:first-child > div:first-child {
+    font-size: 9px !important;
+  }
+  .dashboard-sparkline-column .section-card > div:first-child > div:nth-child(2) {
+    font-size: 15px !important;
+    margin-top: 1px !important;
+  }
+  .dashboard-sparkline-column .section-card > div:first-child > div:nth-child(3) {
+    font-size: 9px !important;
+  }
+  .dashboard-sparkline-column .section-card > div:last-child {
+    height: 40px !important;
+  }
+
   /* List items (users, listeners, etc.) */
   .list-item {
     padding: 10px !important;
@@ -338,11 +443,11 @@
 
   /* Management modules grid */
   .modules-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
+    grid-template-columns: repeat(3, 1fr) !important;
     gap: 6px !important;
   }
   .module-btn {
-    padding: 10px 6px !important;
+    padding: 8px 4px !important;
     gap: 4px !important;
   }
   .module-btn .module-icon {
@@ -356,6 +461,15 @@
   }
   .module-btn .module-label {
     font-size: 10px !important;
+  }
+  .module-btn .module-badge {
+    top: 4px !important;
+    right: 4px !important;
+    min-width: 16px !important;
+    height: 16px !important;
+    border-radius: 8px !important;
+    font-size: 8px !important;
+    padding: 0 3px !important;
   }
   .module-btn .module-arrow {
     display: none !important;
