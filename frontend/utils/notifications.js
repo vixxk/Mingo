@@ -144,13 +144,15 @@ let Notifications = {
 
 const isExpoGo = Constants.appOwnership === 'expo';
 
-try {
-  const RealNotifications = require('expo-notifications');
-  if (RealNotifications) {
-    Notifications = RealNotifications;
+if (!isExpoGo) {
+  try {
+    const RealNotifications = require('expo-notifications');
+    if (RealNotifications) {
+      Notifications = RealNotifications;
+    }
+  } catch (e) {
+    console.warn('Failed to load real expo-notifications, using mock:', e.message);
   }
-} catch (e) {
-  console.warn('Failed to load real expo-notifications, using mock:', e.message);
 }
 
 export { Notifications };

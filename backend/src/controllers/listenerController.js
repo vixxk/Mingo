@@ -227,6 +227,7 @@ class ListenerController {
         totalSessions: listener.totalSessions,
         isOnline: listener.isOnline,
         isBusy: listener.isBusy,
+        busySince: listener.busySince,
         verified: listener.verified,
         bestChoice: listener.bestChoice,
         introAudioUrl: listener.introAudioUrl,

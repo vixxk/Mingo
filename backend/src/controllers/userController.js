@@ -316,6 +316,7 @@ class UserController {
       if (listener) {
         listener.isOnline = false;
         listener.isBusy = false;
+        listener.busySince = null;
         await listener.save();
       }
 
@@ -347,7 +348,7 @@ class UserController {
         // Make listener offline
         await Listener.findOneAndUpdate(
           { userId: user._id },
-          { isOnline: false, isBusy: false }
+          { isOnline: false, isBusy: false, busySince: null }
         );
 
         return ApiResponse.success(res, {

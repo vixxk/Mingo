@@ -14,13 +14,13 @@ import { ms, s, vs } from '../../utils/responsive';
 import { walletAPI } from '../../utils/api';
 
 const DEFAULT_PACKAGES = [
-  { id: '1', coins: 40,   originalPrice: 38,  price: 19,  discount: 50, tag: 'Starter Offer' },
-  { id: '2', coins: 100,  originalPrice: 98,  price: 49,  discount: 50, tag: 'Flat 50% Off' },
-  { id: '3', coins: 220,  originalPrice: 198, price: 99,  discount: 50, tag: 'Most Popular' },
-  { id: '4', coins: 350,  originalPrice: 373, price: 149, discount: 60, tag: 'Flat 60% Off' },
-  { id: '5', coins: 850,  originalPrice: 873, price: 349, discount: 60, tag: 'Best Value' },
-  { id: '6', coins: 1500, originalPrice: 1198, price: 599, discount: 50, tag: 'Super Saver' },
-  { id: '7', coins: 3000, originalPrice: 2497, price: 999, discount: 60, tag: 'Limited Offer' },
+  { id: '1', name: 'Starter Offer', coins: 40,   originalPrice: 38,  price: 19,  discount: 50, tag: 'Starter Offer' },
+  { id: '2', name: 'Flat 50% Off', coins: 100,  originalPrice: 98,  price: 49,  discount: 50, tag: 'Flat 50% Off' },
+  { id: '3', name: 'Most Popular', coins: 220,  originalPrice: 198, price: 99,  discount: 50, tag: 'Most Popular' },
+  { id: '4', name: 'Flat 60% Off', coins: 350,  originalPrice: 373, price: 149, discount: 60, tag: 'Flat 60% Off' },
+  { id: '5', name: 'Best Value', coins: 850,  originalPrice: 873, price: 349, discount: 60, tag: 'Best Value' },
+  { id: '6', name: 'Super Saver', coins: 1500, originalPrice: 1198, price: 599, discount: 50, tag: 'Super Saver' },
+  { id: '7', name: 'Limited Offer', coins: 3000, originalPrice: 2497, price: 999, discount: 60, tag: 'Limited Offer' },
 ];
 
 export default function InCallRechargePopup({ visible, onClose, onRechargeSuccess, lowBalanceMessage }) {

@@ -5,6 +5,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { notificationAPI } from '../../utils/api';
 import { wp, hp, SCREEN_WIDTH, SCREEN_HEIGHT } from '../../utils/responsive';
 
+const SW = SCREEN_WIDTH;
+const SH = SCREEN_HEIGHT;
+
 export default function NotificationsPopup({ visible, onClose }) {
   const slideAnim = useRef(new Animated.Value(SH)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;

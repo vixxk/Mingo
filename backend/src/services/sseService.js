@@ -35,8 +35,8 @@ const sseService = {
     console.log(`[SSE] Status client removed. Remaining: ${statusClients.size}`);
   },
 
-  broadcastListenerStatus: (userId, isOnline, isBusy = false) => {
-    const data = JSON.stringify({ userId: userId.toString(), isOnline, isBusy });
+  broadcastListenerStatus: (userId, isOnline, isBusy = false, busySince = null) => {
+    const data = JSON.stringify({ userId: userId.toString(), isOnline, isBusy, busySince });
     console.log(`[SSE] Broadcasting listener status change: ${data}`);
     for (const res of statusClients) {
       try {

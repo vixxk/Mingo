@@ -4,8 +4,8 @@ const AppError = require('../utils/appError');
 
 class ListenerService {
     static async getRecommended(limit = 20, userLanguage = 'English', blockedUserIds = []) {
-    // Query MongoDB directly for online, approved listeners
-    const listeners = await Listener.find({ status: 'approved', isOnline: true })
+    // Query MongoDB directly for all approved listeners (online and offline)
+    const listeners = await Listener.find({ status: 'approved' })
       .populate('userId', 'name username phone role gender avatarIndex isBanned');
 
     const results = [];
@@ -52,6 +52,7 @@ class ListenerService {
         totalSessions: listener.totalSessions,
         isOnline: listener.isOnline,
         isBusy: listener.isBusy,
+        busySince: listener.busySince,
         isVerified: listener.verified,
         bestChoice: listener.bestChoice,
         audioEnabled: listener.audioEnabled,

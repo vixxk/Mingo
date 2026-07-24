@@ -45,10 +45,42 @@ const LiveBadge = () => (
   </View>
 );
 
-const BusyBadge = () => (
-  <View style={[styles.liveBadge, { backgroundColor: 'rgba(239, 68, 68, 0.9)' }]}>
-    <View style={[styles.liveDot, { backgroundColor: '#fff' }]} />
-    <Text style={styles.liveText}>Busy</Text>
+const BusyBadge = ({ busySince }) => {
+  const [elapsed, setElapsed] = useState('');
+
+  useEffect(() => {
+    if (!busySince) return;
+    
+    const updateElapsed = () => {
+      const now = new Date();
+      const busyTime = new Date(busySince);
+      const diffMs = now - busyTime;
+      const diffMins = Math.floor(diffMs / 60000);
+      
+      if (diffMins < 1) {
+        setElapsed('1 min');
+      } else {
+        setElapsed(`${diffMins} min`);
+      }
+    };
+
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 60000);
+    return () => clearInterval(interval);
+  }, [busySince]);
+
+  return (
+    <View style={[styles.liveBadge, { backgroundColor: 'rgba(239, 68, 68, 0.9)' }]}>
+      <View style={[styles.liveDot, { backgroundColor: '#fff' }]} />
+      <Text style={styles.liveText}>Busy{elapsed ? ` ${elapsed}` : ''}</Text>
+    </View>
+  );
+};
+
+const InactiveBadge = () => (
+  <View style={[styles.liveBadge, { backgroundColor: 'rgba(107, 114, 128, 0.9)' }]}>
+    <View style={[styles.liveDot, { backgroundColor: '#9CA3AF' }]} />
+    <Text style={styles.liveText}>Inactive</Text>
   </View>
 );
 
@@ -84,6 +116,8 @@ const BestChoiceCard = ({ item, onCallPress, onProfilePress }) => {
     }).start();
   };
 
+  const isInactive = !item.isLive || item.isBusy;
+
   return (
     <TouchableOpacity
       activeOpacity={0.9}
@@ -102,42 +136,36 @@ const BestChoiceCard = ({ item, onCallPress, onProfilePress }) => {
           <View style={styles.bestChoiceCardInner}>
             <Image
               source={{ uri: item.image || getAvatarUrl(item.gender, item.avatarIndex) }}
-              style={styles.bestChoiceImage}
+              style={[styles.bestChoiceImage, isInactive && { opacity: 0.5 }]}
               resizeMode="cover"
             />
             {}
             <View style={styles.bestChoiceLiveBadgeWrapper}>
-              {item.isBusy ? <BusyBadge /> : item.isLive ? <LiveBadge /> : null}
+              {item.isBusy ? <BusyBadge busySince={item.busySince} /> : item.isLive ? <LiveBadge /> : <InactiveBadge />}
             </View>
             {}
             <View style={styles.bestChoiceActionStack}>
-              {item.audioEnabled && (
-                <TouchableOpacity 
-                  style={[styles.bestChoiceActionBtn, item.isBusy && { opacity: 0.5 }]} 
-                  activeOpacity={0.7} 
-                  onPress={onProfilePress}
-                >
-                  <Ionicons name="call-outline" size={18} color="#fff" />
-                </TouchableOpacity>
-              )}
-              {item.videoEnabled && (
-                <TouchableOpacity 
-                  style={[styles.bestChoiceActionBtn, item.isBusy && { opacity: 0.5 }]} 
-                  activeOpacity={0.7} 
-                  onPress={onProfilePress}
-                >
-                  <Ionicons name="videocam-outline" size={18} color="#fff" />
-                </TouchableOpacity>
-              )}
-              {item.chatEnabled && (
-                <TouchableOpacity 
-                  style={[styles.bestChoiceActionBtn, item.isBusy && { opacity: 0.5 }]} 
-                  activeOpacity={0.7}
-                  onPress={onProfilePress}
-                >
-                  <Ionicons name="chatbubble-outline" size={18} color="#fff" />
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity 
+                style={[styles.bestChoiceActionBtn, isInactive && { opacity: 0.5 }]} 
+                activeOpacity={0.7} 
+                onPress={() => onCallPress('audio')}
+              >
+                <Ionicons name="call-outline" size={18} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.bestChoiceActionBtn, isInactive && { opacity: 0.5 }]} 
+                activeOpacity={0.7} 
+                onPress={() => onCallPress('video')}
+              >
+                <Ionicons name="videocam-outline" size={18} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.bestChoiceActionBtn, isInactive && { opacity: 0.5 }]} 
+                activeOpacity={0.7}
+                onPress={onProfilePress}
+              >
+                <Ionicons name="chatbubble-outline" size={18} color="#fff" />
+              </TouchableOpacity>
             </View>
             {}
             <View style={styles.bestChoiceNameRow}>
@@ -175,6 +203,8 @@ const PeopleCard = ({ item, onCallPress, onChatPress, onProfilePress }) => {
     }).start();
   };
 
+  const isInactive = !item.isLive || item.isBusy;
+
   return (
     <TouchableOpacity
       activeOpacity={0.9}
@@ -187,7 +217,7 @@ const PeopleCard = ({ item, onCallPress, onChatPress, onProfilePress }) => {
         <View style={styles.peopleImageContainer}>
           <Image
             source={{ uri: item.image || getAvatarUrl(item.gender, item.avatarIndex) }}
-            style={styles.peopleImage}
+            style={[styles.peopleImage, !item.isLive && { opacity: 0.5 }]}
             resizeMode="cover"
           />
           <LinearGradient
@@ -195,7 +225,7 @@ const PeopleCard = ({ item, onCallPress, onChatPress, onProfilePress }) => {
             style={styles.peopleNameGradient}
           />
           <View style={styles.peopleLiveBadgeWrapper}>
-            {item.isBusy ? <BusyBadge /> : item.isLive ? <LiveBadge /> : null}
+            {item.isBusy ? <BusyBadge busySince={item.busySince} /> : item.isLive ? <LiveBadge /> : <InactiveBadge />}
           </View>
           <View style={styles.peopleNameRow}>
             <Text style={styles.peopleName} numberOfLines={1}>
@@ -205,36 +235,30 @@ const PeopleCard = ({ item, onCallPress, onChatPress, onProfilePress }) => {
           </View>
         </View>
         <View style={styles.peopleActions}>
-          {item.audioEnabled && (
-            <TouchableOpacity 
-              style={[styles.peopleActionBtn, item.isBusy && { opacity: 0.5 }]} 
-              activeOpacity={0.7} 
-              onPress={() => onCallPress('audio')}
-              disabled={item.isBusy}
-            >
-              <Ionicons name="call-outline" size={18} color="#22C55E" />
-            </TouchableOpacity>
-          )}
-          {item.chatEnabled && (
-            <TouchableOpacity 
-              style={[styles.peopleActionBtn, item.isBusy && { opacity: 0.5 }]} 
-              activeOpacity={0.7}
-              onPress={onChatPress}
-              disabled={item.isBusy}
-            >
-              <Ionicons name="chatbubble-outline" size={18} color="#fff" />
-            </TouchableOpacity>
-          )}
-          {item.videoEnabled && (
-            <TouchableOpacity 
-              style={[styles.peopleActionBtn, item.isBusy && { opacity: 0.5 }]} 
-              activeOpacity={0.7} 
-              onPress={() => onCallPress('video')}
-              disabled={item.isBusy}
-            >
-              <Ionicons name="videocam-outline" size={18} color="#3B82F6" />
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity 
+            style={[styles.peopleActionBtn, isInactive && { opacity: 0.5 }]} 
+            activeOpacity={0.7} 
+            onPress={() => onCallPress('audio')}
+            disabled={isInactive}
+          >
+            <Ionicons name="call-outline" size={18} color="#22C55E" />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.peopleActionBtn, isInactive && { opacity: 0.5 }]} 
+            activeOpacity={0.7}
+            onPress={onChatPress}
+            disabled={isInactive}
+          >
+            <Ionicons name="chatbubble-outline" size={18} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.peopleActionBtn, isInactive && { opacity: 0.5 }]} 
+            activeOpacity={0.7} 
+            onPress={() => onCallPress('video')}
+            disabled={isInactive}
+          >
+            <Ionicons name="videocam-outline" size={18} color="#3B82F6" />
+          </TouchableOpacity>
         </View>
       </Animated.View>
     </TouchableOpacity>
@@ -386,6 +410,7 @@ export default function HomeScreen() {
           name: l.name,
           isLive: l.isOnline,
           isBusy: l.isBusy,
+          busySince: l.busySince,
           isVerified: l.isVerified,
           bestChoice: l.bestChoice,
           audioEnabled: l.audioEnabled !== false, // default true
@@ -395,6 +420,15 @@ export default function HomeScreen() {
           gender: l.gender,
           avatarIndex: l.avatarIndex || 0,
         }));
+
+        // Sort: Active listeners first, then Inactive
+        mappedListeners.sort((a, b) => {
+          if (a.isLive && !b.isLive) return -1;
+          if (!a.isLive && b.isLive) return 1;
+          if (a.isBusy && !b.isBusy) return -1;
+          if (!a.isBusy && b.isBusy) return 1;
+          return 0;
+        });
 
         const bestChoice = mappedListeners.filter(l => l.bestChoice);
         const people = mappedListeners;
@@ -415,7 +449,7 @@ export default function HomeScreen() {
   useEffect(() => {
     const handleStatusChanged = (data) => {
       console.log('[Home] Listener status changed:', data);
-      const { userId, isOnline, isBusy } = data;
+      const { userId, isOnline, isBusy, busySince } = data;
       
       const updateStatus = (list) => 
         list.map(item => {
@@ -423,14 +457,36 @@ export default function HomeScreen() {
             return {
               ...item,
               isLive: isOnline,
-              isBusy: isBusy
+              isBusy: isBusy,
+              busySince: isBusy ? busySince : null
             };
           }
           return item;
         });
 
-      setBestChoiceData(prev => updateStatus(prev));
-      setPeopleData(prev => updateStatus(prev));
+      // Re-sort after update
+      setBestChoiceData(prev => {
+        const updated = updateStatus(prev);
+        updated.sort((a, b) => {
+          if (a.isLive && !b.isLive) return -1;
+          if (!a.isLive && b.isLive) return 1;
+          if (a.isBusy && !b.isBusy) return -1;
+          if (!a.isBusy && b.isBusy) return 1;
+          return 0;
+        });
+        return updated;
+      });
+      setPeopleData(prev => {
+        const updated = updateStatus(prev);
+        updated.sort((a, b) => {
+          if (a.isLive && !b.isLive) return -1;
+          if (!a.isLive && b.isLive) return 1;
+          if (a.isBusy && !b.isBusy) return -1;
+          if (!a.isBusy && b.isBusy) return 1;
+          return 0;
+        });
+        return updated;
+      });
     };
 
     socketService.on('listener_status_changed', handleStatusChanged);
@@ -442,21 +498,43 @@ export default function HomeScreen() {
   useStatusSSE(
     useCallback((data) => {
       console.log('[Home] SSE Listener status changed:', data);
-      const { userId, isOnline, isBusy } = data;
+      const { userId, isOnline, isBusy, busySince } = data;
       const updateStatus = (list) => 
         list.map(item => {
           if (item.id === userId) {
             return {
               ...item,
               isLive: isOnline,
-              isBusy: isBusy
+              isBusy: isBusy,
+              busySince: isBusy ? busySince : null
             };
           }
           return item;
         });
 
-      setBestChoiceData(prev => updateStatus(prev));
-      setPeopleData(prev => updateStatus(prev));
+      // Re-sort after update
+      setBestChoiceData(prev => {
+        const updated = updateStatus(prev);
+        updated.sort((a, b) => {
+          if (a.isLive && !b.isLive) return -1;
+          if (!a.isLive && b.isLive) return 1;
+          if (a.isBusy && !b.isBusy) return -1;
+          if (!a.isBusy && b.isBusy) return 1;
+          return 0;
+        });
+        return updated;
+      });
+      setPeopleData(prev => {
+        const updated = updateStatus(prev);
+        updated.sort((a, b) => {
+          if (a.isLive && !b.isLive) return -1;
+          if (!a.isLive && b.isLive) return 1;
+          if (a.isBusy && !b.isBusy) return -1;
+          if (!a.isBusy && b.isBusy) return 1;
+          return 0;
+        });
+        return updated;
+      });
     }, [])
   );
 
@@ -775,7 +853,7 @@ export default function HomeScreen() {
         </View>
 
         {}
-        <Text style={styles.sectionTitle}>People You Can Talk</Text>
+        <Text style={styles.sectionTitle}>People</Text>
 
         {}
         <View style={styles.peopleGridContainer}>

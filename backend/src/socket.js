@@ -540,8 +540,10 @@ const initSocket = (server) => {
           
           let listenerUserId = socket.userId || session.listenerId;
           if (listenerUserId) {
-            await Listener.findOneAndUpdate({ userId: listenerUserId }, { isBusy: false });
+            await Listener.findOneAndUpdate({ userId: listenerUserId }, { isBusy: false, busySince: null });
             io.emit('listener_status_changed', { userId: listenerUserId, isOnline: true, isBusy: false });
+            const sseService = require('./services/sseService');
+            sseService.broadcastListenerStatus(listenerUserId, true, false, null);
             await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, listenerUserId.toString());
             await redis.del(REDIS_KEYS.LOCK(listenerUserId.toString()));
           }
@@ -571,8 +573,10 @@ const initSocket = (server) => {
           if (sess) listenerUserId = sess.listenerId;
         }
         if (listenerUserId) {
-          await Listener.findOneAndUpdate({ userId: listenerUserId }, { isBusy: false });
+          await Listener.findOneAndUpdate({ userId: listenerUserId }, { isBusy: false, busySince: null });
           io.emit('listener_status_changed', { userId: listenerUserId, isOnline: true, isBusy: false });
+          const sseService = require('./services/sseService');
+          sseService.broadcastListenerStatus(listenerUserId, true, false, null);
           await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, listenerUserId.toString());
           await redis.del(REDIS_KEYS.LOCK(listenerUserId.toString()));
         }
@@ -599,8 +603,10 @@ const initSocket = (server) => {
         if (userId) {
           io.to(`user_${userId}`).emit('call_cancelled', { sessionId });
           
-          await Listener.findOneAndUpdate({ userId: userId }, { isBusy: false });
+          await Listener.findOneAndUpdate({ userId: userId }, { isBusy: false, busySince: null });
           io.emit('listener_status_changed', { userId: userId, isOnline: true, isBusy: false });
+          const sseService = require('./services/sseService');
+          sseService.broadcastListenerStatus(userId, true, false, null);
           await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, userId.toString());
           await redis.del(REDIS_KEYS.LOCK(userId.toString()));
         }
@@ -630,8 +636,10 @@ const initSocket = (server) => {
             io.to(`user_${session.listenerId}`).emit('call_ended', { sessionId });
             
             // Reset listener busy status
-            await Listener.findOneAndUpdate({ userId: session.listenerId }, { isBusy: false });
+            await Listener.findOneAndUpdate({ userId: session.listenerId }, { isBusy: false, busySince: null });
             io.emit('listener_status_changed', { userId: session.listenerId.toString(), isOnline: true, isBusy: false });
+            const sseService = require('./services/sseService');
+            sseService.broadcastListenerStatus(session.listenerId.toString(), true, false, null);
             await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, session.listenerId.toString());
             await redis.del(REDIS_KEYS.LOCK(session.listenerId.toString()));
           }
@@ -835,8 +843,10 @@ const initSocket = (server) => {
               
               // Reset listener busy status and release lock
               const listenerIdStr = activeCall.listenerId.toString();
-              await Listener.findOneAndUpdate({ userId: listenerIdStr }, { isBusy: false });
+              await Listener.findOneAndUpdate({ userId: listenerIdStr }, { isBusy: false, busySince: null });
               io.emit('listener_status_changed', { userId: listenerIdStr, isOnline: false, isBusy: false });
+              const sseService = require('./services/sseService');
+              sseService.broadcastListenerStatus(listenerIdStr, false, false, null);
               await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, listenerIdStr);
               await redis.del(REDIS_KEYS.LOCK(listenerIdStr));
             }

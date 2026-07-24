@@ -84,6 +84,10 @@ const listenerSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    busySince: {
+      type: Date,
+      default: null,
+    },
     status: {
       type: String,
       enum: ['pending', 'approved', 'rejected'],
@@ -241,7 +245,10 @@ listenerSchema.statics.findAllWithUser = function () {
 
 listenerSchema.statics.setOnlineStatus = async function (userId, isOnline) {
   const update = { isOnline };
-  if (!isOnline) update.isBusy = false;
+  if (!isOnline) {
+    update.isBusy = false;
+    update.busySince = null;
+  }
   return this.findOneAndUpdate({ userId }, update, { new: true });
 };
 

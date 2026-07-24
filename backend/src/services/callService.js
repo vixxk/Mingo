@@ -89,13 +89,16 @@ class CallService {
 
     
     // Mark listener as busy in DB
-    await Listener.findOneAndUpdate({ userId: matchedListenerId }, { isBusy: true });
+    const now = new Date();
+    await Listener.findOneAndUpdate({ userId: matchedListenerId }, { isBusy: true, busySince: now });
 
     try {
       const { getIo } = require('../socket');
-      getIo().emit('listener_status_changed', { userId: matchedListenerId, isOnline: true, isBusy: true });
+      getIo().emit('listener_status_changed', { userId: matchedListenerId, isOnline: true, isBusy: true, busySince: now });
+      const sseService = require('./sseService');
+      sseService.broadcastListenerStatus(matchedListenerId, true, true, now);
     } catch (e) {
-      console.log('Socket error emitting status changed', e.message);
+      console.log('Socket or SSE error emitting status changed', e.message);
     }
 
     await redis.srem(REDIS_KEYS.LISTENERS_AVAILABLE, matchedListenerId);
@@ -198,15 +201,17 @@ class CallService {
       await session.save();
 
       // Mark listener as not busy in DB
-      await Listener.findOneAndUpdate({ userId: sessionListenerIdStr }, { isBusy: false });
+      await Listener.findOneAndUpdate({ userId: sessionListenerIdStr }, { isBusy: false, busySince: null });
 
       try {
         const { getIo } = require('../socket');
         getIo().to(`user_${sessionUserIdStr}`).emit('call_ended', { sessionId });
         getIo().to(`user_${sessionListenerIdStr}`).emit('call_ended', { sessionId });
         getIo().emit('listener_status_changed', { userId: sessionListenerIdStr, isOnline: true, isBusy: false });
+        const sseService = require('./sseService');
+        sseService.broadcastListenerStatus(sessionListenerIdStr, true, false, null);
       } catch (e) {
-        console.log('Socket error emitting call_ended/status changed', e.message);
+        console.log('Socket or SSE error emitting call_ended/status changed', e.message);
       }
 
       await MatchingService.releaseLock(sessionListenerIdStr);
@@ -264,15 +269,17 @@ class CallService {
 
     
     // Mark listener as not busy in DB
-    await Listener.findOneAndUpdate({ userId: sessionListenerIdStr }, { isBusy: false });
+    await Listener.findOneAndUpdate({ userId: sessionListenerIdStr }, { isBusy: false, busySince: null });
 
     try {
       const { getIo } = require('../socket');
       getIo().to(`user_${sessionUserIdStr}`).emit('call_ended', { sessionId });
       getIo().to(`user_${sessionListenerIdStr}`).emit('call_ended', { sessionId });
       getIo().emit('listener_status_changed', { userId: sessionListenerIdStr, isOnline: true, isBusy: false });
+      const sseService = require('./sseService');
+      sseService.broadcastListenerStatus(sessionListenerIdStr, true, false, null);
     } catch (e) {
-      console.log('Socket error emitting call_ended/status changed', e.message);
+      console.log('Socket or SSE error emitting call_ended/status changed', e.message);
     }
 
     await MatchingService.releaseLock(sessionListenerIdStr);
