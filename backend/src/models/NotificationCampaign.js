@@ -22,6 +22,13 @@ const campaignSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // Alias used by the admin history UI. This is the number of valid
+    // audience accounts selected for the campaign, not just accounts with a
+    // currently registered push token.
+    sentCount: {
+      type: Number,
+      default: 0,
+    },
     openedCount: {
       type: Number,
       default: 0,

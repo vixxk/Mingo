@@ -23,6 +23,8 @@ const DEFAULT_PACKAGES = [
   { id: '7', name: 'Limited Offer', coins: 3000, originalPrice: 2497, price: 999, discount: 60, tag: 'Limited Offer' },
 ];
 
+const SUCCESS_DISPLAY_MS = 5000;
+
 export default function InCallRechargePopup({ visible, onClose, onRechargeSuccess, lowBalanceMessage }) {
   const slideAnim = useRef(new Animated.Value(600)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
@@ -71,7 +73,7 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
       setTimeout(() => {
         if (onRechargeSuccess) onRechargeSuccess();
         setPurchasing(null);
-      }, 1200);
+      }, SUCCESS_DISPLAY_MS);
     } catch (e) {
       console.log('Purchase failed:', e);
       setPurchasing(null);

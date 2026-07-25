@@ -171,7 +171,6 @@ export default function VideoCallScreen() {
         // Clear low balance warning if balance is now healthy
         if (data.coins >= 60) {
           setLowBalanceMessage('');
-          setShowRecharge(false);
         }
       }
     };

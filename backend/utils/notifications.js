@@ -120,8 +120,8 @@ const sendNotificationToMultiple = async (tokens, title, body, data = {}) => {
     return { success: true, message: 'No tokens provided' };
   }
 
-  // Deduplicate and filter empty values
-  const uniqueTokens = [...new Set(tokens.filter(Boolean))];
+  // Deduplicate and filter empty/non-string values
+  const uniqueTokens = [...new Set(tokens.filter(t => t && typeof t === 'string'))];
   const expoTokens = [];
   const fcmTokens = [];
 
@@ -145,11 +145,14 @@ const sendNotificationToMultiple = async (tokens, title, body, data = {}) => {
   }, {});
 
   // 1. Send Expo push notifications in batches of 100
+  //    Expo requires all tokens in a single request to belong to the same project
+  //    (experience ID). If a batch mixes projects, the API returns
+  //    PUSH_TOO_MANY_EXPERIENCE_IDS with a details map grouping tokens per project.
   if (expoTokens.length > 0) {
     console.log(`[Push Service] Preparing to send ${expoTokens.length} Expo notifications in batches...`);
-    for (let i = 0; i < expoTokens.length; i += 100) {
-      const chunk = expoTokens.slice(i, i + 100);
-      const payloads = chunk.map(token => ({
+
+    const buildPayloads = (tokens) =>
+      tokens.map(token => ({
         to: token,
         title,
         body,
@@ -158,92 +161,129 @@ const sendNotificationToMultiple = async (tokens, title, body, data = {}) => {
         priority: 'high',
       }));
 
-      try {
-        const response = await axios.post(
-          'https://exp.host/--/api/v2/push/send',
-          payloads,
-          {
-            headers: {
-              'Accept': 'application/json',
-              'Accept-encoding': 'gzip, deflate',
-              'Content-Type': 'application/json',
-            },
+    const sendChunk = async (chunk) => {
+      const payloads = buildPayloads(chunk);
+      const response = await axios.post(
+        'https://exp.host/--/api/v2/push/send',
+        payloads,
+        {
+          headers: {
+            'Accept': 'application/json',
+            'Accept-encoding': 'gzip, deflate',
+            'Content-Type': 'application/json',
+          },
+          timeout: 15000,
+        }
+      );
+      const responseData = response.data;
+      if (responseData && Array.isArray(responseData.data)) {
+        responseData.data.forEach((ticket, idx) => {
+          const correspondingToken = chunk[idx];
+          if (ticket.status === 'ok') {
+            results.expo.sent++;
+          } else {
+            results.expo.failed++;
+            console.error(`[Push Service] Expo ticket error for ${correspondingToken}:`, ticket.message);
+            if (ticket.details?.error === 'DeviceNotRegistered') {
+              results.expo.badTokens.push(correspondingToken);
+            }
           }
-        );
+        });
+      }
+    };
 
-        const responseData = response.data;
-        if (responseData && Array.isArray(responseData.data)) {
-          responseData.data.forEach((ticket, idx) => {
-            const correspondingToken = chunk[idx];
-            if (ticket.status === 'ok') {
-              results.expo.sent++;
-            } else {
-              results.expo.failed++;
-              console.error(`[Push Service] Expo ticket error for ${correspondingToken}:`, ticket.message);
-              if (ticket.details?.error === 'DeviceNotRegistered') {
-                results.expo.badTokens.push(correspondingToken);
+    const sendChunkWithRetry = async (chunk) => {
+      try {
+        await sendChunk(chunk);
+      } catch (err) {
+        const resp = err.response?.data;
+        if (
+          err.response?.status === 400 &&
+          resp?.errors?.[0]?.code === 'PUSH_TOO_MANY_EXPERIENCE_IDS' &&
+          resp.errors[0].details
+        ) {
+          // Tokens from multiple projects in one batch — regroup by project
+          const projectGroups = resp.errors[0].details;
+          console.log(`[Push Service] Splitting batch across ${Object.keys(projectGroups).length} Expo projects...`);
+          for (const projectTokens of Object.values(projectGroups)) {
+            const validTokens = projectTokens.filter(t => chunk.includes(t));
+            if (validTokens.length > 0) {
+              try {
+                await sendChunk(validTokens);
+              } catch (innerErr) {
+                console.error(`[Push Service] Project-subgroup Expo error:`, innerErr.message);
+                results.expo.failed += validTokens.length;
               }
             }
-          });
+          }
+        } else {
+          console.error('[Push Service] Expo batch error:', err.message);
+          results.expo.failed += chunk.length;
         }
-      } catch (err) {
-        console.error('[Push Service] Expo batch multicast error:', err.message);
-        results.expo.failed += chunk.length;
       }
+    };
+
+    for (let i = 0; i < expoTokens.length; i += 100) {
+      const chunk = expoTokens.slice(i, i + 100);
+      await sendChunkWithRetry(chunk);
     }
   }
 
   // 2. Send Firebase FCM notifications using sendEachForMulticast
   if (fcmTokens.length > 0) {
     console.log(`[Push Service] Preparing to send ${fcmTokens.length} FCM notifications...`);
-    try {
-      const message = {
-        notification: { title, body },
-        data: stringifiedData,
-        tokens: fcmTokens,
-        android: {
-          priority: 'high',
-          notification: {
-            title,
-            body,
-            sound: data?.type === 'incoming_call' ? 'ringtone' : 'default',
-            channelId: data?.type === 'incoming_call' ? 'calls' : 'default',
-          },
-        },
-        apns: {
-          payload: {
-            aps: {
-              sound: 'default',
+    // Firebase limits multicast requests to 500 registration tokens.
+    for (let i = 0; i < fcmTokens.length; i += 500) {
+      const chunk = fcmTokens.slice(i, i + 500);
+      try {
+        const message = {
+          notification: { title, body },
+          data: stringifiedData,
+          tokens: chunk,
+          android: {
+            priority: 'high',
+            notification: {
+              title,
+              body,
+              sound: data?.type === 'incoming_call' ? 'ringtone' : 'default',
+              channelId: data?.type === 'incoming_call' ? 'calls' : 'default',
             },
           },
-        },
-      };
+          apns: {
+            payload: {
+              aps: {
+                sound: 'default',
+              },
+            },
+          },
+        };
 
-      const response = await admin.messaging().sendEachForMulticast(message);
-      console.log(`[Push Service] FCM Multicast complete. Success: ${response.successCount}, Failure: ${response.failureCount}`);
-      
-      results.fcm.sent = response.successCount;
-      results.fcm.failed = response.failureCount;
+        const response = await admin.messaging().sendEachForMulticast(message);
+        console.log(`[Push Service] FCM Multicast batch complete. Success: ${response.successCount}, Failure: ${response.failureCount}`);
 
-      response.responses.forEach((resp, idx) => {
-        if (!resp.success) {
-          const correspondingToken = fcmTokens[idx];
-          const err = resp.error;
-          console.error(`[Push Service] FCM Multicast error for token ${correspondingToken}:`, err?.message);
-          
-          const isBadToken = 
-            err?.code === 'messaging/invalid-registration-token' ||
-            err?.code === 'messaging/registration-token-not-registered' ||
-            err?.message?.includes('not-registered');
+        results.fcm.sent += response.successCount;
+        results.fcm.failed += response.failureCount;
 
-          if (isBadToken) {
-            results.fcm.badTokens.push(correspondingToken);
+        response.responses.forEach((resp, idx) => {
+          if (!resp.success) {
+            const correspondingToken = chunk[idx];
+            const err = resp.error;
+            console.error(`[Push Service] FCM Multicast error for token ${correspondingToken}:`, err?.message);
+
+            const isBadToken =
+              err?.code === 'messaging/invalid-registration-token' ||
+              err?.code === 'messaging/registration-token-not-registered' ||
+              err?.message?.includes('not-registered');
+
+            if (isBadToken) {
+              results.fcm.badTokens.push(correspondingToken);
+            }
           }
-        }
-      });
-    } catch (err) {
-      console.error('[Push Service] FCM Multicast failed entirely:', err.message);
-      results.fcm.failed = fcmTokens.length;
+        });
+      } catch (err) {
+        console.error('[Push Service] FCM Multicast batch failed entirely:', err.message);
+        results.fcm.failed += chunk.length;
+      }
     }
   }
 

@@ -16,6 +16,43 @@ const startServer = async () => {
   const GiftService = require('./services/giftService');
   await GiftService.seedGifts();
 
+  // Clean up stale sessions that survived a restart (active sessions with no billing activity)
+  try {
+    const Session = require('./models/sessionModel');
+    const Listener = require('./models/listenerModel');
+    const staleThreshold = new Date(Date.now() - 5 * 60 * 1000); // 5 minutes
+    const staleSessions = await Session.find({
+      status: 'active',
+      $or: [
+        { lastDeductionTime: { $exists: false } },
+        { lastDeductionTime: null },
+        { lastDeductionTime: { $lt: staleThreshold } },
+      ]
+    });
+    for (const session of staleSessions) {
+      session.status = 'completed';
+      session.endTime = new Date();
+      await session.save();
+
+      const CallService = require('./services/callService');
+      await CallService.incrementListenerCounters(session.listenerId, session.callType).catch(err => {
+        console.error('[Startup] Error incrementing counters for stale session:', err.message);
+      });
+
+      if (session.listenerId) {
+        await Listener.findOneAndUpdate(
+          { userId: session.listenerId.toString() },
+          { isBusy: false, busySince: null }
+        );
+      }
+    }
+    if (staleSessions.length > 0) {
+      console.log(`[Startup] Cleaned ${staleSessions.length} stale sessions from previous lifecycle`);
+    }
+  } catch (err) {
+    console.error('[Startup] Error cleaning stale sessions:', err.message);
+  }
+
   const server = http.createServer(app);
   initSocket(server);
   app.set('io', getIo());

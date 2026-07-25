@@ -12,6 +12,23 @@ const ActivityLog = require('../models/ActivityLog');
 const PushService = require('./pushService');
 
 class CallService {
+    static async incrementListenerCounters(listenerId, callType) {
+    if (!listenerId) return;
+    const Listener = require('../models/listenerModel');
+    const listener = await Listener.findOne({ userId: listenerId });
+    if (listener) {
+      if (callType === 'audio') {
+        listener.audioCalls += 1;
+        listener.todayAudioCalls += 1;
+      } else {
+        listener.videoCalls += 1;
+        listener.todayVideoCalls += 1;
+      }
+      listener.totalSessions += 1;
+      await listener.save();
+    }
+  }
+
     static async startCall(userId, listenerId = null, callType = 'audio') {
     const userIdStr = userId.toString();
 
@@ -22,6 +39,11 @@ class CallService {
     // Minimum 1 minute cost: audio=10 coins/min, video=40 coins/min
     const minCoins = callType === 'video' ? 40 : 10;
     if (user.coins < minCoins) {
+      PushService.sendPushNotification(userIdStr, {
+        title: 'Recharge to start your call',
+        body: `You need at least ${minCoins} coins to start a ${callType} call.`,
+        data: { type: 'insufficient_balance', reason: 'call_start', callType },
+      }).catch(err => console.error('[CallService] Insufficient-balance push failed:', err.message));
       throw new AppError('Insufficient coins. Please recharge.', 402);
     }
 
@@ -42,29 +64,65 @@ class CallService {
     if (!matchedListenerId) {
       const match = await MatchingService.findMatch(userIdStr);
       matchedListenerId = match.listenerId;
-    } else {
-      const listenerIdStr = matchedListenerId.toString();
-
-      const listenerProfile = await Listener.findOne({ userId: listenerIdStr });
-      if (!listenerProfile || listenerProfile.status !== 'approved' || !listenerProfile.isOnline) {
-        throw new AppError('Listener is offline', 400);
-      }
-
-      const acquired = await redis.set(
-        REDIS_KEYS.LOCK(listenerIdStr),
-        userIdStr,
-        'NX',
-        'EX',
-        20
-      );
-      if (acquired !== 'OK') {
-        throw new AppError('Listener is currently unavailable', 409);
-      }
-      matchedListenerId = listenerIdStr;
     }
 
-    // Check if the selected listener is already in an active call session
     const listenerIdStr = matchedListenerId.toString();
+
+    const listenerProfile = await Listener.findOne({ userId: listenerIdStr });
+    if (!listenerProfile || listenerProfile.status !== 'approved' || !listenerProfile.isOnline) {
+      throw new AppError('Listener is offline', 400);
+    }
+
+    const typeAllowed =
+      (callType === 'audio' && listenerProfile.audioEnabled !== false) ||
+      (callType === 'video' && listenerProfile.videoEnabled === true) ||
+      (callType === 'chat' && listenerProfile.chatEnabled !== false);
+    if (!typeAllowed) {
+      throw new AppError(`Listener does not support ${callType} calls`, 400);
+    }
+
+    if (listenerProfile.isBusy) {
+      const existingSession = await Session.findOne({
+        $or: [
+          { userId: listenerIdStr },
+          { listenerId: listenerIdStr }
+        ],
+        status: 'active'
+      });
+      if (!existingSession) {
+        await Listener.findOneAndUpdate({ userId: listenerIdStr }, { isBusy: false, busySince: null });
+        listenerProfile.isBusy = false;
+        listenerProfile.busySince = null;
+      } else if (existingSession.lastDeductionTime) {
+        throw new AppError('Listener is currently unavailable', 409);
+      } else {
+        const sessionAge = Date.now() - new Date(existingSession.startTime || existingSession.createdAt).getTime();
+        if (sessionAge > 120000) {
+          existingSession.status = 'completed';
+          existingSession.endTime = new Date();
+          await existingSession.save();
+          await Listener.findOneAndUpdate({ userId: listenerIdStr }, { isBusy: false, busySince: null });
+          listenerProfile.isBusy = false;
+          listenerProfile.busySince = null;
+        } else {
+          throw new AppError('Listener is currently unavailable', 409);
+        }
+      }
+    }
+
+    const acquired = await redis.set(
+      REDIS_KEYS.LOCK(listenerIdStr),
+      userIdStr,
+      'NX',
+      'EX',
+      20
+    );
+    if (acquired !== 'OK') {
+      throw new AppError('Listener is currently unavailable', 409);
+    }
+    matchedListenerId = listenerIdStr;
+
+    // Check if the selected listener is already in an active call session
     const existingListenerSession = await Session.findOne({
       $or: [
         { userId: listenerIdStr },
@@ -73,7 +131,18 @@ class CallService {
       status: 'active'
     });
     if (existingListenerSession) {
-      throw new AppError('Listener is currently busy in another call', 400);
+      if (!existingListenerSession.lastDeductionTime) {
+        const sessionAge = Date.now() - new Date(existingListenerSession.startTime || existingListenerSession.createdAt).getTime();
+        if (sessionAge > 120000) {
+          existingListenerSession.status = 'completed';
+          existingListenerSession.endTime = new Date();
+          await existingListenerSession.save();
+        } else {
+          throw new AppError('Listener is currently busy in another call', 400);
+        }
+      } else {
+        throw new AppError('Listener is currently busy in another call', 400);
+      }
     }
 
     
@@ -108,7 +177,6 @@ class CallService {
 
     
     const listenerUser = await User.findById(matchedListenerId).select('name username avatarIndex gender');
-    const listenerProfile = await Listener.findOne({ userId: matchedListenerId });
 
     await ActivityLog.create({
       user: user.name,
@@ -254,18 +322,7 @@ class CallService {
     await session.save();
 
     // Update listener call counters (earnings already credited per-minute by billing timer)
-    const listener = await Listener.findOne({ userId: session.listenerId });
-    if (listener) {
-      if (session.callType === 'audio') {
-        listener.audioCalls += 1;
-        listener.todayAudioCalls += 1;
-      } else {
-        listener.videoCalls += 1;
-        listener.todayVideoCalls += 1;
-      }
-      listener.totalSessions += 1;
-      await listener.save();
-    }
+    await CallService.incrementListenerCounters(session.listenerId, session.callType);
 
     
     // Mark listener as not busy in DB

@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  IoChevronBack, IoMegaphone, IoAdd, IoClose, IoSend,
-  IoPeople, IoPerson, IoHeadset, IoSearch, IoTimeOutline,
+  IoChevronBack, IoMegaphone, IoAdd, IoSend,
+  IoPeople, IoPerson, IoHeadset, IoTimeOutline,
   IoCheckmarkCircle, IoAlertCircle, IoRemove,
 } from 'react-icons/io5'
 import { adminAPI } from '../utils/api'
@@ -52,7 +52,7 @@ function HistorySkeleton() {
   )
 }
 
-const targetColors = { everyone: 'var(--accent)', users: '#A855F7', listeners: '#10B981' }
+const targetColors = { all: 'var(--accent)', everyone: 'var(--accent)', users: '#A855F7', listeners: '#10B981' }
 const deliveryMethods = ['both', 'push', 'in-app']
 
 export default function Notifications() {
@@ -62,17 +62,10 @@ export default function Notifications() {
   const [message, setMessage] = useState('')
   const [target, setTarget] = useState('everyone')
   const [deliveryMethod, setDeliveryMethod] = useState('both')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState([])
-  const [selectedTargets, setSelectedTargets] = useState([])
   const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
   const [modal, setModal] = useState({ visible: false, type: 'success', message: '' })
-  const [searching, setSearching] = useState(false)
-  const [showDropdown, setShowDropdown] = useState(false)
-  const searchRef = useRef(null)
-  const debounceRef = useRef(null)
 
   const fetchHistory = useCallback(async () => {
     try {
@@ -90,62 +83,8 @@ export default function Notifications() {
 
   useEffect(() => { fetchHistory() }, [fetchHistory])
 
-  useEffect(() => {
-    if (!searchQuery.trim() || target === 'everyone') {
-      setSearchResults([])
-      setShowDropdown(false)
-      return
-    }
-    setSearching(true)
-    clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(async () => {
-      try {
-        const apiFn = target === 'users' ? adminAPI.getUsers : adminAPI.getListeners
-        const res = await apiFn({ search: searchQuery.trim(), limit: 10 })
-        const data = res.data || res
-        const list = data.users || data.listeners || data || []
-        const filtered = Array.isArray(list)
-          ? list.filter(item => !selectedTargets.some(s => s.id === (item.id || item._id)))
-          : []
-        setSearchResults(filtered)
-        setShowDropdown(true)
-      } catch {
-        setSearchResults([])
-      } finally {
-        setSearching(false)
-      }
-    }, 300)
-    return () => clearTimeout(debounceRef.current)
-  }, [searchQuery, target, selectedTargets])
-
-  useEffect(() => {
-    const handleClick = (e) => {
-      if (searchRef.current && !searchRef.current.contains(e.target)) {
-        setShowDropdown(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [])
-
-  const handleSelectTarget = (item) => {
-    const id = item.id || item._id
-    if (selectedTargets.some(s => s.id === id)) return
-    setSelectedTargets(prev => [...prev, { id, name: item.name || item.phone || 'Unknown' }])
-    setSearchQuery('')
-    setShowDropdown(false)
-  }
-
-  const handleRemoveTarget = (id) => {
-    setSelectedTargets(prev => prev.filter(s => s.id !== id))
-  }
-
   const handleTargetChange = (newTarget) => {
     setTarget(newTarget)
-    setSelectedTargets([])
-    setSearchQuery('')
-    setSearchResults([])
-    setShowDropdown(false)
   }
 
   const resetForm = () => {
@@ -153,24 +92,17 @@ export default function Notifications() {
     setMessage('')
     setTarget('everyone')
     setDeliveryMethod('both')
-    setSelectedTargets([])
-    setSearchQuery('')
-    setSearchResults([])
-    setShowDropdown(false)
   }
 
   const handleSend = async () => {
-    if (!message.trim() || (target !== 'everyone' && selectedTargets.length === 0)) return
+    if (!message.trim()) return
     setSending(true)
     try {
       const payload = {
         title: title.trim(),
         body: message.trim(),
-        target: target === 'everyone' ? 'all' : target,
+        target,
         notificationMethod: deliveryMethod,
-      }
-      if (target !== 'everyone') {
-        payload.userIds = selectedTargets.map(s => s.id)
       }
       await adminAPI.sendNotification(payload)
       setModal({ visible: true, type: 'success', message: 'Campaign sent successfully!' })
@@ -186,7 +118,7 @@ export default function Notifications() {
 
   const closeModal = () => setModal(prev => ({ ...prev, visible: false }))
 
-  const isFormValid = message.trim() && (target === 'everyone' || selectedTargets.length > 0)
+  const isFormValid = message.trim()
 
   return (
     <div className="page-wrap" style={{ backgroundColor: 'var(--bg-primary)', minHeight: '100vh', padding: 'var(--page-padding)' }}>
@@ -352,116 +284,6 @@ export default function Notifications() {
             })}
           </div>
 
-          {/* Searchable Picker (Users / Listeners) */}
-          {target !== 'everyone' && (
-            <div ref={searchRef} style={{ position: 'relative', marginBottom: 16 }}>
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
-                borderRadius: 12, padding: '0 14px', height: 42,
-              }}>
-                <IoSearch size={16} color="var(--text-muted)" />
-                <input
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  onFocus={() => { if (searchResults.length > 0) setShowDropdown(true) }}
-                  placeholder={`Search ${target}...`}
-                  style={{
-                    flex: 1, background: 'none', border: 'none', color: '#fff',
-                    fontSize: 13, outline: 'none', height: '100%',
-                  }}
-                />
-                {searching && (
-                  <div style={{
-                    width: 16, height: 16, borderRadius: 8,
-                    border: '2px solid var(--accent)', borderTopColor: 'transparent',
-                    animation: 'pulse 0.8s linear infinite',
-                  }} />
-                )}
-              </div>
-
-              {/* Dropdown */}
-              {showDropdown && (
-                <div style={{
-                  position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
-                  backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
-                  borderRadius: 12, marginTop: 4, maxHeight: 200, overflowY: 'auto',
-                  boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-                }}>
-                  {searchResults.length === 0 ? (
-                    <div style={{ padding: '12px 14px', color: 'var(--text-muted)', fontSize: 13, textAlign: 'center' }}>
-                      {searchQuery.trim() ? 'No results found' : 'Type to search...'}
-                    </div>
-                  ) : (
-                    searchResults.map(item => {
-                      const id = item.id || item._id
-                      const name = item.name || item.phone || 'Unknown'
-                      return (
-                        <button
-                          key={id}
-                          onClick={() => handleSelectTarget(item)}
-                          style={{
-                            width: '100%', display: 'flex', alignItems: 'center',
-                            gap: 10, padding: '10px 14px', border: 'none',
-                            background: 'none', color: '#fff', fontSize: 13,
-                            cursor: 'pointer', textAlign: 'left',
-                            borderBottom: '1px solid var(--border)',
-                          }}
-                          onMouseEnter={e => e.currentTarget.style.backgroundColor = '#1A1A1A'}
-                          onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
-                        >
-                          <div style={{
-                            width: 28, height: 28, borderRadius: 14,
-                            background: `linear-gradient(135deg, ${targetColors[target]}, ${targetColors[target]}88)`,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: 11, fontWeight: 900, color: '#fff', flexShrink: 0,
-                          }}>
-                            {name.charAt(0).toUpperCase()}
-                          </div>
-                          <span style={{ flex: 1 }}>{name}</span>
-                          <IoAdd size={16} color="var(--accent)" />
-                        </button>
-                      )
-                    })
-                  )}
-                </div>
-              )}
-
-              {/* Selected Chips */}
-              {selectedTargets.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-                  {selectedTargets.map(item => (
-                    <div
-                      key={item.id}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 6,
-                        padding: '6px 10px', borderRadius: 10,
-                        backgroundColor: `${targetColors[target]}15`,
-                        border: `1px solid ${targetColors[target]}30`,
-                      }}
-                    >
-                      <span style={{ fontSize: 12, fontWeight: 700, color: targetColors[target] }}>
-                        {item.name}
-                      </span>
-                      <button
-                        onClick={() => handleRemoveTarget(item.id)}
-                        style={{
-                          width: 16, height: 16, borderRadius: 8, border: 'none',
-                          backgroundColor: `${targetColors[target]}30`,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          cursor: 'pointer', color: targetColors[target], padding: 0,
-                          fontSize: 10,
-                        }}
-                      >
-                        <IoClose size={10} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
           {/* Delivery Method */}
           <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
             Delivery Method
@@ -536,7 +358,7 @@ export default function Notifications() {
         <div>
           {history.map((camp) => {
             const tColor = targetColors[camp.target] || 'var(--accent)'
-            const tLabel = camp.target ? camp.target.charAt(0).toUpperCase() + camp.target.slice(1) : 'Everyone'
+            const tLabel = camp.target === 'all' ? 'Everyone' : camp.target ? camp.target.charAt(0).toUpperCase() + camp.target.slice(1) : 'Everyone'
             return (
               <div className="notif-history-item"
                 key={camp._id || camp.id}
@@ -560,7 +382,7 @@ export default function Notifications() {
                   </div>
                 </div>
                 <div style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 8, lineHeight: 1.4 }}>
-                  {truncate(camp.message, 80)}
+                  {truncate(camp.body || camp.message, 80)}
                 </div>
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 16, marginTop: 12,
@@ -569,22 +391,30 @@ export default function Notifications() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <IoSend size={12} color="var(--text-muted)" />
                     <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>
-                      {camp.sentCount || 0} sent
+                      {camp.sentToCount ?? camp.sentCount ?? 0} targeted
                     </span>
                   </div>
+                  {camp.sentCount !== undefined && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <IoCheckmarkCircle size={12} color="#10B981" />
+                      <span style={{ fontSize: 12, color: '#10B981', fontWeight: 600 }}>
+                        {camp.sentCount} pushed
+                      </span>
+                    </div>
+                  )}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <IoTimeOutline size={12} color="var(--text-muted)" />
                     <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>
                       {formatDate(camp.createdAt)}
                     </span>
                   </div>
-                  {camp.deliveryMethod && camp.deliveryMethod !== 'both' && (
+                  {camp.method && camp.method !== 'both' && (
                     <div style={{
                       padding: '2px 8px', borderRadius: 6,
                       backgroundColor: 'var(--border)', fontSize: 10, fontWeight: 700,
                       color: 'var(--text-secondary)', textTransform: 'capitalize',
                     }}>
-                      {camp.deliveryMethod}
+                      {camp.method === 'platform' ? 'in-app' : camp.method}
                     </div>
                   )}
                 </div>

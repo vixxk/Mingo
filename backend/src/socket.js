@@ -9,6 +9,7 @@ const jwt = require('jsonwebtoken');
 const config = require('./config/env');
 const { redis, REDIS_KEYS } = require('./config/redis');
 const PushService = require('./services/pushService');
+const CallService = require('./services/callService');
 
 let io;
 
@@ -292,6 +293,11 @@ const initSocket = (server) => {
                 requiredCoins: CHAT_COINS_PER_SESSION,
                 currentCoins: sender.coins,
               });
+              PushService.sendPushNotification(senderId, {
+                title: 'Recharge to continue chatting',
+                body: `Your chat needs ${CHAT_COINS_PER_SESSION} coins for the next session.`,
+                data: { type: 'insufficient_balance', reason: 'chat_start', conversationId: conversationId.toString() },
+              }).catch(err => console.error('[Chat] Insufficient-balance push failed:', err.message));
               return;
             }
             // User has balance but session not started yet — save message, 
@@ -630,7 +636,10 @@ const initSocket = (server) => {
             await session.save();
             stopCallBillingTimer(sessionId);
             if (session.roomId) stopCallBillingTimer(session.roomId);
-            
+
+            // Increment listener call counters
+            await CallService.incrementListenerCounters(session.listenerId, session.callType);
+
             // Notify both user rooms
             io.to(`user_${session.userId}`).emit('call_ended', { sessionId });
             io.to(`user_${session.listenerId}`).emit('call_ended', { sessionId });
@@ -679,6 +688,11 @@ const initSocket = (server) => {
         const user = await User.findById(userId);
         if (!user || user.coins < 10) {
           socket.emit('insufficient_balance', { requiredCoins: 10, currentCoins: user?.coins || 0 });
+          PushService.sendPushNotification(userId, {
+            title: 'Recharge to start a call',
+            body: 'You need at least 10 coins to start an audio call.',
+            data: { type: 'insufficient_balance', reason: 'random_call_start', callType: 'audio' },
+          }).catch(err => console.error('[Socket] Insufficient-balance push failed:', err.message));
           return;
         }
 
@@ -837,6 +851,9 @@ const initSocket = (server) => {
               stopCallBillingTimer(activeCall._id.toString());
               stopCallBillingTimer(activeCall.roomId);
 
+              // Increment listener call counters
+              await CallService.incrementListenerCounters(activeCall.listenerId, activeCall.callType);
+
               // Notify both participants
               io.to(`user_${activeCall.userId}`).emit('call_ended', { sessionId: activeCall._id.toString() });
               io.to(`user_${activeCall.listenerId}`).emit('call_ended', { sessionId: activeCall._id.toString() });
@@ -928,6 +945,20 @@ function startChatSessionTimer(conversationId, userId) {
               requiredCoins: CHAT_COINS_PER_SESSION,
               currentCoins: user.coins,
             });
+            PushService.sendPushNotification(userId, {
+              title: 'Chat ended — recharge to continue',
+              body: `Your chat ended because you need ${CHAT_COINS_PER_SESSION} more coins.`,
+              data: { type: 'insufficient_balance', reason: 'chat_renewal', conversationId: conversationId.toString() },
+            }).catch(err => console.error('[Chat] Insufficient-balance push failed:', err.message));
+
+            const listenerId = conversation.participants.find(p => p.toString() !== userId.toString());
+            if (listenerId) {
+              PushService.sendPushNotification(listenerId, {
+                title: 'Chat ended — user ran out of balance',
+                body: 'The chat ended because the user ran out of coins.',
+                data: { type: 'chat_ended', reason: 'user_balance_depleted', conversationId: conversationId.toString() },
+              }).catch(err => console.error('[Chat] Insufficient-balance push to listener failed:', err.message));
+            }
           }
           io.to(`user_${userId}`).emit('chat_session_ended', { conversationId });
         }
@@ -1170,6 +1201,11 @@ async function syncAndResumeChatSession(conversationId) {
                     requiredCoins: CHAT_COINS_PER_SESSION,
                     currentCoins: user.coins,
                   });
+                  PushService.sendPushNotification(startedBy, {
+                    title: 'Chat ended — recharge to continue',
+                    body: `Your chat ended because you need ${CHAT_COINS_PER_SESSION} more coins.`,
+                    data: { type: 'insufficient_balance', reason: 'chat_renewal', conversationId: conversationId.toString() },
+                  }).catch(err => console.error('[Chat] Insufficient-balance push failed:', err.message));
                 }
               }
             } else {
@@ -1318,6 +1354,31 @@ async function deductCallMinute(sessionId, userId, listenerId, coinsPerMin, payo
         endTime: new Date(),
       });
 
+      // Increment listener call counters
+      await CallService.incrementListenerCounters(listenerId, callType);
+
+      // Auto-ending used to leave the listener marked busy and its Redis lock
+      // alive. Release every availability marker before notifying clients.
+      const listenerIdStr = listenerId.toString();
+      await Listener.findOneAndUpdate(
+        { userId: listenerIdStr },
+        { isBusy: false, busySince: null }
+      );
+      await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, listenerIdStr);
+      await redis.del(REDIS_KEYS.LOCK(listenerIdStr));
+      try {
+        io.emit('listener_status_changed', {
+          userId: listenerIdStr,
+          isOnline: true,
+          isBusy: false,
+          busySince: null,
+        });
+        const sseService = require('./services/sseService');
+        sseService.broadcastListenerStatus(listenerIdStr, true, false, null);
+      } catch (statusErr) {
+        console.error('[CallBilling] Failed to broadcast listener availability:', statusErr.message);
+      }
+
       // Notify both parties
       if (io) {
         io.to(`user_${userId}`).emit('call_auto_ended', {
@@ -1331,6 +1392,16 @@ async function deductCallMinute(sessionId, userId, listenerId, coinsPerMin, payo
           message: 'The call has ended because the user ran out of balance.',
         });
       }
+      PushService.sendPushNotification(userId, {
+        title: 'Call ended — recharge to continue',
+        body: 'Your call ended because your coin balance ran out. Recharge to keep talking.',
+        data: { type: 'insufficient_balance', reason: 'call_ended', sessionId: sessionId.toString(), callType },
+      }).catch(err => console.error('[CallBilling] Insufficient-balance push failed for user:', err.message));
+      PushService.sendPushNotification(listenerId, {
+        title: 'Call ended — user ran out of balance',
+        body: 'The call has ended because the user ran out of coins. You are now available for new calls.',
+        data: { type: 'call_ended', reason: 'user_balance_depleted', sessionId: sessionId.toString() },
+      }).catch(err => console.error('[CallBilling] Insufficient-balance push failed for listener:', err.message));
       return;
     }
 

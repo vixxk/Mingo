@@ -95,7 +95,7 @@ const VerifiedBadge = () => (
 
 
 
-const BestChoiceCard = ({ item, onCallPress, onProfilePress }) => {
+const BestChoiceCard = ({ item, onCallPress, onChatPress, onProfilePress }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
@@ -117,6 +117,9 @@ const BestChoiceCard = ({ item, onCallPress, onProfilePress }) => {
   };
 
   const isInactive = !item.isLive || item.isBusy;
+  const canUseAudio = item.audioEnabled !== false;
+  const canUseVideo = item.videoEnabled === true;
+  const canUseChat = item.chatEnabled !== false;
 
   return (
     <TouchableOpacity
@@ -145,27 +148,36 @@ const BestChoiceCard = ({ item, onCallPress, onProfilePress }) => {
             </View>
             {}
             <View style={styles.bestChoiceActionStack}>
-              <TouchableOpacity 
-                style={[styles.bestChoiceActionBtn, isInactive && { opacity: 0.5 }]} 
-                activeOpacity={0.7} 
-                onPress={() => onCallPress('audio')}
-              >
-                <Ionicons name="call-outline" size={18} color="#fff" />
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.bestChoiceActionBtn, isInactive && { opacity: 0.5 }]} 
-                activeOpacity={0.7} 
-                onPress={() => onCallPress('video')}
-              >
-                <Ionicons name="videocam-outline" size={18} color="#fff" />
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.bestChoiceActionBtn, isInactive && { opacity: 0.5 }]} 
-                activeOpacity={0.7}
-                onPress={onProfilePress}
-              >
-                <Ionicons name="chatbubble-outline" size={18} color="#fff" />
-              </TouchableOpacity>
+              {canUseAudio && (
+                <TouchableOpacity
+                  style={[styles.bestChoiceActionBtn, isInactive && { opacity: 0.5 }]}
+                  activeOpacity={0.7}
+                  onPress={() => onCallPress('audio')}
+                  disabled={isInactive}
+                >
+                  <Ionicons name="call-outline" size={18} color="#fff" />
+                </TouchableOpacity>
+              )}
+              {canUseVideo && (
+                <TouchableOpacity
+                  style={[styles.bestChoiceActionBtn, isInactive && { opacity: 0.5 }]}
+                  activeOpacity={0.7}
+                  onPress={() => onCallPress('video')}
+                  disabled={isInactive}
+                >
+                  <Ionicons name="videocam-outline" size={18} color="#fff" />
+                </TouchableOpacity>
+              )}
+              {canUseChat && (
+                <TouchableOpacity
+                  style={[styles.bestChoiceActionBtn, isInactive && { opacity: 0.5 }]}
+                  activeOpacity={0.7}
+                  onPress={onChatPress}
+                  disabled={isInactive}
+                >
+                  <Ionicons name="chatbubble-outline" size={18} color="#fff" />
+                </TouchableOpacity>
+              )}
             </View>
             {}
             <View style={styles.bestChoiceNameRow}>
@@ -204,6 +216,9 @@ const PeopleCard = ({ item, onCallPress, onChatPress, onProfilePress }) => {
   };
 
   const isInactive = !item.isLive || item.isBusy;
+  const canUseAudio = item.audioEnabled !== false;
+  const canUseVideo = item.videoEnabled === true;
+  const canUseChat = item.chatEnabled !== false;
 
   return (
     <TouchableOpacity
@@ -235,30 +250,36 @@ const PeopleCard = ({ item, onCallPress, onChatPress, onProfilePress }) => {
           </View>
         </View>
         <View style={styles.peopleActions}>
-          <TouchableOpacity 
-            style={[styles.peopleActionBtn, isInactive && { opacity: 0.5 }]} 
-            activeOpacity={0.7} 
-            onPress={() => onCallPress('audio')}
-            disabled={isInactive}
-          >
-            <Ionicons name="call-outline" size={18} color="#22C55E" />
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.peopleActionBtn, isInactive && { opacity: 0.5 }]} 
-            activeOpacity={0.7}
-            onPress={onChatPress}
-            disabled={isInactive}
-          >
-            <Ionicons name="chatbubble-outline" size={18} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.peopleActionBtn, isInactive && { opacity: 0.5 }]} 
-            activeOpacity={0.7} 
-            onPress={() => onCallPress('video')}
-            disabled={isInactive}
-          >
-            <Ionicons name="videocam-outline" size={18} color="#3B82F6" />
-          </TouchableOpacity>
+          {canUseAudio && (
+            <TouchableOpacity
+              style={[styles.peopleActionBtn, isInactive && { opacity: 0.5 }]}
+              activeOpacity={0.7}
+              onPress={() => onCallPress('audio')}
+              disabled={isInactive}
+            >
+              <Ionicons name="call-outline" size={18} color="#22C55E" />
+            </TouchableOpacity>
+          )}
+          {canUseChat && (
+            <TouchableOpacity
+              style={[styles.peopleActionBtn, isInactive && { opacity: 0.5 }]}
+              activeOpacity={0.7}
+              onPress={onChatPress}
+              disabled={isInactive}
+            >
+              <Ionicons name="chatbubble-outline" size={18} color="#fff" />
+            </TouchableOpacity>
+          )}
+          {canUseVideo && (
+            <TouchableOpacity
+              style={[styles.peopleActionBtn, isInactive && { opacity: 0.5 }]}
+              activeOpacity={0.7}
+              onPress={() => onCallPress('video')}
+              disabled={isInactive}
+            >
+              <Ionicons name="videocam-outline" size={18} color="#3B82F6" />
+            </TouchableOpacity>
+          )}
         </View>
       </Animated.View>
     </TouchableOpacity>
@@ -738,9 +759,20 @@ export default function HomeScreen() {
     <BestChoiceCard 
       item={item} 
       onCallPress={(type) => handleCallPress(item, type)} 
+      onChatPress={() => {
+        router.push({
+          pathname: '/(chat)/chat',
+          params: {
+            name: item.name,
+            id: item.id,
+            avatarIndex: item.avatarIndex || '0',
+            gender: item.gender || 'Female',
+          },
+        });
+      }}
       onProfilePress={() => handleProfilePress(item.id)} 
     />
-  ), []);
+  ), [router]);
 
   // Skeleton loading UI
   if (loading && bestChoiceData.length === 0 && peopleData.length === 0) {

@@ -19,25 +19,69 @@ class PushService {
    */
   static async sendPushToMultiple(userIds, message) {
     const cleanUserIds = [...new Set(userIds.filter(Boolean).map(id => String(id)))];
-    if (cleanUserIds.length === 0) return;
+    const emptyResult = {
+      success: true,
+      usersTargeted: 0,
+      tokensTargeted: 0,
+      sentCount: 0,
+      failedCount: 0,
+      results: {
+        totalTargeted: 0,
+        expo: { sent: 0, failed: 0, badTokens: [] },
+        fcm: { sent: 0, failed: 0, badTokens: [] },
+      },
+    };
+
+    if (cleanUserIds.length === 0) return emptyResult;
 
     try {
       const User = require('../models/userModel');
       const usersWithTokens = await User.find({
         _id: { $in: cleanUserIds },
-        pushToken: { $ne: null }
+        isDeleted: { $ne: true },
+        pushToken: { $nin: [null, ''] }
       }).select('pushToken');
       
-      const pushTokens = usersWithTokens.map(u => u.pushToken).filter(Boolean);
+      const pushTokens = usersWithTokens.map(u => u.pushToken).filter(t => t && typeof t === 'string');
       if (pushTokens.length > 0) {
         console.log(`[PushService] Dispatching push to ${pushTokens.length} tokens via FCM/Expo...`);
         const { sendNotificationToMultiple } = require('../../utils/notifications');
-        return await sendNotificationToMultiple(pushTokens, message.title, message.body, message.data || {});
+        const result = await sendNotificationToMultiple(pushTokens, message.title, message.body, message.data || {});
+        const deliveryResults = result?.results || emptyResult.results;
+        const sentCount = (deliveryResults.expo?.sent || 0) + (deliveryResults.fcm?.sent || 0);
+        const failedCount = (deliveryResults.expo?.failed || 0) + (deliveryResults.fcm?.failed || 0);
+
+        return {
+          ...result,
+          usersTargeted: cleanUserIds.length,
+          tokensTargeted: pushTokens.length,
+          sentCount,
+          failedCount,
+          results: deliveryResults,
+        };
       } else {
         console.log('[PushService] No push tokens found for users:', cleanUserIds);
       }
+
+      return {
+        ...emptyResult,
+        usersTargeted: cleanUserIds.length,
+      };
     } catch (err) {
       console.error('[PushService] Dispatch failed:', err.message);
+      return {
+        success: false,
+        usersTargeted: cleanUserIds.length,
+        tokensTargeted: 0,
+        sentCount: 0,
+        failedCount: 0,
+        error: err.message,
+        results: {
+          totalTargeted: 0,
+          expo: { sent: 0, failed: 0, badTokens: [] },
+          fcm: { sent: 0, failed: 0, badTokens: [] },
+        },
+      };
     }
   }
 
@@ -49,24 +93,36 @@ class PushService {
   static async sendPushToSegment(targetType, message) {
     try {
       const User = require('../models/userModel');
-      let filter = { pushToken: { $ne: null } };
+      let filter = {
+        isDeleted: { $ne: true },
+        role: { $in: ['USER', 'LISTENER'] },
+      };
       if (targetType === 'users') {
         filter.role = 'USER';
       } else if (targetType === 'listeners') {
         filter.role = 'LISTENER';
       }
 
-      const usersWithTokens = await User.find(filter).select('pushToken');
-      const pushTokens = usersWithTokens.map(u => u.pushToken).filter(Boolean);
-      if (pushTokens.length > 0) {
-        console.log(`[PushService] Dispatching segment (${targetType}) push to ${pushTokens.length} tokens via FCM/Expo...`);
-        const { sendNotificationToMultiple } = require('../../utils/notifications');
-        return await sendNotificationToMultiple(pushTokens, message.title, message.body, message.data || {});
-      } else {
-        console.log(`[PushService] No push tokens found for segment: ${targetType}`);
-      }
+      const targetUsers = await User.find(filter).select('_id');
+      return await this.sendPushToMultiple(
+        targetUsers.map(user => user._id.toString()),
+        message
+      );
     } catch (err) {
       console.error('[PushService] Segment dispatch failed:', err.message);
+      return {
+        success: false,
+        usersTargeted: 0,
+        tokensTargeted: 0,
+        sentCount: 0,
+        failedCount: 0,
+        error: err.message,
+        results: {
+          totalTargeted: 0,
+          expo: { sent: 0, failed: 0, badTokens: [] },
+          fcm: { sent: 0, failed: 0, badTokens: [] },
+        },
+      };
     }
   }
 }

@@ -13,8 +13,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { ms, s, vs, hp, wp } from '../../utils/responsive';
 import { giftsAPI, walletAPI } from '../../utils/api';
+import InsufficientBalancePopup from './InsufficientBalancePopup';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -25,6 +27,8 @@ const GiftPopup = ({ visible, onClose, receiverId, sessionId, onGiftSent }) => {
   const [multiplier, setMultiplier] = useState(1);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [showInsufficientBalance, setShowInsufficientBalance] = useState(false);
+  const router = useRouter();
   
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -46,6 +50,7 @@ const GiftPopup = ({ visible, onClose, receiverId, sessionId, onGiftSent }) => {
         }),
       ]).start();
     } else {
+      setShowInsufficientBalance(false);
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 0,
@@ -83,7 +88,7 @@ const GiftPopup = ({ visible, onClose, receiverId, sessionId, onGiftSent }) => {
     
     const totalCost = selectedGift.price * multiplier;
     if (balance < totalCost) {
-      alert('Insufficient coins. Please recharge.');
+      setShowInsufficientBalance(true);
       return;
     }
 
@@ -102,7 +107,11 @@ const GiftPopup = ({ visible, onClose, receiverId, sessionId, onGiftSent }) => {
         onClose();
       }
     } catch (error) {
-      alert(error.message || 'Failed to send gift');
+      if (error?.status === 402 || /insufficient/i.test(error?.message || '')) {
+        setShowInsufficientBalance(true);
+      } else {
+        console.error('Failed to send gift:', error);
+      }
     } finally {
       setSending(false);
     }
@@ -199,6 +208,19 @@ const GiftPopup = ({ visible, onClose, receiverId, sessionId, onGiftSent }) => {
           )}
         </Animated.View>
       </View>
+      <InsufficientBalancePopup
+        visible={showInsufficientBalance}
+        onClose={() => setShowInsufficientBalance(false)}
+        onBuyCoins={() => {
+          setShowInsufficientBalance(false);
+          onClose();
+          router.push('/balance');
+        }}
+        balance={balance}
+        title="Not enough coins"
+        subtitle={<>You need more coins to send this gift.{ '\n'}Recharge and keep the good vibes going.</>}
+        buttonLabel="Recharge"
+      />
     </Modal>
   );
 };
@@ -213,14 +235,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
   sheet: {
-    backgroundColor: '#0F0F0F',
+    backgroundColor: '#0D0815',
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     paddingTop: vs(20),
     paddingHorizontal: wp(6),
     height: hp(65),
     borderWidth: 1,
-    borderColor: '#1F1F1F',
+    borderColor: '#2A1540',
   },
   header: {
     flexDirection: 'row',

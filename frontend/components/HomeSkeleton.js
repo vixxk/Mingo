@@ -1,13 +1,15 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, ScrollView, Animated, Dimensions } from 'react-native';
+import { View, StyleSheet, ScrollView, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { wp, hp, ss, vss, vs } from '../utils/responsive';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+import { wp, hp, ss, vss } from '../utils/responsive';
 
 const CARD_WIDTH = wp(85);
 const CARD_GAP = wp(4);
+
+const ShimmerBlock = ({ style, opacity }) => (
+  <Animated.View style={[styles.shimmerDefault, style, { opacity }]} />
+);
 
 export default function HomeSkeleton() {
   const insets = useSafeAreaInsets();
@@ -18,56 +20,54 @@ export default function HomeSkeleton() {
       Animated.sequence([
         Animated.timing(animValue, {
           toValue: 1,
-          duration: 1200,
+          duration: 1000,
           useNativeDriver: true,
-          easing: (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
         }),
         Animated.timing(animValue, {
           toValue: 0,
-          duration: 1200,
+          duration: 1000,
           useNativeDriver: true,
-          easing: (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
-        })
+        }),
       ])
     ).start();
   }, []);
 
   const opacity = animValue.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.2, 0.55]
+    outputRange: [0.12, 0.5],
   });
 
   const pulseOpacity = animValue.interpolate({
     inputRange: [0, 0.5, 1],
-    outputRange: [0.15, 0.5, 0.15]
+    outputRange: [0.08, 0.45, 0.08],
   });
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar style="light" />
-      
-      {/* Header Skeleton */}
+
+      {/* ── Header ── */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <ShimmerBlock style={styles.headerAvatar} opacity={opacity} />
-          <ShimmerBlock style={styles.headerCoinBadge} opacity={opacity} />
-          <ShimmerBlock style={styles.headerTimer} opacity={opacity} />
+          <ShimmerBlock style={styles.avatar} opacity={opacity} />
+          <ShimmerBlock style={styles.coinBadge} opacity={opacity} />
+          <ShimmerBlock style={styles.timerCapsule} opacity={opacity} />
         </View>
-        <ShimmerBlock style={styles.headerNotification} opacity={opacity} />
+        <ShimmerBlock style={styles.notificationBtn} opacity={opacity} />
       </View>
 
-      <ScrollView 
-        style={styles.scrollView} 
-        contentContainerStyle={styles.scrollContent} 
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Best Choice Section Title */}
+        {/* ── Best Choice title ── */}
         <ShimmerBlock style={styles.sectionTitle} opacity={opacity} />
 
-        {/* Best Choice Carousel Skeleton - with gradient border effect */}
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false} 
+        {/* ── Best Choice carousel ── */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.carouselContainer}
         >
           {[1, 2].map((i) => (
@@ -75,23 +75,26 @@ export default function HomeSkeleton() {
               <View style={styles.bestChoiceGradientBorder}>
                 <View style={styles.bestChoiceCardInner}>
                   <ShimmerBlock style={styles.fullSize} opacity={opacity} />
-                  
-                  {/* Simulated Live Badge (top left) */}
-                  <View style={styles.bestChoiceLiveBadgeWrapper}>
-                    <ShimmerBlock style={styles.liveBadge} opacity={pulseOpacity} />
+
+                  {/* Live / Busy badge */}
+                  <View style={styles.badgeWrapper}>
+                    <View style={styles.liveBadgeShape}>
+                      <ShimmerBlock style={styles.liveBadgeDot} opacity={pulseOpacity} />
+                      <ShimmerBlock style={styles.liveBadgeText} opacity={pulseOpacity} />
+                    </View>
                   </View>
 
-                  {/* Simulated Action Stack (right) - 3 icons */}
-                  <View style={styles.bestChoiceActionStack}>
+                  {/* Action stack (3 buttons) */}
+                  <View style={styles.actionStack}>
                     <ShimmerBlock style={styles.actionCircle} opacity={opacity} />
                     <ShimmerBlock style={styles.actionCircle} opacity={opacity} />
                     <ShimmerBlock style={styles.actionCircle} opacity={opacity} />
                   </View>
 
-                  {/* Simulated Name Row (bottom left) */}
-                  <View style={styles.bestChoiceNameRow}>
-                    <ShimmerBlock style={styles.cardNameText} opacity={opacity} />
-                    <ShimmerBlock style={styles.verifiedBadgeSkeleton} opacity={opacity} />
+                  {/* Name row */}
+                  <View style={styles.nameRow}>
+                    <ShimmerBlock style={styles.nameText} opacity={opacity} />
+                    <ShimmerBlock style={styles.verifiedBadge} opacity={opacity} />
                   </View>
                 </View>
               </View>
@@ -99,41 +102,41 @@ export default function HomeSkeleton() {
           ))}
         </ScrollView>
 
-        {/* Pagination Dots Skeleton */}
+        {/* ── Pagination dots ── */}
         <View style={styles.pagination}>
-          {[1, 2, 3].map((i) => (
-            <ShimmerBlock key={i} style={styles.paginationDot} opacity={opacity} />
-          ))}
+          <ShimmerBlock style={styles.paginationDotActive} opacity={opacity} />
+          <ShimmerBlock style={styles.paginationDot} opacity={opacity} />
+          <ShimmerBlock style={styles.paginationDot} opacity={opacity} />
         </View>
 
-        {/* People Section Title */}
-        <ShimmerBlock style={[styles.sectionTitle, styles.sectionTitleSecondary]} opacity={opacity} />
+        {/* ── People title ── */}
+        <ShimmerBlock style={[styles.sectionTitle, { width: wp(30) }]} opacity={opacity} />
 
-        {/* People Grid Skeleton - 4 cards (2x2) */}
+        {/* ── People grid (2×2) ── */}
         <View style={styles.peopleGrid}>
           {[1, 2, 3, 4].map((i) => (
             <View key={i} style={styles.peopleCardWrapper}>
               <View style={styles.peopleCard}>
-                {/* Image Container Area */}
                 <View style={styles.peopleImageContainer}>
                   <ShimmerBlock style={styles.fullSize} opacity={opacity} />
-                  
-                  {/* Gradient overlay at bottom */}
-                  <View style={styles.peopleNameGradient} />
-                  
-                  {/* Simulated Live Badge (top left) */}
-                  <View style={styles.peopleLiveBadgeWrapper}>
-                    <ShimmerBlock style={styles.liveBadge} opacity={pulseOpacity} />
+                  <View style={styles.peopleGradientOverlay} />
+
+                  {/* Badge */}
+                  <View style={styles.badgeWrapper}>
+                    <View style={[styles.liveBadgeShape, { backgroundColor: 'rgba(0,0,0,0.4)' }]}>
+                      <ShimmerBlock style={styles.liveBadgeDot} opacity={pulseOpacity} />
+                      <ShimmerBlock style={styles.liveBadgeText} opacity={pulseOpacity} />
+                    </View>
                   </View>
 
-                  {/* Simulated Name (bottom left) */}
+                  {/* Name */}
                   <View style={styles.peopleNameRow}>
                     <ShimmerBlock style={styles.peopleNameText} opacity={opacity} />
-                    <ShimmerBlock style={styles.verifiedBadgeSkeleton} opacity={opacity} />
+                    <ShimmerBlock style={styles.verifiedBadge} opacity={opacity} />
                   </View>
                 </View>
 
-                {/* Actions row at the bottom (3 buttons) */}
+                {/* Action buttons */}
                 <View style={styles.peopleActions}>
                   <ShimmerBlock style={styles.peopleActionBtn} opacity={opacity} />
                   <ShimmerBlock style={styles.peopleActionBtn} opacity={opacity} />
@@ -144,28 +147,16 @@ export default function HomeSkeleton() {
           ))}
         </View>
 
-        {/* Random Button Skeleton */}
-        <View style={styles.floatingRandomWrapper}>
-          <ShimmerBlock style={styles.randomBtnSkeleton} opacity={opacity} />
-        </View>
-
-        <View style={{ height: vs(20) }} />
+        <View style={{ height: hp(22) }} />
       </ScrollView>
+
+      {/* ── Floating Random button ── */}
+      <View style={[styles.floatingRandomWrapper, { bottom: hp(18), right: wp(5) }]}>
+        <ShimmerBlock style={styles.randomBtn} opacity={opacity} />
+      </View>
     </View>
   );
 }
-
-const ShimmerBlock = ({ style, opacity }) => {
-  return (
-    <Animated.View
-      style={[
-        styles.shimmerDefault,
-        style,
-        { opacity }
-      ]}
-    />
-  );
-};
 
 const styles = StyleSheet.create({
   container: {
@@ -181,59 +172,63 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 0,
   },
+
+  /* ═══ Header ═══ */
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: ss(4),
-    paddingVertical: vss(1.5),
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1.5),
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: ss(2),
+    gap: wp(2),
   },
-  headerAvatar: {
-    width: ss(10),
-    height: ss(10),
-    borderRadius: ss(5),
+  avatar: {
+    width: wp(10),
+    height: wp(10),
+    borderRadius: wp(5),
   },
-  headerCoinBadge: {
-    width: ss(16),
-    height: vss(3.2),
-    borderRadius: ss(5),
+  coinBadge: {
+    width: wp(18),
+    height: hp(3.2),
+    borderRadius: wp(5),
   },
-  headerTimer: {
-    width: ss(20),
-    height: vss(3.2),
-    borderRadius: ss(5),
+  timerCapsule: {
+    width: wp(22),
+    height: hp(3.2),
+    borderRadius: wp(5),
   },
-  headerNotification: {
-    width: ss(10),
-    height: ss(10),
-    borderRadius: ss(5),
+  notificationBtn: {
+    width: wp(10),
+    height: wp(10),
+    borderRadius: wp(5),
   },
+
+  /* ═══ Scroll area ═══ */
   scrollView: {
     flex: 1,
   },
   scrollContent: {
     paddingBottom: vss(10),
   },
+
+  /* ═══ Section title ═══ */
   sectionTitle: {
-    width: ss(35),
-    height: vss(3),
-    borderRadius: 8,
-    marginHorizontal: ss(4),
-    marginTop: vss(2.5),
-    marginBottom: vss(1.5),
+    width: wp(40),
+    height: hp(3.2),
+    borderRadius: 6,
+    marginHorizontal: wp(4),
+    marginTop: hp(2.5),
+    marginBottom: hp(1.5),
   },
-  sectionTitleSecondary: {
-    width: ss(55),
-    marginTop: vss(3),
-  },
+
+  /* ═══ Best Choice carousel ═══ */
   carouselContainer: {
-    paddingHorizontal: ss(4),
-    gap: ss(4),
+    paddingHorizontal: wp(4),
+    gap: wp(4),
   },
   bestChoiceCardOuter: {
     width: CARD_WIDTH,
@@ -241,44 +236,63 @@ const styles = StyleSheet.create({
   bestChoiceGradientBorder: {
     borderRadius: wp(5),
     padding: 2.5,
-    backgroundColor: 'transparent',
+    backgroundColor: '#1C1C1C',
   },
   bestChoiceCardInner: {
     borderRadius: wp(4.5),
     overflow: 'hidden',
     backgroundColor: '#111',
     height: hp(25),
-    borderWidth: 1,
-    borderColor: '#1C1C1C',
+    position: 'relative',
   },
-  bestChoiceLiveBadgeWrapper: {
+
+  /* badge — top-left capsule with dot + text */
+  badgeWrapper: {
     position: 'absolute',
     top: hp(1.2),
     left: wp(2.5),
   },
-  liveBadge: {
-    width: wp(12),
-    height: hp(2.5),
+  liveBadgeShape: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.55)',
     borderRadius: wp(3),
+    paddingHorizontal: wp(2),
+    paddingVertical: hp(0.35),
+    gap: wp(1),
   },
-  bestChoiceActionStack: {
+  liveBadgeDot: {
+    width: wp(1.5),
+    height: wp(1.5),
+    borderRadius: wp(0.75),
+  },
+  liveBadgeText: {
+    width: wp(8),
+    height: hp(1.6),
+    borderRadius: 3,
+  },
+
+  /* action stack — right side vertical buttons */
+  actionStack: {
     position: 'absolute',
     top: '30%',
     right: wp(1.5),
+    backgroundColor: 'rgba(255,255,255,0.12)',
     borderRadius: wp(5),
     paddingVertical: hp(1.2),
-    paddingHorizontal: wp(1.2),
+    paddingHorizontal: wp(1),
     gap: hp(1.5),
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: 'rgba(255,255,255,0.2)',
   },
   actionCircle: {
     width: wp(7),
     height: wp(7),
     borderRadius: wp(3.5),
   },
-  bestChoiceNameRow: {
+
+  /* name row — bottom-left */
+  nameRow: {
     position: 'absolute',
     bottom: hp(1.2),
     left: wp(2.5),
@@ -287,16 +301,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: wp(1),
   },
-  cardNameText: {
+  nameText: {
     width: wp(30),
-    height: hp(2.2),
+    height: hp(2),
     borderRadius: 4,
   },
-  verifiedBadgeSkeleton: {
+  verifiedBadge: {
     width: wp(4),
     height: wp(4),
     borderRadius: wp(2),
   },
+
+  /* ═══ Pagination dots ═══ */
   pagination: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -310,6 +326,13 @@ const styles = StyleSheet.create({
     height: wp(2),
     borderRadius: wp(1),
   },
+  paginationDotActive: {
+    width: wp(2.5),
+    height: wp(2.5),
+    borderRadius: wp(1.25),
+  },
+
+  /* ═══ People grid ═══ */
   peopleGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -332,18 +355,13 @@ const styles = StyleSheet.create({
     position: 'relative',
     overflow: 'hidden',
   },
-  peopleNameGradient: {
+  peopleGradientOverlay: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
     height: hp(8),
-    backgroundColor: 'rgba(0,0,0,0.2)',
-  },
-  peopleLiveBadgeWrapper: {
-    position: 'absolute',
-    top: hp(1.2),
-    left: wp(2.5),
+    backgroundColor: 'rgba(0,0,0,0.35)',
   },
   peopleNameRow: {
     position: 'absolute',
@@ -361,10 +379,10 @@ const styles = StyleSheet.create({
   },
   peopleActions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'space-evenly',
     alignItems: 'center',
     paddingVertical: vss(1.2),
-    paddingHorizontal: ss(3),
+    paddingHorizontal: ss(1),
     backgroundColor: '#111',
   },
   peopleActionBtn: {
@@ -374,15 +392,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1C1C1C',
   },
+
+  /* ═══ Floating Random button ═══ */
   floatingRandomWrapper: {
     position: 'absolute',
-    bottom: hp(18),
-    right: wp(5),
     zIndex: 50,
   },
-  randomBtnSkeleton: {
+  randomBtn: {
     width: wp(28),
-    height: hp(5),
+    height: hp(5.5),
     borderRadius: wp(6),
   },
 });

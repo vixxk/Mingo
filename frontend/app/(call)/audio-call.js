@@ -171,7 +171,6 @@ export default function AudioCallScreen() {
         // Clear low balance warning if balance is now healthy
         if (data.coins >= 20) {
           setLowBalanceMessage('');
-          setShowRecharge(false);
         }
       }
     };

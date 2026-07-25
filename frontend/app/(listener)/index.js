@@ -283,7 +283,7 @@ export default function ListenerHomeScreen() {
         if (profileRes?.data) {
           setEarnings(profileRes.data.earnings || 0);
           setTotalCalls({ audio: profileRes.data.audioCalls || 0, video: profileRes.data.videoCalls || 0 });
-          setTotalChats(profileRes.data.todayChats || 0);
+          setTotalChats(profileRes.data.totalChats || 0);
           setIsOnline(profileRes.data.isOnline);
           setAudioEnabled(profileRes.data.audioEnabled !== false);
           setVideoEnabled(profileRes.data.videoEnabled === true);
@@ -379,7 +379,7 @@ export default function ListenerHomeScreen() {
               setEarnings(profileRes.data.earnings || 0);
               const sessions = profileRes.data.totalSessions || 0;
               setTotalCalls({ audio: profileRes.data.audioCalls || 0, video: profileRes.data.videoCalls || 0 });
-              setTotalChats(profileRes.data.todayChats || 0);
+              setTotalChats(profileRes.data.totalChats || 0);
               setIsOnline(profileRes.data.isOnline);
               setAudioEnabled(profileRes.data.audioEnabled !== false);
               setVideoEnabled(profileRes.data.videoEnabled === true);
