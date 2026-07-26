@@ -332,6 +332,51 @@ const sendNotificationToTopic = async (topic, title, body, data = {}) => {
   }
 };
 
+/**
+ * Sends a push notification via OneSignal REST API using external user IDs.
+ * Requires ONESIGNAL_APP_ID and ONESIGNAL_REST_API_KEY in .env
+ */
+const sendNotificationToOneSignalByUserIds = async (userIds, title, body, data = {}) => {
+  const appId = process.env.ONESIGNAL_APP_ID;
+  const apiKey = process.env.ONESIGNAL_REST_API_KEY;
+
+  if (!appId || !apiKey || appId === 'your_onesignal_app_id' || apiKey === 'your_onesignal_rest_api_key') {
+    console.log('[OneSignal] Skipping — app ID or REST API key not configured');
+    return { success: false, error: 'OneSignal not configured' };
+  }
+
+  const cleanIds = [...new Set(userIds.filter(Boolean).map(id => String(id)))];
+  if (cleanIds.length === 0) return { success: true, sent: 0 };
+
+  try {
+    const response = await axios.post(
+      'https://onesignal.com/api/v1/notifications',
+      {
+        app_id: appId,
+        include_external_user_ids: cleanIds,
+        headings: { en: title },
+        contents: { en: body },
+        data,
+        ios_badgeType: 'Increase',
+        ios_badgeCount: 1,
+        priority: 10,
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Basic ${apiKey}`,
+        },
+        timeout: 10000,
+      }
+    );
+    console.log(`[OneSignal] Notification sent to ${cleanIds.length} user(s):`, response.data?.id);
+    return { success: true, id: response.data?.id, sent: cleanIds.length };
+  } catch (err) {
+    console.error('[OneSignal] API error:', err.response?.data?.errors || err.message);
+    return { success: false, error: err.message };
+  }
+};
+
 const sendPaymentSuccessNotification = async (fcmToken, amount) => {
   return sendNotificationToDevice(
     fcmToken,
@@ -384,6 +429,7 @@ module.exports = {
   sendNotificationToDevice,
   sendNotificationToMultiple,
   sendNotificationToTopic,
+  sendNotificationToOneSignalByUserIds,
   sendPaymentSuccessNotification,
   sendZeroBalanceNotification,
   sendListenerApprovalNotification,

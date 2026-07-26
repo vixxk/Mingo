@@ -153,19 +153,18 @@ export default function TabLayout() {
             initializeOneSignal(user._id || user.id, user.role || 'USER');
             
             // Also fetch and update the Expo/FCM push token on the backend
-            const { registerForPushNotificationsAsync } = require('../../utils/notifications');
-            registerForPushNotificationsAsync().then(token => {
+            try {
+              const { registerForPushNotificationsAsync } = require('../../utils/notifications');
+              const token = await registerForPushNotificationsAsync();
               if (token && token !== 'expo-go-mock-token' && token.length > 10) {
                 console.log('[TabLayout] Fetched valid push token, registering with backend:', token);
-                userAPI.updatePushToken(token).catch(err => 
-                  console.log('[TabLayout] Error registering push token with backend:', err.message)
-                );
+                await userAPI.updatePushToken(token);
               } else {
                 console.log('[TabLayout] Skipping push token registration — token is invalid or mock:', token);
               }
-            }).catch(tokenErr => {
-              console.log('[TabLayout] Error getting push token:', tokenErr.message);
-            });
+            } catch (regErr) {
+              console.log('[TabLayout] Error during push token setup:', regErr.message);
+            }
           }
         } catch (oneErr) {
           console.log('Error initializing OneSignal in TabLayout:', oneErr);

@@ -35,6 +35,24 @@ class PushService {
     if (cleanUserIds.length === 0) return emptyResult;
 
     try {
+      // 1. Try OneSignal first (uses external_user_ids — no DB token lookup needed)
+      const { sendNotificationToOneSignalByUserIds, sendNotificationToMultiple } = require('../../utils/notifications');
+      const oneSignalResult = await sendNotificationToOneSignalByUserIds(
+        cleanUserIds, message.title, message.body, message.data || {}
+      );
+      if (oneSignalResult.success && oneSignalResult.sent > 0) {
+        console.log(`[PushService] Sent via OneSignal to ${oneSignalResult.sent} user(s)`);
+        return {
+          success: true,
+          usersTargeted: cleanUserIds.length,
+          tokensTargeted: oneSignalResult.sent,
+          sentCount: oneSignalResult.sent,
+          failedCount: 0,
+          channel: 'onesignal',
+        };
+      }
+
+      // 2. Fall back to Expo/FCM push tokens
       const User = require('../models/userModel');
       const usersWithTokens = await User.find({
         _id: { $in: cleanUserIds },
@@ -45,7 +63,6 @@ class PushService {
       const pushTokens = usersWithTokens.map(u => u.pushToken).filter(t => t && typeof t === 'string');
       if (pushTokens.length > 0) {
         console.log(`[PushService] Dispatching push to ${pushTokens.length} tokens via FCM/Expo...`);
-        const { sendNotificationToMultiple } = require('../../utils/notifications');
         const result = await sendNotificationToMultiple(pushTokens, message.title, message.body, message.data || {});
         const deliveryResults = result?.results || emptyResult.results;
         const sentCount = (deliveryResults.expo?.sent || 0) + (deliveryResults.fcm?.sent || 0);
@@ -57,7 +74,7 @@ class PushService {
           tokensTargeted: pushTokens.length,
           sentCount,
           failedCount,
-          results: deliveryResults,
+          channel: 'expo-fcm',
         };
       } else {
         console.log('[PushService] No push tokens found for users:', cleanUserIds);

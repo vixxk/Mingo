@@ -49,7 +49,7 @@ const ZegoCallWrapper = React.memo(({ appId, appSign, userId, userName, roomId, 
         onCallEnd: onCallEnd,
         onHangUp: onCallEnd,
         onOnlySelfInRoom: onCallEnd,
-        durationConfig: { isDurationVisible: true },
+        durationConfig: { isDurationVisible: false },
         turnOnCameraWhenJoining: true,
         turnOnMicrophoneWhenJoining: true,
         layout: {
@@ -367,6 +367,13 @@ export default function VideoCallScreen() {
 
         {/* Floating overlay — uses pointerEvents='box-none' so only buttons intercept touches */}
         <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+          {/* Custom duration badge (Zego's built-in is disabled) */}
+          <View style={{ position: 'absolute', top: insets.top + vs(8), left: 0, right: 0, alignItems: 'center', zIndex: 9999 }}>
+            <View style={styles.durationBadge}>
+              <View style={styles.liveDot} />
+              <Text style={styles.durationBadgeText}>{formatDuration(callDuration)}</Text>
+            </View>
+          </View>
           {/* Balance badge + Recharge + Gift button */}
           <View style={[styles.floatingTopRight, { zIndex: 9999, elevation: 9999 }]}>
             {currentCoins !== null && !isListener && (

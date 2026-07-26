@@ -49,7 +49,7 @@ const ZegoCallWrapper = React.memo(({ appId, appSign, userId, userName, roomId, 
         onCallEnd: onCallEnd,
         onHangUp: onCallEnd,
         onOnlySelfInRoom: onCallEnd,
-        durationConfig: { isDurationVisible: true },
+        durationConfig: { isDurationVisible: false },
         turnOnCameraWhenJoining: false,
         turnOnMicrophoneWhenJoining: true,
         useFrontFacingCamera: false,
@@ -367,6 +367,13 @@ export default function AudioCallScreen() {
           onCallEnd={handleEndCall}
         />
 
+        {/* Custom duration badge (Zego's built-in is disabled) */}
+        <View style={{ position: 'absolute', top: insets.top + vs(8), left: 0, right: 0, alignItems: 'center', zIndex: 9999 }}>
+          <View style={styles.durationBadge}>
+            <View style={styles.liveDot} />
+            <Text style={styles.durationBadgeText}>{formatDuration(callDuration)}</Text>
+          </View>
+        </View>
         {/* Balance badge + Recharge button */}
         <View style={styles.floatingTopRight}>
           {currentCoins !== null && !isListener && (
@@ -643,6 +650,26 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontFamily: 'Inter_900Black',
     marginBottom: vs(8),
+  },
+  durationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: s(14),
+    paddingVertical: vs(6),
+    borderRadius: 20,
+    gap: s(6),
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#EF4444',
+  },
+  durationBadgeText: {
+    color: '#fff',
+    fontSize: ms(14, 0.3),
+    fontFamily: 'Inter_600SemiBold',
   },
   durationText: {
     fontSize: ms(18, 0.3),
