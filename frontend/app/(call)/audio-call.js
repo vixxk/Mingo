@@ -302,12 +302,6 @@ export default function AudioCallScreen() {
     };
   }, [navigation]);
 
-  const formatDuration = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
   const handleEndCall = useCallback(async () => {
     if (callEndedRef.current) return;
     callEndedRef.current = true;
@@ -470,7 +464,6 @@ export default function AudioCallScreen() {
           />
         </Animated.View>
         <Text style={styles.callerName}>{name}</Text>
-        <Text style={styles.durationText}>{formatDuration(callDuration)}</Text>
         <View style={styles.statusRow}>
           <View style={styles.statusDot} />
           <Text style={styles.statusText}>Audio Call in Progress</Text>
@@ -641,12 +634,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#fff',
     fontFamily: 'Inter_900Black',
-    marginBottom: vs(8),
-  },
-  durationText: {
-    fontSize: ms(18, 0.3),
-    color: '#A855F7',
-    fontFamily: 'Inter_600SemiBold',
     marginBottom: vs(8),
   },
   statusRow: {

@@ -302,12 +302,6 @@ export default function VideoCallScreen() {
     };
   }, [navigation]);
 
-  const formatDuration = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
   const handleEndCall = useCallback(async () => {
     if (callEndedRef.current) return;
     callEndedRef.current = true;
@@ -454,7 +448,6 @@ export default function VideoCallScreen() {
       />
 
       <View style={[styles.topBar, { paddingTop: insets.top + vs(8) }]}>
-        <Text style={styles.durationBadgeText}>{formatDuration(callDuration)}</Text>
         <View style={styles.topBarRight}>
           {currentCoins !== null && !isListener && (
             <View style={styles.coinsBadgeInline}>
@@ -635,11 +628,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: s(8),
-  },
-  durationBadgeText: {
-    color: '#fff',
-    fontSize: ms(14, 0.3),
-    fontFamily: 'Inter_600SemiBold',
   },
   coinsBadgeInline: {
     flexDirection: 'row',
