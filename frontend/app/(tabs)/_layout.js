@@ -18,7 +18,7 @@ export default function TabLayout() {
   const segments = useSegments();
   const [isAuthenticated, setIsAuthenticated] = useState(null);
   const [incomingCalls, setIncomingCalls] = useState([]);
-  const unreadCount = useSSE();
+  const { unreadCount } = useSSE();
 
   const isChatOpenRef = React.useRef(false);
 

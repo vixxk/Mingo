@@ -659,12 +659,23 @@ class AdminController {
       if (status !== 'all') filter.status = status;
       if (reportType && reportType !== 'all') filter.reportType = reportType;
 
-      const reports = await MemberReport.find(filter)
+      let reports = await MemberReport.find(filter)
         .populate('reporter', 'name username phone')
         .populate('reportedUser', 'name username phone')
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(parseInt(limit));
+
+      reports = reports.map(r => ({
+        ...r.toObject(),
+        reporterName: r.reporter?.name || 'Unknown',
+        reporterPhone: r.reporter?.phone || null,
+        reportedName: r.reportedUser?.name || 'Unknown',
+        reportedPhone: r.reportedUser?.phone || null,
+        reportedId: r.reportedUser?._id?.toString() || null,
+        reason: r.category || 'other',
+        description: r.message || '',
+      }));
 
       const total = await MemberReport.countDocuments(filter);
 
@@ -887,28 +898,43 @@ static async resetCoinPackages(req, res, next) {
     try {
       const SystemSettings = require('../models/SystemSettings');
       const settings = await SystemSettings.getSettings();
-      
-      const allowedUpdates = [
-        'coinToDiamondRatio', 
-        'diamondToInrRatio', 
-        'commissionPercentage', 
-        'minWithdrawalLimit', 
-        'audioPayoutRate',
-        'videoPayoutRate',
-        'chatPayoutRate',
-        'maintenanceMode',
-        'otpSettings',
-        'notifications',
-        'activePackagesCount'
-      ];
 
-      allowedUpdates.forEach(key => {
+      const numericFields = ['coinToDiamondRatio', 'diamondToInrRatio', 'commissionPercentage', 'minWithdrawalLimit', 'audioPayoutRate', 'videoPayoutRate', 'chatPayoutRate', 'activePackagesCount'];
+      const booleanFields = ['maintenanceMode'];
+
+      let hasChanges = false;
+
+      numericFields.forEach(key => {
         if (req.body[key] !== undefined) {
-          settings[key] = req.body[key];
+          const val = Number(req.body[key]);
+          if (isNaN(val) || val < 0) {
+            throw new AppError(`${key} must be a non-negative number`, 400);
+          }
+          settings[key] = val;
+          hasChanges = true;
         }
       });
 
-      await settings.save();
+      booleanFields.forEach(key => {
+        if (req.body[key] !== undefined) {
+          settings[key] = Boolean(req.body[key]);
+          hasChanges = true;
+        }
+      });
+
+      if (req.body.otpSettings !== undefined) {
+        settings.otpSettings = req.body.otpSettings;
+        hasChanges = true;
+      }
+
+      if (req.body.notifications !== undefined) {
+        settings.notifications = req.body.notifications;
+        hasChanges = true;
+      }
+
+      if (hasChanges) {
+        await settings.save();
+      }
       return ApiResponse.success(res, settings, 'System settings updated');
     } catch (err) {
       next(err);

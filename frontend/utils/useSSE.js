@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export function useSSE() {
   const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadPeopleCount, setUnreadPeopleCount] = useState(0);
 
   useEffect(() => {
     let xhr = null;
@@ -18,26 +19,19 @@ export function useSSE() {
 
       if (!token) {
         setUnreadCount(0);
+        setUnreadPeopleCount(0);
         if (reconnectTimeout) clearTimeout(reconnectTimeout);
         reconnectTimeout = setTimeout(connectSSE, 5000);
         return;
       }
 
-      // Abort any existing connection before starting a new one
       if (xhr) {
-        console.log('[SSE] Aborting existing XHR connection before initiating new one');
-        try {
-          xhr.abort();
-        } catch (e) {
-          console.log('[SSE] Error aborting existing XHR:', e.message);
-        }
+        try { xhr.abort(); } catch (e) {}
         xhr = null;
       }
 
       const baseUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api';
       const sseUrl = `${baseUrl}/chat/unread-count/sse`;
-
-      console.log('[SSE] Connecting to:', sseUrl);
 
       const localXhr = new XMLHttpRequest();
       xhr = localXhr;
@@ -49,9 +43,7 @@ export function useSSE() {
 
       localXhr.onreadystatechange = () => {
         if (!keepConnecting || xhr !== localXhr) {
-          try {
-            localXhr.abort();
-          } catch (e) {}
+          try { localXhr.abort(); } catch (e) {}
           return;
         }
 
@@ -70,8 +62,10 @@ export function useSSE() {
                   try {
                     const parsed = JSON.parse(dataStr);
                     if (parsed && typeof parsed.unreadCount === 'number') {
-                      console.log('[SSE] Received unreadCount update:', parsed.unreadCount);
                       setUnreadCount(parsed.unreadCount);
+                    }
+                    if (parsed && typeof parsed.unreadPeopleCount === 'number') {
+                      setUnreadPeopleCount(parsed.unreadPeopleCount);
                     }
                   } catch (e) {
                     console.log('[SSE] Error parsing chunk JSON:', e.message);
@@ -85,7 +79,6 @@ export function useSSE() {
         }
 
         if (localXhr.readyState === 4) {
-          console.log('[SSE] Connection closed. ReadyState:', localXhr.readyState, 'Status:', localXhr.status);
           if (keepConnecting && xhr === localXhr) {
             if (reconnectTimeout) clearTimeout(reconnectTimeout);
             reconnectTimeout = setTimeout(connectSSE, 3000);
@@ -93,8 +86,7 @@ export function useSSE() {
         }
       };
 
-      localXhr.onerror = (err) => {
-        console.log('[SSE] XHR error:', err);
+      localXhr.onerror = () => {
         if (keepConnecting && xhr === localXhr) {
           if (reconnectTimeout) clearTimeout(reconnectTimeout);
           reconnectTimeout = setTimeout(connectSSE, 5000);
@@ -106,10 +98,7 @@ export function useSSE() {
 
     const disconnectSSE = () => {
       if (xhr) {
-        console.log('[SSE] Aborting connection due to background/disposal');
-        try {
-          xhr.abort();
-        } catch (e) {}
+        try { xhr.abort(); } catch (e) {}
         xhr = null;
       }
       if (reconnectTimeout) {
@@ -118,12 +107,9 @@ export function useSSE() {
       }
     };
 
-    // Initial connect
     connectSSE();
 
-    // Reconnect / Disconnect on App State change
     const handleAppStateChange = (nextAppState) => {
-      console.log('[SSE] AppState transition:', nextAppState);
       if (nextAppState === 'active') {
         keepConnecting = true;
         connectSSE();
@@ -142,5 +128,5 @@ export function useSSE() {
     };
   }, []);
 
-  return unreadCount;
+  return { unreadCount, unreadPeopleCount };
 }

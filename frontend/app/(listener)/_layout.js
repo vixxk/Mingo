@@ -20,7 +20,7 @@ export default function ListenerLayout() {
   const segments = useSegments();
   
   const [incomingCalls, setIncomingCalls] = useState([]);
-  const unreadCount = useSSE();
+  const { unreadPeopleCount } = useSSE();
 
   const isChatOpenRef = React.useRef(false);
   const incomingCallsRef = useRef([]);
@@ -334,7 +334,7 @@ export default function ListenerLayout() {
                 color={color}
               />
             ),
-            tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+            tabBarBadge: unreadPeopleCount > 0 ? unreadPeopleCount : undefined,
           }}
         />
         <Tabs.Screen

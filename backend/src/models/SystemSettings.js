@@ -83,14 +83,6 @@ systemSettingsSchema.statics.getSettings = async function () {
   } else if (!settings.coinPricing || settings.coinPricing.length === 0) {
     settings.coinPricing = defaults;
     await settings.save();
-  } else {
-    // Check if existing packages match expected defaults (by ID sequence)
-    const currentIds = settings.coinPricing.map(p => String(p.id)).sort().join(',');
-    if (currentIds !== expectedIds) {
-      console.log('[SystemSettings] Coin packages out of sync, resetting to defaults');
-      settings.coinPricing = defaults;
-      await settings.save();
-    }
   }
   return settings;
 };

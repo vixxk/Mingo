@@ -640,7 +640,7 @@ export default function Wallet() {
                 backgroundColor: 'var(--accent-light)', color: 'var(--accent)',
                 fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
               }}>
-              coins / min
+              diamonds / min
             </span>
           </div>
         </div>
@@ -668,7 +668,7 @@ export default function Wallet() {
               backgroundColor: 'var(--accent-light)', color: 'var(--accent)',
               fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
             }}>
-              coins / min
+              diamonds / min
             </span>
           </div>
         </div>
@@ -696,7 +696,7 @@ export default function Wallet() {
               backgroundColor: 'var(--accent-light)', color: 'var(--accent)',
               fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
             }}>
-              coins / 5 min
+              diamonds / 5 min
             </span>
             </div>
           </div>

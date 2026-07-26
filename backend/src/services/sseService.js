@@ -51,12 +51,15 @@ const sseService = {
     try {
       const conversations = await Conversation.find({ participants: userId });
       let totalUnread = 0;
+      let unreadPeopleCount = 0;
       conversations.forEach(conv => {
         if (conv.unreadCount) {
-          totalUnread += conv.unreadCount.get(userId.toString()) || 0;
+          const count = conv.unreadCount.get(userId.toString()) || 0;
+          totalUnread += count;
+          if (count > 0) unreadPeopleCount++;
         }
       });
-      res.write(`data: ${JSON.stringify({ unreadCount: totalUnread })}\n\n`);
+      res.write(`data: ${JSON.stringify({ unreadCount: totalUnread, unreadPeopleCount })}\n\n`);
     } catch (err) {
       console.error(`[SSE] Error sending unread count to ${userId}:`, err);
     }
@@ -70,14 +73,17 @@ const sseService = {
     try {
       const conversations = await Conversation.find({ participants: userIdStr });
       let totalUnread = 0;
+      let unreadPeopleCount = 0;
       conversations.forEach(conv => {
         if (conv.unreadCount) {
-          totalUnread += conv.unreadCount.get(userIdStr) || 0;
+          const count = conv.unreadCount.get(userIdStr) || 0;
+          totalUnread += count;
+          if (count > 0) unreadPeopleCount++;
         }
       });
 
-      console.log(`[SSE] Notifying user ${userIdStr} of new unread count: ${totalUnread}`);
-      const data = JSON.stringify({ unreadCount: totalUnread });
+      console.log(`[SSE] Notifying user ${userIdStr}: ${totalUnread} msgs from ${unreadPeopleCount} people`);
+      const data = JSON.stringify({ unreadCount: totalUnread, unreadPeopleCount });
       for (const res of userClients) {
         res.write(`data: ${data}\n\n`);
       }

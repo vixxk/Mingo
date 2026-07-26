@@ -211,7 +211,7 @@ const MessageBubble = ({ item }) => {
     );
   }
 
-  const isMedia = item.type === 'image' || item.type === 'sticker';
+  const isMedia = item.type === 'image';
   const bubbleStyle = isMedia
     ? styles.mediaBubble
     : item.sent ? styles.bubbleSent : styles.bubbleReceived;
@@ -221,9 +221,6 @@ const MessageBubble = ({ item }) => {
       <View style={[styles.bubble, bubbleStyle]}>
         {(!item.type || item.type === 'text') && (
           <Text style={styles.bubbleText}>{item.text}</Text>
-        )}
-        {item.type === 'sticker' && (
-          <Image source={{ uri: item.mediaUrl }} style={{ width: wp(26), height: wp(26) }} resizeMode="contain" />
         )}
         {item.type === 'image' && (
           <Image source={{ uri: item.mediaUrl }} style={{ width: wp(52), height: hp(25), borderRadius: wp(2.5) }} resizeMode="cover" />
@@ -235,13 +232,6 @@ const MessageBubble = ({ item }) => {
     </View>
   );
 };
-
-const STICKERS = [
-  'https://cdn-icons-png.flaticon.com/512/1043/1043292.png',
-  'https://cdn-icons-png.flaticon.com/512/1043/1043306.png',
-  'https://cdn-icons-png.flaticon.com/512/1043/1043301.png',
-  'https://cdn-icons-png.flaticon.com/512/1043/1043288.png',
-];
 
 const EMOJIS = [
   '😀','😂','🥺','😍','🙏','👍','😭','🔥','🥰','😊','✨','❤️','🙌','😎','🤔','😘',
@@ -300,7 +290,6 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState([]);
   const [isAdminChat, setIsAdminChat] = useState(paramIsAdmin === 'true');
   const [loading, setLoading] = useState(true);
-  const [showStickers, setShowStickers] = useState(false);
   const [showEmojis, setShowEmojis] = useState(false);
   const [message, setMessage] = useState('');
   const [userRole, setUserRole] = useState('USER');
@@ -685,15 +674,20 @@ export default function ChatScreen() {
 
     const handleChatUserOffline = (data) => {
       console.log('[Chat] Other user went offline:', data);
-      // Show system message that user is offline
-      const offlineMsg = {
-        id: `offline_${Date.now()}`,
-        text: data.message || 'User went offline.',
-        sent: false,
-        type: 'system',
-        createdAt: new Date().toISOString(),
-      };
-      setMessages(prev => [...prev, offlineMsg]);
+      setMessages(prev => {
+        const lastMsg = prev[prev.length - 1];
+        if (lastMsg && lastMsg.type === 'system' && lastMsg.text === (data.message || 'User went offline.')) {
+          return prev;
+        }
+        const offlineMsg = {
+          id: `offline_${Date.now()}`,
+          text: data.message || 'User went offline.',
+          sent: false,
+          type: 'system',
+          createdAt: new Date().toISOString(),
+        };
+        return [...prev, offlineMsg];
+      });
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     };
 
@@ -837,39 +831,6 @@ export default function ChatScreen() {
 
   const handleEmojiPress = (emoji) => setMessage((prev) => prev + emoji);
 
-  const handleSendSticker = (stickerUrl) => {
-    if (realConversationId && currentUserId) {
-      if (chatBlocked) {
-        if (userRole === 'USER') router.push('/balance');
-        return;
-      }
-      
-      const tempId = `temp_${Date.now()}`;
-      const optimisticMsg = {
-        id: tempId,
-        text: '',
-        sent: true,
-        type: 'sticker',
-        mediaUrl: stickerUrl,
-        senderId: currentUserId,
-        senderModel: userRole === 'LISTENER' ? 'Listener' : 'User',
-        createdAt: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, optimisticMsg]);
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-
-      socketService.emit('send_message', {
-        conversationId: realConversationId, 
-        senderId: currentUserId, 
-        senderModel: userRole === 'LISTENER' ? 'Listener' : 'User',
-        content: '', 
-        type: 'sticker', 
-        mediaUrl: stickerUrl,
-      });
-      setShowStickers(false);
-    }
-  };
-
   if (loading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -1006,19 +967,6 @@ export default function ChatScreen() {
         <View style={{ height: hp(1) }} />
       </ScrollView>
 
-      {/* Sticker panel */}
-      {showStickers && (
-        <View style={styles.stickerPanel}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {STICKERS.map((stickerUrl, idx) => (
-              <TouchableOpacity key={idx} onPress={() => handleSendSticker(stickerUrl)}>
-                <Image source={{ uri: stickerUrl }} style={styles.stickerThumb} resizeMode="contain" />
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
       {/* Emoji panel */}
       {showEmojis && (
         <View style={styles.emojiPanel}>
@@ -1085,12 +1033,8 @@ export default function ChatScreen() {
               <Ionicons name="send" size={wp(5.5)} color={chatBlocked ? '#4B5563' : '#EC4899'} />
             </TouchableOpacity>
             <TouchableOpacity activeOpacity={0.7} style={styles.inputAction}
-              onPress={() => { setShowEmojis(!showEmojis); setShowStickers(false); }}>
+              onPress={() => setShowEmojis(!showEmojis)}>
               <Ionicons name="happy-outline" size={wp(5.5)} color={showEmojis ? '#EC4899' : '#9CA3AF'} />
-            </TouchableOpacity>
-            <TouchableOpacity activeOpacity={0.7} style={styles.inputAction}
-              onPress={() => { setShowStickers(!showStickers); setShowEmojis(false); }}>
-              <Ionicons name="star-outline" size={wp(5.5)} color={showStickers ? '#EC4899' : '#9CA3AF'} />
             </TouchableOpacity>
           </View>
         </View>
@@ -1315,12 +1259,7 @@ const styles = StyleSheet.create({
   },
   blockedBannerText: { fontSize: wp(3.2), color: '#F59E0B', fontWeight: '600' },
 
-  // Sticker & Emoji
-  stickerPanel: {
-    backgroundColor: '#111', paddingVertical: hp(1.5), paddingHorizontal: wp(3),
-    borderTopWidth: 1, borderTopColor: '#222', height: hp(10),
-  },
-  stickerThumb: { width: wp(15), height: wp(15), marginRight: wp(3) },
+  // Emoji
   emojiPanel: { backgroundColor: '#111', height: hp(22), borderTopWidth: 1, borderTopColor: '#222' },
   emojiContainer: { flexDirection: 'row', flexWrap: 'wrap', padding: wp(2.5), justifyContent: 'center' },
   emojiButton: { padding: wp(2), margin: wp(1) },

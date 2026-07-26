@@ -49,7 +49,7 @@ export default function FavouriteListenerPopup({ visible, onGotIt, onClose }) {
           </View>
 
           <Text style={styles.subtitle}>
-            Now you mark listeners as your favourite.
+            Now you can mark listeners as your favourite.
           </Text>
 
           <TouchableOpacity
