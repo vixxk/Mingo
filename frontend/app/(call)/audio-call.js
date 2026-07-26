@@ -49,7 +49,6 @@ const ZegoCallWrapper = React.memo(({ appId, appSign, userId, userName, roomId, 
         onCallEnd: onCallEnd,
         onHangUp: onCallEnd,
         onOnlySelfInRoom: onCallEnd,
-        durationConfig: { isDurationVisible: false },
         turnOnCameraWhenJoining: false,
         turnOnMicrophoneWhenJoining: true,
         useFrontFacingCamera: false,
@@ -367,10 +366,6 @@ export default function AudioCallScreen() {
           onCallEnd={handleEndCall}
         />
 
-        {/* Duration indicator */}
-        <View style={{ position: 'absolute', top: insets.top + vs(8), left: 0, right: 0, alignItems: 'center', zIndex: 9999 }}>
-          <Text style={styles.durationBadgeText}>{formatDuration(callDuration)}</Text>
-        </View>
         {/* Balance badge + Recharge button */}
         <View style={styles.floatingTopRight}>
           {currentCoins !== null && !isListener && (
@@ -647,11 +642,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontFamily: 'Inter_900Black',
     marginBottom: vs(8),
-  },
-  durationBadgeText: {
-    color: '#fff',
-    fontSize: ms(14, 0.3),
-    fontFamily: 'Inter_600SemiBold',
   },
   durationText: {
     fontSize: ms(18, 0.3),

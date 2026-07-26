@@ -1273,71 +1273,57 @@ const mongoose = require('mongoose');
  * warns on low balance, and auto-ends when balance is 0.
  */
 async function startCallBillingTimer(sessionId) {
-  try {
-    // Don't double-start
-    if (callBillingTimers[sessionId]) return;
-    callBillingTimers[sessionId] = 'pending';
+  if (callBillingTimers[sessionId]) return;
 
-    let session;
-    if (mongoose.Types.ObjectId.isValid(sessionId)) {
-      session = await Session.findById(sessionId);
-    } else {
-      session = await Session.findOne({ roomId: sessionId });
-    }
-
-    if (!session || session.status !== 'active') {
-      delete callBillingTimers[sessionId];
-      return;
-    }
-
-    const realSessionId = session._id.toString();
-    if (callBillingTimers[realSessionId]) {
-      delete callBillingTimers[sessionId];
-      return;
-    }
-
-    const isVideo = session.callType === 'video';
-    const coinsPerMin = isVideo ? VIDEO_COINS_PER_MIN : AUDIO_COINS_PER_MIN;
-    
-    let payoutPerMin = isVideo ? VIDEO_PAYOUT_PER_MIN : AUDIO_PAYOUT_PER_MIN;
-    try {
-      const SystemSettings = require('./models/SystemSettings');
-      const settings = await SystemSettings.findOne();
-      if (settings) {
-        payoutPerMin = isVideo ? (settings.videoPayoutRate ?? VIDEO_PAYOUT_PER_MIN) : (settings.audioPayoutRate ?? AUDIO_PAYOUT_PER_MIN);
-      }
-    } catch (err) {
-      console.error('Error loading dynamic payout rates:', err);
-    }
-
-    session.lastDeductionTime = new Date();
-    await session.save();
-
-    const timer = setInterval(async () => {
-      try {
-        const activeSession = await Session.findById(realSessionId);
-        if (!activeSession || activeSession.status !== 'active') {
-          stopCallBillingTimer(realSessionId);
-          stopCallBillingTimer(sessionId);
-          return;
-        }
-        await deductCallMinute(realSessionId, activeSession.userId, activeSession.listenerId, coinsPerMin, payoutPerMin, activeSession.callType);
-      } catch (err) {
-        console.error(`[CallBilling] Error in billing timer for ${realSessionId}:`, err);
-      }
-    }, CALL_BILLING_INTERVAL);
-
-    callBillingTimers[sessionId] = timer;
-    callBillingTimers[realSessionId] = timer;
-
-    await deductCallMinute(realSessionId, session.userId, session.listenerId, coinsPerMin, payoutPerMin, session.callType);
-  } catch (err) {
-    console.error(`[CallBilling] Fatal error starting billing timer for ${sessionId}:`, err);
-    delete callBillingTimers[sessionId];
-    Object.keys(callBillingTimers).forEach(key => {
-      if (callBillingTimers[key] === 'pending') delete callBillingTimers[key];
-    });
+  let realSessionId = sessionId;
+  if (!mongoose.Types.ObjectId.isValid(sessionId)) {
+    const found = await Session.findOne({ roomId: sessionId }).select('_id');
+    if (!found) return;
+    realSessionId = found._id.toString();
+    if (callBillingTimers[realSessionId]) return;
+    sessionId = realSessionId;
   }
+
+  const session = await Session.findOneAndUpdate(
+    { _id: realSessionId, status: 'active', lastDeductionTime: null },
+    { $set: { lastDeductionTime: new Date() } },
+    { new: true }
+  );
+
+  if (!session) return;
+
+  const isVideo = session.callType === 'video';
+  const coinsPerMin = isVideo ? VIDEO_COINS_PER_MIN : AUDIO_COINS_PER_MIN;
+  
+  let payoutPerMin = isVideo ? VIDEO_PAYOUT_PER_MIN : AUDIO_PAYOUT_PER_MIN;
+  try {
+    const SystemSettings = require('./models/SystemSettings');
+    const settings = await SystemSettings.findOne();
+    if (settings) {
+      payoutPerMin = isVideo ? (settings.videoPayoutRate ?? VIDEO_PAYOUT_PER_MIN) : (settings.audioPayoutRate ?? AUDIO_PAYOUT_PER_MIN);
+    }
+  } catch (err) {
+    console.error('Error loading dynamic payout rates:', err);
+  }
+
+  const timer = setInterval(async () => {
+    try {
+      const activeSession = await Session.findById(realSessionId);
+      if (!activeSession || activeSession.status !== 'active') {
+        stopCallBillingTimer(realSessionId);
+        stopCallBillingTimer(sessionId);
+        return;
+      }
+      await deductCallMinute(realSessionId, activeSession.userId, activeSession.listenerId, coinsPerMin, payoutPerMin, activeSession.callType);
+    } catch (err) {
+      console.error(`[CallBilling] Error in billing timer for ${realSessionId}:`, err);
+    }
+  }, CALL_BILLING_INTERVAL);
+
+  callBillingTimers[sessionId] = timer;
+  callBillingTimers[realSessionId] = timer;
+
+  await deductCallMinute(realSessionId, session.userId, session.listenerId, coinsPerMin, payoutPerMin, session.callType);
 }
 
 /**
