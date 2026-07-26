@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { authAPI } from '../utils/api'
 import LogoutPopup from '../components/shared/LogoutPopup'
 import {
-  IoSettingsOutline, IoMegaphoneOutline, IoStatsChartOutline,
+  IoSettings, IoMegaphoneOutline, IoStatsChartOutline,
   IoWalletOutline, IoCashOutline, IoBanOutline, IoFlagOutline,
   IoStarOutline, IoChevronForward, IoLogOut, IoPersonCircleOutline,
   IoChevronBack,
@@ -56,10 +56,15 @@ return (
           }}>
           <IoChevronBack size={20} color="#fff" />
         </button>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <h1 className="page-header-title" style={{ color: 'var(--text-primary)', fontSize: 'var(--header-font-size)', fontWeight: 800, margin: 0, letterSpacing: '-0.3px' }}>Settings</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
+          <div className="icon-box" style={{
+            width: 36, height: 36, borderRadius: 10,
+            background: 'var(--accent-gradient)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <IoSettings size={18} color="#fff" />
           </div>
+          <h1 className="page-header-title" style={{ color: 'var(--text-primary)', fontSize: 'var(--header-font-size)', fontWeight: 800, margin: 0, letterSpacing: '-0.3px' }}>Settings</h1>
         </div>
       </div>
 

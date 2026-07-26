@@ -88,7 +88,7 @@ function AnimatedNumber({ value, format, duration = 1200 }) {
 }
 
 const modules = [
-  { label: 'Sessions', icon: IoCall, path: '/sessions', color: '#A855F7', badgeKey: 'totalCalls' },
+  { label: 'Sessions', icon: IoCall, path: '/sessions', color: '#A855F7', badgeKey: null },
   { label: 'Approvals', icon: IoShieldCheckmark, path: '/approvals', color: '#7C6FF7', badgeKey: 'pendingApprovals' },
   { label: 'Payouts', icon: IoCash, path: '/payouts', color: '#8B5CF6', badgeKey: 'pendingPayout' },
   { label: 'Analytics', icon: IoStatsChart, path: '/analytics', color: '#EC4899', badgeKey: null },

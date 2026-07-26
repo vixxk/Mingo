@@ -118,6 +118,34 @@ class AdminController {
       const diamondsGeneratedToday = diamondsGeneratedTodayAgg.length > 0 ? diamondsGeneratedTodayAgg[0].total : 0;
       const pendingPayoutAmount = pendingPayoutAgg.length > 0 ? pendingPayoutAgg[0].total : 0;
 
+      // Gift-specific stats
+      const [
+        totalGiftsSentCount,
+        totalGiftsCoinsAgg,
+        giftSendersTodayAgg,
+        uniqueGiftSendersAgg
+      ] = await Promise.all([
+        Transaction.countDocuments({ type: 'gift_send', status: 'completed' }),
+        Transaction.aggregate([
+          { $match: { type: 'gift_send', status: 'completed' } },
+          { $group: { _id: null, total: { $sum: { $abs: '$coins' } } } }
+        ]),
+        Transaction.aggregate([
+          { $match: { type: 'gift_send', status: 'completed', createdAt: { $gte: today } } },
+          { $group: { _id: '$userId' } },
+          { $count: 'count' }
+        ]),
+        Transaction.aggregate([
+          { $match: { type: 'gift_send', status: 'completed' } },
+          { $group: { _id: '$userId' } },
+          { $count: 'count' }
+        ])
+      ]);
+      const totalGiftsSent = totalGiftsSentCount || 0;
+      const totalGiftCoinsSpent = totalGiftsCoinsAgg.length > 0 ? totalGiftsCoinsAgg[0].total : 0;
+      const giftSendersToday = giftSendersTodayAgg.length > 0 ? giftSendersTodayAgg[0].count : 0;
+      const uniqueGiftSenders = uniqueGiftSendersAgg.length > 0 ? uniqueGiftSendersAgg[0].count : 0;
+
       // Graph Data
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days + 1);
@@ -193,19 +221,9 @@ class AdminController {
       ]);
 
       const dailyGiftsRaw = await Transaction.aggregate([
-        {
-          $match: {
-            type: { $in: ['gift_send', 'gift_receive'] },
-            status: 'completed',
-            createdAt: { $gte: startDate }
-          }
-        },
-        {
-          $group: {
-            _id: { $dateToString: { format: groupByFormat, date: "$createdAt" } },
-            amount: { $sum: "$coins" }
-          }
-        },
+        { $match: { type: 'gift_send', status: 'completed', createdAt: { $gte: startDate } } },
+        { $project: { absCoins: { $abs: "$coins" }, date: "$createdAt" } },
+        { $group: { _id: { $dateToString: { format: groupByFormat, date: "$date" } }, amount: { $sum: "$absCoins" } } },
         { $sort: { _id: 1 } }
       ]);
 
@@ -256,6 +274,10 @@ class AdminController {
         activeChats,
         pendingUsers: pendingUsersCount,
         pendingListeners: pendingListenersCount,
+        totalGiftsSent,
+        totalGiftCoinsSpent,
+        giftSendersToday,
+        uniqueGiftSenders,
         charts: {
           dailyRevenue,
           dailyRegistrations,
@@ -294,15 +316,8 @@ class AdminController {
       }
 
       if (status === 'active') {
-        filter._id = { $in: onlineUserIds, $nin: allListenerUserIds };
+        filter.isBanned = { $ne: true };
       } else if (status === 'inactive') {
-        const excludeIds = [...new Set([...onlineUserIds.map(id => id.toString()), ...allListenerUserIds.map(id => id.toString())])];
-        filter._id = { $nin: excludeIds };
-      } else {
-        filter._id = { $nin: allListenerUserIds };
-      }
-
-      if (status === 'banned') {
         filter.isBanned = true;
       }
 
@@ -310,8 +325,11 @@ class AdminController {
         delete filter._id;
         filter.isDeleted = true;
       } else {
-        // Only show non-deleted users unless explicitly filtering for deleted
         filter.isDeleted = { $ne: true };
+      }
+
+      if (!status || status === 'all') {
+        filter._id = { $nin: allListenerUserIds };
       }
 
       const users = await User.find(filter)
@@ -639,10 +657,16 @@ class AdminController {
   static async getActivities(req, res, next) {
     try {
       const { limit = 20, page = 1 } = req.query;
-      const activities = await ActivityLog.find()
+      let activities = await ActivityLog.find()
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(parseInt(limit));
+
+      activities = activities.map(a => {
+        const obj = a.toObject();
+        obj.performedBy = obj.user;
+        return obj;
+      });
 
       const total = await ActivityLog.countDocuments();
 

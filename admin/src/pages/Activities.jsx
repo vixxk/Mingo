@@ -23,8 +23,6 @@ const TYPE_ICONS = {
   system: IoConstruct,
 }
 
-const TABS = ['All', 'User', 'Listener', 'Session', 'Payout', 'System']
-
 const getRelativeTime = (dateStr) => {
   if (!dateStr) return ''
   const now = Date.now()
@@ -48,8 +46,6 @@ const getExactTime = (dateStr) => {
     hour: '2-digit', minute: '2-digit', second: '2-digit',
   })
 }
-
-const filterKey = (tab) => tab === 'All' ? null : tab.toLowerCase()
 
 function ActivitiesSkeleton() {
   return (
@@ -83,7 +79,6 @@ export default function Activities() {
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [activeTab, setActiveTab] = useState('All')
   const [offset, setOffset] = useState(0)
   const [tooltipId, setTooltipId] = useState(null)
   const LIMIT = 20
@@ -116,13 +111,8 @@ export default function Activities() {
   }, [offset])
 
   useEffect(() => {
-    setOffset(0)
-    fetchActivities(false, 0)
-  }, [activeTab]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const filtered = activeTab === 'All'
-    ? activities
-    : activities.filter(a => a.type === activeTab.toLowerCase())
+    fetchActivities()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLoadMore = (e) => {
     e.preventDefault()
@@ -174,35 +164,6 @@ export default function Activities() {
         </div>
       </div>
 
-      {/* Filter Tabs */}
-      <div className="filter-tabs tabs-scroll" style={{
-        display: 'flex', gap: 8, marginBottom: 20, overflowX: 'auto',
-      }}>
-        {TABS.map(tab => {
-          const isActive = activeTab === tab
-          const color = tab === 'All' ? 'var(--accent)' : TYPE_COLORS[tab.toLowerCase()]
-          return (
-            <button
-              key={tab}
-              onClick={() => {
-                setActiveTab(tab)
-                setOffset(0)
-              }}
-              style={{
-                flexShrink: 0, padding: '8px 16px', borderRadius: 20, border: 'none',
-                background: isActive ? `${color}20` : 'var(--bg-tertiary)',
-                color: isActive ? color : 'var(--text-secondary)',
-                fontSize: 13, fontWeight: 700, cursor: 'pointer',
-                transition: 'all 0.2s',
-                ...(isActive ? { border: `1px solid ${color}40` } : { border: '1px solid var(--border)' }),
-              }}
-            >
-              {tab}
-            </button>
-          )
-        })}
-      </div>
-
       {/* Activity Count Badge */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -223,7 +184,7 @@ export default function Activities() {
       {/* Loading State */}
       {loading ? (
         <ActivitiesSkeleton />
-      ) : filtered.length === 0 ? (
+      ) : activities.length === 0 ? (
         /* Empty State */
         <div style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -232,13 +193,13 @@ export default function Activities() {
         }}>
           <IoConstruct size={48} color="var(--border)" />
           <p style={{ color: 'var(--text-muted)', fontSize: 15, marginTop: 12 }}>
-            {activeTab === 'All' ? 'No activities recorded yet' : `No ${activeTab.toLowerCase()} activities`}
+            No activities recorded yet
           </p>
         </div>
       ) : (
         /* Activity List */
         <div>
-          {filtered.map(activity => {
+          {activities.map(activity => {
             const Icon = TYPE_ICONS[activity.type] || IoConstruct
             const color = TYPE_COLORS[activity.type] || 'var(--text-muted)'
             return (
@@ -267,19 +228,15 @@ export default function Activities() {
                   {/* Content */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: '#fff', lineHeight: 1.3 }}>
-                      {activity.action || activity.description || 'Unknown action'}
+                      {activity.performedBy ? (
+                        <>{activity.performedBy} {activity.action || activity.description || 'performed an action'}</>
+                      ) : (
+                        activity.action || activity.description || 'Unknown action'
+                      )}
                     </div>
-                    {activity.performedBy && (
+                    {activity.targetName && (
                       <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 3 }}>
-                        by <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{activity.performedBy}</span>
-                        {activity.targetName && (
-                          <span> &rarr; {activity.targetName}</span>
-                        )}
-                      </div>
-                    )}
-                    {activity.targetName && !activity.performedBy && (
-                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 3 }}>
-                        {activity.targetName}
+                        &rarr; {activity.targetName}
                         {activity.targetType && (
                           <span style={{ color: color, fontWeight: 600 }}> ({activity.targetType})</span>
                         )}

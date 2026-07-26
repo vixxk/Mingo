@@ -300,7 +300,7 @@ export default function MemberReports() {
                 }}
               >
                 <IoBan size={16} />
-                Ban Reported User
+                Ban Reported Member
               </button>
             </div>
           ) : (

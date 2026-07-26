@@ -44,15 +44,15 @@ const cardAccents = {
 const sectionColors = {
   registeredUsers: 'var(--accent)',
   approvedListeners: '#10B981',
-  gifts: '#F59E0B',
-  walletTransactions: '#A855F7',
+  gifts: '#A855F7',
+  walletTransactions: '#F59E0B',
 }
 
 const sectionLabels = {
   registeredUsers: 'Registered Users',
   approvedListeners: 'Approved Listeners',
-  gifts: 'Revenue & Purchases',
-  walletTransactions: 'Wallet & Call Transactions',
+  gifts: 'Gift Transactions',
+  walletTransactions: 'Coin Purchases',
 }
 
 export default function Analytics() {
@@ -275,7 +275,7 @@ export default function Analytics() {
 
   const revenueChartData = dailyRevenue
     .filter(r => r._id)
-    .map(r => ({ label: formatLabel(r._id), value: r.amount }))
+    .map(r => ({ label: formatLabel(r._id), value: Math.abs(r.amount || 0) }))
 
   const approvedListenersChartData = dailyApprovedListeners
     .filter(r => r._id)
@@ -283,7 +283,7 @@ export default function Analytics() {
 
   const giftsChartData = dailyGifts
     .filter(r => r._id)
-    .map(r => ({ label: formatLabel(r._id), value: r.amount }))
+    .map(r => ({ label: formatLabel(r._id), value: Math.abs(r.amount || 0) }))
 
   const sectionData = {
     registeredUsers: registrationChartData,
@@ -668,8 +668,8 @@ export default function Analytics() {
                   display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
                   gap: 10,
                 }}>
-                  <MiniStat label="Period Total" value={formatNumber(sectionItems.reduce((a, b) => a + b.value, 0))} color={color} />
-                  <MiniStat label="Daily Average" value={formatNumber(Math.round(sectionItems.reduce((a, b) => a + b.value, 0) / sectionItems.length))} color={color} />
+                  <MiniStat label="Period Total" value={formatNumber(Math.abs(sectionItems.reduce((a, b) => a + b.value, 0)))} color={color} />
+                  <MiniStat label="Daily Average" value={formatNumber(Math.abs(Math.round(sectionItems.reduce((a, b) => a + b.value, 0) / sectionItems.length)))} color={color} />
                   <MiniStat label="Peak" value={formatNumber(maxVal)} color={color} />
                 </div>
               </div>
@@ -690,9 +690,9 @@ export default function Analytics() {
                     display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
                     gap: 10,
                   }}>
-                    <MiniStat label="Total Revenue" value={formatCurrency(d.totalRevenue || 0)} color={color} />
-                    <MiniStat label="Active Sessions" value={formatNumber(d.totalCalls || 0)} color={color} />
-                    <MiniStat label="Coins Today" value={formatNumber(d.coinsPurchasedToday || 0)} color={color} />
+                    <MiniStat label="Total Gifts Sent" value={formatNumber(d.totalGiftsSent || 0)} color={color} />
+                    <MiniStat label="Gift Coins Spent" value={formatCurrency(d.totalGiftCoinsSpent || 0)} color={color} />
+                    <MiniStat label="Unique Gift Senders" value={formatNumber(d.uniqueGiftSenders || 0)} color={color} />
                   </div>
                 )}
                 {key === 'walletTransactions' && (
@@ -700,9 +700,9 @@ export default function Analytics() {
                     display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
                     gap: 10,
                   }}>
-                    <MiniStat label="Active Chats" value={formatNumber(d.activeChats || 0)} color={color} />
+                    <MiniStat label="Total Revenue" value={formatCurrency(d.totalRevenue || 0)} color={color} />
+                    <MiniStat label="Coins Today" value={formatNumber(d.coinsPurchasedToday || 0)} color={color} />
                     <MiniStat label="Pending Payouts" value={formatNumber(d.pendingPayoutsCount || 0)} color={color} />
-                    <MiniStat label="Pending Amount" value={formatCurrency(d.pendingPayoutAmount || 0)} color={color} />
                   </div>
                 )}
                 {!['approvedListeners', 'gifts', 'walletTransactions'].includes(key) && (

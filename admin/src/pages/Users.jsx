@@ -52,7 +52,7 @@ export default function Users() {
         if (searchTerm) params.search = searchTerm
         if (activeFilter === 'Active') params.status = 'active'
         else if (activeFilter === 'Inactive') params.status = 'inactive'
-        else if (activeFilter === 'Deleted') params.isDeleted = true
+        else if (activeFilter === 'Deleted') params.status = 'deleted'
 
         const res = await adminAPI.getUsers(params)
         const data = res.data || res
