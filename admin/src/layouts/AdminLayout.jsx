@@ -107,53 +107,7 @@ export default function AdminLayout() {
       minHeight: '100vh',
       backgroundColor: 'var(--bg-primary)',
     }}>
-      <style>{`@media (max-width: 600px) { .mobile-sidebar-open { width: 280px !important; } .mobile-main { margin-left: 0 !important; padding-top: 56px !important; } }`}</style>
-      {/* Mobile menu toggle (hidden when sidebar open) */}
-      <button
-        onClick={() => setSidebarOpen(true)}
-        style={{
-          position: 'fixed',
-          top: 12,
-          left: 12,
-          zIndex: 60,
-          width: 44,
-          height: 44,
-          borderRadius: 'var(--radius-md)',
-          backgroundColor: 'var(--bg-secondary)',
-          border: '1px solid var(--border)',
-          display: isDesktop || sidebarOpen ? 'none' : 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          color: 'var(--text-secondary)',
-          transition: 'background-color 0.2s',
-        }}
-        onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'}
-        onMouseLeave={e => e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'}
-      >
-        <IoMenu size={28} />
-      </button>
-
-      {/* Mobile header brand */}
-      {!isDesktop && !sidebarOpen && (
-        <div style={{
-          position: 'fixed',
-          top: 12,
-          left: 64,
-          right: 12,
-          zIndex: 55,
-          backgroundColor: 'var(--bg-primary)',
-          borderRadius: 'var(--radius-md)',
-          border: '1px solid var(--border)',
-          padding: '8px 14px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-        }}>
-          <img src="/logo.png" alt="Mingo" style={{ width: 24, height: 24, borderRadius: 8, objectFit: 'contain', flexShrink: 0 }} />
-          <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-display)', letterSpacing: '-0.3px' }}>Mingo Admin Panel</span>
-        </div>
-      )}
+      <style>{`@media (max-width: 600px) { .mobile-sidebar-open { width: 280px !important; } }`}</style>
 
       {/* Sidebar */}
       <aside
@@ -578,10 +532,57 @@ export default function AdminLayout() {
       <main className="mobile-main" style={{
         flex: 1,
         marginLeft: isDesktop ? sidebarWidth : 0,
-        paddingTop: isDesktop ? 0 : 60,
         minHeight: '100vh',
         transition: 'margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
       }}>
+        {/* Mobile header (scrolls with page) */}
+        {!isDesktop && !sidebarOpen && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '12px 16px',
+            backgroundColor: 'var(--bg-primary)',
+            borderBottom: '1px solid var(--border)',
+          }}>
+            <button
+              onClick={() => setSidebarOpen(true)}
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 'var(--radius-md)',
+                backgroundColor: 'var(--bg-secondary)',
+                border: '1px solid var(--border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                color: 'var(--text-secondary)',
+                transition: 'background-color 0.2s',
+                flexShrink: 0,
+              }}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'}
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'}
+            >
+              <IoMenu size={28} />
+            </button>
+            <div style={{
+              flex: 1,
+              backgroundColor: 'var(--bg-primary)',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border)',
+              padding: '8px 14px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              minWidth: 0,
+            }}>
+              <img src="/logo.png" alt="Mingo" style={{ width: 24, height: 24, borderRadius: 8, objectFit: 'contain', flexShrink: 0 }} />
+              <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-display)', letterSpacing: '-0.3px' }}>Mingo Admin Panel</span>
+            </div>
+          </div>
+        )}
+
         <div style={{
           maxWidth: 'var(--container-max-width)',
           margin: '0 auto',
