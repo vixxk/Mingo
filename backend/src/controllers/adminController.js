@@ -690,16 +690,18 @@ class AdminController {
         .skip((page - 1) * limit)
         .limit(parseInt(limit));
 
-      reports = reports.map(r => ({
+    reports = reports.map(r => ({
         ...r.toObject(),
         reporterName: r.reporter?.name || 'Unknown',
         reporterPhone: r.reporter?.phone || null,
+        reporterId: r.reporter?._id?.toString() || null,
         reportedName: r.reportedUser?.name || 'Unknown',
         reportedPhone: r.reportedUser?.phone || null,
         reportedId: r.reportedUser?._id?.toString() || null,
         reason: r.category || 'other',
         description: r.message || '',
-      }));
+        reportType: r.reportType || 'general',
+    }));
 
       const total = await MemberReport.countDocuments(filter);
 

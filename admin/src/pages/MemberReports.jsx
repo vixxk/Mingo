@@ -152,7 +152,7 @@ export default function MemberReports() {
   }
 
   const handleBan = async () => {
-    if (!selectedReport || actionLoading) return
+    if (!selectedReport || actionLoading || !selectedReport.reportedId) return
     setActionLoading(true)
     try {
       await adminAPI.toggleBanUser(selectedReport.reportedId)
@@ -215,39 +215,48 @@ export default function MemberReports() {
             </div>
           </div>
 
-          <div className="report-detail-section" style={{
-            backgroundColor: 'var(--bg-tertiary)', borderRadius: 12, border: '1px solid var(--border)',
-            padding: 16, marginBottom: 16,
-          }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#fff', margin: '0 0 12px' }}>
-              Reported Member
-            </h3>
-            <div style={{ color: '#fff', fontWeight: 600, fontSize: 14, marginBottom: 2 }}>
-              {r.reportedName || 'Unknown'}
-            </div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 2 }}>
-              {r.reportedPhone || '—'}
-            </div>
-            <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-              ID: {r.reportedId || '—'}
-            </div>
-          </div>
+<div className="report-detail-section" style={{
+             backgroundColor: 'var(--bg-tertiary)', borderRadius: 12, border: '1px solid var(--border)',
+             padding: 16, marginBottom: 16,
+           }}>
+             <h3 style={{ fontSize: 14, fontWeight: 700, color: '#fff', margin: '0 0 12px' }}>
+               {r.reportType === 'general' ? 'Issue Reported By' : 'Reported Member'}
+             </h3>
+             <div style={{ color: '#fff', fontWeight: 600, fontSize: 14, marginBottom: 2 }}>
+               {r.reportType === 'general' ? (r.reporterName || 'Unknown') : (r.reportedName || 'Unknown')}
+             </div>
+             <div style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 2 }}>
+               {r.reportType === 'general' ? (r.reporterPhone || '—') : (r.reportedPhone || '—')}
+             </div>
+             <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+               ID: {r.reportType === 'general' ? (r.reporterId || r.reportedId || '—') : (r.reportedId || '—')}
+             </div>
+           </div>
 
-          <div className="report-detail-section" style={{
-            backgroundColor: 'var(--bg-tertiary)', borderRadius: 12, border: '1px solid var(--border)',            padding: 'var(--card-padding)', marginBottom: 16,
-          }}
-        >
-          <div style={{ marginBottom: 12 }}>
-              <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, marginBottom: 4 }}>Reason / Category</div>
-              <div style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>{r.reason || '—'}</div>
-            </div>
-            <div>
-              <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, marginBottom: 4 }}>Description</div>
-              <div style={{ color: '#D1D5DB', fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-                {r.description || 'No description provided'}
+          {r.reportType !== 'general' && (
+            <div className="report-detail-section" style={{
+              backgroundColor: 'var(--bg-tertiary)', borderRadius: 12, border: '1px solid var(--border)',
+              padding: 'var(--card-padding)', marginBottom: 16,
+            }}>
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, marginBottom: 4 }}>Reason / Category</div>
+                <div style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>{r.reason || '—'}</div>
               </div>
             </div>
+          )}
+
+          <div className="report-detail-section" style={{
+            backgroundColor: 'var(--bg-tertiary)', borderRadius: 12, border: '1px solid var(--border)',
+            padding: 'var(--card-padding)', marginBottom: 16,
+          }}
+        >
+          <div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, marginBottom: 4 }}>Description</div>
+            <div style={{ color: '#D1D5DB', fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+              {r.description || 'No description provided'}
+            </div>
           </div>
+        </div>
 
           <div style={{ color: 'var(--text-muted)', fontSize: 11, marginBottom: 20 }}>
             Reported on {formatDate(r.createdAt)}
@@ -287,21 +296,21 @@ export default function MemberReports() {
                   Dismiss
                 </button>
               </div>
-              <button
-                onClick={handleBan}
-                disabled={actionLoading}
-                style={{
-                  width: '100%', padding: '12px 0', borderRadius: 10, border: 'none',
-                  cursor: actionLoading ? 'not-allowed' : 'pointer',
-                  backgroundColor: actionLoading ? 'var(--text-muted)' : '#EF4444',
-                  color: '#fff', fontSize: 13, fontWeight: 700,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                  opacity: actionLoading ? 0.6 : 1,
-                }}
-              >
-                <IoBan size={16} />
-                Ban Reported Member
-              </button>
+              {isPending && selectedReport?.reportType !== 'general' && (
+                <button
+                  onClick={handleBan}
+                  style={{
+                    width: '100%', padding: '12px 0', borderRadius: 10, border: 'none',
+                    cursor: 'pointer',
+                    backgroundColor: '#EF4444',
+                    color: '#fff', fontSize: 13, fontWeight: 700,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  }}
+                >
+                  <IoBan size={16} />
+                  Ban Reported Member
+                </button>
+              )}
             </div>
           ) : (
             <button
@@ -476,8 +485,12 @@ export default function MemberReports() {
                     <StatusBadge status={report.status} />
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                    Reported: <span style={{ color: '#fff', fontWeight: 600 }}>{report.reportedName || 'Unknown'}</span>
-                    {report.reportedPhone ? ` (${report.reportedPhone})` : ''}
+                    {report.reportType === 'general' ? (
+                      <span>Issue Report from Profile Page by <span style={{ color: '#fff', fontWeight: 600 }}>{report.reporterName || 'Unknown'}</span></span>
+                    ) : (
+                      <>Reported: <span style={{ color: '#fff', fontWeight: 600 }}>{report.reportedName || 'Unknown'}</span>
+                      {report.reportedPhone ? ` (${report.reportedPhone})` : ''}</>
+                    )}
                   </div>
                 </div>
               </div>
