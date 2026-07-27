@@ -134,6 +134,27 @@ export default function AdminLayout() {
         <IoMenu size={28} />
       </button>
 
+      {/* Mobile header brand */}
+      {!isDesktop && !sidebarOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 12,
+          left: 64,
+          right: 12,
+          zIndex: 55,
+          backgroundColor: 'var(--bg-primary)',
+          borderRadius: 'var(--radius-md)',
+          border: '1px solid var(--border)',
+          padding: '8px 14px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+        }}>
+          <img src="/logo.png" alt="Mingo" style={{ width: 24, height: 24, borderRadius: 8, objectFit: 'contain', flexShrink: 0 }} />
+          <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-display)', letterSpacing: '-0.3px' }}>Mingo Admin Panel</span>
+        </div>
+      )}
+
       {/* Sidebar */}
       <aside
         className={isDesktop ? '' : (sidebarOpen ? 'mobile-sidebar-open' : '')}
