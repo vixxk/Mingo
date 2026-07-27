@@ -986,3 +986,8 @@ input:focus, textarea:focus, select:focus {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
+
+/* Recharts tooltip z-index fix */
+.recharts-tooltip-wrapper {
+  z-index: 99999 !important;
+}

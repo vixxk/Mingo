@@ -17,12 +17,17 @@ const {
 } = require('../../utils/notifications');
 
 class AdminController {
-  static async getStats(req, res, next) {
+static async getStats(req, res, next) {
     try {
       const { timeline = 7 } = req.query;
       const days = parseInt(timeline) || 7;
       const today = new Date();
       today.setHours(0, 0, 0, 0);
+
+      // Calculate the start date based on timeline for period-appropriate metrics
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days + 1);
+      startDate.setHours(0, 0, 0, 0);
 
       // Self-healing database role sync: Set role to 'USER' for any users whose listener application is rejected or pending
       const dirtyListeners = await Listener.find({ status: { $in: ['rejected', 'pending'] } }).select('userId');
@@ -68,15 +73,26 @@ class AdminController {
         { $count: 'count' }
       ]).then(resArr => resArr[0]?.count || 0);
 
+      // Get active user and listener IDs for the period (must be resolved before Promise.all)
+      const activeUserIdsForPeriod = await Session.distinct('userId', {
+        status: 'completed',
+        createdAt: { $gte: startDate }
+      });
+      const activeListenerIdsForPeriod = await Session.distinct('listenerId', {
+        status: 'completed',
+        createdAt: { $gte: startDate }
+      });
+
       const [
         totalUsers,
         totalListeners,
         activeNow,
         totalCalls,
         pendingReports,
-        activeUsersToday,
-        coinsPurchasedTodayAgg,
-        diamondsGeneratedTodayAgg,
+        activeUsersPeriod,
+        activeListenersPeriod,
+        coinsPurchasedPeriodAgg,
+        diamondsGeneratedPeriodAgg,
         pendingPayoutAgg,
         pendingPayoutsCount,
         activeChats,
@@ -88,13 +104,21 @@ class AdminController {
         onlineApprovedListenersCountPromise,
         Session.countDocuments({ status: 'completed' }),
         MemberReport.countDocuments({ status: 'pending' }),
-        User.countDocuments({ role: 'USER', _id: { $nin: allListenerUserIds }, updatedAt: { $gte: today } }),
+        User.countDocuments({
+          role: 'USER',
+          _id: { $nin: allListenerUserIds, $in: activeUserIdsForPeriod }
+        }),
+        // Count distinct listeners who had completed sessions in the period
+        Listener.countDocuments({
+          status: 'approved',
+          userId: { $in: activeListenerIdsForPeriod }
+        }),
         Transaction.aggregate([
-          { $match: { type: 'purchase', status: 'completed', createdAt: { $gte: today } } },
+          { $match: { type: 'purchase', status: 'completed', createdAt: { $gte: startDate } } },
           { $group: { _id: null, total: { $sum: '$coins' } } }
         ]),
         Session.aggregate([
-          { $match: { status: 'completed', createdAt: { $gte: today } } },
+          { $match: { status: 'completed', createdAt: { $gte: startDate } } },
           { $group: { _id: null, total: { $sum: '$listenerEarnings' } } }
         ]),
         PayoutRequest.aggregate([
@@ -102,7 +126,7 @@ class AdminController {
           { $group: { _id: null, total: { $sum: '$amount' } } }
         ]),
         PayoutRequest.countDocuments({ status: 'pending' }),
-        Session.countDocuments({ status: 'active' }),
+        Session.countDocuments({ callType: 'chat' }),
         Listener.countDocuments({ status: 'pending' }),
         Listener.countDocuments({ status: 'approved', profileStatus: 'pending' })
       ]);
@@ -114,8 +138,8 @@ class AdminController {
         { $group: { _id: null, total: { $sum: '$coins' } } },
       ]);
       const totalRevenue = revenueAgg.length > 0 ? revenueAgg[0].total : 0;
-      const coinsPurchasedToday = coinsPurchasedTodayAgg.length > 0 ? coinsPurchasedTodayAgg[0].total : 0;
-      const diamondsGeneratedToday = diamondsGeneratedTodayAgg.length > 0 ? diamondsGeneratedTodayAgg[0].total : 0;
+      const coinsPurchasedPeriod = coinsPurchasedPeriodAgg.length > 0 ? coinsPurchasedPeriodAgg[0].total : 0;
+      const diamondsGeneratedPeriod = diamondsGeneratedPeriodAgg.length > 0 ? diamondsGeneratedPeriodAgg[0].total : 0;
       const pendingPayoutAmount = pendingPayoutAgg.length > 0 ? pendingPayoutAgg[0].total : 0;
 
       // Gift-specific stats
@@ -129,9 +153,8 @@ class AdminController {
         Transaction.aggregate([
           { $match: { type: 'gift_send', status: 'completed' } },
           { $group: { _id: null, total: { $sum: { $abs: '$coins' } } } }
-        ]),
-        Transaction.aggregate([
-          { $match: { type: 'gift_send', status: 'completed', createdAt: { $gte: today } } },
+        ]),        Transaction.aggregate([
+          { $match: { type: 'gift_send', status: 'completed', createdAt: { $gte: startDate } } },
           { $group: { _id: '$userId' } },
           { $count: 'count' }
         ]),
@@ -143,13 +166,11 @@ class AdminController {
       ]);
       const totalGiftsSent = totalGiftsSentCount || 0;
       const totalGiftCoinsSpent = totalGiftsCoinsAgg.length > 0 ? totalGiftsCoinsAgg[0].total : 0;
-      const giftSendersToday = giftSendersTodayAgg.length > 0 ? giftSendersTodayAgg[0].count : 0;
+      const giftSendersPeriod = giftSendersTodayAgg.length > 0 ? giftSendersTodayAgg[0].count : 0;
       const uniqueGiftSenders = uniqueGiftSendersAgg.length > 0 ? uniqueGiftSendersAgg[0].count : 0;
 
-      // Graph Data
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - days + 1);
-      startDate.setHours(0, 0, 0, 0);
+      // Graph Data - use a separate variable to avoid mutating startDate
+      const graphStartDate = new Date(startDate);
 
       const groupByFormat = days >= 90 ? "%Y-%m" : "%Y-%m-%d";
 
@@ -175,7 +196,7 @@ class AdminController {
           $match: { 
             type: 'purchase', 
             status: 'completed', 
-            createdAt: { $gte: startDate } 
+            createdAt: { $gte: graphStartDate } 
           } 
         },
         {
@@ -192,7 +213,7 @@ class AdminController {
           $match: { 
             role: 'USER',
             _id: { $nin: allListenerUserIds },
-            createdAt: { $gte: startDate } 
+            createdAt: { $gte: graphStartDate } 
           } 
         },
         {
@@ -208,7 +229,7 @@ class AdminController {
         {
           $match: {
             status: 'approved',
-            createdAt: { $gte: startDate }
+            createdAt: { $gte: graphStartDate }
           }
         },
         {
@@ -221,7 +242,7 @@ class AdminController {
       ]);
 
       const dailyGiftsRaw = await Transaction.aggregate([
-        { $match: { type: 'gift_send', status: 'completed', createdAt: { $gte: startDate } } },
+        { $match: { type: 'gift_send', status: 'completed', createdAt: { $gte: graphStartDate } } },
         { $project: { absCoins: { $abs: "$coins" }, date: "$createdAt" } },
         { $group: { _id: { $dateToString: { format: groupByFormat, date: "$date" } }, amount: { $sum: "$absCoins" } } },
         { $sort: { _id: 1 } }
@@ -258,6 +279,25 @@ class AdminController {
         dailyGifts = fillMissingDates(dailyGiftsRaw, days, 'amount');
       }
 
+      // All-time peak computations
+      const allTimePeakRevenueAgg = await Transaction.aggregate([
+        { $match: { type: 'purchase', status: 'completed' } },
+        { $project: { date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, coins: '$coins' } },
+        { $group: { _id: '$date', dailyAmount: { $sum: '$coins' } } },
+        { $sort: { dailyAmount: -1 } },
+        { $limit: 1 },
+      ]);
+      const allTimePeakRevenue = allTimePeakRevenueAgg.length > 0 ? allTimePeakRevenueAgg[0].dailyAmount : 0;
+
+      const allTimePeakSignupsAgg = await User.aggregate([
+        { $match: { role: 'USER', isDeleted: { $ne: true } } },
+        { $project: { date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } } } },
+        { $group: { _id: '$date', dailyCount: { $sum: 1 } } },
+        { $sort: { dailyCount: -1 } },
+        { $limit: 1 },
+      ]);
+      const allTimePeakSignups = allTimePeakSignupsAgg.length > 0 ? allTimePeakSignupsAgg[0].dailyCount : 0;
+
       return ApiResponse.success(res, {
         totalUsers,
         totalListeners,
@@ -267,23 +307,28 @@ class AdminController {
         activeNow, // Online Listeners
         totalCalls,
         totalRevenue,
-        activeUsersToday,
-        coinsPurchasedToday,
-        diamondsGeneratedToday,
+        activeUsersPeriod,
+        activeListenersPeriod,
+        coinsPurchasedPeriod,
+        diamondsGeneratedPeriod,
         pendingPayoutAmount,
         activeChats,
         pendingUsers: pendingUsersCount,
         pendingListeners: pendingListenersCount,
         totalGiftsSent,
         totalGiftCoinsSpent,
-        giftSendersToday,
+        giftSendersPeriod,
         uniqueGiftSenders,
+        timeline: days,
+        periodLabel: `${days}d`,
         charts: {
           dailyRevenue,
           dailyRegistrations,
           dailyApprovedListeners,
           dailyGifts
-        }
+        },
+        allTimePeakRevenue,
+        allTimePeakSignups,
       }, 'Admin stats retrieved');
     } catch (err) {
       next(err);

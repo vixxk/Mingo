@@ -2,13 +2,13 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { adminAPI } from '../utils/api'
 import {
-  IoDownload, IoPeople, IoHeadset, IoWallet, IoCall,
+  IoDownload, IoPeople, IoHeadset, IoCall, IoWallet,
   IoBarChart, IoChevronBack, IoTime, IoPulse,
   IoCash, IoChatbubbles, IoFlag, IoCheckmarkCircle,
   IoArrowUp, IoArrowDown, IoArrowForward,
 } from 'react-icons/io5'
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts'
-import { StatCard, SectionTitle } from '../components/admin/AdminComponents'
+import { SectionTitle } from '../components/admin/AdminComponents'
 import { AdminPageSkeleton } from '../components/admin/Skeleton'
 import ToastNotification from '../components/shared/ToastNotification'
 import { jsPDF } from 'jspdf'
@@ -67,14 +67,25 @@ export default function Analytics() {
     gifts: true,
     walletTransactions: true,
   })
-  const [period, setPeriod] = useState('7')
+  const [period, setPeriod] = useState('1')
 
   const PERIOD_OPTIONS = [
+    { id: '1', label: '1D' },
     { id: '7', label: '7D' },
     { id: '30', label: '30D' },
     { id: '90', label: '3M' },
     { id: '365', label: '1Y' },
   ]
+
+  const getPeriodLabel = () => {
+    const days = parseInt(period)
+    if (days === 1) return 'Today'
+    if (days === 7) return '7 days'
+    if (days === 30) return '30 days'
+    if (days === 90) return '3 months'
+    if (days === 365) return '1 year'
+    return `${days} days`
+  }
 
   const getDateRangeLabel = () => {
     const days = parseInt(period)
@@ -136,11 +147,11 @@ export default function Analytics() {
       doc.text('Summary Statistics', 14, 45)
 
       const summaryData = [
-        ['Total Users', formatNumber(d.totalUsers || 0)],
+        ['Total Members', formatNumber(Math.max(0, (d.totalUsers || 0) - (d.totalListeners || 0)))],
         ['Total Listeners', formatNumber(d.totalListeners || 0)],
         ['Total Sessions', formatNumber(d.totalCalls || 0)],
         ['Total Revenue', formatCurrency(d.totalRevenue || 0)],
-        ['Active Today', formatNumber(d.activeUsersToday || 0)],
+        ['Active Members', formatNumber(d.activeUsersPeriod || 0)],
         ['Online Listeners', formatNumber(d.activeNow || 0)],
         ['Pending Reports', formatNumber(d.pendingReports || 0)],
         ['Pending Payouts', formatNumber(d.pendingPayoutsCount || 0)],
@@ -159,10 +170,10 @@ export default function Analytics() {
       let finalY = doc.lastAutoTable.finalY + 10
       doc.setFontSize(14)
       doc.setFont(undefined, 'bold')
-      doc.text('User Distribution', 14, finalY)
+      doc.text('Members Distribution', 14, finalY)
 
       const distData = [
-        ['Users', formatNumber(d.totalUsers || 0)],
+        ['Members', formatNumber(Math.max(0, (d.totalUsers || 0) - (d.totalListeners || 0)))],
         ['Listeners', formatNumber(d.totalListeners || 0)],
       ]
 
@@ -246,7 +257,7 @@ export default function Analytics() {
 
   const d = data || {}
   const pieData = [
-    { name: 'Users', value: d.totalUsers || 0 },
+    { name: 'Users', value: Math.max(0, (d.totalUsers || 0) - (d.totalListeners || 0)) },
     { name: 'Listeners', value: d.totalListeners || 0 },
   ]
 
@@ -355,12 +366,12 @@ export default function Analytics() {
           subtitle={`${formatNumber(d.activeNow || 0)} online`}
         />
         <MiniCard
-          title="Active Today"
-          value={formatNumber(d.activeUsersToday || 0)}
+          title="Active Members"
+          value={formatNumber(d.activeUsersPeriod || 0)}
           icon={cardAccents.activeToday.icon}
           color={cardAccents.activeToday.color}
           bg={cardAccents.activeToday.bg}
-          subtitle={`${formatNumber(d.activeChats || 0)} active chats`}
+          subtitle={`${formatNumber(d.activeChats || 0)} chat sessions`}
         />
         <MiniCard
           title="Total Sessions"
@@ -368,7 +379,7 @@ export default function Analytics() {
           icon={cardAccents.totalCalls.icon}
           color={cardAccents.totalCalls.color}
           bg={cardAccents.totalCalls.bg}
-          subtitle={`${formatNumber(d.activeChats || 0)} active now`}
+          subtitle={`${formatNumber(d.activeChats || 0)} chat sessions`}
         />
         <MiniCard
           title="Total Revenue"
@@ -376,7 +387,7 @@ export default function Analytics() {
           icon={cardAccents.totalRevenue.icon}
           color={cardAccents.totalRevenue.color}
           bg={cardAccents.totalRevenue.bg}
-          subtitle={`${formatNumber(d.coinsPurchasedToday || 0)} coins today`}
+          subtitle={`${formatNumber(d.coinsPurchasedPeriod || 0)} coins`}
         />
         <MiniCard
           title="Pending Approvals"
@@ -387,13 +398,6 @@ export default function Analytics() {
           subtitle={`${d.pendingUsers || 0} users, ${d.pendingListeners || 0} listeners`}
         />
         <MiniCard
-          title="Online Listeners"
-          value={formatNumber(d.activeNow || 0)}
-          icon={cardAccents.activeNow.icon}
-          color={cardAccents.activeNow.color}
-          bg={cardAccents.activeNow.bg}
-        />
-        <MiniCard
           title="Pending Payouts"
           value={formatNumber(d.pendingPayoutsCount || 0)}
           icon={cardAccents.pendingPayouts.icon}
@@ -401,17 +405,6 @@ export default function Analytics() {
           bg={cardAccents.pendingPayouts.bg}
           subtitle={d.pendingPayoutAmount ? formatCurrency(d.pendingPayoutAmount) : undefined}
         />
-      </div>
-
-      {/* Stat Cards Row */}
-      <div className="stat-cards hide-mobile-row" style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-        gap: 12, marginBottom: 24,
-      }}>
-        <StatCard title="Active Today" value={formatNumber(d.activeUsersToday)} icon={<IoTime size={16} color="var(--accent)" />} trend={d.activeUsersToday > 0 ? 12 : undefined} />
-        <StatCard title="Total Calls" value={formatNumber(d.totalCalls)} icon={<IoCall size={16} color="var(--accent)" />} />
-        <StatCard title="Total Revenue" value={formatCurrency(d.totalRevenue)} icon={<IoWallet size={16} color="var(--accent)" />} />
       </div>
 
       {/* Period Selector */}
@@ -461,7 +454,7 @@ export default function Analytics() {
           backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border)',
           padding: 'var(--card-padding)',
         }}>
-          <SectionTitle>User Distribution</SectionTitle>
+          <SectionTitle>Members Distribution</SectionTitle>
           <div style={{ height: 240 }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -509,8 +502,8 @@ export default function Analytics() {
             }}>
               <IoPeople size={16} color="var(--accent)" />
               <div>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>Total Users</div>
-                <div style={{ fontSize: 15, fontWeight: 800, color: '#fff' }}>{formatNumber(d.totalUsers)}</div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>Total Members</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: '#fff' }}>{formatNumber(Math.max(0, (d.totalUsers || 0) - (d.totalListeners || 0)))}</div>
               </div>
             </div>
             <div style={{
@@ -531,34 +524,34 @@ export default function Analytics() {
           backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border)',
           padding: 'var(--card-padding)',
         }}>
-          <SectionTitle>Today's Activity</SectionTitle>
+          <SectionTitle>{period === '1' ? "Today's Activity" : `${period === '7' ? 'Weekly' : period === '30' ? 'Monthly' : period === '90' ? 'Quarterly' : 'Yearly'} Activity`}</SectionTitle>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <TodayRow
-              label="Active Users"
-              value={formatNumber(d.activeUsersToday || 0)}
+              label={period === '1' ? 'Active Users' : `Active Users (${getPeriodLabel()})`}
+              value={formatNumber(d.activeUsersPeriod || 0)}
               icon={<IoPeople size={16} color="var(--accent)" />}
               color="var(--accent)"
             />
             <TodayRow
-              label="Online Listeners"
-              value={formatNumber(d.activeNow || 0)}
+              label={period === '1' ? 'Active Listeners' : `Active Listeners (${getPeriodLabel()})`}
+              value={formatNumber(d.activeListenersPeriod || 0)}
               icon={<IoHeadset size={16} color="#10B981" />}
               color="#10B981"
             />
             <TodayRow
-              label="Coins Purchased"
-              value={formatNumber(d.coinsPurchasedToday || 0)}
+              label={period === '1' ? 'Coins Purchased' : `Coins Purchased (${getPeriodLabel()})`}
+              value={formatNumber(d.coinsPurchasedPeriod || 0)}
               icon={<IoCash size={16} color="#F59E0B" />}
               color="#F59E0B"
             />
             <TodayRow
-              label="Diamonds Generated"
-              value={formatNumber(d.diamondsGeneratedToday || 0)}
+              label={period === '1' ? 'Diamonds Generated' : `Diamonds Generated (${getPeriodLabel()})`}
+              value={formatNumber(d.diamondsGeneratedPeriod || 0)}
               icon={<IoWallet size={16} color="#A855F7" />}
               color="#A855F7"
             />
             <TodayRow
-              label="Active Chats"
+              label="Chat Sessions"
               value={formatNumber(d.activeChats || 0)}
               icon={<IoChatbubbles size={16} color="#60A5FA" />}
               color="#60A5FA"
@@ -701,7 +694,7 @@ export default function Analytics() {
                     gap: 10,
                   }}>
                     <MiniStat label="Total Revenue" value={formatCurrency(d.totalRevenue || 0)} color={color} />
-                    <MiniStat label="Coins Today" value={formatNumber(d.coinsPurchasedToday || 0)} color={color} />
+                    <MiniStat label="Coins" value={formatNumber(d.coinsPurchasedPeriod || 0)} color={color} />
                     <MiniStat label="Pending Payouts" value={formatNumber(d.pendingPayoutsCount || 0)} color={color} />
                   </div>
                 )}

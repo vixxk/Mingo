@@ -145,6 +145,8 @@ const CustomTooltip = ({ active, payload, label, formatter, color }) => {
   const currentColor = color || (payload[0] && payload[0].color) || '#8B5CF6'
   return (
     <div style={{
+      position: 'relative',
+      zIndex: 99999,
       backgroundColor: 'var(--bg-secondary)',
       border: `1px solid ${currentColor}40`,
       borderRadius: 'var(--radius-lg)',
@@ -244,14 +246,14 @@ export default function Dashboard() {
 
   const audienceData = [
     { name: 'Listeners', value: totalListeners, color: '#A855F7' },
-    { name: 'Other members', value: nonListenerUsers, color: '#10B981' },
+    { name: 'Users', value: nonListenerUsers, color: '#10B981' },
   ]
 
-  const peakRevenue = dailyRevenue.length > 0 ? Math.max(...dailyRevenue.map(d => d.amount)) : 0
+  const peakRevenue = s.allTimePeakRevenue || (dailyRevenue.length > 0 ? Math.max(...dailyRevenue.map(d => d.amount)) : 0)
   const dailyAvgRevenue = dailyRevenue.length > 0
     ? dailyRevenue.reduce((a, b) => a + b.amount, 0) / dailyRevenue.length
     : 0
-  const peakSignups = dailyRegistrations.length > 0 ? Math.max(...dailyRegistrations.map(d => d.count)) : 0
+  const peakSignups = s.allTimePeakSignups || (dailyRegistrations.length > 0 ? Math.max(...dailyRegistrations.map(d => d.count)) : 0)
   const dailyAvgSignups = dailyRegistrations.length > 0
     ? dailyRegistrations.reduce((a, b) => a + b.count, 0) / dailyRegistrations.length
     : 0
@@ -259,20 +261,23 @@ export default function Dashboard() {
     const pulseData = [
     {
       name: 'Revenue Flow',
-      value: Math.round(Math.min(100, peakRevenue ? (dailyAvgRevenue / peakRevenue) * 120 : 0)),
+      value: Math.round(Math.min(100, peakRevenue ? (dailyAvgRevenue / peakRevenue) * 100 : 0)),
       display: formatCurrency(Math.round(dailyAvgRevenue)),
+      peak: peakRevenue ? formatCurrency(Math.round(peakRevenue)) : '—',
       color: '#A855F7',
     },
     {
       name: 'Signup Surge',
-      value: Math.round(Math.min(100, peakSignups ? (dailyAvgSignups / peakSignups) * 120 : 0)),
+      value: Math.round(Math.min(100, peakSignups ? (dailyAvgSignups / peakSignups) * 100 : 0)),
       display: formatNumber(Math.round(dailyAvgSignups)),
+      peak: peakSignups ? formatNumber(peakSignups) : '—',
       color: '#F59E0B',
     },
     {
       name: 'Session Pace',
       value: Math.round(Math.min(100, sessionRate * 10)),
       display: `${sessionRate.toFixed(1)} / user`,
+      peak: null,
       color: '#10B981',
     },
   ]
@@ -531,7 +536,7 @@ export default function Dashboard() {
           marginBottom: 'var(--section-gap)',
         }}>
           <StatCard
-            title="Total Users"
+            title="Total Members"
             value={<AnimatedNumber value={totalUsers} format={formatNumber} />}
             icon={<IoPeople size={16} color="var(--accent)" />}
             subtitle="Registered accounts"
@@ -595,7 +600,7 @@ export default function Dashboard() {
                         <Cell key={entry.name} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip content={<CustomTooltip formatter={(v) => formatNumber(v)} />} />
+                    <Tooltip content={<CustomTooltip formatter={(v) => formatNumber(v)} />} usePortal />
                   </PieChart>
                 </ResponsiveContainer>
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
@@ -607,7 +612,7 @@ export default function Dashboard() {
               </div>
               <div className="ap-stats" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <PulseStat label="Total listeners" value={formatNumber(totalListeners)} accent="#A855F7" subtext={`${listenerShare.toFixed(1)}% of users`} />
-                <PulseStat label="Non-listeners" value={formatNumber(nonListenerUsers)} accent="#10B981" subtext={`${(100 - listenerShare).toFixed(1)}% of users`} />
+                <PulseStat label="Total users" value={formatNumber(nonListenerUsers)} accent="#10B981" subtext={`${(100 - listenerShare).toFixed(1)}% of users`} />
                 <PulseStat label="Avg sessions/user" value={sessionRate.toFixed(1)} accent="#F59E0B" subtext="Engagement metric" />
               </div>
             </div>
@@ -647,8 +652,8 @@ export default function Dashboard() {
                     </defs>
                     <Area type="monotone" dataKey="revenue" stroke="#A855F7" strokeWidth={2} fill="url(#revGrad)" dot={false} isAnimationActive={true} animationDuration={1000} />
                     <XAxis dataKey="month" hide />
-                    <YAxis hide domain={['dataMin - 10', 'dataMax + 10']} />
-                    <Tooltip content={<CustomTooltip formatter={(v) => formatCurrency(v)} color="#A855F7" />} />
+                    <YAxis hide domain={[0, 'dataMax']} />
+                    <Tooltip content={<CustomTooltip formatter={(v) => formatCurrency(v)} color="#A855F7" />} usePortal />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -686,8 +691,8 @@ export default function Dashboard() {
                     </defs>
                     <Area type="monotone" dataKey="signups" stroke="#F59E0B" strokeWidth={2} fill="url(#regGrad)" dot={false} isAnimationActive={true} animationDuration={1000} />
                     <XAxis dataKey="month" hide />
-                    <YAxis hide domain={['dataMin - 1', 'dataMax + 1']} />
-                    <Tooltip content={<CustomTooltip formatter={(v) => formatNumber(v)} color="#F59E0B" />} />
+                    <YAxis hide domain={[0, 'dataMax']} />
+                    <Tooltip content={<CustomTooltip formatter={(v) => formatNumber(v)} color="#F59E0B" />} usePortal />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -746,6 +751,7 @@ export default function Dashboard() {
                     <div>
                       <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.8px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>{item.name}</div>
                       <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', marginTop: 8 }}>{item.display}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>vs peak: {item.peak || '—'}</div>
                     </div>
                     <div style={{ width: 38, height: 38, borderRadius: '50%', backgroundColor: `${item.color}20`, display: 'grid', placeItems: 'center', color: item.color, fontWeight: 800, fontSize: 13 }}>
                       {item.value}%
