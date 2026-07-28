@@ -3,36 +3,20 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { authAPI } from '../utils/api'
 
-
 export default function Login() {
   const navigate = useNavigate()
   const { login } = useAuth()
-  const [phone, setPhone] = useState('')
-  const [otp, setOtp] = useState('')
-  const [step, setStep] = useState('phone')
+  const [digits, setDigits] = useState('')
+  const [passcode, setPasscode] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const handleSendOtp = async () => {
-    if (!phone) return
+  const handleLogin = async () => {
+    if (!digits || !passcode) return
     setLoading(true)
     setError('')
     try {
-      await authAPI.loginSendOtp(phone)
-      setStep('otp')
-    } catch (e) {
-      setError(e.message || 'Failed to send OTP')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleVerifyOtp = async () => {
-    if (!otp) return
-    setLoading(true)
-    setError('')
-    try {
-      const res = await authAPI.login({ phone, otp })
+      const res = await authAPI.login({ phone: digits, otp: passcode })
       const userData = res.data?.user
       const token = res.data?.token
 
@@ -47,12 +31,6 @@ export default function Login() {
     } finally {
       setLoading(false)
     }
-  }
-
-  const handleBack = () => {
-    setStep('phone')
-    setOtp('')
-    setError('')
   }
 
   return (
@@ -145,7 +123,7 @@ export default function Login() {
             fontSize: 14,
             margin: 0,
           }}>
-            {step === 'phone' ? 'Enter the digits' : 'Enter the passcode'}
+            Enter the digits and passcode to sign in
           </p>
         </div>
 
@@ -165,175 +143,102 @@ export default function Login() {
           </div>
         )}
 
-        {step === 'phone' ? (
-          <>
-            <label style={{
-              color: 'var(--text-muted)',
-              fontSize: 12,
-              fontWeight: 600,
-              marginBottom: 8,
-              display: 'block',
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px',
-            }}>
-              Phone Number
-            </label>
-            <input
-              value={phone}
-              onChange={e => setPhone(e.target.value)}
-              placeholder="+1 (555) 000-0000"
-              type="tel"
-              autoFocus
-              onKeyDown={e => e.key === 'Enter' && handleSendOtp()}
-              style={{
-                width: '100%',
-                backgroundColor: 'var(--bg-tertiary)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-md)',
-                color: 'var(--text-primary)',
-                padding: '14px 16px',
-                fontSize: 15,
-                outline: 'none',
-                marginBottom: 20,
-                boxSizing: 'border-box',
-                transition: 'border-color 0.2s',
-              }}
-            />
-            <button
-              onClick={handleSendOtp}
-              disabled={loading || !phone}
-              style={{
-                width: '100%',
-                border: 'none',
-                borderRadius: 'var(--radius-md)',
-                cursor: loading || !phone ? 'not-allowed' : 'pointer',
-                background: loading || !phone ? 'var(--bg-tertiary)' : 'var(--accent-gradient)',
-                padding: '14px 0',
-                color: loading || !phone ? 'var(--text-muted)' : '#fff',
-                fontSize: 15,
-                fontWeight: 700,
-                fontFamily: 'var(--font-display)',
-                transition: 'opacity 0.2s',
-                opacity: loading || !phone ? 0.6 : 1,
-              }}>
-              {loading ? (
-                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                  <span style={{
-                    width: 16, height: 16, borderRadius: '50%',
-                    border: '2px solid rgba(255,255,255,0.3)',
-                    borderTopColor: '#fff',
-                    animation: 'spin 0.6s linear infinite',
-                    display: 'inline-block',
-                  }} />
-                  Sending...
-                </span>
-              ) : 'Send OTP'}
-            </button>
-          </>
-        ) : (
-          <>
-            <label style={{
-              color: 'var(--text-muted)',
-              fontSize: 12,
-              fontWeight: 600,
-              marginBottom: 8,
-              display: 'block',
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px',
-            }}>
-              Verification Code
-            </label>
-            <input
-              value={otp}
-              onChange={e => setOtp(e.target.value)}
-              placeholder="0000"
-              type="text"
-              maxLength={6}
-              autoFocus
-              onKeyDown={e => e.key === 'Enter' && handleVerifyOtp()}
-              style={{
-                width: '100%',
-                backgroundColor: 'var(--bg-tertiary)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-md)',
-                color: 'var(--text-primary)',
-                padding: '14px 16px',
-                fontSize: 20,
-                fontWeight: 700,
-                fontFamily: 'var(--font-display)',
-                outline: 'none',
-                marginBottom: 12,
-                boxSizing: 'border-box',
-                textAlign: 'center',
-                letterSpacing: 10,
-              }}
-            />
-            <p style={{
-              color: 'var(--text-muted)',
-              fontSize: 12,
-              textAlign: 'center',
-              marginBottom: 20,
-            }}>
-              Sent to <strong style={{ color: 'var(--text-secondary)' }}>{phone}</strong>
-            </p>
-            <button
-              onClick={handleVerifyOtp}
-              disabled={loading || !otp}
-              style={{
-                width: '100%',
-                border: 'none',
-                borderRadius: 'var(--radius-md)',
-                cursor: loading || !otp ? 'not-allowed' : 'pointer',
-                background: loading || !otp ? 'var(--bg-tertiary)' : 'var(--accent-gradient)',
-                padding: '14px 0',
-                color: loading || !otp ? 'var(--text-muted)' : '#fff',
-                fontSize: 15,
-                fontWeight: 700,
-                fontFamily: 'var(--font-display)',
-                marginBottom: 12,
-                transition: 'opacity 0.2s',
-                opacity: loading || !otp ? 0.6 : 1,
-              }}>
-              {loading ? (
-                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                  <span style={{
-                    width: 16, height: 16, borderRadius: '50%',
-                    border: '2px solid rgba(255,255,255,0.3)',
-                    borderTopColor: '#fff',
-                    animation: 'spin 0.6s linear infinite',
-                    display: 'inline-block',
-                  }} />
-                  Verifying...
-                </span>
-              ) : 'Verify & Sign In'}
-            </button>
-            <button
-              onClick={handleBack}
-              style={{
-                width: '100%',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-md)',
-                cursor: 'pointer',
-                background: 'transparent',
-                padding: '12px 0',
-                color: 'var(--text-muted)',
-                fontSize: 14,
-                fontWeight: 600,
-                transition: 'color 0.2s, border-color 0.2s',
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.color = 'var(--text-secondary)'
-                e.currentTarget.style.borderColor = 'var(--border-light)'
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.color = 'var(--text-muted)'
-                e.currentTarget.style.borderColor = 'var(--border)'
-              }}
-            >
-              Back
-            </button>
-          </>
-        )}
+        <label style={{
+          color: 'var(--text-muted)',
+          fontSize: 12,
+          fontWeight: 600,
+          marginBottom: 8,
+          display: 'block',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+        }}>
+          Enter the digits
+        </label>
+        <input
+          value={digits}
+          onChange={e => setDigits(e.target.value)}
+          placeholder="Phone number or username"
+          type="text"
+          autoFocus
+          onKeyDown={e => e.key === 'Enter' && handleLogin()}
+          style={{
+            width: '100%',
+            backgroundColor: 'var(--bg-tertiary)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)',
+            color: 'var(--text-primary)',
+            padding: '14px 16px',
+            fontSize: 15,
+            outline: 'none',
+            marginBottom: 20,
+            boxSizing: 'border-box',
+            transition: 'border-color 0.2s',
+          }}
+        />
+
+        <label style={{
+          color: 'var(--text-muted)',
+          fontSize: 12,
+          fontWeight: 600,
+          marginBottom: 8,
+          display: 'block',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+        }}>
+          Enter the passcode
+        </label>
+        <input
+          value={passcode}
+          onChange={e => setPasscode(e.target.value)}
+          placeholder="Passcode"
+          type="password"
+          maxLength={20}
+          onKeyDown={e => e.key === 'Enter' && handleLogin()}
+          style={{
+            width: '100%',
+            backgroundColor: 'var(--bg-tertiary)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)',
+            color: 'var(--text-primary)',
+            padding: '14px 16px',
+            fontSize: 15,
+            outline: 'none',
+            marginBottom: 20,
+            boxSizing: 'border-box',
+            transition: 'border-color 0.2s',
+          }}
+        />
+
+        <button
+          onClick={handleLogin}
+          disabled={loading || !digits || !passcode}
+          style={{
+            width: '100%',
+            border: 'none',
+            borderRadius: 'var(--radius-md)',
+            cursor: loading || !digits || !passcode ? 'not-allowed' : 'pointer',
+            background: loading || !digits || !passcode ? 'var(--bg-tertiary)' : 'var(--accent-gradient)',
+            padding: '14px 0',
+            color: loading || !digits || !passcode ? 'var(--text-muted)' : '#fff',
+            fontSize: 15,
+            fontWeight: 700,
+            fontFamily: 'var(--font-display)',
+            transition: 'opacity 0.2s',
+            opacity: loading || !digits || !passcode ? 0.6 : 1,
+          }}>
+          {loading ? (
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <span style={{
+                width: 16, height: 16, borderRadius: '50%',
+                border: '2px solid rgba(255,255,255,0.3)',
+                borderTopColor: '#fff',
+                animation: 'spin 0.6s linear infinite',
+                display: 'inline-block',
+              }} />
+              Signing in...
+            </span>
+          ) : 'Login'}
+        </button>
       </div>
     </div>
   )
