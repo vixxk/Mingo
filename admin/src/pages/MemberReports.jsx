@@ -88,7 +88,7 @@ export default function MemberReports() {
       setReports(Array.isArray(list) ? list : [])
       const total = data.total || list.length
       setTotalPages(Math.ceil(total / 20))
-      setTotalReports(total)
+      setTotalReports(data.totalAll || total)
       if (data.counts) setCounts(data.counts)
     } catch (e) {
       setToast({ visible: true, message: e.message || 'Failed to load reports', type: 'error' })

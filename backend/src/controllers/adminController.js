@@ -750,15 +750,17 @@ static async getStats(req, res, next) {
 
       const total = await MemberReport.countDocuments(filter);
 
-      const [pendingCount, resolvedCount, dismissedCount] = await Promise.all([
+      const [pendingCount, resolvedCount, dismissedCount, totalAll] = await Promise.all([
         MemberReport.countDocuments({ status: 'pending' }),
         MemberReport.countDocuments({ status: 'resolved' }),
         MemberReport.countDocuments({ status: 'dismissed' }),
+        MemberReport.countDocuments({}),
       ]);
 
       return ApiResponse.success(res, {
         reports,
         total,
+        totalAll,
         counts: { pending: pendingCount, resolved: resolvedCount, dismissed: dismissedCount }
       }, 'Reports retrieved');
     } catch (err) {

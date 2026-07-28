@@ -658,7 +658,7 @@ export default function Analytics() {
                   })}
                 </div>
                 <div style={{
-                  display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+                  display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
                   gap: 10,
                 }}>
                   <MiniStat label="Period Total" value={formatNumber(Math.abs(sectionItems.reduce((a, b) => a + b.value, 0)))} color={color} />
@@ -670,7 +670,7 @@ export default function Analytics() {
               <div>
                 {key === 'approvedListeners' && (
                   <div style={{
-                    display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                    display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
                     gap: 10,
                   }}>
                     <MiniStat label="Total Approved" value={formatNumber(d.totalListeners || 0)} color={color} />
@@ -680,7 +680,7 @@ export default function Analytics() {
                 )}
                 {key === 'gifts' && (
                   <div style={{
-                    display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                    display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
                     gap: 10,
                   }}>
                     <MiniStat label="Total Gifts Sent" value={formatNumber(d.totalGiftsSent || 0)} color={color} />
@@ -690,7 +690,7 @@ export default function Analytics() {
                 )}
                 {key === 'walletTransactions' && (
                   <div style={{
-                    display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                    display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
                     gap: 10,
                   }}>
                     <MiniStat label="Total Revenue" value={formatCurrency(d.totalRevenue || 0)} color={color} />
@@ -766,11 +766,11 @@ function MiniCard({ title, value, icon, color, bg, subtitle }) {
 function MiniStat({ label, value, color }) {
   return (
     <div style={{
-      padding: '10px 14px', borderRadius: 14,
+      padding: '8px 10px', borderRadius: 12,
       backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
     }}>
-      <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</div>
-      <div style={{ fontSize: 16, fontWeight: 800, color, marginTop: 2 }}>{value}</div>
+      <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
+      <div style={{ fontSize: 14, fontWeight: 800, color, marginTop: 2 }}>{value}</div>
     </div>
   )
 }

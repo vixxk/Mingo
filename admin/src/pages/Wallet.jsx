@@ -311,20 +311,56 @@ export default function Wallet() {
               <IoAdd size={18} style={{ marginRight: 6, verticalAlign: 'middle' }} />
               New Package
             </div>
-            <div className="wallet-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              {['name', 'coins', 'price', 'originalPrice', 'tag', 'discount'].map(field => (
+            <div style={{ marginBottom: 10 }}>
+              <label style={{ color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 4, textTransform: 'capitalize' }}>
+                Name
+              </label>
+              <input
+                value={addForm.name}
+                onChange={e => setAddForm({ ...addForm, name: e.target.value })}
+                placeholder="name"
+                type="text"
+                style={{
+                  width: '100%', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+                  borderRadius: 8, color: '#fff', padding: '7px 10px', fontSize: 13,
+                  outline: 'none', boxSizing: 'border-box',
+                }}
+              />
+            </div>
+            <div className="wallet-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+              {['coins', 'price', 'originalPrice'].map(field => (
                 <div key={field}>
-                  <label style={{ color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 4, textTransform: 'capitalize' }}>
-                    {field.replace(/([A-Z])/g, ' $1').trim()}
+                  <label style={{ color: 'var(--text-secondary)', fontSize: 10, fontWeight: 600, display: 'block', marginBottom: 3, textTransform: 'capitalize' }}>
+                    {field === 'originalPrice' ? 'Orig. price' : field}
                   </label>
                   <input
                     value={addForm[field]}
                     onChange={e => setAddForm({ ...addForm, [field]: e.target.value })}
-                    placeholder={field === 'originalPrice' ? 'Original price' : field === 'discount' ? 'Discount %' : field}
-                    type={field === 'name' || field === 'tag' ? 'text' : 'number'}
+                    placeholder={field === 'originalPrice' ? 'Orig. price' : field}
+                    type="number"
                     style={{
                       width: '100%', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
-                      borderRadius: 10, color: '#fff', padding: '10px 12px', fontSize: 14,
+                      borderRadius: 8, color: '#fff', padding: '7px 10px', fontSize: 13,
+                      outline: 'none', boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+              {['tag', 'discount'].map(field => (
+                <div key={field}>
+                  <label style={{ color: 'var(--text-secondary)', fontSize: 10, fontWeight: 600, display: 'block', marginBottom: 3, textTransform: 'capitalize' }}>
+                    {field === 'discount' ? 'Discount %' : field}
+                  </label>
+                  <input
+                    value={addForm[field]}
+                    onChange={e => setAddForm({ ...addForm, [field]: e.target.value })}
+                    placeholder={field === 'discount' ? 'Discount %' : field}
+                    type={field === 'tag' ? 'text' : 'number'}
+                    style={{
+                      width: '100%', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+                      borderRadius: 8, color: '#fff', padding: '7px 10px', fontSize: 13,
                       outline: 'none', boxSizing: 'border-box',
                     }}
                   />
@@ -393,20 +429,56 @@ export default function Wallet() {
                       <IoClose size={20} />
                     </button>
                   </div>
-                  <div className="wallet-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    {['name', 'coins', 'price', 'originalPrice', 'tag', 'discount'].map(field => (
+                  <div style={{ marginBottom: 8 }}>
+                    <label style={{ color: 'var(--text-secondary)', fontSize: 10, fontWeight: 600, display: 'block', marginBottom: 3, textTransform: 'capitalize' }}>
+                      Name
+                    </label>
+                    <input
+                      value={editForm.name}
+                      onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                      placeholder="name"
+                      type="text"
+                      style={{
+                        width: '100%', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+                        borderRadius: 8, color: '#fff', padding: '7px 10px', fontSize: 13,
+                        outline: 'none', boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                    {['coins', 'price', 'originalPrice'].map(field => (
                       <div key={field}>
-                        <label style={{ color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 3, textTransform: 'capitalize' }}>
-                          {field.replace(/([A-Z])/g, ' $1').trim()}
+                        <label style={{ color: 'var(--text-secondary)', fontSize: 10, fontWeight: 600, display: 'block', marginBottom: 3, textTransform: 'capitalize' }}>
+                          {field === 'originalPrice' ? 'Orig. price' : field}
                         </label>
                         <input
                           value={editForm[field]}
                           onChange={e => setEditForm({ ...editForm, [field]: e.target.value })}
-                          placeholder={field}
-                          type={field === 'name' || field === 'tag' ? 'text' : 'number'}
+                          placeholder={field === 'originalPrice' ? 'Orig. price' : field}
+                          type="number"
                           style={{
                             width: '100%', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
-                            borderRadius: 'var(--radius-sm)', color: '#fff', padding: '8px 10px', fontSize: 13,
+                            borderRadius: 8, color: '#fff', padding: '7px 10px', fontSize: 13,
+                            outline: 'none', boxSizing: 'border-box',
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+                    {['tag', 'discount'].map(field => (
+                      <div key={field}>
+                        <label style={{ color: 'var(--text-secondary)', fontSize: 10, fontWeight: 600, display: 'block', marginBottom: 3, textTransform: 'capitalize' }}>
+                          {field === 'discount' ? 'Discount %' : field}
+                        </label>
+                        <input
+                          value={editForm[field]}
+                          onChange={e => setEditForm({ ...editForm, [field]: e.target.value })}
+                          placeholder={field === 'discount' ? 'Discount %' : field}
+                          type={field === 'tag' ? 'text' : 'number'}
+                          style={{
+                            width: '100%', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+                            borderRadius: 8, color: '#fff', padding: '7px 10px', fontSize: 13,
                             outline: 'none', boxSizing: 'border-box',
                           }}
                         />
