@@ -338,7 +338,6 @@ static async getStats(req, res, next) {
   static async getUsers(req, res, next) {
     try {
       const { search, status, page = 1, limit = 50 } = req.query;
-      const allListenerUserIds = await Listener.find().distinct('userId');
       const filter = { role: 'USER' };
 
       if (search) {
@@ -360,26 +359,17 @@ static async getStats(req, res, next) {
         }
       }
 
-      if (status === 'online') {
+      if (status === 'online' || status === 'live') {
         filter._id = { $in: onlineUserIds };
         filter.isDeleted = { $ne: true };
       } else if (status === 'offline') {
         filter._id = { $nin: onlineUserIds };
         filter.isDeleted = { $ne: true };
         filter.isBanned = { $ne: true };
-      } else {
-        if (status === 'deleted') {
-          delete filter._id;
-          filter.isDeleted = true;
-        } else {
-          filter.isDeleted = { $ne: true };
-          filter.isBanned = { $ne: true };
-        }
-
-        if (!status || status === 'all') {
-          filter._id = { $nin: allListenerUserIds };
-        }
+      } else if (status === 'deleted') {
+        filter.isDeleted = true;
       }
+      // 'all' — show all users, no exclusions
 
       const users = await User.find(filter)
         .select('-__v')

@@ -42,7 +42,7 @@ export default function Users() {
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' })
   const [refreshKey, setRefreshKey] = useState(0)
 
-  const filters = ['All', 'Live', 'Offline', 'Deleted']
+  const filters = ['All', 'Online', 'Offline', 'Deleted']
 
   useEffect(() => {
     const load = async () => {
@@ -50,7 +50,7 @@ export default function Users() {
         setLoading(true)
         const params = { page, limit: 20 }
         if (searchTerm) params.search = searchTerm
-        if (activeFilter === 'Live') params.status = 'live'
+        if (activeFilter === 'Online') params.status = 'online'
         else if (activeFilter === 'Offline') params.status = 'offline'
         else if (activeFilter === 'Deleted') params.status = 'deleted'
 
