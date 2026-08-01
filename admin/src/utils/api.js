@@ -302,6 +302,29 @@ export const adminAPI = {
     return apiRequest(`/admin/listeners/${id}`, { method: 'DELETE' })
   },
 
+  // Listener documents
+  getListenerDocUploadUrl: async (id, payload) => {
+    return apiRequest(`/admin/listeners/${id}/docs/upload-url`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  addListenerDoc: async (id, payload) => {
+    return apiRequest(`/admin/listeners/${id}/docs`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  getListenerDocs: async (id) => {
+    return apiRequest(`/admin/listeners/${id}/docs`)
+  },
+
+  deleteListenerDoc: async (id, docId) => {
+    return apiRequest(`/admin/listeners/${id}/docs/${docId}`, { method: 'DELETE' })
+  },
+
   // Wallet
   getWalletSettings: async () => {
     return apiRequest('/admin/settings')

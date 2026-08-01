@@ -23,7 +23,7 @@ const getAvatarGradient = (id) => {
   return avatarGradients[Number(id) % avatarGradients.length] || avatarGradients[0]
 }
 
-const TABS = ['All', 'Pending', 'Approved', 'Verified', 'Best Choice', 'Rejected', 'Deleted']
+const TABS = ['All', 'Online', 'Pending', 'Approved', 'Verified', 'Best Choice', 'Rejected', 'Deleted']
 
 const STATUS_MAP = {
   pending: { label: 'Pending', color: '#F59E0B', bg: '#1A150B' },
@@ -70,14 +70,13 @@ function getAvatarColor(name) {
 
 export default function Listeners() {
   const navigate = useNavigate()
+  const [refreshKey, setRefreshKey] = useState(0)
   const [listeners, setListeners] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [activeTab, setActiveTab] = useState('All')
-  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' })
   const [selectedListener, setSelectedListener] = useState(null)
-
-  const [refreshKey, setRefreshKey] = useState(0)
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' })
 
   const fetchListeners = useCallback(async (params = {}) => {
     setLoading(true)
@@ -103,12 +102,17 @@ export default function Listeners() {
     fetchListeners()
   }, [fetchListeners])
 
+  useEffect(() => {
+    setRefreshKey(k => k + 1)
+  }, [activeTab, search])
+
   const filteredListeners = listeners.filter(l => {
     const name = (l.name || '').toLowerCase()
     const phone = (l.phone || '').toLowerCase()
     const s = search.toLowerCase()
     if (s && !name.includes(s) && !phone.includes(s)) return false
     if (activeTab === 'All') return true
+    if (activeTab === 'Online') return l.isOnline && !l.isBanned && !l.isDeleted
     if (activeTab === 'Pending') return l.status === 'pending' && !l.isBanned && !l.isDeleted
     if (activeTab === 'Approved') return l.status === 'approved' && !l.isBanned && !l.isDeleted
     if (activeTab === 'Verified') return l.isVerified && !l.isBanned && !l.isDeleted
@@ -286,7 +290,7 @@ export default function Listeners() {
                       </span>
                     ))}
                   </div>
-                  <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>{listener.phone || '—'}</span>
+                  <span className="list-item-detail" style={{ color: 'var(--text-muted)', fontSize: 13 }}>{listener.phone || '—'}</span>
                   {listener.skills && listener.skills.length > 0 && (
                     <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
                       {listener.skills.slice(0, 3).map((s, i) => (

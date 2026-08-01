@@ -194,7 +194,7 @@ export default function Payouts() {
   }
 
   const renderSkeleton = () => (
-    <div style={{ padding: 'var(--page-padding)', flex: 1, backgroundColor: 'var(--bg-primary)' }}>
+    <div className="page-wrap" style={{ padding: 'var(--page-padding)', flex: 1, backgroundColor: 'var(--bg-primary)' }}>
       <Skeleton width={120} height={28} style={{ marginBottom: 24 }} />
       <Skeleton width="100%" height={44} borderRadius={12} style={{ marginBottom: 20 }} />
       {[1, 2, 3, 4].map(i => (
@@ -316,7 +316,7 @@ export default function Payouts() {
 
           {!confirmAction ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div className="payout-actions-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 {Object.entries(ACTION_COLORS).map(([key, config]) => {
                   if (key === 'cancel' && p.status === 'cancelled') return null
                   if (key === 'paid' && p.status === 'paid') return null
@@ -396,7 +396,7 @@ export default function Payouts() {
 
   return (
     <div className="page-wrap" style={{ backgroundColor: 'var(--bg-primary)', minHeight: '100vh', paddingBottom: 40 }}>
-      <div style={{ padding: '16px 16px 0' }}>
+      <div className="page-wrap-inner" style={{ padding: '16px 16px 0' }}>
         <div className="page-hdr-row" style={{ display: 'flex', alignItems: 'center', marginBottom: 24 }}>
           <button className="back-btn"
             onClick={() => navigate(-1)}
@@ -496,7 +496,7 @@ export default function Payouts() {
         </div>
       </div>
 
-      <div style={{ padding: '0 16px' }}>
+      <div className="page-wrap-inner" style={{ padding: '0 16px' }}>
         {loading ? (
           [1, 2, 3, 4].map(i => (
             <Skeleton key={i} width="100%" height={96} borderRadius={16} style={{ marginBottom: 12 }} />

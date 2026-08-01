@@ -205,6 +205,7 @@ export default function Activities() {
             return (
               <div
                 key={activity._id}
+                className="activities-item"
                 style={{
                   backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)',
                   borderRadius: 'var(--radius-xl)', padding: 'var(--card-padding)', marginBottom: 10,
@@ -216,7 +217,7 @@ export default function Activities() {
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   {/* Icon */}
-                  <div style={{
+                  <div className="activities-icon" style={{
                     width: 40, height: 40, borderRadius: 12,
                     backgroundColor: `${color}20`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -226,7 +227,7 @@ export default function Activities() {
                   </div>
 
                   {/* Content */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="activities-content" style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: '#fff', lineHeight: 1.3 }}>
                       {activity.performedBy ? (
                         <>{activity.performedBy} {activity.action || activity.description || 'performed an action'}</>
@@ -235,7 +236,7 @@ export default function Activities() {
                       )}
                     </div>
                     {activity.targetName && (
-                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 3 }}>
+                      <div className="activities-target" style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 3 }}>
                         &rarr; {activity.targetName}
                         {activity.targetType && (
                           <span style={{ color: color, fontWeight: 600 }}> ({activity.targetType})</span>
@@ -245,11 +246,11 @@ export default function Activities() {
                   </div>
 
 {/* Time */}
-                  <div style={{ flexShrink: 0, textAlign: 'right', minWidth: 140 }}>
-                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  <div className="activities-time" style={{ flexShrink: 0, textAlign: 'right', minWidth: 140 }}>
+                    <div className="activities-relative" style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>
                       {getRelativeTime(activity.createdAt)}
                     </div>
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2, whiteSpace: 'nowrap' }}>
+                    <div className="activities-exact" style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2, whiteSpace: 'nowrap' }}>
                       {getExactTime(activity.createdAt)}
                     </div>
                   </div>
@@ -263,6 +264,7 @@ export default function Activities() {
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16, marginBottom: 8 }}>
               <button
                 type="button"
+                className="activities-load-more"
                 onClick={handleLoadMore}
                 disabled={loadingMore}
                 style={{

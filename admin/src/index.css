@@ -48,17 +48,17 @@
   }
 }
 
-/* Mobile */
-@media (max-width: 600px) {
+/* Mobile — screen-size % based spacing for consistent UI across all small screens */
+@media (max-width: 767px) {
   :root {
-    --page-padding: 10px;
-    --card-padding: 14px;
-    --header-font-size: 17px;
-    --section-gap: 14px;
+    --page-padding: clamp(10px, 2.5vw, 16px);
+    --card-padding: clamp(12px, 2.5vw, 18px);
+    --header-font-size: clamp(16px, 4.5vw, 20px);
+    --section-gap: clamp(12px, 3vw, 18px);
   }
 }
 
-/* Tablet */
+/* Tablet helper */
 @media (max-width: 900px) and (min-width: 601px) {
   .tablet-grid-2 {
     grid-template-columns: repeat(2, 1fr) !important;
@@ -66,7 +66,7 @@
 }
 
 /* Utility classes for responsive behavior */
-@media (max-width: 600px) {
+@media (max-width: 767px) {
   .hide-mobile { display: none !important; }
   .stack-mobile { flex-direction: column !important; }
   .full-width-mobile { width: 100% !important; }
@@ -120,12 +120,22 @@
     max-width: 100% !important;
     overflow-x: hidden !important;
   }
+  /* Inner page wrappers (MemberReports, Payouts) rely on .page-wrap padding */
+  .page-wrap-inner {
+    padding: 0 !important;
+  }
 
   /* Headers */
   .page-header {
-    flex-wrap: wrap !important;
+    flex-wrap: nowrap !important;
     gap: 8px !important;
     margin-bottom: 12px !important;
+  }
+  .page-header > div {
+    min-width: 0 !important;
+  }
+  .page-header > div:last-child {
+    flex-shrink: 0 !important;
   }
   .page-header-title {
     font-size: 17px !important;
@@ -205,10 +215,32 @@
     margin-bottom: var(--section-gap) !important;
   }
   .stat-card {
-    padding: 14px !important;
+    padding: 10px !important;
+    border-top-width: 2px !important;
+    border-radius: var(--radius-lg) !important;
+  }
+  .stat-card-label {
+    font-size: 10px !important;
   }
   .stat-card-value {
-    font-size: 20px !important;
+    font-size: 17px !important;
+  }
+  .stat-card > div:first-child {
+    margin-bottom: 6px !important;
+  }
+  .stat-card > div:first-child > span:last-child {
+    width: 26px !important;
+    height: 26px !important;
+    min-width: 26px !important;
+    border-radius: 8px !important;
+  }
+  .stat-card > div:first-child > span:last-child svg {
+    width: 13px !important;
+    height: 13px !important;
+  }
+  .stat-card > div:nth-child(3) {
+    font-size: 10px !important;
+    margin-top: 4px !important;
   }
 
   /* Mini cards - 2 columns */
@@ -276,90 +308,137 @@
   }
   .dashboard-momentum-rings {
     grid-template-columns: repeat(3, 1fr) !important;
-    gap: 8px !important;
+    gap: 6px !important;
   }
   .momentum-rings-wrapper {
     min-height: auto !important;
   }
   .momentum-ring {
-    padding: 10px !important;
-    gap: 8px !important;
-  }
-  .momentum-ring-graphic {
-    width: 72px !important;
-    height: 72px !important;
-  }
-  .momentum-ring-center {
-    width: 44px !important;
-    height: 44px !important;
-  }
-  .momentum-ring-label {
-    font-size: 9px !important;
-  }
-  .momentum-ring-display {
-    font-size: 12px !important;
-  }
-  .dashboard-audience-pulse .ap-flex {
-    gap: 10px !important;
-  }
-  .dashboard-audience-pulse .ap-chart {
-    min-height: 180px !important;
-    min-width: 180px !important;
-  }
-  .dashboard-audience-pulse .ap-chart .recharts-responsive-container {
-    height: 180px !important;
-  }
-  .dashboard-audience-pulse .ap-chart > div:last-child div:first-child {
-    font-size: 20px !important;
-  }
-  .dashboard-audience-pulse .ap-chart > div:last-child div:last-child {
-    font-size: 11px !important;
-  }
-  .dashboard-audience-pulse .ap-chart > div:nth-child(2) {
-    top: 8px !important;
-  }
-  .dashboard-audience-pulse .ap-stats {
+    padding: 8px !important;
     gap: 6px !important;
   }
-  .dashboard-audience-pulse .ap-stats > div {
-    padding: 8px 10px !important;
+  .momentum-ring-graphic {
+    width: 56px !important;
+    height: 56px !important;
+  }
+  .momentum-ring-center {
+    width: 34px !important;
+    height: 34px !important;
+  }
+  .momentum-ring-center div {
+    font-size: 11px !important;
+  }
+  .momentum-ring-label {
+    font-size: 8px !important;
+  }
+  .momentum-ring-display {
+    font-size: 10px !important;
+  }
+  .momentum-rings-wrapper + div {
     gap: 8px !important;
   }
-  .dashboard-audience-pulse .ap-stats > div > div:first-child div:first-child {
+  .momentum-rings-wrapper + div > div {
+    padding: 10px 12px !important;
+  }
+  .momentum-rings-wrapper + div > div > div:first-child > div:first-child div {
     font-size: 9px !important;
   }
-  .dashboard-audience-pulse .ap-stats > div > div:first-child div:nth-child(2) {
-    font-size: 13px !important;
-    margin-top: 3px !important;
+  .momentum-rings-wrapper + div > div > div:first-child > div:first-child div:nth-child(2) {
+    font-size: 15px !important;
+    margin-top: 4px !important;
   }
-  .dashboard-audience-pulse .ap-stats > div > div:first-child div:nth-child(3) {
+  .momentum-rings-wrapper + div > div > div:first-child > div:first-child div:nth-child(3) {
     font-size: 9px !important;
-    margin-top: 2px !important;
   }
-  .dashboard-audience-pulse .ap-stats > div > div:last-child {
-    width: 12px !important;
-    height: 12px !important;
+  .momentum-rings-wrapper + div > div > div:first-child > div:last-child {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 11px !important;
   }
-  .dashboard-audience-pulse .ap-stats > div > div:last-child > div {
-    width: 5px !important;
-    height: 5px !important;
+  .momentum-rings-wrapper + div > div > div:nth-child(2) {
+    margin-top: 6px !important;
+  }
+  /* Audience Pulse — Redesigned mobile layout */
+  .dashboard-audience-pulse .ap-flex {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+  }
+  .dashboard-audience-pulse .ap-chart {
+    min-height: 110px !important;
+    min-width: 0 !important;
+    width: 110px !important;
+    max-width: 110px !important;
+    height: 110px !important;
+    flex-shrink: 0 !important;
+    margin: 4px auto !important;
+  }
+  .dashboard-audience-pulse .ap-chart .recharts-responsive-container {
+    height: 110px !important;
+  }
+  .dashboard-audience-pulse .ap-chart > div:last-child div:first-child {
+    font-size: 15px !important;
+  }
+  .dashboard-audience-pulse .ap-chart > div:last-child div:last-child {
+    font-size: 9px !important;
+  }
+  .dashboard-audience-pulse .ap-chart > div:nth-child(2) {
+    top: 6px !important;
+  }
+  .dashboard-audience-pulse .ap-stats {
+    width: 100% !important;
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+  .dashboard-audience-pulse .ap-stats > * {
+    width: 100% !important;
+    padding: 6px 6px !important;
+  }
+  .dashboard-audience-pulse .ap-stats > * div {
+    gap: 4px !important;
+  }
+  /* Audience pulse stats handled by React isMobile — no CSS overrides needed */
+  .ap-mobile-center-label {
+    display: none !important;
+  }
+  .ap-center-overlay {
+    display: flex !important;
+    position: absolute !important;
+    inset: 0 !important;
+    align-items: center !important;
+    justify-content: center !important;
+    pointer-events: none !important;
+  }
+  .ap-center-overlay > div > div:first-child {
+    font-size: 18px !important;
+    font-weight: 800 !important;
+  }
+  .ap-center-overlay > div > div:last-child {
+    font-size: 8px !important;
+    margin-top: 1px !important;
+    letter-spacing: 0.5px !important;
   }
 
   .dashboard-sparkline-column .section-card {
-    padding: 10px !important;
+    padding: 8px 10px !important;
   }
   .dashboard-sparkline-column .section-card > div:first-child > div:first-child {
-    font-size: 9px !important;
+    font-size: 8px !important;
   }
   .dashboard-sparkline-column .section-card > div:first-child > div:nth-child(2) {
-    font-size: 15px !important;
+    font-size: 14px !important;
     margin-top: 1px !important;
   }
   .dashboard-sparkline-column .section-card > div:first-child > div:nth-child(3) {
+    font-size: 8px !important;
+  }
+  .dashboard-sparkline-column .section-card > div:first-child > div:last-child {
     font-size: 9px !important;
+    padding: 2px 7px !important;
   }
   .dashboard-sparkline-column .section-card > div:last-child {
-    height: 40px !important;
+    height: 32px !important;
   }
 
   /* List items (users, listeners, etc.) */
@@ -753,6 +832,23 @@
     padding: 5px 10px !important;
   }
 
+  /* Analytics section toggles - fit 4 buttons on one row */
+  .tabs-scroll.analytics-section-toggles {
+    flex-wrap: nowrap !important;
+    overflow-x: hidden !important;
+    gap: clamp(4px, 1.5vw, 6px) !important;
+  }
+  .analytics-section-toggles > button {
+    flex: 1 1 0 !important;
+    justify-content: center !important;
+    padding: clamp(5px, 1.6vw, 7px) clamp(4px, 1.5vw, 12px) !important;
+    font-size: clamp(9px, 2.4vw, 11px) !important;
+    border-radius: 8px !important;
+    min-width: 0 !important;
+    text-align: center !important;
+    line-height: 1.25 !important;
+  }
+
   /* Period / date selectors */
   .period-selector {
     padding: 10px 12px !important;
@@ -874,6 +970,191 @@
   }
   .campaign-form input {
     font-size: 13px !important;
+  }
+
+  /* ========= ADDITIONAL CONSISTENT MOBILE OVERRIDES ========= */
+
+  /* Allow header rows to wrap so titles/buttons never overflow */
+  .page-hdr-row {
+    flex-wrap: wrap !important;
+  }
+  .page-hdr-row > div:last-child:not(:first-child) {
+    margin-left: auto !important;
+  }
+
+  /* Search box inner wrapper matches shrunken outer height */
+  .search-bar > div,
+  .search-bar {
+    height: 36px !important;
+  }
+
+  /* List/member cards wrap so right-side elements never squeeze names */
+  .list-item,
+  .member-card {
+    flex-wrap: wrap !important;
+  }
+  .list-item > div:first-child {
+    align-self: center !important;
+  }
+
+  /* Sessions card header + participants wrap */
+  .session-card > div:first-child {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+  .session-participants {
+    flex-wrap: wrap !important;
+    row-gap: 8px !important;
+  }
+
+  /* Analytics stat grids: 3-col -> 2-col */
+  .mini-stat-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Analytics members distribution stats */
+  .distribution-stat-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Members distribution pie chart - half size on mobile */
+  .members-distribution-chart {
+    height: 120px !important;
+  }
+  .members-distribution-chart .recharts-legend-wrapper {
+    font-size: 10px !important;
+  }
+
+  /* Wallet form tag/discount grids stack to single column */
+  .wallet-tag-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+  /* Coin packages header stays on one line + buttons shrink */
+  .coin-packages-header {
+    flex-wrap: nowrap !important;
+    gap: clamp(6px, 2vw, 10px) !important;
+  }
+  .coin-packages-header h2 {
+    font-size: clamp(13px, 3.8vw, 18px) !important;
+    white-space: nowrap !important;
+    min-width: 0 !important;
+  }
+  .coin-packages-header .coin-actions {
+    margin-left: auto !important;
+    flex-shrink: 0 !important;
+    gap: clamp(4px, 1.5vw, 8px) !important;
+  }
+  .coin-packages-header .coin-actions button {
+    padding: clamp(5px, 1.6vw, 8px) clamp(7px, 2.2vw, 14px) !important;
+    font-size: clamp(10px, 2.6vw, 13px) !important;
+    gap: clamp(3px, 1vw, 6px) !important;
+    border-radius: 8px !important;
+    white-space: nowrap !important;
+  }
+  .coin-packages-header .coin-actions button svg {
+    width: clamp(11px, 3vw, 16px) !important;
+    height: clamp(11px, 3vw, 16px) !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Activities page hand-rolled items */
+  .activities-item {
+    padding: 12px !important;
+  }
+  .activities-item .activities-icon {
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 10px !important;
+  }
+  .activities-item .activities-icon svg {
+    width: 15px !important;
+    height: 15px !important;
+  }
+  .activities-item .activities-content {
+    font-size: 12px !important;
+  }
+  .activities-item .activities-target {
+    font-size: 11px !important;
+  }
+  .activities-item .activities-time {
+    min-width: 0 !important;
+  }
+  .activities-item .activities-time .activities-relative {
+    font-size: 10px !important;
+  }
+  .activities-item .activities-time .activities-exact {
+    font-size: 8px !important;
+  }
+  .activities-item .activities-load-more {
+    width: 100% !important;
+    padding: 12px 16px !important;
+    justify-content: center !important;
+  }
+
+  /* Notifications custom modal becomes bottom sheet */
+  .notif-modal-overlay {
+    padding: var(--page-padding) !important;
+    align-items: flex-end !important;
+  }
+  .notif-modal-box {
+    max-width: 100% !important;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0 !important;
+    padding: 24px 20px 20px !important;
+  }
+
+  /* Banned members confirm dialog */
+  .unban-dialog-overlay {
+    padding: var(--page-padding) !important;
+    align-items: flex-end !important;
+  }
+  .unban-dialog-box {
+    max-width: 100% !important;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0 !important;
+    padding: 20px !important;
+  }
+
+  /* Listener documents viewer becomes bottom sheet */
+  .listener-docs-overlay {
+    padding: var(--page-padding) !important;
+    align-items: flex-end !important;
+  }
+  .listener-docs-box {
+    max-width: 100% !important;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0 !important;
+    padding: 20px 16px !important;
+    max-height: 80vh !important;
+  }
+
+  /* Toast fits screen width */
+  .toast-notification {
+    min-width: 0 !important;
+    width: calc(100vw - 24px) !important;
+    max-width: 340px !important;
+    padding: 12px 14px !important;
+  }
+  .toast-notification .toast-msg {
+    font-size: 13px !important;
+  }
+
+  /* Notification history cards */
+  .notif-history-item {
+    padding: 14px !important;
+  }
+
+  /* Profile approval body */
+  .approval-card-body {
+    padding: 12px !important;
+  }
+
+  /* Member report / payout card bodies */
+  .report-card,
+  .payout-card {
+    padding: 12px !important;
+  }
+
+  /* Payout modal action buttons stack on narrow screens */
+  .payout-actions-grid {
+    grid-template-columns: 1fr 1fr !important;
   }
 }
 

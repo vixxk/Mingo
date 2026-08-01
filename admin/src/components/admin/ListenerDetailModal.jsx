@@ -5,6 +5,7 @@ import {
   IoGlobeOutline, IoWalletOutline, IoCalendarOutline,
   IoTimeOutline, IoStar, IoShieldCheckmark, IoMic,
   IoPlay, IoPause, IoEllipsisVertical, IoDownload,
+  IoDocumentText, IoCloudUploadOutline, IoFolderOpenOutline,
 } from 'react-icons/io5'
 import { adminAPI } from '../../utils/api'
 import ToastNotification from '../shared/ToastNotification'
@@ -69,6 +70,12 @@ export default function ListenerDetailModal({ visible, listener, onClose, onBan,
   const [menuOpen, setMenuOpen] = useState(false)
   const audioRef = useRef(null)
   const menuRef = useRef(null)
+  const fileInputRef = useRef(null)
+  const [showDocs, setShowDocs] = useState(false)
+  const [documents, setDocuments] = useState([])
+  const [docsLoading, setDocsLoading] = useState(false)
+  const [uploadingDoc, setUploadingDoc] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(null)
 
   useEffect(() => {
     if (listener) {
@@ -254,7 +261,7 @@ export default function ListenerDetailModal({ visible, listener, onClose, onBan,
     if (!trimmed) return
     try {
       setSendingMessage(true)
-      await adminAPI.sendAdminMessage(l._id || l.id, trimmed)
+      await adminAPI.sendAdminMessage(l.userId || l._id || l.id, trimmed)
       setMessageText('')
       setIsMessaging(false)
       setToast({ visible: true, message: 'Message sent successfully', type: 'success' })
@@ -262,6 +269,102 @@ export default function ListenerDetailModal({ visible, listener, onClose, onBan,
       setToast({ visible: true, message: 'Failed to send message', type: 'error' })
     } finally {
       setSendingMessage(false)
+    }
+  }
+
+  const loadDocuments = async () => {
+    if (!l || !l._id) return
+    setDocsLoading(true)
+    try {
+      const res = await adminAPI.getListenerDocs(l._id)
+      const data = res.data || res || {}
+      setDocuments(Array.isArray(data.documents) ? data.documents : (Array.isArray(data) ? data : []))
+    } catch {
+      setToast({ visible: true, message: 'Failed to load documents', type: 'error' })
+    } finally {
+      setDocsLoading(false)
+    }
+  }
+
+  const handleOpenDocs = async () => {
+    setShowDocs(true)
+    await loadDocuments()
+  }
+
+  const handleUploadDoc = async (file) => {
+    if (!file || !l || !l._id) return
+    const fileType = file.type || 'application/octet-stream'
+    setUploadingDoc(true)
+    setUploadProgress(0)
+    try {
+      // 1. Get presigned upload URL
+      const urlRes = await adminAPI.getListenerDocUploadUrl(l._id, {
+        fileName: file.name,
+        fileType,
+      })
+      const urlData = urlRes.data || urlRes || {}
+      if (!urlData.uploadUrl) throw new Error('No upload URL returned')
+
+      // 2. Upload the file directly to S3 (any size via direct PUT)
+      const uploadRes = await fetch(urlData.uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': fileType },
+        body: file,
+      })
+      if (!uploadRes.ok) throw new Error('Upload to storage failed')
+
+      // 3. Save metadata
+      await adminAPI.addListenerDoc(l._id, {
+        fileName: file.name,
+        fileUrl: urlData.fileUrl,
+        fileType,
+        size: file.size || 0,
+      })
+
+      setUploadProgress(100)
+      setToast({ visible: true, message: 'Document uploaded successfully', type: 'success' })
+      await loadDocuments()
+    } catch (e) {
+      setToast({ visible: true, message: e.message || 'Failed to upload document', type: 'error' })
+    } finally {
+      setUploadingDoc(false)
+      setUploadProgress(null)
+    }
+  }
+
+  const handleFileInput = (e) => {
+    const file = e.target.files && e.target.files[0]
+    if (file) handleUploadDoc(file)
+    e.target.value = ''
+  }
+
+  const handleDeleteDoc = async (doc) => {
+    if (!l || !l._id || !doc) return
+    if (!window.confirm(`Delete "${doc.fileName}"? This cannot be undone.`)) return
+    try {
+      await adminAPI.deleteListenerDoc(l._id, doc._id)
+      setDocuments(prev => prev.filter(d => d._id !== doc._id))
+      setToast({ visible: true, message: 'Document deleted', type: 'success' })
+    } catch {
+      setToast({ visible: true, message: 'Failed to delete document', type: 'error' })
+    }
+  }
+
+  const formatFileSize = (bytes) => {
+    if (!bytes) return '—'
+    const units = ['B', 'KB', 'MB', 'GB']
+    let i = 0
+    let n = bytes
+    while (n >= 1024 && i < units.length - 1) { n /= 1024; i++ }
+    return `${n.toFixed(n >= 10 || i === 0 ? 0 : 1)} ${units[i]}`
+  }
+
+  const formatDocDate = (d) => {
+    if (!d) return ''
+    try {
+      return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    } catch {
+      return ''
     }
   }
 
@@ -558,6 +661,48 @@ export default function ListenerDetailModal({ visible, listener, onClose, onBan,
             </div>
           )}
 
+          {/* Documents */}
+          <div style={{ width: '100%', marginBottom: 16 }}>
+            <div style={{
+              fontSize: 14, color: 'var(--text-secondary)', fontWeight: 700, marginBottom: 8,
+              display: 'flex', alignItems: 'center', gap: 6,
+            }}>
+              <IoDocumentText size={16} />
+              Documents
+            </div>
+            <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+              <button onClick={() => fileInputRef.current && fileInputRef.current.click()} disabled={uploadingDoc}
+                style={{
+                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  padding: '12px 0', borderRadius: 14, border: 'none', cursor: uploadingDoc ? 'default' : 'pointer',
+                  backgroundColor: 'var(--accent-light)', color: 'var(--accent)', fontSize: 13, fontWeight: 700,
+                  opacity: uploadingDoc ? 0.6 : 1,
+                }}>
+                {uploadingDoc ? (
+                  <>
+                    <IoCloudUploadOutline size={17} />
+                    {uploadProgress != null && uploadProgress < 100 ? 'Uploading...' : 'Saving...'}
+                  </>
+                ) : (
+                  <>
+                    <IoCloudUploadOutline size={17} />
+                    Upload Docs
+                  </>
+                )}
+              </button>
+              <button onClick={handleOpenDocs}
+                style={{
+                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  padding: '12px 0', borderRadius: 14, border: '1px solid var(--border)', cursor: 'pointer',
+                  backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700,
+                }}>
+                <IoFolderOpenOutline size={17} />
+                Show Docs
+              </button>
+            </div>
+            <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleFileInput} />
+          </div>
+
           {/* Action Buttons */}
           <div style={{ display: 'flex', gap: 12, width: '100%' }}>
             <button onClick={handleToggleBan}
@@ -699,6 +844,124 @@ export default function ListenerDetailModal({ visible, listener, onClose, onBan,
                   color: '#FFF', fontSize: 14, fontWeight: 700,
                 }}>
                 {sendingMessage ? 'Sending...' : 'Send'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Documents Viewer Dialog */}
+      {showDocs && (
+        <div className="listener-docs-overlay" style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 1150,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '5%',
+        }} onClick={() => setShowDocs(false)}>
+          <div className="listener-docs-box" style={{
+            width: '100%', maxWidth: 420, backgroundColor: 'var(--bg-secondary)',
+            borderRadius: 24, padding: '24px 20px', border: '1px solid var(--border)',
+            display: 'flex', flexDirection: 'column', maxHeight: '80vh',
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <IoFolderOpenOutline size={20} color="var(--accent)" />
+                <h3 style={{
+                  fontSize: 18, fontWeight: 800, color: 'var(--text-primary)',
+                  fontFamily: 'var(--font-display)', margin: 0,
+                }}>
+                  Documents
+                </h3>
+              </div>
+              <button onClick={() => setShowDocs(false)} style={{
+                width: 32, height: 32, borderRadius: 16, backgroundColor: 'var(--bg-tertiary)',
+                border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', color: 'var(--text-primary)',
+              }}>
+                <IoClose size={20} />
+              </button>
+            </div>
+
+            {docsLoading ? (
+              <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+                Loading documents...
+              </div>
+            ) : documents.length === 0 ? (
+              <div style={{
+                padding: '24px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13,
+                backgroundColor: 'var(--bg-tertiary)', borderRadius: 16, border: '1px dashed var(--border)',
+              }}>
+                <IoDocumentText size={28} color="var(--border)" style={{ marginBottom: 8 }} />
+                <div>No documents uploaded yet.</div>
+                <div style={{ fontSize: 11, marginTop: 4 }}>Use "Upload Docs" to add files.</div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto' }}>
+                {documents.map(doc => (
+                  <div key={doc._id} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    backgroundColor: 'var(--bg-tertiary)', borderRadius: 14,
+                    padding: '10px 12px', border: '1px solid var(--border)',
+                  }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                      backgroundColor: 'var(--accent-light)', color: 'var(--accent)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <IoDocumentText size={18} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontSize: 13, color: '#fff', fontWeight: 600,
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      }} title={doc.fileName}>
+                        {doc.fileName}
+                      </div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                        {formatFileSize(doc.size)}{doc.uploadedAt ? ` · ${formatDocDate(doc.uploadedAt)}` : ''}
+                      </div>
+                    </div>
+                    <a href={doc.fileUrl} target="_blank" rel="noreferrer" download
+                      style={{
+                        width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+                        backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: 'var(--text-secondary)', cursor: 'pointer',
+                      }}>
+                      <IoDownload size={15} />
+                    </a>
+                    <button onClick={() => handleDeleteDoc(doc)}
+                      style={{
+                        width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+                        backgroundColor: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: '#EF4444', cursor: 'pointer',
+                      }}>
+                      <IoTrashOutline size={15} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 12, width: '100%', marginTop: 16 }}>
+              <button onClick={() => fileInputRef.current && fileInputRef.current.click()} disabled={uploadingDoc}
+                style={{
+                  flex: 1, height: 42, borderRadius: 30, border: 'none', cursor: uploadingDoc ? 'default' : 'pointer',
+                  background: 'var(--accent-gradient)',
+                  color: '#FFF', fontSize: 13, fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  opacity: uploadingDoc ? 0.6 : 1,
+                }}>
+                <IoCloudUploadOutline size={16} />
+                {uploadingDoc ? 'Uploading...' : 'Upload Doc'}
+              </button>
+              <button onClick={() => setShowDocs(false)}
+                style={{
+                  flex: 1, height: 42, borderRadius: 30, border: '1.5px solid #3F3F46',
+                  backgroundColor: 'transparent', color: '#A1A1AA', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                }}>
+                Close
               </button>
             </div>
           </div>

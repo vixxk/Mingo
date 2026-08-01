@@ -451,12 +451,12 @@ export default function ListenerProfileScreen() {
             </View>
           )}
 
-          {/* Expertise Tags */}
+          {/* Interest Tags */}
           {tags.length > 0 && (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Ionicons name="pricetag" size={SW * 0.045} color="#8B5CF6" />
-                <Text style={styles.sectionTitle}>Expertise</Text>
+                <Text style={styles.sectionTitle}>Interest</Text>
               </View>
               <View style={styles.tagsContainer}>
                 {tags.map((tag, idx) => (

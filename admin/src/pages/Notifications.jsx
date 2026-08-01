@@ -427,6 +427,7 @@ export default function Notifications() {
       {/* Animated Modal */}
       {modal.visible && (
         <div
+          className="notif-modal-overlay"
           onClick={closeModal}
           style={{
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -436,6 +437,7 @@ export default function Notifications() {
           }}
         >
           <div
+            className="notif-modal-box"
             onClick={e => e.stopPropagation()}
             style={{
               width: '100%', maxWidth: 340, backgroundColor: 'var(--bg-secondary)',

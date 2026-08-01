@@ -360,21 +360,25 @@ static async getStats(req, res, next) {
         }
       }
 
-      if (status === 'active') {
-        filter.isBanned = { $ne: true };
-      } else if (status === 'inactive') {
-        filter.isBanned = true;
-      }
-
-      if (status === 'deleted') {
-        delete filter._id;
-        filter.isDeleted = true;
-      } else {
+      if (status === 'online') {
+        filter._id = { $in: onlineUserIds };
         filter.isDeleted = { $ne: true };
-      }
+      } else if (status === 'offline') {
+        filter._id = { $nin: onlineUserIds };
+        filter.isDeleted = { $ne: true };
+        filter.isBanned = { $ne: true };
+      } else {
+        if (status === 'deleted') {
+          delete filter._id;
+          filter.isDeleted = true;
+        } else {
+          filter.isDeleted = { $ne: true };
+          filter.isBanned = { $ne: true };
+        }
 
-      if (!status || status === 'all') {
-        filter._id = { $nin: allListenerUserIds };
+        if (!status || status === 'all') {
+          filter._id = { $nin: allListenerUserIds };
+        }
       }
 
       const users = await User.find(filter)
@@ -671,6 +675,109 @@ static async getStats(req, res, next) {
     }
   }
 
+  /**
+   * POST /admin/listeners/:id/docs/upload-url
+   * Generate a presigned S3 upload URL for a listener document (any file type/size).
+   */
+  static async getListenerDocUploadUrl(req, res, next) {
+    try {
+      const listener = await Listener.findById(req.params.id);
+      if (!listener) throw new AppError('Listener not found', 404);
+
+      const { fileName, fileType } = req.body;
+      if (!fileName || !fileType) {
+        throw new AppError('fileName and fileType are required', 400);
+      }
+
+      const { generateUploadUrl } = require('../utils/s3');
+      const extension = (fileName.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/gi, '');
+      const { uploadUrl, fileUrl, key } = await generateUploadUrl(fileType, extension || 'bin', 'listener_documents');
+
+      return ApiResponse.success(res, { uploadUrl, fileUrl, key }, 'Upload URL generated');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * POST /admin/listeners/:id/docs
+   * Store metadata for an uploaded listener document.
+   */
+  static async addListenerDoc(req, res, next) {
+    try {
+      const listener = await Listener.findById(req.params.id);
+      if (!listener) throw new AppError('Listener not found', 404);
+
+      const { fileName, fileUrl, fileType, size } = req.body;
+      if (!fileName || !fileUrl) {
+        throw new AppError('fileName and fileUrl are required', 400);
+      }
+
+      listener.documents = listener.documents || [];
+      listener.documents.push({
+        fileName,
+        fileUrl,
+        fileType: fileType || 'application/octet-stream',
+        size: Number(size) || 0,
+        uploadedBy: req.user?.name || 'Admin',
+        uploadedAt: new Date(),
+      });
+
+      await listener.save();
+
+      const doc = listener.documents[listener.documents.length - 1];
+      return ApiResponse.success(res, doc, 'Document added');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * GET /admin/listeners/:id/docs
+   * List all documents uploaded for a listener.
+   */
+  static async getListenerDocs(req, res, next) {
+    try {
+      const listener = await Listener.findById(req.params.id);
+      if (!listener) throw new AppError('Listener not found', 404);
+
+      const docs = (listener.documents || []).slice().sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
+      return ApiResponse.success(res, { documents: docs }, 'Documents retrieved');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * DELETE /admin/listeners/:id/docs/:docId
+   * Remove a document from the listener (also deletes the S3 object).
+   */
+  static async deleteListenerDoc(req, res, next) {
+    try {
+      const listener = await Listener.findById(req.params.id);
+      if (!listener) throw new AppError('Listener not found', 404);
+
+      const docIndex = (listener.documents || []).findIndex(d => String(d._id) === req.params.docId);
+      if (docIndex === -1) throw new AppError('Document not found', 404);
+
+      const doc = listener.documents[docIndex];
+      listener.documents.splice(docIndex, 1);
+      await listener.save();
+
+      try {
+        const { extractKeyFromUrl, deleteObject } = require('../utils/s3');
+        const key = extractKeyFromUrl(doc.fileUrl);
+        if (key) await deleteObject(key);
+      } catch (e) {
+        console.error('Failed to delete S3 object for listener doc:', e.message);
+      }
+
+      return ApiResponse.success(res, null, 'Document deleted');
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async toggleBestChoice(req, res, next) {
     try {
       const listener = await Listener.findById(req.params.id);
@@ -833,7 +940,6 @@ static async getStats(req, res, next) {
         originalPrice: req.body.originalPrice,
         discount: req.body.discount,
         tag: req.body.tag,
-        name: req.body.name,
         isPopular: req.body.isPopular || false,
       };
       Object.keys(newPkg).forEach(k => newPkg[k] === undefined && delete newPkg[k]);
@@ -854,7 +960,7 @@ static async getStats(req, res, next) {
       if (index === -1) {
         throw new AppError('Coin package not found', 404);
       }
-      const allowed = ['name', 'coins', 'price', 'originalPrice', 'discount', 'tag', 'isPopular'];
+      const allowed = ['coins', 'price', 'originalPrice', 'discount', 'tag', 'isPopular'];
       allowed.forEach(field => {
         if (req.body[field] !== undefined) {
           settings.coinPricing[index][field] = req.body[field];
@@ -887,13 +993,13 @@ static async resetCoinPackages(req, res, next) {
     try {
       const SystemSettings = require('../models/SystemSettings');
       const defaults = [
-        { id: '1', name: 'Starter Offer', coins: 40,   originalPrice: 38, price: 19,  discount: 50, tag: 'Starter Offer' },
-        { id: '2', name: 'Flat 50% Off', coins: 100,  originalPrice: 98, price: 49,  discount: 50, tag: 'Flat 50% Off' },
-        { id: '3', name: 'Most Popular', coins: 220,  originalPrice: 198, price: 99,  discount: 50, tag: 'Most Popular' },
-        { id: '4', name: 'Flat 60% Off', coins: 350,  originalPrice: 373, price: 149, discount: 60, tag: 'Flat 60% Off' },
-        { id: '5', name: 'Best Value', coins: 850,  originalPrice: 873, price: 349, discount: 60, tag: 'Best Value' },
-        { id: '6', name: 'Super Saver', coins: 1500, originalPrice: 1198, price: 599, discount: 50, tag: 'Super Saver' },
-        { id: '7', name: 'Limited Offer', coins: 3000, originalPrice: 2497, price: 999, discount: 60, tag: 'Limited Offer' },
+        { id: '1', coins: 40,   originalPrice: 38, price: 19,  discount: 50, tag: 'Starter Offer' },
+        { id: '2', coins: 100,  originalPrice: 98, price: 49,  discount: 50, tag: 'Flat 50% Off' },
+        { id: '3', coins: 220,  originalPrice: 198, price: 99,  discount: 50, tag: 'Most Popular' },
+        { id: '4', coins: 350,  originalPrice: 373, price: 149, discount: 60, tag: 'Flat 60% Off' },
+        { id: '5', coins: 850,  originalPrice: 873, price: 349, discount: 60, tag: 'Best Value' },
+        { id: '6', coins: 1500, originalPrice: 1198, price: 599, discount: 50, tag: 'Super Saver' },
+        { id: '7', coins: 3000, originalPrice: 2497, price: 999, discount: 60, tag: 'Limited Offer' },
       ];
       const settings = await SystemSettings.getSettings();
       settings.coinPricing = defaults;
@@ -1566,7 +1672,14 @@ static async resetCoinPackages(req, res, next) {
       const targetUserId = req.params.id;
       const adminId = req.user.id;
 
-      const targetUser = await User.findById(targetUserId);
+      let targetUser = await User.findById(targetUserId);
+      if (!targetUser) {
+        // If not found in users, check if it's a listener ID and resolve to userId
+        const listener = await Listener.findById(targetUserId).select('userId');
+        if (listener && listener.userId) {
+          targetUser = await User.findById(listener.userId);
+        }
+      }
       if (!targetUser) throw new AppError('User not found', 404);
 
       // 1. Find or create conversation between Admin and User
@@ -1609,22 +1722,31 @@ static async resetCoinPackages(req, res, next) {
         io.to(`user_${targetUserIdStr}`).emit('receive_message', message);
       }
 
-      // 5. Send push notification to target user
-      const { sendNotificationToMultiple } = require('../../utils/notifications');
-      if (targetUser.pushToken) {
-        try {
-          await sendNotificationToMultiple(
-            [targetUser.pushToken],
-            'Support Message 🛡️',
-            content,
-            { conversationId: conversation._id.toString(), type: 'admin_message' }
-          );
-        } catch (e) {
-          console.log('Error sending admin message push notification:', e);
-        }
+      // 5. Trigger SSE unread-count update so the mobile badge reflects the new message
+      try {
+        const sseService = require('../services/sseService');
+        sseService.notifyUser(targetUserIdStr);
+      } catch (sseErr) {
+        console.error('SSE notification error in sendAdminMessage:', sseErr);
       }
 
-      // 6. Create activity log
+      // 6. Send push notification to target user (OneSignal first, then Expo/FCM fallback)
+      const PushService = require('../services/pushService');
+      try {
+        const pushResult = await PushService.sendPushNotification(targetUserId.toString(), {
+          title: 'Support Message 🛡️',
+          body: content,
+          data: {
+            conversationId: conversation._id.toString(),
+            type: 'admin_message',
+          },
+        });
+        console.log(`[Admin Message] Push notification result for user ${targetUserIdStr}:`, JSON.stringify(pushResult));
+      } catch (e) {
+        console.log('Error sending admin message push notification:', e);
+      }
+
+      // 7. Create activity log
       await ActivityLog.create({
         user: 'Admin',
         action: `Sent a support message to ${targetUser.name}: "${content.substring(0, 40)}${content.length > 40 ? '...' : ''}"`,

@@ -18,12 +18,12 @@ export default function Wallet() {
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' })
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState({
-    name: '', coins: '', price: '', originalPrice: '', tag: '', discount: '', isPopular: false,
+    coins: '', price: '', originalPrice: '', tag: '', discount: '', isPopular: false,
   })
   const [deleteConfirm, setDeleteConfirm] = useState({ visible: false, id: null })
   const [showAddForm, setShowAddForm] = useState(false)
   const [addForm, setAddForm] = useState({
-    name: '', coins: '', price: '', originalPrice: '', tag: '', discount: '', isPopular: false,
+    coins: '', price: '', originalPrice: '', tag: '', discount: '', isPopular: false,
   })
   const [saving, setSaving] = useState(false)
 
@@ -71,7 +71,6 @@ export default function Wallet() {
   const handleEdit = (pkg) => {
     setEditingId(pkg._id)
     setEditForm({
-      name: pkg.name ?? '',
       coins: String(pkg.coins ?? ''),
       price: String(pkg.price ?? ''),
       originalPrice: String(pkg.originalPrice ?? ''),
@@ -90,7 +89,6 @@ export default function Wallet() {
     setSaving(true)
     try {
       const payload = {
-        name: editForm.name,
         coins: Number(editForm.coins),
         price: Number(editForm.price),
         originalPrice: editForm.originalPrice ? Number(editForm.originalPrice) : undefined,
@@ -142,14 +140,13 @@ export default function Wallet() {
   }
 
   const handleAddPackage = async () => {
-    if (!addForm.name || !addForm.coins || !addForm.price) {
-      showToast('Name, coins, and price are required', 'error')
+    if (!addForm.coins || !addForm.price) {
+      showToast('Coins and price are required', 'error')
       return
     }
     setSaving(true)
     try {
       const payload = {
-        name: addForm.name,
         coins: Number(addForm.coins),
         price: Number(addForm.price),
         originalPrice: addForm.originalPrice ? Number(addForm.originalPrice) : undefined,
@@ -164,7 +161,7 @@ export default function Wallet() {
         : [...packages, newPkg]
       setPackages(updated)
       setShowAddForm(false)
-      setAddForm({ name: '', coins: '', price: '', originalPrice: '', tag: '', discount: '', isPopular: false })
+      setAddForm({ coins: '', price: '', originalPrice: '', tag: '', discount: '', isPopular: false })
       showToast('Package added successfully')
     } catch (e) {
       showToast(e.message || 'Failed to add package', 'error')
@@ -273,9 +270,9 @@ export default function Wallet() {
 
       {/* Coin Packages */}
       <div style={{ marginBottom: 36 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div className="coin-packages-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <h2 style={{ fontSize: 18, fontWeight: 800, color: '#fff', margin: 0 }}>Coin Packages</h2>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div className="coin-actions" style={{ display: 'flex', gap: 8 }}>
             <button
               onClick={() => { setShowAddForm(!showAddForm); setEditingId(null) }}
               style={{
@@ -311,22 +308,6 @@ export default function Wallet() {
               <IoAdd size={18} style={{ marginRight: 6, verticalAlign: 'middle' }} />
               New Package
             </div>
-            <div style={{ marginBottom: 10 }}>
-              <label style={{ color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 4, textTransform: 'capitalize' }}>
-                Name
-              </label>
-              <input
-                value={addForm.name}
-                onChange={e => setAddForm({ ...addForm, name: e.target.value })}
-                placeholder="name"
-                type="text"
-                style={{
-                  width: '100%', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
-                  borderRadius: 8, color: '#fff', padding: '7px 10px', fontSize: 13,
-                  outline: 'none', boxSizing: 'border-box',
-                }}
-              />
-            </div>
             <div className="wallet-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
               {['coins', 'price', 'originalPrice'].map(field => (
                 <div key={field}>
@@ -347,7 +328,7 @@ export default function Wallet() {
                 </div>
               ))}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+            <div className="wallet-tag-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
               {['tag', 'discount'].map(field => (
                 <div key={field}>
                   <label style={{ color: 'var(--text-secondary)', fontSize: 10, fontWeight: 600, display: 'block', marginBottom: 3, textTransform: 'capitalize' }}>
@@ -392,7 +373,7 @@ export default function Wallet() {
                 {saving ? 'Saving...' : 'Add Package'}
               </button>
               <button
-                onClick={() => { setShowAddForm(false); setAddForm({ name: '', coins: '', price: '', originalPrice: '', tag: '', discount: '', isPopular: false }) }}
+                onClick={() => { setShowAddForm(false); setAddForm({ coins: '', price: '', originalPrice: '', tag: '', discount: '', isPopular: false }) }}
                 style={{
                   padding: '10px 16px', borderRadius: 10, border: '1px solid var(--border)',
                   cursor: 'pointer', background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 600,
@@ -424,28 +405,12 @@ export default function Wallet() {
               {editingId === pkg._id ? (
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                    <span style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>Editing: {editForm.name || pkg.name}</span>
+                    <span style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>Editing: {editForm.tag || `${editForm.coins} coins`}</span>
                     <button onClick={handleCancelEdit} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
                       <IoClose size={20} />
                     </button>
                   </div>
-                  <div style={{ marginBottom: 8 }}>
-                    <label style={{ color: 'var(--text-secondary)', fontSize: 10, fontWeight: 600, display: 'block', marginBottom: 3, textTransform: 'capitalize' }}>
-                      Name
-                    </label>
-                    <input
-                      value={editForm.name}
-                      onChange={e => setEditForm({ ...editForm, name: e.target.value })}
-                      placeholder="name"
-                      type="text"
-                      style={{
-                        width: '100%', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
-                        borderRadius: 8, color: '#fff', padding: '7px 10px', fontSize: 13,
-                        outline: 'none', boxSizing: 'border-box',
-                      }}
-                    />
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                  <div className="wallet-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
                     {['coins', 'price', 'originalPrice'].map(field => (
                       <div key={field}>
                         <label style={{ color: 'var(--text-secondary)', fontSize: 10, fontWeight: 600, display: 'block', marginBottom: 3, textTransform: 'capitalize' }}>
@@ -465,7 +430,7 @@ export default function Wallet() {
                       </div>
                     ))}
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+                  <div className="wallet-tag-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
                     {['tag', 'discount'].map(field => (
                       <div key={field}>
                         <label style={{ color: 'var(--text-secondary)', fontSize: 10, fontWeight: 600, display: 'block', marginBottom: 3, textTransform: 'capitalize' }}>
@@ -514,7 +479,7 @@ export default function Wallet() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                      <span style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>{pkg.name}</span>
+                      <span style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>{pkg.tag || `${pkg.coins} Coins`}</span>
                       {pkg.isPopular && (
                         <span style={{
                           display: 'inline-flex', alignItems: 'center', gap: 3,
@@ -594,7 +559,7 @@ export default function Wallet() {
           <IoWallet size={18} style={{ marginRight: 8, verticalAlign: 'middle' }} />
           Global Wallet Settings
         </h2>
-        <div style={{
+        <div className="section-card" style={{
           backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border)',
           padding: 24,
         }}>
@@ -684,7 +649,7 @@ export default function Wallet() {
           <IoCashIcon size={18} style={{ marginRight: 8, verticalAlign: 'middle' }} />
           Listener Earning Rates
         </h2>
-        <div style={{
+        <div className="section-card" style={{
           backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border)',
           padding: 24,
         }}>

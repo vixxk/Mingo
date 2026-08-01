@@ -37,6 +37,7 @@ export default function ToastNotification({ visible, message, type = 'success', 
 
   return (
     <div
+      className="toast-notification"
       style={{
         position: 'fixed',
         top: 24,
@@ -70,7 +71,7 @@ export default function ToastNotification({ visible, message, type = 'success', 
       }}>
         <Icon size={18} color={config.color} />
       </div>
-      <span style={{
+      <span className="toast-msg" style={{
         color: 'var(--text-primary)',
         fontSize: 14,
         fontWeight: 600,

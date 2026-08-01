@@ -64,7 +64,7 @@ export default function Login() {
           height: 500px;
           background: radial-gradient(circle, var(--accent-light) 0%, transparent 70%);
         }
-        @media (max-width: 600px) {
+        @media (max-width: 767px) {
           .page-wrap {
             min-height: 100vh !important;
           }

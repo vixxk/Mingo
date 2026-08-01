@@ -17,7 +17,7 @@ export function Skeleton({ width, height, borderRadius = 8, style }) {
 
 export function AdminPageSkeleton({ type = 'list' }) {
   const containerStyle = {
-    padding: 16,
+    padding: 'var(--page-padding)',
     flex: 1,
     backgroundColor: 'var(--bg-primary)',
   }
@@ -25,8 +25,8 @@ export function AdminPageSkeleton({ type = 'list' }) {
   if (type === 'dashboard') {
     return (
       <div style={containerStyle}>
-        <Skeleton width={180} height={28} style={{ marginBottom: 24 }} />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 20 }}>
+        <Skeleton width="28%" height={28} style={{ marginBottom: 24 }} />
+        <div className="stat-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 20 }}>
           {[1, 2, 3, 4].map(i => (
             <Skeleton key={i} width="100%" height={110} borderRadius={16} />
           ))}

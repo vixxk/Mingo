@@ -155,7 +155,6 @@ export default function RoleSelectionScreen() {
                 <Ionicons name="arrow-forward" size={20} color="#fff" style={{ marginLeft: 8 }} />
               </LinearGradient>
             </TouchableOpacity>
-            <Text style={styles.footerHint}>You cannot switch your role later.</Text>
           </View>
         </View>
       </SafeAreaView>

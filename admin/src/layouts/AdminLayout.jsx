@@ -107,7 +107,7 @@ export default function AdminLayout() {
       minHeight: '100vh',
       backgroundColor: 'var(--bg-primary)',
     }}>
-      <style>{`@media (max-width: 600px) { .mobile-sidebar-open { width: 280px !important; } }`}</style>
+      <style>{`@media (max-width: 767px) { .mobile-sidebar-open { width: 280px !important; } }`}</style>
 
       {/* Sidebar */}
       <aside

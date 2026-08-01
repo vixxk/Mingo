@@ -1,4 +1,7 @@
-export function StatCard({ title, value, icon, trend, subtitle, onClick }) {
+import { useState } from 'react'
+
+export function StatCard({ title, value, icon, trend, subtitle, onClick, accent = 'var(--accent)' }) {
+  const [hovered, setHovered] = useState(false)
   return (
     <div
       onClick={onClick}
@@ -8,22 +11,15 @@ export function StatCard({ title, value, icon, trend, subtitle, onClick }) {
         padding: '20px',
         backgroundColor: 'var(--bg-secondary)',
         border: '1px solid var(--border)',
-        borderTop: '3px solid var(--accent)',
+        borderTop: `3px solid ${accent}`,
+        borderRightColor: hovered ? 'rgba(255, 255, 255, 0.8)' : 'var(--border)',
+        borderBottomColor: hovered ? 'rgba(255, 255, 255, 0.8)' : 'var(--border)',
+        borderLeftColor: hovered ? 'rgba(255, 255, 255, 0.8)' : 'var(--border)',
         cursor: onClick ? 'pointer' : 'default',
-        transition: 'border-color 0.2s, transform 0.2s',
+        transition: 'border-color 0.25s ease',
       }}
-      onMouseEnter={e => {
-        e.currentTarget.style.borderLeftColor = 'var(--border-light)'
-        e.currentTarget.style.borderRightColor = 'var(--border-light)'
-        e.currentTarget.style.borderBottomColor = 'var(--border-light)'
-        e.currentTarget.style.transform = 'translateY(-1px)'
-      }}
-      onMouseLeave={e => {
-        e.currentTarget.style.borderLeftColor = ''
-        e.currentTarget.style.borderRightColor = ''
-        e.currentTarget.style.borderBottomColor = ''
-        e.currentTarget.style.transform = 'translateY(0)'
-      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
       <div style={{
         display: 'flex',
@@ -42,10 +38,10 @@ export function StatCard({ title, value, icon, trend, subtitle, onClick }) {
         </span>
         {icon && (
           <span style={{
-            width: 32,
-            height: 32,
+            width: 34,
+            height: 34,
             borderRadius: 'var(--radius-sm)',
-            backgroundColor: 'var(--accent-light)',
+            backgroundColor: `${accent}1A`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

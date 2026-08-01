@@ -241,6 +241,7 @@ export default function BannedMembers() {
 
       {confirmTarget && (
         <div
+          className="unban-dialog-overlay"
           style={{
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
             backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 1000,
@@ -248,7 +249,7 @@ export default function BannedMembers() {
             padding: 20,
           }}
         >
-          <div style={{
+          <div className="unban-dialog-box" style={{
             width: '100%', maxWidth: 360,
             backgroundColor: 'var(--bg-secondary)', borderRadius: 24,
             border: '1.5px solid var(--border)', padding: '28px 24px',

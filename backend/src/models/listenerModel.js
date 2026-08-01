@@ -155,6 +155,36 @@ const listenerSchema = new mongoose.Schema(
       default: ['#3B82F6', '#8B5CF6'],
     },
 
+    // Admin-uploaded documents (any file type, stored in S3)
+    documents: [
+      {
+        fileName: {
+          type: String,
+          default: '',
+        },
+        fileUrl: {
+          type: String,
+          default: '',
+        },
+        fileType: {
+          type: String,
+          default: 'application/octet-stream',
+        },
+        size: {
+          type: Number,
+          default: 0,
+        },
+        uploadedBy: {
+          type: String,
+          default: 'Admin',
+        },
+        uploadedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
+
     // ─── Public Profile ───────────────────────────────────────
     publicProfile: {
       type: publicProfileSchema,

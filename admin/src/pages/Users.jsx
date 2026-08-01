@@ -42,7 +42,7 @@ export default function Users() {
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' })
   const [refreshKey, setRefreshKey] = useState(0)
 
-  const filters = ['All', 'Active', 'Inactive', 'Deleted']
+  const filters = ['All', 'Live', 'Offline', 'Deleted']
 
   useEffect(() => {
     const load = async () => {
@@ -50,8 +50,8 @@ export default function Users() {
         setLoading(true)
         const params = { page, limit: 20 }
         if (searchTerm) params.search = searchTerm
-        if (activeFilter === 'Active') params.status = 'active'
-        else if (activeFilter === 'Inactive') params.status = 'inactive'
+        if (activeFilter === 'Live') params.status = 'live'
+        else if (activeFilter === 'Offline') params.status = 'offline'
         else if (activeFilter === 'Deleted') params.status = 'deleted'
 
         const res = await adminAPI.getUsers(params)
@@ -84,6 +84,7 @@ export default function Users() {
   const handleFilterChange = (filter) => {
     setActiveFilter(filter)
     setPage(1)
+    setRefreshKey(k => k + 1)
   }
 
   const handleBan = async (userId, currentlyBanned) => {
@@ -257,7 +258,7 @@ export default function Users() {
               {/* User Info */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 15, fontWeight: 800, color: '#fff' }}>
+                  <span className="list-item-name" style={{ fontSize: 15, fontWeight: 800, color: '#fff' }}>
                     {user.name || 'Unknown'}
                   </span>
                   <div style={{
@@ -266,7 +267,7 @@ export default function Users() {
                     flexShrink: 0,
                   }} />
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                <div className="list-item-detail" style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
                   {user.phone || 'No phone'}
                 </div>
               </div>

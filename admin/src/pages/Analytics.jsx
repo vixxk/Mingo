@@ -455,15 +455,15 @@ export default function Analytics() {
           padding: 'var(--card-padding)',
         }}>
           <SectionTitle>Members Distribution</SectionTitle>
-          <div style={{ height: 240 }}>
+          <div className="members-distribution-chart" style={{ height: 240 }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={pieData}
                   cx="50%"
                   cy="50%"
-                  innerRadius={55}
-                  outerRadius={85}
+                  innerRadius="46%"
+                  outerRadius="70%"
                   paddingAngle={4}
                   dataKey="value"
                   stroke="none"
@@ -492,7 +492,7 @@ export default function Analytics() {
               </PieChart>
             </ResponsiveContainer>
           </div>
-          <div style={{
+          <div className="distribution-stat-grid" style={{
             display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 8,
           }}>
             <div style={{
@@ -567,7 +567,7 @@ export default function Analytics() {
       </div>
 
       {/* Section Toggles */}
-      <div className="tabs-scroll" style={{
+      <div className="analytics-section-toggles tabs-scroll" style={{
         display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16,
       }}>
         {Object.entries(sectionLabels).map(([key, label]) => {
@@ -657,7 +657,7 @@ export default function Analytics() {
                     )
                   })}
                 </div>
-                <div style={{
+                <div className="mini-stat-grid" style={{
                   display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
                   gap: 10,
                 }}>
@@ -669,7 +669,7 @@ export default function Analytics() {
             ) : (
               <div>
                 {key === 'approvedListeners' && (
-                  <div style={{
+                  <div className="mini-stat-grid" style={{
                     display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
                     gap: 10,
                   }}>
@@ -679,7 +679,7 @@ export default function Analytics() {
                   </div>
                 )}
                 {key === 'gifts' && (
-                  <div style={{
+                  <div className="mini-stat-grid" style={{
                     display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
                     gap: 10,
                   }}>
@@ -689,7 +689,7 @@ export default function Analytics() {
                   </div>
                 )}
                 {key === 'walletTransactions' && (
-                  <div style={{
+                  <div className="mini-stat-grid" style={{
                     display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
                     gap: 10,
                   }}>

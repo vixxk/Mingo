@@ -1,7 +1,7 @@
 import { Tabs, useRouter, useSegments } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { View, StyleSheet, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, Platform, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
@@ -270,13 +270,21 @@ export default function TabLayout() {
           options={{
             title: 'Messages',
             tabBarIcon: ({ color, focused }) => (
-              <Ionicons
-                name={focused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline'}
-                size={22}
-                color={color}
-              />
+              <View style={{ position: 'relative' }}>
+                <Ionicons
+                  name={focused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline'}
+                  size={22}
+                  color={color}
+                />
+                {unreadCount > 0 && (
+                  <View style={styles.unreadBadge}>
+                    <Text style={styles.unreadBadgeText}>
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </Text>
+                  </View>
+                )}
+              </View>
             ),
-            tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
           }}
         />
         <Tabs.Screen
@@ -302,3 +310,28 @@ export default function TabLayout() {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  unreadBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -6,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    minWidth: 18,
+    minHeight: 18,
+    paddingHorizontal: 4,
+    paddingVertical: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#000',
+  },
+  unreadBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '800',
+    fontFamily: 'Inter_900Black',
+    lineHeight: 12,
+  },
+});

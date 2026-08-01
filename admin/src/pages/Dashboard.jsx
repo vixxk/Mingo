@@ -1,4 +1,16 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, useSyncExternalStore } from 'react'
+
+const useIsMobile = (breakpoint = 767) => {
+  return useSyncExternalStore(
+    (callback) => {
+      const mq = window.matchMedia(`(max-width: ${breakpoint}px)`)
+      mq.addEventListener('change', callback)
+      return () => mq.removeEventListener('change', callback)
+    },
+    () => window.innerWidth <= breakpoint,
+    () => false
+  )
+}
 import { useNavigate } from 'react-router-dom'
 import { adminAPI, authAPI } from '../utils/api'
 
@@ -180,6 +192,7 @@ export default function Dashboard() {
   const [revenueData, setRevenueData] = useState([])
   const [registrationData, setRegistrationData] = useState([])
   const [retrying, setRetrying] = useState(false)
+  const isMobile = useIsMobile()
 
   const safeRevenueData = useMemo(() => revenueData || [], [revenueData])
   const safeRegistrationData = useMemo(() => registrationData || [], [registrationData])
@@ -358,92 +371,86 @@ export default function Dashboard() {
           color: var(--text-primary);
           text-align: center;
         }
-        @media (max-width: 600px) {
+        @media (max-width: 767px) {
           .dashboard-momentum-rings {
             grid-template-columns: repeat(3, 1fr) !important;
-            gap: 8px;
+            gap: 6px;
           }
           .momentum-ring {
-            padding: 10px;
-            gap: 8px;
+            padding: 8px;
+            gap: 6px;
           }
           .momentum-ring-graphic {
-            width: 72px;
-            height: 72px;
+            width: 56px;
+            height: 56px;
           }
           .momentum-ring-center {
-            width: 44px;
-            height: 44px;
+            width: 34px;
+            height: 34px;
           }
           .momentum-ring-center div {
-            font-size: 13px !important;
-          }
-          .momentum-ring-label {
-            font-size: 9px;
-          }
-          .momentum-ring-display {
-            font-size: 12px;
-          }
-          .dashboard-audience-pulse .ap-flex {
-            gap: 10px !important;
-          }
-          .dashboard-audience-pulse .ap-chart {
-            min-height: 180px !important;
-            min-width: 180px !important;
-          }
-          .dashboard-audience-pulse .ap-chart .recharts-responsive-container {
-            height: 180px !important;
-          }
-          .dashboard-audience-pulse .ap-chart > div:last-child div:first-child {
-            font-size: 20px !important;
-          }
-          .dashboard-audience-pulse .ap-chart > div:last-child div:last-child {
             font-size: 11px !important;
           }
-          .dashboard-audience-pulse .ap-chart > div:nth-child(2) {
-            top: 8px !important;
+          .momentum-ring-label {
+            font-size: 8px;
           }
-          .dashboard-audience-pulse .ap-stats {
+          .momentum-ring-display {
+            font-size: 10px;
+          }
+          /* Audience Pulse — Redesigned mobile layout */
+          .dashboard-audience-pulse .ap-flex {
+            flex-direction: column !important;
+            align-items: center !important;
             gap: 6px !important;
           }
-          .dashboard-audience-pulse .ap-stats > div {
-            padding: 8px 10px !important;
-            gap: 8px !important;
+          .dashboard-audience-pulse .ap-chart {
+            min-height: 110px !important;
+            min-width: 0 !important;
+            width: 110px !important;
+            max-width: 110px !important;
+            height: 110px !important;
+            flex-shrink: 0 !important;
+            margin: 4px 0 !important;
           }
-          .dashboard-audience-pulse .ap-stats > div > div:first-child div:first-child {
+          .dashboard-audience-pulse .ap-chart .recharts-responsive-container {
+            height: 110px !important;
+          }
+          .dashboard-audience-pulse .ap-chart > div:last-child div:first-child {
+            font-size: 15px !important;
+          }
+          .dashboard-audience-pulse .ap-chart > div:last-child div:last-child {
             font-size: 9px !important;
           }
-          .dashboard-audience-pulse .ap-stats > div > div:first-child div:nth-child(2) {
-            font-size: 13px !important;
-            margin-top: 3px !important;
+          .dashboard-audience-pulse .ap-chart > div:nth-child(2) {
+            top: 6px !important;
           }
-          .dashboard-audience-pulse .ap-stats > div > div:first-child div:nth-child(3) {
-            font-size: 9px !important;
-            margin-top: 2px !important;
-          }
-          .dashboard-audience-pulse .ap-stats > div > div:last-child {
-            width: 12px !important;
-            height: 12px !important;
-          }
-          .dashboard-audience-pulse .ap-stats > div > div:last-child > div {
-            width: 5px !important;
-            height: 5px !important;
-          }
+          /* Audience pulse stats handled by React isMobile — no CSS overrides needed */
           .dashboard-sparkline-column .section-card {
-            padding: 10px !important;
+            padding: 8px 10px !important;
           }
           .dashboard-sparkline-column .section-card > div:first-child > div:first-child {
-            font-size: 9px !important;
+            font-size: 8px !important;
           }
           .dashboard-sparkline-column .section-card > div:first-child > div:nth-child(2) {
-            font-size: 15px !important;
+            font-size: 14px !important;
             margin-top: 1px !important;
           }
           .dashboard-sparkline-column .section-card > div:first-child > div:nth-child(3) {
+            font-size: 8px !important;
+          }
+          .dashboard-sparkline-column .section-card > div:first-child > div:last-child {
             font-size: 9px !important;
+            padding: 2px 7px !important;
           }
           .dashboard-sparkline-column .section-card > div:last-child {
-            height: 40px !important;
+            height: 32px !important;
+          }
+          .ap-center-overlay {
+            position: absolute !important;
+            inset: 0 !important;
+            align-items: center !important;
+            justify-content: center !important;
+            pointer-events: none !important;
           }
         }
       `}</style>
@@ -540,24 +547,28 @@ export default function Dashboard() {
             value={<AnimatedNumber value={totalUsers} format={formatNumber} />}
             icon={<IoPeople size={16} color="var(--accent)" />}
             subtitle="Registered accounts"
+            accent="#A855F7"
           />
           <StatCard
             title="Listeners"
             value={<AnimatedNumber value={totalListeners} format={formatNumber} />}
-            icon={<IoHeadset size={16} color="#A855F7" />}
+            icon={<IoHeadset size={16} color="#8B5CF6" />}
             subtitle="Active voice agents"
+            accent="#8B5CF6"
           />
           <StatCard
             title="Revenue"
             value={<AnimatedNumber value={totalRevenue} format={formatCurrency} />}
             icon={<IoWallet size={16} color="#10B981" />}
             subtitle="Total earnings"
+            accent="#10B981"
           />
           <StatCard
             title="Sessions"
             value={<AnimatedNumber value={totalSessions} format={formatNumber} />}
             icon={<IoCall size={16} color="#F59E0B" />}
             subtitle="Completed calls"
+            accent="#F59E0B"
           />
         </div>
       </div>
@@ -581,8 +592,8 @@ export default function Dashboard() {
           }}>
             <SectionTitle>Audience Pulse</SectionTitle>
             <div className="ap-flex" style={{ display: 'flex', gap: 18, alignItems: 'center' }}>
-              <div className="ap-chart" style={{ minHeight: 200, minWidth: 200, position: 'relative', flexShrink: 0 }}>
-                <ResponsiveContainer width="100%" height={200}>
+              <div className="ap-chart" style={{ minHeight: isMobile ? 110 : 200, minWidth: isMobile ? 0 : 200, width: isMobile ? 110 : undefined, maxWidth: isMobile ? 110 : undefined, height: isMobile ? 110 : undefined, position: 'relative', flexShrink: 0 }}>
+                <ResponsiveContainer width="100%" height={isMobile ? 110 : 200}>
                   <PieChart>
                     <Pie
                       data={audienceData}
@@ -603,17 +614,17 @@ export default function Dashboard() {
                     <Tooltip content={<CustomTooltip formatter={(v) => formatNumber(v)} />} usePortal />
                   </PieChart>
                 </ResponsiveContainer>
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                <div className="ap-center-overlay" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
                   <div style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)' }}>{Math.round(listenerShare)}%</div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Listeners</div>
                   </div>
                 </div>
               </div>
-              <div className="ap-stats" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <PulseStat label="Total listeners" value={formatNumber(totalListeners)} accent="#A855F7" subtext={`${listenerShare.toFixed(1)}% of users`} />
-                <PulseStat label="Total users" value={formatNumber(nonListenerUsers)} accent="#10B981" subtext={`${(100 - listenerShare).toFixed(1)}% of users`} />
-                <PulseStat label="Avg sessions/user" value={sessionRate.toFixed(1)} accent="#F59E0B" subtext="Engagement metric" />
+              <div className="ap-stats" style={{ flex: isMobile ? 'none' : 1, display: isMobile ? 'grid' : 'flex', gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : undefined, flexDirection: isMobile ? undefined : 'column', gap: isMobile ? 6 : 10, width: isMobile ? '100%' : undefined }}>
+                <PulseStat label="Total listeners" value={formatNumber(totalListeners)} accent="#A855F7" subtext={`${listenerShare.toFixed(1)}% of users`} compact={isMobile} />
+                <PulseStat label="Total users" value={formatNumber(nonListenerUsers)} accent="#10B981" subtext={`${(100 - listenerShare).toFixed(1)}% of users`} compact={isMobile} />
+                <PulseStat label="Avg sessions/user" value={sessionRate.toFixed(1)} accent="#F59E0B" subtext="Engagement metric" compact={isMobile} />
               </div>
             </div>
           </div>
@@ -908,26 +919,30 @@ export default function Dashboard() {
   )
 }
 
-function PulseStat({ label, value, accent, subtext }) {
+function PulseStat({ label, value, accent, subtext, compact }) {
   return (
     <div style={{
       display: 'flex',
-      justifyContent: 'space-between',
+      flexDirection: compact ? 'column' : 'row',
+      justifyContent: compact ? 'center' : 'space-between',
       alignItems: 'center',
-      gap: 14,
-      padding: '14px 16px',
+      gap: compact ? 2 : 14,
+      padding: compact ? '8px 6px' : '14px 16px',
       borderRadius: 'var(--radius-md)',
       backgroundColor: 'var(--bg-tertiary)',
       border: '1px solid var(--border)',
+      textAlign: 'center',
     }}>
       <div>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.9px' }}>{label}</div>
-        <div style={{ marginTop: 6, fontSize: 17, fontWeight: 800, color: 'var(--text-primary)' }}>{value}</div>
-        {subtext && <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text-secondary)' }}>{subtext}</div>}
+        <div style={{ fontSize: compact ? 8 : 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: compact ? '0.3px' : '0.9px' }}>{label}</div>
+        <div style={{ marginTop: compact ? 1 : 6, fontSize: compact ? 14 : 17, fontWeight: 800, color: 'var(--text-primary)' }}>{value}</div>
+        {!compact && subtext && <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text-secondary)' }}>{subtext}</div>}
       </div>
-      <div style={{ width: 18, height: 18, borderRadius: '50%', backgroundColor: `${accent}20`, border: `2px solid ${accent}`, display: 'grid', placeItems: 'center' }}>
-        <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: accent }} />
-      </div>
+      {!compact && (
+        <div style={{ width: 18, height: 18, borderRadius: '50%', backgroundColor: `${accent}20`, border: `2px solid ${accent}`, display: 'grid', placeItems: 'center' }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: accent }} />
+        </div>
+      )}
     </div>
   )
 }

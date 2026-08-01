@@ -332,7 +332,7 @@ export default function MemberReports() {
 
   if (loading && reports.length === 0) {
     return (
-      <div style={{ padding: 'var(--page-padding)', flex: 1, backgroundColor: 'var(--bg-primary)' }}>
+      <div className="page-wrap" style={{ padding: 'var(--page-padding)', flex: 1, backgroundColor: 'var(--bg-primary)' }}>
         <Skeleton width={140} height={28} style={{ marginBottom: 24 }} />
         <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
           {[1, 2, 3, 4].map(i => (
@@ -348,7 +348,7 @@ export default function MemberReports() {
 
   return (
     <div className="page-wrap" style={{ backgroundColor: 'var(--bg-primary)', minHeight: '100vh', paddingBottom: 40 }}>
-      <div style={{ padding: '16px 16px 0' }}>
+      <div className="page-wrap-inner" style={{ padding: '16px 16px 0' }}>
         <div className="page-hdr-row" style={{ display: 'flex', alignItems: 'center', marginBottom: 24 }}>
           <button className="back-btn"
             onClick={() => navigate(-1)}
@@ -448,7 +448,7 @@ export default function MemberReports() {
         </div>
       </div>
 
-      <div style={{ padding: '0 16px' }}>
+      <div className="page-wrap-inner" style={{ padding: '0 16px' }}>
         {loading ? (
           [1, 2, 3, 4].map(i => (
             <Skeleton key={i} width="100%" height={120} borderRadius={16} style={{ marginBottom: 12 }} />

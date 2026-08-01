@@ -460,9 +460,9 @@ export default function EditPublicProfileScreen() {
           <Text style={styles.charCount}>{aboutMe.length}/2000</Text>
         </View>
 
-        {/* Expertise Tags */}
+        {/* Interest Tags */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Expertise Tags ({selectedTags.length}/6)</Text>
+          <Text style={styles.label}>Interest Tags ({selectedTags.length}/6)</Text>
           <View style={styles.chipGrid}>
             {AVAILABLE_TAGS.map((tag) => {
               const active = selectedTags.includes(tag);

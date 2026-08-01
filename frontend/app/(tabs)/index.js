@@ -117,9 +117,9 @@ const BestChoiceCard = ({ item, onCallPress, onChatPress, onProfilePress }) => {
   };
 
   const isInactive = !item.isLive || item.isBusy;
-  const canUseAudio = item.audioEnabled !== false;
-  const canUseVideo = item.videoEnabled === true;
-  const canUseChat = item.chatEnabled !== false;
+  const canUseAudio = isInactive || item.audioEnabled !== false;
+  const canUseVideo = isInactive || item.videoEnabled === true;
+  const canUseChat = isInactive || item.chatEnabled !== false;
 
   return (
     <TouchableOpacity
@@ -216,9 +216,9 @@ const PeopleCard = ({ item, onCallPress, onChatPress, onProfilePress }) => {
   };
 
   const isInactive = !item.isLive || item.isBusy;
-  const canUseAudio = item.audioEnabled !== false;
-  const canUseVideo = item.videoEnabled === true;
-  const canUseChat = item.chatEnabled !== false;
+  const canUseAudio = isInactive || item.audioEnabled !== false;
+  const canUseVideo = isInactive || item.videoEnabled === true;
+  const canUseChat = isInactive || item.chatEnabled !== false;
 
   return (
     <TouchableOpacity
@@ -786,15 +786,6 @@ export default function HomeScreen() {
       {}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity 
-            activeOpacity={0.7} 
-            onPress={() => router.push('/profile')}
-          >
-            <Image
-              source={userAvatar ? { uri: userAvatar } : require('../../images/user_avatar.png')}
-              style={styles.avatar}
-            />
-          </TouchableOpacity>
           <TouchableOpacity
             style={styles.coinBadge}
             activeOpacity={0.7}
@@ -817,13 +808,24 @@ export default function HomeScreen() {
             </TouchableOpacity>
           )}
         </View>
-        <TouchableOpacity 
-          style={styles.notificationBtn} 
-          activeOpacity={0.7}
-          onPress={() => setShowNotifications(true)}
-        >
-          <Ionicons name="notifications-outline" size={24} color="#fff" />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity 
+            activeOpacity={0.7} 
+            onPress={() => router.push('/profile')}
+          >
+            <Image
+              source={userAvatar ? { uri: userAvatar } : require('../../images/user_avatar.png')}
+              style={styles.avatar}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.notificationBtn} 
+            activeOpacity={0.7}
+            onPress={() => setShowNotifications(true)}
+          >
+            <Ionicons name="notifications-outline" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {}
@@ -1054,6 +1056,11 @@ const styles = StyleSheet.create({
     paddingVertical: hp(1.5),
   },
   headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: wp(2),
+  },
+  headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: wp(2),

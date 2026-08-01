@@ -34,9 +34,12 @@ const MENU_ITEMS = [
   { id: '4', label: 'Become a Listener', icon: 'star-outline', route: '/listener' },
   { id: '5', label: 'Help & Support', icon: 'help-circle-outline', route: '/help-support' },
   { id: '7', label: 'Raise an Issue', icon: 'flag-outline', action: 'issue' },
+  { id: '12', label: 'Blocked Listeners', icon: 'ban-outline', route: '/blocked-users' },
   { id: '6', label: 'Account Settings', icon: 'person-outline', route: '/edit-profile' },
+  { id: '14', label: 'Billing Address', icon: 'location-outline', route: '/billing-address' },
   { id: '8', label: 'Privacy Policy', icon: 'shield-checkmark-outline', action: 'privacy' },
   { id: '10', label: 'Terms & Conditions', icon: 'document-text-outline', action: 'terms' },
+  { id: '13', label: 'Safety Center', icon: 'shield-half-outline', action: 'safety' },
   { id: '11', label: 'Community Guidelines', icon: 'information-circle-outline', action: 'guidelines' },
   { id: '9', label: 'Delete Account', icon: 'trash-outline', action: 'delete', danger: true },
 ];
@@ -170,6 +173,8 @@ export default function ProfileScreen() {
       Linking.openURL('https://www.talkmingo.com/terms');
     } else if (item.action === 'guidelines') {
       Linking.openURL('https://www.talkmingo.com/community-guidelines');
+    } else if (item.action === 'safety') {
+      Linking.openURL('https://www.talkmingo.com/safety-center');
     } else if (item.action === 'delete') {
       setShowDeletePopup(true);
     } else if (item.route) {
