@@ -1,47 +1,90 @@
-import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
-import { useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing } from 'react-native';
+import { useRef, useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ms, s, vs } from '../../utils/responsive';
 
+const AUTO_DISMISS_MS = 3000;
+
 export default function SafetyPopup({ visible, onDismiss }) {
   const slideAnim = useRef(new Animated.Value(400)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
+  const squashAnim = useRef(new Animated.Value(1)).current;
+  const [rendered, setRendered] = useState(visible);
 
+  // Enter: slide up from the bottom with a soft spring
   useEffect(() => {
     if (visible) {
+      setRendered(true);
+      // Stop any in-flight exit animation before re-entering
+      slideAnim.stopAnimation();
+      overlayAnim.stopAnimation();
+      squashAnim.stopAnimation();
+      slideAnim.setValue(400);
+      squashAnim.setValue(1);
+      overlayAnim.setValue(0);
       Animated.parallel([
         Animated.timing(overlayAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
         Animated.spring(slideAnim, { toValue: 0, friction: 8, tension: 40, useNativeDriver: true }),
       ]).start();
-      
+
       const timer = setTimeout(() => {
         if (onDismiss) onDismiss();
-      }, 5000);
+      }, AUTO_DISMISS_MS);
       return () => clearTimeout(timer);
-    } else {
-      Animated.parallel([
-        Animated.timing(overlayAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
-        Animated.timing(slideAnim, { toValue: 400, duration: 200, useNativeDriver: true }),
-      ]).start();
     }
   }, [visible]);
 
-  if (!visible) return null;
+  // Exit: compress (squash) and retract into the bottom button
+  useEffect(() => {
+    if (!visible && rendered) {
+      Animated.parallel([
+        Animated.timing(overlayAnim, {
+          toValue: 0,
+          duration: 340,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 340,
+          duration: 340,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(squashAnim, {
+          toValue: 0.05,
+          duration: 340,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]).start(({ finished }) => {
+        if (finished) setRendered(false);
+      });
+    }
+  }, [visible, rendered]);
+
+  if (!rendered) return null;
 
   return (
     <View style={styles.wrapper} pointerEvents="box-none">
-      <Animated.View style={[styles.container, { transform: [{ translateY: slideAnim }] }]}>
+      <Animated.View
+        style={[
+          styles.container,
+          {
+            opacity: overlayAnim,
+            transform: [{ translateY: slideAnim }, { scaleY: squashAnim }],
+          },
+        ]}
+      >
         <LinearGradient
           colors={['#4D7C0F', '#65A30D', '#3F6212']}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={styles.popup}
         >
-          {}
-          <TouchableOpacity 
-            style={styles.closeBtn} 
-            activeOpacity={0.7} 
+          <TouchableOpacity
+            style={styles.closeBtn}
+            activeOpacity={0.7}
             onPress={onDismiss}
           >
             <Ionicons name="close" size={24} color="rgba(255,255,255,0.6)" />
@@ -64,10 +107,6 @@ const styles = StyleSheet.create({
   wrapper: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 500,
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.3)',
   },
   container: {
     position: 'absolute',

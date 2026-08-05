@@ -201,6 +201,9 @@ class CallService {
           avatarIndex: (user.avatarIndex || 0).toString(),
           gender: user.gender || 'Female',
           callType: callType,
+          // Same app-scoped credentials for the accepting side (notification path)
+          zegoAppId: zegoCredentials.appId,
+          zegoAppSign: zegoCredentials.appSign,
         }
       }).catch(err => {
         console.error('[CallService] Push notification promise failed:', err.message);
@@ -367,7 +370,20 @@ class CallService {
     if (!session) {
       throw new AppError('Session not found', 404);
     }
-    return session;
+
+    // Attach the current Zego credentials so both participants always join the
+    // same Zego app — the client must never rely on stale hardcoded values.
+    let credentials = null;
+    try {
+      credentials = getZegoCredentials();
+    } catch (e) {
+      console.log('[CallService] Zego credentials unavailable:', e.message);
+    }
+
+    return {
+      ...session.toObject(),
+      ...(credentials ? { zegoAppId: credentials.appId, zegoAppSign: credentials.appSign } : {}),
+    };
   }
 
     static async getUserHistory(userId, limit, offset) {
@@ -380,7 +396,7 @@ class CallService {
 
   static async getActiveSession(userId) {
     const userIdStr = userId.toString();
-    return Session.findOne({
+    const session = await Session.findOne({
       status: 'active',
       callType: { $in: ['audio', 'video', 'chat'] },
       $or: [
@@ -389,6 +405,19 @@ class CallService {
       ]
     }).populate('userId', 'name username avatarIndex gender')
       .populate('listenerId', 'name username avatarIndex gender');
+    if (!session) return null;
+
+    // Attach the current Zego credentials so a resumed call joins the same app.
+    let credentials = null;
+    try {
+      credentials = getZegoCredentials();
+    } catch (e) {
+      console.log('[CallService] Zego credentials unavailable:', e.message);
+    }
+    return {
+      ...session.toObject(),
+      ...(credentials ? { zegoAppId: credentials.appId, zegoAppSign: credentials.appSign } : {}),
+    };
   }
 }
 

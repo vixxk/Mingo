@@ -41,6 +41,7 @@ export default function LoginScreen() {
   const [showWelcomePopup, setShowWelcomePopup] = useState(false);
   const [userName, setUserName] = useState('');
   const [countdown, setCountdown] = useState(60);
+  const [isLoginSuccess, setIsLoginSuccess] = useState(false);
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -87,7 +88,7 @@ export default function LoginScreen() {
           } else if (role === 'LISTENER') {
             router.replace('/(listener)');
           } else if (listenerStatus === 'pending') {
-            router.replace('/(profile)/listener');
+            router.replace('/(profile)/listener-pending');
           } else if (listenerStatus === 'rejected' && !hasDismissedRejection) {
             router.replace('/(auth)/verification-failed');
           } else {
@@ -184,6 +185,7 @@ export default function LoginScreen() {
       }
       
       setUserName(result.data.user.name);
+      await AsyncStorage.setItem('showLoginOffers', 'true');
       setShowWelcomePopup(true);
     } catch (error) {
       if (error.status === 404) {

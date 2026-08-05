@@ -100,8 +100,10 @@ export default function SplashScreenPage() {
 
       let listenerStatus = null;
       let hasDismissedRejection = false;
+      let useAppAsUser = false;
       try {
         listenerStatus = await AsyncStorage.getItem('listenerStatus');
+        useAppAsUser = (await AsyncStorage.getItem('useAppAsUser')) === 'true';
         const userStr = await AsyncStorage.getItem('user');
         let userId = null;
         if (userStr) {
@@ -169,10 +171,16 @@ export default function SplashScreenPage() {
         Linking.openURL('http://192.168.1.100:5173/login');
         return;
       } else if (role === 'LISTENER') {
-        router.replace('/(listener)');
+        if (listenerStatus === 'pending' && !useAppAsUser) {
+          router.replace('/(profile)/listener-pending');
+        } else if (listenerStatus === 'rejected' && !hasDismissedRejection) {
+          router.replace('/(auth)/verification-failed');
+        } else {
+          router.replace('/(listener)');
+        }
       } else if (userToken) {
-        if (listenerStatus === 'pending') {
-          router.replace('/(profile)/listener');
+        if (listenerStatus === 'pending' && !useAppAsUser) {
+          router.replace('/(profile)/listener-pending');
         } else if (listenerStatus === 'rejected' && !hasDismissedRejection) {
           router.replace('/(auth)/verification-failed');
         } else {

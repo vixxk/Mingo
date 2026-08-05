@@ -6,9 +6,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { s, vs, ms } from '../../utils/responsive';
-import { authAPI, userAPI, callAPI } from '../../utils/api';
+import { authAPI, userAPI, callAPI, walletAPI } from '../../utils/api';
 import { socketService } from '../../utils/socket';
 import IncomingCallPopup from '../../components/shared/IncomingCallPopup';
+import InsufficientBalancePopup from '../../components/shared/InsufficientBalancePopup';
 import { useSSE } from '../../utils/useSSE';
 
 import { initializeOneSignal } from '../../utils/notifications';
@@ -18,6 +19,8 @@ export default function TabLayout() {
   const segments = useSegments();
   const [isAuthenticated, setIsAuthenticated] = useState(null);
   const [incomingCalls, setIncomingCalls] = useState([]);
+  // Recharge gate: user tried to answer a call without enough coins
+  const [rechargeGate, setRechargeGate] = useState(null); // { callerName, callType, minCoins, balance }
   const { unreadCount } = useSSE();
 
   const isChatOpenRef = React.useRef(false);
@@ -92,6 +95,27 @@ export default function TabLayout() {
       setIncomingCalls(prev => prev.filter(c => c.callId !== callId));
       return;
     }
+
+    // ── Recharge gate: a call must not proceed without enough coins ──
+    const minCoins = callType === 'video' ? 40 : 10;
+    let balance = 0;
+    try {
+      const balRes = await walletAPI.getBalance();
+      balance = balRes?.data?.coins ?? 0;
+    } catch (e) {
+      console.log('Error fetching balance before accept:', e);
+    }
+    if (balance < minCoins) {
+      // Decline the call so the caller is not left hanging, then prompt recharge
+      socketService.emit('call_rejected', {
+        userId: callerId,
+        sessionId: callId,
+        reason: 'insufficient_balance',
+      });
+      setIncomingCalls(prev => prev.filter(c => c.callId !== callId));
+      setRechargeGate({ callerName, callType, minCoins, balance });
+      return;
+    }
     
     // Automatically reject all other active requests
     const otherCalls = incomingCalls.filter(c => c.callId !== callId);
@@ -120,7 +144,10 @@ export default function TabLayout() {
         avatarIndex,
         gender,
         callType,
-        isIncoming: 'true'
+        isIncoming: 'true',
+        // Session-scoped Zego credentials — both sides must join the same app
+        ...(session?.zegoAppId ? { zegoAppId: String(session.zegoAppId) } : {}),
+        ...(session?.zegoAppSign ? { zegoAppSign: String(session.zegoAppSign) } : {}),
       }
     });
   };
@@ -306,6 +333,24 @@ export default function TabLayout() {
         calls={incomingCalls}
         onAccept={handleAcceptCall}
         onReject={handleRejectCall}
+      />
+
+      {/* Recharge gate — user tried to answer a call without enough coins */}
+      <InsufficientBalancePopup
+        visible={!!rechargeGate}
+        balance={rechargeGate?.balance || 0}
+        title={rechargeGate ? `${rechargeGate.callerName} is waiting` : ''}
+        subtitle={
+          rechargeGate
+            ? `You need at least ${rechargeGate.minCoins} coins to answer this ${rechargeGate.callType === 'video' ? 'video' : 'audio'} call. Please recharge to continue.`
+            : ''
+        }
+        buttonLabel="Recharge Now"
+        onBuyCoins={() => {
+          setRechargeGate(null);
+          router.push('/balance');
+        }}
+        onClose={() => setRechargeGate(null)}
       />
     </View>
   );

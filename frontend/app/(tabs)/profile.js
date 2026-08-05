@@ -180,8 +180,19 @@ export default function ProfileScreen() {
     } else if (item.route) {
       if (item.id === '4') {
         const storedStatus = await AsyncStorage.getItem('listenerStatus');
-        if (storedStatus === 'approved' || user?.listener?.status === 'approved') {
+        let listenerStatus = storedStatus || user?.listener?.status;
+        try {
+          const meRes = await authAPI.me();
+          if (meRes?.data) {
+            listenerStatus = meRes.data.listener?.status || listenerStatus;
+          }
+        } catch (e) {}
+        if (listenerStatus === 'approved') {
           setShowSwitchRolePopup(true);
+          return;
+        }
+        if (listenerStatus === 'pending') {
+          router.push('/(profile)/listener-pending');
           return;
         }
       }

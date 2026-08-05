@@ -39,7 +39,8 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow Mingo to access your camera for video calls."
+          "cameraPermission": "Allow Mingo to access your camera for video calls.",
+          "microphonePermission": "Allow Mingo to access your microphone for audio and video calls."
         }
       ],
       "./plugins/withZegoCloud.js",

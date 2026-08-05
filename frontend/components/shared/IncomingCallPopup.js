@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ms, s, vs, hp, wp } from '../../utils/responsive';
 import { getAvatarUrl } from '../../utils/avatars';
+import { playIncomingCallSound, stopIncomingCallSound } from '../../utils/callSounds';
 
 const AVATAR_SIZE = Math.min(wp(12.8), 52);
 const AVATAR_RING_SIZE = AVATAR_SIZE + 6;
@@ -146,7 +147,17 @@ const IncomingCallPopup = ({ calls = [], onAccept, onReject, visible }) => {
   const activeCalls = (Array.isArray(calls) ? calls : []).filter(
     (call) => !dismissedCallIds.includes(call.callId)
   );
-  
+
+  // Play the incoming-call chime while there's a call to answer,
+  // and stop it as soon as all calls are gone (answered/rejected/dismissed).
+  useEffect(() => {
+    if (activeCalls.length > 0) {
+      playIncomingCallSound();
+    } else {
+      stopIncomingCallSound();
+    }
+  }, [activeCalls.length]);
+
   if (activeCalls.length === 0) return null;
 
   const isOverflow = activeCalls.length > 3;

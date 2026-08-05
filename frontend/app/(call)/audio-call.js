@@ -10,6 +10,7 @@ import Constants from 'expo-constants';
 
 import SafetyPopup from '../../components/call/SafetyPopup';
 import InCallRechargePopup from '../../components/call/InCallRechargePopup';
+import EndCallPopup from '../../components/call/EndCallPopup';
 import GiftPopup from '../../components/shared/GiftPopup';
 import GiftAnimationOverlay from '../../components/call/GiftAnimationOverlay';
 import { callAPI, walletAPI } from '../../utils/api';
@@ -21,13 +22,14 @@ import { getAvatarUrl } from '../../utils/avatars';
 const { height: SH } = Dimensions.get('window');
 const isExpoGo = Constants.appOwnership === 'expo';
 
-let ZegoUIKitPrebuiltCall, ONE_ON_ONE_VOICE_CALL_CONFIG;
+let ZegoUIKitPrebuiltCall, ONE_ON_ONE_VOICE_CALL_CONFIG, ZegoMenuBarButtonName;
 try {
   if (!isExpoGo) {
     const zegoModule = require('@zegocloud/zego-uikit-prebuilt-call-rn');
     ZegoUIKitPrebuiltCall = zegoModule.ZegoUIKitPrebuiltCall;
+    ZegoMenuBarButtonName = zegoModule.ZegoMenuBarButtonName;
     ONE_ON_ONE_VOICE_CALL_CONFIG =
-      zegoModule.ONE_ON_ONE_VOICE_CALL_CONFIG || zegoModule.ZegoMenuBarButtonName;
+      zegoModule.ONE_ON_ONE_VOICE_CALL_CONFIG || ZegoMenuBarButtonName;
   } else {
     console.log('Skipping ZegoCloud load in Expo Go mode');
   }
@@ -37,6 +39,15 @@ try {
 
 const ZegoCallWrapper = React.memo(({ appId, appSign, userId, userName, roomId, onCallEnd }) => {
   if (!ZegoUIKitPrebuiltCall) return null;
+
+  // Remove Zego's built-in hang-up button so every end-call request goes
+  // through the end-call confirmation popup (falls back to default if the
+  // config keys are unavailable).
+  const menuBar = ONE_ON_ONE_VOICE_CALL_CONFIG?.bottomMenuBarConfig;
+  const safeButtons = Array.isArray(menuBar?.buttons)
+    ? menuBar.buttons.filter((b) => b !== ZegoMenuBarButtonName?.hangUpButton)
+    : undefined;
+
   return (
     <ZegoUIKitPrebuiltCall
       appID={appId}
@@ -46,20 +57,15 @@ const ZegoCallWrapper = React.memo(({ appId, appSign, userId, userName, roomId, 
       callID={roomId}
       config={{
         ...ONE_ON_ONE_VOICE_CALL_CONFIG,
+        ...(safeButtons ? { bottomMenuBarConfig: { ...menuBar, buttons: safeButtons } } : {}),
         onCallEnd: onCallEnd,
         onHangUp: onCallEnd,
         onOnlySelfInRoom: onCallEnd,
         turnOnCameraWhenJoining: false,
         turnOnMicrophoneWhenJoining: true,
-        useFrontFacingCamera: false,
-        layout: {
-          mode: 1, // Gallery mode to avoid floating PIP preview
-        },
-        audioVideoViewConfig: {
-          showMicrophoneStateOnView: false,
-          showCameraStateOnView: false,
-          useVideoViewAspectFill: false,
-        },
+        // Route audio through the loudspeaker by default — the SDK's default
+        // routes to the earpiece, which is easily mistaken for no audio at all.
+        useSpeakerWhenJoining: false,
       }}
     />
   );
@@ -82,6 +88,7 @@ export default function AudioCallScreen() {
   } = useLocalSearchParams();
 
   const [showSafety, setShowSafety] = useState(true);
+  const [showEndCallPopup, setShowEndCallPopup] = useState(false);
   const [showRecharge, setShowRecharge] = useState(false);
   const [showGiftPopup, setShowGiftPopup] = useState(false);
   const [receivedGift, setReceivedGift] = useState(null);
@@ -95,14 +102,6 @@ export default function AudioCallScreen() {
   const [hasPermission, setHasPermission] = useState(null);
   const [isListener, setIsListener] = useState(false);
 
-  // Auto-dismiss safety popup after 3 seconds
-  useEffect(() => {
-    if (showSafety) {
-      const timer = setTimeout(() => setShowSafety(false), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [showSafety]);
-  
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const intervalRef = useRef(null);
   const callEndedRef = useRef(false);
@@ -198,7 +197,9 @@ export default function AudioCallScreen() {
           try {
             router.dismissAll();
           } catch (e) {}
-          router.replace('/');
+          // Go straight to the listener dashboard — avoids re-showing the
+          // splash screen, which made the app look like it restarted.
+          router.replace('/(listener)');
         } else {
           router.replace({
             pathname: '/(call)/call-feedback',
@@ -323,7 +324,9 @@ export default function AudioCallScreen() {
           try {
             router.dismissAll();
           } catch (e) {}
-          router.replace('/');
+          // Go straight to the listener dashboard — avoids re-showing the
+          // splash screen, which made the app look like it restarted.
+          router.replace('/(listener)');
         } else {
           router.replace({
             pathname: '/(call)/call-feedback',
@@ -360,7 +363,7 @@ export default function AudioCallScreen() {
           onCallEnd={handleEndCall}
         />
 
-        {/* Balance badge + Recharge button */}
+        {/* Balance badge + Recharge + Gift — stacked on the top right */}
         <View style={styles.floatingTopRight}>
           {currentCoins !== null && !isListener && (
             <View style={styles.coinsBadge}>
@@ -370,33 +373,56 @@ export default function AudioCallScreen() {
           )}
           {!isListener && (
             <TouchableOpacity
-              style={styles.floatingRechargeBtn}
+              style={styles.floatingRechargeGift}
               onPress={() => setShowRecharge(true)}
               activeOpacity={0.8}
             >
-              <Ionicons name="wallet-outline" size={20} color="#fff" />
-              <Text style={styles.floatingRechargeText}>Recharge</Text>
+              <Ionicons name="wallet-outline" size={22} color="#EC4899" />
+              <Text style={[styles.floatingRechargeText, { color: '#EC4899' }]}>Recharge</Text>
             </TouchableOpacity>
           )}
 
           {!isListener && (
             <TouchableOpacity
-              style={[styles.floatingRechargeBtn, { backgroundColor: 'rgba(168, 85, 247, 0.9)', shadowColor: '#A855F7' }]}
+              style={[styles.floatingRechargeGift, { backgroundColor: 'rgba(168, 85, 247, 0.15)', borderColor: 'rgba(168, 85, 247, 0.3)' }]}
               onPress={() => setShowGiftPopup(true)}
               activeOpacity={0.8}
             >
-              <Ionicons name="gift-outline" size={20} color="#fff" />
-              <Text style={styles.floatingRechargeText}>Gift</Text>
+              <Ionicons name="gift-outline" size={22} color="#A855F7" />
+              <Text style={[styles.floatingRechargeText, { color: '#A855F7' }]}>Gift</Text>
             </TouchableOpacity>
           )}
         </View>
-        
-        {showSafety && (
-          <SafetyPopup
-            visible={showSafety}
-            onDismiss={() => setShowSafety(false)}
-          />
-        )}
+
+        {/* Floating safety shield — reopens the safety popup */}
+        <TouchableOpacity
+          style={styles.floatingSafetyBtn}
+          onPress={() => setShowSafety(true)}
+          activeOpacity={0.8}
+          accessibilityLabel="Open safety guidance"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="shield-checkmark" size={wp(6)} color="#4ADE80" />
+        </TouchableOpacity>
+
+        {/* End-call button — opens the confirmation popup */}
+        <TouchableOpacity
+          style={styles.floatingEndBtn}
+          onPress={() => setShowEndCallPopup(true)}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="call" size={26} color="#fff" style={{ transform: [{ rotate: '135deg' }] }} />
+        </TouchableOpacity>
+
+        <EndCallPopup
+          visible={showEndCallPopup}
+          onEndCall={handleEndCall}
+          onDismiss={() => setShowEndCallPopup(false)}
+        />
+        <SafetyPopup
+          visible={showSafety}
+          onDismiss={() => setShowSafety(false)}
+        />
         <InCallRechargePopup
           visible={showRecharge}
           onClose={() => setShowRecharge(false)}
@@ -447,6 +473,29 @@ export default function AudioCallScreen() {
         style={StyleSheet.absoluteFill}
       />
 
+      {/* Recharge + Gift — stacked on the top right (user only) */}
+      {!isListener && (
+        <View style={styles.fallbackTopRight}>
+          <TouchableOpacity
+            style={styles.floatingRechargeGift}
+            onPress={() => setShowRecharge(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="wallet-outline" size={20} color="#EC4899" />
+            <Text style={[styles.floatingRechargeText, { color: '#EC4899' }]}>Recharge</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.floatingRechargeGift, { backgroundColor: 'rgba(168, 85, 247, 0.15)', borderColor: 'rgba(168, 85, 247, 0.3)' }]}
+            onPress={() => setShowGiftPopup(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="gift-outline" size={20} color="#A855F7" />
+            <Text style={[styles.floatingRechargeText, { color: '#A855F7' }]}>Gift</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Top Header section */}
       <View style={[styles.topSection, { paddingTop: insets.top + vs(40) }]}>
         {/* Balance indicator */}
@@ -487,7 +536,7 @@ export default function AudioCallScreen() {
 
         <TouchableOpacity
           style={styles.endCallBtn}
-          onPress={handleEndCall}
+          onPress={() => setShowEndCallPopup(true)}
           activeOpacity={0.8}
         >
           <Ionicons name="call" size={32} color="#fff" style={{ transform: [{ rotate: '135deg' }] }} />
@@ -507,36 +556,27 @@ export default function AudioCallScreen() {
         </TouchableOpacity>
       </View>
 
-      {}
-      {!isListener && (
-        <View style={[styles.bottomSection, { paddingBottom: Math.max(insets.bottom + vs(16), vs(32)) }]}>
-          <TouchableOpacity
-            style={styles.rechargeBarBtn}
-            onPress={() => setShowRecharge(true)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="wallet-outline" size={18} color="#fff" />
-            <Text style={styles.rechargeBarText}>Add Coins</Text>
-          </TouchableOpacity>
-          <Text style={styles.safetyHint}>
-            Keep the conversation safe & respectful
-          </Text>
-        </View>
-      )}
-      {isListener && (
-        <View style={[styles.bottomSection, { paddingBottom: Math.max(insets.bottom + vs(16), vs(32)) }]}>
-          <Text style={styles.safetyHint}>
-            Keep the conversation safe & respectful
-          </Text>
-        </View>
-      )}
+      <View style={[styles.bottomSection, { paddingBottom: Math.max(insets.bottom + vs(16), vs(32)) }]}>
+        <TouchableOpacity
+          style={styles.safetyIconBtn}
+          onPress={() => setShowSafety(true)}
+          activeOpacity={0.7}
+          accessibilityLabel="Open safety guidance"
+        >
+          <Ionicons name="shield-checkmark" size={wp(6)} color="#4ADE80" />
+        </TouchableOpacity>
+      </View>
 
-      {showSafety && (
-        <SafetyPopup
-          visible={showSafety}
-          onDismiss={() => setShowSafety(false)}
-        />
-      )}
+      <EndCallPopup
+        visible={showEndCallPopup}
+        onEndCall={handleEndCall}
+        onDismiss={() => setShowEndCallPopup(false)}
+      />
+
+      <SafetyPopup
+        visible={showSafety}
+        onDismiss={() => setShowSafety(false)}
+      />
 
       <InCallRechargePopup
         visible={showRecharge}
@@ -698,28 +738,48 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: s(24),
   },
-  rechargeBarBtn: {
-    flexDirection: 'row',
+  safetyIconBtn: {
+    width: wp(12),
+    height: wp(12),
+    borderRadius: wp(6),
+    backgroundColor: 'rgba(34, 197, 94, 0.15)',
     alignItems: 'center',
-    backgroundColor: 'rgba(236, 72, 153, 0.2)',
-    borderRadius: 24,
-    paddingHorizontal: s(20),
-    paddingVertical: vs(10),
-    gap: s(8),
-    marginBottom: vs(12),
-    borderWidth: 1,
-    borderColor: 'rgba(236, 72, 153, 0.4)',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#22C55E',
+    marginTop: vs(12),
   },
-  rechargeBarText: {
-    color: '#EC4899',
-    fontSize: ms(13, 0.3),
-    fontFamily: 'Inter_600SemiBold',
+  floatingSafetyBtn: {
+    position: 'absolute',
+    left: s(12),
+    bottom: hp(15),
+    width: wp(11),
+    height: wp(11),
+    borderRadius: wp(5.5),
+    backgroundColor: 'rgba(34, 197, 94, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#22C55E',
+    zIndex: 9999,
+    elevation: 9999,
   },
-  safetyHint: {
-    fontSize: ms(12, 0.3),
-    color: '#4B5563',
-    fontFamily: 'Inter_400Regular',
-    fontStyle: 'italic',
+  floatingEndBtn: {
+    position: 'absolute',
+    bottom: hp(16),
+    alignSelf: 'center',
+    width: wp(15),
+    height: wp(15),
+    borderRadius: wp(7.5),
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999,
+    elevation: 9999,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
   },
 
   // Zego mode floating elements
@@ -747,19 +807,25 @@ const styles = StyleSheet.create({
     fontSize: ms(13, 0.3),
     fontFamily: 'Inter_700Bold',
   },
-  floatingRechargeBtn: {
-    backgroundColor: 'rgba(236, 72, 153, 0.9)',
+  floatingRechargeGift: {
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderRadius: 25,
+    paddingHorizontal: s(14),
+    paddingVertical: vs(8),
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: s(12),
-    paddingVertical: vs(8),
-    borderRadius: 20,
     gap: s(6),
-    shadowColor: '#EC4899',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 8,
+    zIndex: 999,
+  },
+  fallbackTopRight: {
+    position: 'absolute',
+    top: hp(16),
+    right: s(12),
+    alignItems: 'flex-end',
+    gap: vs(8),
+    zIndex: 999,
   },
   floatingRechargeText: {
     color: '#fff',

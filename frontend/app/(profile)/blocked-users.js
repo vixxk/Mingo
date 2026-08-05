@@ -10,7 +10,6 @@ import {
   RefreshControl,
   Modal,
   Pressable,
-  SafeAreaView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -120,14 +119,12 @@ export default function BlockedUsersScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar style="light" />
-      <SafeAreaView style={{ flex: 0, backgroundColor: '#000' }} />
 
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
           <Ionicons name="chevron-back" size={hp(3.2)} color="#fff" />
+          <Text style={styles.headerTitle}>{title}</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{title}</Text>
-        <View style={styles.headerSpacer} />
       </View>
 
       {loading ? (
@@ -219,26 +216,19 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: wp(4),
-    paddingVertical: hp(1.5),
+    paddingVertical: hp(2),
   },
   backBtn: {
-    width: wp(9),
-    height: wp(9),
-    borderRadius: wp(4.5),
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: wp(2),
   },
   headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: ms(18, 0.3),
-    fontWeight: '800',
+    fontSize: wp(5.5),
     color: '#fff',
-    fontFamily: 'Inter_900Black',
-  },
-  headerSpacer: {
-    width: wp(9),
+    fontWeight: '600',
   },
   loadingContainer: {
     flex: 1,

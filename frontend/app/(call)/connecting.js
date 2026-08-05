@@ -18,9 +18,11 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { socketService } from '../../utils/socket';
-import { callAPI, listenersAPI } from '../../utils/api';
+import { callAPI, listenersAPI, walletAPI } from '../../utils/api';
+import { playRingtone, stopRingtone } from '../../utils/callSounds';
 import { ms, s, vs, SCREEN_HEIGHT } from '../../utils/responsive';
 import { getAvatarUrl } from '../../utils/avatars';
+import InsufficientBalancePopup from '../../components/shared/InsufficientBalancePopup';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
@@ -46,7 +48,9 @@ export default function ConnectingScreen() {
     zegoAppId,
     zegoAppSign,
     callType = 'audio',
-    isRandom
+    isRandom,
+    matched,
+    partnerRole
   } = useLocalSearchParams();
 
   const [realCallId, setRealCallId] = React.useState(initialCallId);
@@ -58,6 +62,11 @@ export default function ConnectingScreen() {
     message: '',
   });
 
+  // Recharge gate — shown when the user tries to start a call without enough coins
+  const [showRechargeGate, setShowRechargeGate] = React.useState(false);
+  const [rechargeCallType, setRechargeCallType] = React.useState('audio');
+  const [rechargeBalance, setRechargeBalance] = React.useState(0);
+
   const handleErrorModalClose = () => {
     setErrorModal(prev => ({ ...prev, visible: false }));
     router.back();
@@ -65,6 +74,11 @@ export default function ConnectingScreen() {
 
   const realCallIdRef = useRef(initialCallId);
   const realRoomIdRef = useRef(initialRoomId);
+
+  // Zego credentials resolved from the backend session (falls back to route
+  // params, then to the config defaults in the call screen).
+  const zegoAppIdRef = useRef(zegoAppId);
+  const zegoAppSignRef = useRef(zegoAppSign);
   
   useEffect(() => {
     realCallIdRef.current = realCallId;
@@ -151,11 +165,24 @@ export default function ConnectingScreen() {
     fetchDirectInterests();
   }, [partnerListenerId, listenerId]);
 
+  // Fetch the user's real balance and open the recharge gate
+  const showRechargeGateFor = async (type) => {
+    setRechargeCallType(type);
+    setShowRechargeGate(true);
+    try {
+      const balRes = await walletAPI.getBalance();
+      setRechargeBalance(balRes?.data?.coins ?? 0);
+    } catch (e) {
+      console.log('Balance fetch failed in recharge gate:', e);
+    }
+  };
+
   const handleCancel = useCallback(() => {
     if (callTimeoutRef.current) {
       clearTimeout(callTimeoutRef.current);
       callTimeoutRef.current = null;
     }
+    stopRingtone();
     const targetUserId = partnerListenerIdRef.current || listenerId;
     socketService.emit('call_cancelled', { 
       userId: targetUserId, 
@@ -182,6 +209,9 @@ export default function ConnectingScreen() {
         useNativeDriver: false,
       })
     ).start();
+
+    // Play the caller ringback while we wait for the listener
+    playRingtone();
 
     // Signal incoming call to listener via socket
     const signalCall = async () => {
@@ -210,6 +240,7 @@ export default function ConnectingScreen() {
             clearTimeout(callTimeoutRef.current);
             callTimeoutRef.current = null;
           }
+          stopRingtone();
           const targetScreen = callType === 'video' ? '/(call)/video-call' : '/(call)/audio-call';
           router.replace({ 
             pathname: targetScreen, 
@@ -220,8 +251,8 @@ export default function ConnectingScreen() {
               listenerId: partnerListenerIdRef.current, 
               avatarIndex: partnerAvatarIndexRef.current, 
               gender: partnerGenderRef.current, 
-              zegoAppId, 
-              zegoAppSign, 
+              ...(zegoAppIdRef.current ? { zegoAppId: String(zegoAppIdRef.current) } : {}),
+              ...(zegoAppSignRef.current ? { zegoAppSign: String(zegoAppSignRef.current) } : {}),
               callType 
             } 
           });
@@ -234,6 +265,7 @@ export default function ConnectingScreen() {
             clearTimeout(callTimeoutRef.current);
             callTimeoutRef.current = null;
           }
+          stopRingtone();
           router.replace({
             pathname: '/(call)/user-busy',
             params: { name: partnerNameRef.current, reason: data.reason || 'rejected' },
@@ -242,22 +274,27 @@ export default function ConnectingScreen() {
 
         if (isRandom === 'true') {
           // RANDOM CALL FLOW
-          
-          socketService.on('random_match_found', async (data) => {
+
+          const handleRandomMatch = async (data) => {
             console.log('Random match found:', data);
             if (callTimeoutRef.current) {
               clearTimeout(callTimeoutRef.current);
               callTimeoutRef.current = null;
             }
-            
+
             try {
               // Now that we have a partner, create a real session in DB
               const targetListenerId = data.role === 'LISTENER' ? data.partnerId : callerId;
               const sessionRes = await callAPI.startCall(targetListenerId, callType);
-              
+
               const finalSessionId = sessionRes.data.sessionId;
               const finalRoomId = sessionRes.data.roomId;
-              
+
+              // Use the backend's session-scoped Zego credentials so both
+              // participants always join the same Zego app.
+              if (sessionRes.data?.zegoAppId) zegoAppIdRef.current = sessionRes.data.zegoAppId;
+              if (sessionRes.data?.zegoAppSign) zegoAppSignRef.current = sessionRes.data.zegoAppSign;
+
               setRealCallId(finalSessionId);
               setRealRoomId(finalRoomId);
 
@@ -285,14 +322,17 @@ export default function ConnectingScreen() {
                   roomId: finalRoomId,
                   avatarIndex: data.partnerAvatar,
                   gender: data.partnerGender,
-                  role: data.role
+                  role: data.role,
+                  ...(sessionRes.data?.zegoAppId ? { zegoAppId: sessionRes.data.zegoAppId } : {}),
+                  ...(sessionRes.data?.zegoAppSign ? { zegoAppSign: sessionRes.data.zegoAppSign } : {}),
                 }
               });
-              
+
               // Start a fresh 30s ringing timeout for the matched listener
               callTimeoutRef.current = setTimeout(() => {
                 socketService.off('call_accepted');
                 socketService.off('call_rejected');
+                stopRingtone();
                 socketService.emit('call_cancelled', { 
                   userId: targetListenerId, 
                   sessionId: finalSessionId 
@@ -305,31 +345,50 @@ export default function ConnectingScreen() {
 
             } catch (err) {
               console.error('Error starting random call session:', err);
+              stopRingtone();
+              if (err.status === 402 || (err.message && err.message.toLowerCase().includes('insufficient'))) {
+                showRechargeGateFor(callType);
+              } else {
+                setErrorModal({
+                  visible: true,
+                  title: 'Failed to Connect',
+                  message: err.message || 'Failed to start call session',
+                });
+              }
+            }
+          };
+
+          if (matched === 'true') {
+            // Partner was already matched on the finding screen — continue directly
+            handleRandomMatch({
+              partnerId: listenerId,
+              partnerName: name,
+              partnerAvatar: avatarIndex ?? '0',
+              partnerGender: gender || 'Female',
+              role: partnerRole || 'LISTENER',
+            });
+          } else {
+            socketService.on('random_match_found', handleRandomMatch);
+
+            socketService.on('searching_random', (data) => {
+              console.log(data.message);
+            });
+
+            socketService.on('random_search_timeout', () => {
+              if (callTimeoutRef.current) {
+                clearTimeout(callTimeoutRef.current);
+                callTimeoutRef.current = null;
+              }
+              stopRingtone();
               setErrorModal({
                 visible: true,
-                title: 'Failed to Connect',
-                message: err.message || 'Failed to start call session',
+                title: 'Search Timeout',
+                message: 'No online partner found. Please try again later.',
               });
-            }
-          });
-
-          socketService.on('searching_random', (data) => {
-            console.log(data.message);
-          });
-
-          socketService.on('random_search_timeout', () => {
-            if (callTimeoutRef.current) {
-              clearTimeout(callTimeoutRef.current);
-              callTimeoutRef.current = null;
-            }
-            setErrorModal({
-              visible: true,
-              title: 'Search Timeout',
-              message: 'No online partner found. Please try again later.',
             });
-          });
 
-          socketService.emit('request_random_call', { role: userRole });
+            socketService.emit('request_random_call', { role: userRole });
+          }
         } else {
           // DIRECT CALL FLOW
           try {
@@ -337,6 +396,11 @@ export default function ConnectingScreen() {
             const sessionRes = await callAPI.startCall(listenerId, callType);
             const finalSessionId = sessionRes.data.sessionId;
             const finalRoomId = sessionRes.data.roomId;
+
+            // Use the backend's session-scoped Zego credentials so both
+            // participants always join the same Zego app.
+            if (sessionRes.data?.zegoAppId) zegoAppIdRef.current = sessionRes.data.zegoAppId;
+            if (sessionRes.data?.zegoAppSign) zegoAppSignRef.current = sessionRes.data.zegoAppSign;
             
             setRealCallId(finalSessionId);
             setRealRoomId(finalRoomId);
@@ -352,25 +416,33 @@ export default function ConnectingScreen() {
                 roomId: finalRoomId,
                 avatarIndex: userAvatar,
                 gender: userGender,
+                ...(sessionRes.data?.zegoAppId ? { zegoAppId: sessionRes.data.zegoAppId } : {}),
+                ...(sessionRes.data?.zegoAppSign ? { zegoAppSign: sessionRes.data.zegoAppSign } : {}),
               }
             });
           } catch (err) {
             console.error('Error starting call session:', err);
-            const isOffline = err.message === 'Listener is offline';
-            if (isOffline) {
-              socketService.triggerLocalEvent('listener_status_changed', {
-                userId: listenerId,
-                isOnline: false,
-                isBusy: false,
+            stopRingtone();
+            if (err.status === 402 || (err.message && err.message.toLowerCase().includes('insufficient'))) {
+              // Recharge gate: the call must not proceed without enough coins
+              showRechargeGateFor(callType);
+            } else {
+              const isOffline = err.message === 'Listener is offline';
+              if (isOffline) {
+                socketService.triggerLocalEvent('listener_status_changed', {
+                  userId: listenerId,
+                  isOnline: false,
+                  isBusy: false,
+                });
+              }
+              setErrorModal({
+                visible: true,
+                title: isOffline ? 'Listener Offline' : 'Failed to Connect',
+                message: isOffline 
+                  ? `${partnerName} is currently offline. Please try again later.` 
+                  : (err.message || 'Failed to start call session'),
               });
             }
-            setErrorModal({
-              visible: true,
-              title: isOffline ? 'Listener Offline' : 'Failed to Connect',
-              message: isOffline 
-                ? `${partnerName} is currently offline. Please try again later.` 
-                : (err.message || 'Failed to start call session'),
-            });
           }
         }
 
@@ -379,6 +451,7 @@ export default function ConnectingScreen() {
           callTimeoutRef.current = setTimeout(() => {
             socketService.off('call_accepted');
             socketService.off('call_rejected');
+            stopRingtone();
             socketService.emit('call_cancelled', { 
               userId: listenerId, 
               sessionId: realCallIdRef.current || initialCallId 
@@ -401,6 +474,7 @@ export default function ConnectingScreen() {
       if (callTimeoutRef.current) {
         clearTimeout(callTimeoutRef.current);
       }
+      stopRingtone();
       socketService.off('call_accepted');
       socketService.off('call_rejected');
       socketService.off('random_match_found');
@@ -476,6 +550,23 @@ export default function ConnectingScreen() {
           <Text style={styles.cancelText}>Cancel Call</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Recharge gate — the call cannot proceed without enough coins */}
+      <InsufficientBalancePopup
+        visible={showRechargeGate}
+        balance={rechargeBalance}
+        title={rechargeCallType === 'video' ? 'Video calls need coins' : 'Audio calls need coins'}
+        subtitle={`You need at least ${rechargeCallType === 'video' ? 40 : 10} coins to start this ${rechargeCallType} call. Please recharge to continue.`}
+        buttonLabel="Recharge Now"
+        onBuyCoins={() => {
+          setShowRechargeGate(false);
+          router.replace('/balance');
+        }}
+        onClose={() => {
+          setShowRechargeGate(false);
+          router.back();
+        }}
+      />
 
       {/* Custom Error/Offline Alert Modal */}
       <Modal

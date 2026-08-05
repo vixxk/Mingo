@@ -22,6 +22,7 @@ export default function ListenerProfileScreen() {
 
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [coverError, setCoverError] = useState(false);
   const [isFavourite, setIsFavourite] = useState(false);
   const [viewerVisible, setViewerVisible] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
@@ -46,6 +47,7 @@ export default function ListenerProfileScreen() {
   const fetchProfile = async (isRefreshing = false) => {
     try {
       if (!isRefreshing) setLoading(true);
+      setCoverError(false);
       const res = await listenersAPI.getPublicProfile(id);
       setProfile(res.data);
 
@@ -201,7 +203,6 @@ export default function ListenerProfileScreen() {
     : ['#7C3AED', '#6D28D9', '#4C1D95'];
   const tags = pub.expertiseTags || [];
   const languages = pub.languages || ['English'];
-  const galleryImages = pub.galleryImages || [];
   const hookline = pub.hookline || '';
   const aboutMe = pub.aboutMe || '';
 
@@ -236,17 +237,18 @@ export default function ListenerProfileScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#fff"
-            colors={['#fff']}
+            tintColor="#8B5CF6"
+            colors={['#8B5CF6']}
+            progressBackgroundColor="#1A1A1F"
           />
         }
       >
         {/* Hero Section */}
         <Animated.View style={[styles.heroSection, { opacity: headerOpacity }]}>
-          {coverImage ? (
+          {coverImage && !coverError ? (
             <Animated.View style={{ opacity: coverOpacity }}>
               <TouchableOpacity onPress={() => openViewer(coverImage)} activeOpacity={0.9}>
-                <Image source={{ uri: coverImage }} style={styles.coverPhoto} />
+                <Image source={{ uri: coverImage }} style={styles.coverPhoto} resizeMode="cover" onError={() => setCoverError(true)} />
                 <LinearGradient
                   colors={['transparent', 'rgba(0,0,0,0.7)']}
                   style={styles.coverOverlay}
@@ -428,29 +430,6 @@ export default function ListenerProfileScreen() {
             )}
           </Animated.View>
 
-          {/* Gallery */}
-          {galleryImages.length > 0 && (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Ionicons name="images" size={SW * 0.045} color="#F59E0B" />
-                <Text style={styles.sectionTitle}>Gallery</Text>
-              </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.galleryScroll}>
-                {galleryImages.map((img, idx) => (
-                  <TouchableOpacity 
-                    key={idx} 
-                    style={styles.galleryImageWrapper}
-                    onPress={() => openViewer(img)}
-                    activeOpacity={0.9}
-                  >
-                    <Image source={{ uri: img }} style={styles.galleryImage} />
-                    <LinearGradient colors={['transparent', 'rgba(0,0,0,0.4)']} style={styles.galleryOverlay} />
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          )}
-
           {/* Interest Tags */}
           {tags.length > 0 && (
             <View style={styles.section}>
@@ -542,7 +521,7 @@ const styles = StyleSheet.create({
 
   heroSection: { alignItems: 'center', marginBottom: SH * 0.01 },
   coverGradient: { width: '100%', height: SH * 0.18, overflow: 'hidden' },
-  coverPhoto: { width: '100%', height: SH * 0.18 },
+  coverPhoto: { width: '100%', height: SH * 0.18, overflow: 'hidden' },
   coverOverlay: { ...StyleSheet.absoluteFillObject },
   decoCircle1: {
     position: 'absolute', width: SW * 0.4, height: SW * 0.4, borderRadius: SW * 0.2,
@@ -622,11 +601,6 @@ const styles = StyleSheet.create({
 
   aboutCard: { backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: SW * 0.04, padding: '4.5%', borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
   aboutText: { color: '#9CA3AF', fontSize: SW * 0.036, lineHeight: SW * 0.058, fontFamily: 'Inter_400Regular' },
-
-  galleryScroll: { paddingRight: '5%' },
-  galleryImageWrapper: { width: SW * 0.6, height: SW * 0.38, borderRadius: SW * 0.04, overflow: 'hidden', marginRight: SW * 0.03, backgroundColor: '#111' },
-  galleryImage: { width: '100%', height: '100%' },
-  galleryOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '30%' },
 
   modalOverlay: {
     flex: 1,

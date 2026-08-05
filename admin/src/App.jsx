@@ -6,6 +6,8 @@ import Dashboard from './pages/Dashboard'
 import Users from './pages/Users'
 import Listeners from './pages/Listeners'
 import Sessions from './pages/Sessions'
+import ChatLogs from './pages/ChatLogs'
+import ChatLogDetail from './pages/ChatLogDetail'
 import Wallet from './pages/Wallet'
 import Payouts from './pages/Payouts'
 import Analytics from './pages/Analytics'
@@ -16,6 +18,7 @@ import BannedMembers from './pages/BannedMembers'
 import BestChoice from './pages/BestChoice'
 import MemberReports from './pages/MemberReports'
 import Activities from './pages/Activities'
+import Ads from './pages/Ads'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -58,6 +61,8 @@ export default function App() {
             <Route path="users" element={<Users />} />
             <Route path="listeners" element={<Listeners />} />
             <Route path="sessions" element={<Sessions />} />
+            <Route path="chat-logs" element={<ChatLogs />} />
+            <Route path="chat-logs/:id" element={<ChatLogDetail />} />
             <Route path="wallet" element={<Wallet />} />
             <Route path="payouts" element={<Payouts />} />
             <Route path="analytics" element={<Analytics />} />
@@ -68,6 +73,7 @@ export default function App() {
             <Route path="best-choice" element={<BestChoice />} />
             <Route path="reports" element={<MemberReports />} />
             <Route path="activities" element={<Activities />} />
+            <Route path="ads" element={<Ads />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

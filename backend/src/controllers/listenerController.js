@@ -126,9 +126,6 @@ class ListenerController {
         aboutMe,
         expertiseTags,
         languages,
-        galleryImages,
-        galleryVideos,
-        profileImage,
         gradientColors,
         displayName,
       } = req.body;
@@ -140,10 +137,14 @@ class ListenerController {
       if (aboutMe !== undefined) draft.aboutMe = aboutMe;
       if (expertiseTags !== undefined) draft.expertiseTags = expertiseTags;
       if (languages !== undefined) draft.languages = languages;
-      if (galleryImages !== undefined) draft.galleryImages = galleryImages;
-      if (galleryVideos !== undefined) draft.galleryVideos = galleryVideos;
-      if (profileImage !== undefined) draft.profileImage = profileImage;
-      if (req.body.coverImage !== undefined) draft.coverImage = req.body.coverImage;
+
+      // ── Avatar-only policy: listeners can never set profile/cover/gallery
+      // photos. Any previously stored photo fields are stripped from drafts so
+      // old photos cannot be re-submitted for approval either.
+      delete draft.galleryImages;
+      delete draft.galleryVideos;
+      delete draft.profileImage;
+      delete draft.coverImage;
 
       listener.draftProfile = draft;
       listener.profileStatus = 'draft';
@@ -261,6 +262,12 @@ class ListenerController {
         throw new AppError('Maximum 10 files at once', 400);
       }
 
+      // ── Avatar-only policy: photos are never permitted for listeners ──
+      const PHOTO_CATEGORIES = ['profile_image', 'cover_image', 'gallery_image', 'gallery_video'];
+      if (files.some((f) => PHOTO_CATEGORIES.includes(f?.category))) {
+        throw new AppError('Photos are not permitted for listeners. Only an avatar can be used as the profile picture.', 403);
+      }
+
       const folderMap = {
         profile_image: 'listener_profiles',
         cover_image: 'listener_covers',
@@ -311,6 +318,91 @@ class ListenerController {
         videoEnabled: listener.videoEnabled,
         chatEnabled: listener.chatEnabled,
       }, 'Settings updated');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * GET /listener/earnings-stats
+   * Dashboard earnings reconciled DIRECTLY against the transaction ledger.
+   * Earnings and session counts are derived from completed call_credit and
+   * gift_receive transactions (joined with their Session docs), instead of
+   * the accumulated counter fields — so the dashboard always matches the
+   * visible transaction history.
+   */
+  static async getEarningsStats(req, res, next) {
+    try {
+      const userId = req.user.id;
+      const Transaction = require('../models/transactionModel');
+      const Session = require('../models/sessionModel');
+
+      const credits = await Transaction.find({
+        userId,
+        type: { $in: ['call_credit', 'gift_receive'] },
+        status: 'completed',
+      }).select('type amount metadata description createdAt').lean();
+
+      let ledgerTotal = 0;
+      let giftEarnings = 0;
+      const bySession = {}; // sessionId -> { amount }
+      for (const t of credits) {
+        const amt = t.amount || 0;
+        if (t.type === 'gift_receive') {
+          giftEarnings += amt;
+        } else {
+          ledgerTotal += amt;
+          const sid = t.metadata?.sessionId ? t.metadata.sessionId.toString() : `txn_${t._id}`;
+          if (!bySession[sid]) bySession[sid] = { amount: 0, sessionId: t.metadata?.sessionId || null };
+          bySession[sid].amount += amt;
+        }
+      }
+
+      // Resolve each credited session to its call type for accurate counts + breakdown
+      const sessionIds = Object.values(bySession)
+        .filter((s) => s.sessionId)
+        .map((s) => s.sessionId.toString());
+      const sessions = await Session.find({ _id: { $in: sessionIds } }).select('callType').lean();
+      const typeOf = {};
+      for (const s of sessions) typeOf[s._id.toString()] = s.callType;
+
+      const counts = { audio: 0, video: 0, chat: 0, other: 0 };
+      const breakdown = { audio: 0, video: 0, chat: 0, gifts: giftEarnings, other: 0 };
+      for (const [sid, info] of Object.entries(bySession)) {
+        const t = typeOf[sid];
+        if (t === 'audio' || t === 'video' || t === 'chat') {
+          counts[t] += 1;
+          breakdown[t] += info.amount;
+        } else {
+          counts.other += 1;
+          breakdown.other += info.amount;
+        }
+      }
+
+      const round2 = (n) => Math.round(n * 100) / 100;
+      const totalEarnings = round2(ledgerTotal + giftEarnings);
+
+      const Listener = require('../models/listenerModel');
+      const listener = await Listener.findOne({ userId }).select('earnings');
+      const counterTotal = round2(listener?.earnings || 0);
+
+      return ApiResponse.success(res, {
+        totalEarnings,
+        breakdown: {
+          audio: round2(breakdown.audio),
+          video: round2(breakdown.video),
+          chat: round2(breakdown.chat),
+          gifts: round2(breakdown.gifts),
+          other: round2(breakdown.other),
+        },
+        calls: counts,
+        audioCalls: counts.audio,
+        videoCalls: counts.video,
+        totalChats: counts.chat,
+        ledgerTotal: totalEarnings,
+        counterTotal,
+        synced: Math.abs(counterTotal - totalEarnings) < 0.01,
+      }, 'Earnings stats retrieved');
     } catch (err) {
       next(err);
     }

@@ -7,7 +7,6 @@ import {
   FlatList,
   ActivityIndicator,
   ScrollView,
-  SafeAreaView,
   RefreshControl,
   Animated,
 } from 'react-native';
@@ -214,16 +213,15 @@ export default function TransactionsScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar style="light" />
-      <SafeAreaView style={{ flex: 0, backgroundColor: '#000' }} />
       
       {}
-      <View style={[styles.header, { paddingTop: insets.top + vs(10) }]}>
+      <View style={[styles.header, {}]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={28} color="#fff" />
+          <Ionicons name="chevron-back" size={wp(6)} color="#fff" />
+          <Text style={styles.headerTitle}>Transactions</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Transactions</Text>
         {userRole !== 'LISTENER' && (
           <View style={styles.balanceBadge}>
             <Text style={{ fontSize: 14 }}>🪙</Text>
@@ -291,19 +289,20 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: wp(5),
-    paddingBottom: vs(15),
+    justifyContent: 'space-between',
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(2),
     backgroundColor: '#000',
   },
   backBtn: {
-    padding: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: wp(2),
   },
   headerTitle: {
-    fontSize: ms(20),
-    fontFamily: 'Inter_700Bold',
+    fontSize: wp(5.5),
     color: '#fff',
-    marginLeft: wp(4),
-    flex: 1,
+    fontWeight: '600',
   },
   balanceBadge: {
     flexDirection: 'row',

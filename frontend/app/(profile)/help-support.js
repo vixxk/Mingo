@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
-import { ms, s, vs, SCREEN_HEIGHT } from '../../utils/responsive';
+import { ms, s, vs, wp, hp, SCREEN_HEIGHT, SCREEN_WIDTH } from '../../utils/responsive';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -53,6 +53,23 @@ const FAQ_DATA = [
   },
 ];
 
+const CategoryCard = ({ icon, iconBg, title, subtitle, onPress }) => (
+  <TouchableOpacity
+    style={styles.categoryCard}
+    activeOpacity={0.7}
+    onPress={onPress}
+  >
+    <View style={styles.categoryIcon}>
+      <Ionicons name={icon} size={wp(5.5)} color={iconBg} />
+    </View>
+    <View style={styles.categoryTextContainer}>
+      <Text style={styles.categoryTitle}>{title}</Text>
+      <Text style={styles.categorySubtitle}>{subtitle}</Text>
+    </View>
+    <Ionicons name="chevron-forward" size={wp(5)} color="#6B7280" />
+  </TouchableOpacity>
+);
+
 const FAQItem = ({ item, isOpen, onToggle }) => (
   <View style={styles.faqItem}>
     <TouchableOpacity
@@ -64,7 +81,7 @@ const FAQItem = ({ item, isOpen, onToggle }) => (
       <View style={styles.faqToggle}>
         <Ionicons
           name={isOpen ? 'close' : 'add'}
-          size={20}
+          size={wp(4.5)}
           color="#000"
         />
       </View>
@@ -86,7 +103,7 @@ export default function HelpSupportScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar style="light" />
 
       <LinearGradient
@@ -95,17 +112,16 @@ export default function HelpSupportScreen() {
         style={styles.bgGradient}
       />
 
-      {}
-      <View style={[styles.header, { paddingTop: insets.top + vs(8) }]}>
+      {/* Header */}
+      <View style={styles.header}>
         <TouchableOpacity
           style={styles.backBtn}
           onPress={() => router.back()}
           activeOpacity={0.7}
         >
-          <Ionicons name="chevron-back" size={22} color="#fff" />
+          <Ionicons name="chevron-back" size={wp(5.5)} color="#fff" />
+          <Text style={styles.headerTitle}>Help & Support</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Help & Support</Text>
-        <View style={{ width: 22 }} />
       </View>
 
       <ScrollView
@@ -113,15 +129,46 @@ export default function HelpSupportScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {FAQ_DATA.map((item) => (
-          <FAQItem
-            key={item.id}
-            item={item}
-            isOpen={openId === item.id}
-            onToggle={() => toggleFAQ(item.id)}
+        {/* Select by Category Section */}
+        <Text style={styles.sectionTitle}>Select by Category</Text>
+        
+        <View style={styles.categoryContainer}>
+          <CategoryCard
+            icon="call-outline"
+            iconBg="#2563EB"
+            title="Recent Sessions"
+            subtitle="Regarding Audio and Video calls"
+            onPress={() => router.push('/(profile)/recent-sessions')}
           />
-        ))}
-        <View style={{ height: vs(60) }} />
+          <CategoryCard
+            icon="wallet-outline"
+            iconBg="#8B5CF6"
+            title="Recent Payments"
+            subtitle="Regarding Wallet and Payments"
+            onPress={() => router.push('/(profile)/recent-payments')}
+          />
+        </View>
+
+        {/* Quick Help Section */}
+        <View style={styles.quickHelpHeader}>
+          <Text style={styles.sectionTitle}>Quick Help</Text>
+          <TouchableOpacity style={styles.viewAllBtn} activeOpacity={0.7} onPress={() => router.push('/(profile)/quick-help')}>
+            <Text style={styles.viewAllText}>View all</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.quickHelpContainer}>
+          {FAQ_DATA.slice(0, 3).map((item) => (
+            <FAQItem
+              key={item.id}
+              item={item}
+              isOpen={openId === item.id}
+              onToggle={() => toggleFAQ(item.id)}
+            />
+          ))}
+        </View>
+
+        <View style={{ height: hp(8) }} />
       </ScrollView>
     </View>
   );
@@ -137,42 +184,104 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: SCREEN_HEIGHT * 0.45,
+    height: hp(45),
   },
 
-  
+  /* Header */
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: s(16),
-    paddingBottom: vs(12),
+    justifyContent: 'space-between',
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(2),
   },
   backBtn: {
-    marginRight: s(8),
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: wp(2),
   },
   headerTitle: {
-    flex: 1,
-    fontSize: ms(16, 0.3),
+    fontSize: wp(5.5),
     color: '#fff',
-    fontFamily: 'Inter_500Medium',
+    fontWeight: '600',
   },
 
-  
+  /* Scroll */
   scroll: {
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: s(16),
-    paddingTop: vs(8),
-    gap: vs(12),
+    paddingHorizontal: wp(4),
+    paddingTop: hp(1),
   },
 
-  
+  /* Section Title */
+  sectionTitle: {
+    fontSize: ms(15, 0.3),
+    color: '#fff',
+    fontFamily: 'Inter_700Bold',
+    marginBottom: hp(1.5),
+  },
+
+  /* Category Cards */
+  categoryContainer: {
+    gap: hp(1.2),
+    marginBottom: hp(3),
+  },
+  categoryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#141414',
+    borderRadius: wp(4),
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1.8),
+    borderWidth: 1,
+    borderColor: '#1F1F1F',
+  },
+  categoryIcon: {
+    marginRight: wp(3),
+  },
+  categoryTextContainer: {
+    flex: 1,
+  },
+  categoryTitle: {
+    fontSize: ms(15, 0.3),
+    color: '#fff',
+    fontFamily: 'Inter_600SemiBold',
+    marginBottom: hp(0.3),
+  },
+  categorySubtitle: {
+    fontSize: ms(12, 0.3),
+    color: '#9CA3AF',
+    fontFamily: 'Inter_400Regular',
+  },
+
+  /* Quick Help */
+  quickHelpHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: hp(1.5),
+  },
+  viewAllText: {
+    fontSize: ms(13, 0.3),
+    color: '#EF4444',
+    fontFamily: 'Inter_600SemiBold',
+    lineHeight: ms(15, 0.3),
+  },
+  viewAllBtn: {
+    alignSelf: 'center',
+  },
+  quickHelpContainer: {
+    gap: hp(1.2),
+  },
+
+  /* FAQ Items */
   faqItem: {
     backgroundColor: '#141414',
-    borderRadius: 16,
-    paddingHorizontal: s(18),
-    paddingVertical: vs(16),
+    borderRadius: wp(4),
+    paddingHorizontal: wp(4.5),
+    paddingVertical: hp(1.8),
     borderWidth: 1,
     borderColor: '#1F1F1F',
   },
@@ -183,17 +292,17 @@ const styles = StyleSheet.create({
   },
   faqQuestion: {
     flex: 1,
-    fontSize: ms(15, 0.3),
+    fontSize: ms(14, 0.3),
     color: '#fff',
     fontWeight: '700',
     fontFamily: 'Inter_700Bold',
-    lineHeight: ms(22),
-    marginRight: s(12),
+    lineHeight: ms(20),
+    marginRight: wp(3),
   },
   faqToggle: {
-    width: s(32),
-    height: s(32),
-    borderRadius: s(16),
+    width: wp(8),
+    height: wp(8),
+    borderRadius: wp(4),
     backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
@@ -203,6 +312,6 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     fontFamily: 'Inter_400Regular',
     lineHeight: ms(19),
-    marginTop: vs(12),
+    marginTop: hp(1.5),
   },
 });

@@ -99,6 +99,22 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    billingAddress: {
+      type: String,
+      default: '',
+      trim: true,
+      maxlength: 500,
+    },
+    // ── Chat safety: anti-abuse escalation ───────────────────
+    abuseViolations: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    abuseLockedUntil: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

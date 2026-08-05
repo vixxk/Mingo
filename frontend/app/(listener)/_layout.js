@@ -42,10 +42,11 @@ export default function ListenerLayout() {
     
     const { callerId, callerName, callType, callId, roomId, avatarIndex, gender } = acceptedCall;
     
+    let session;
     try {
       // Validate that the session is still active
       const sessionRes = await callAPI.getSession(callId);
-      const session = sessionRes?.data;
+      session = sessionRes?.data;
       if (!session || session.status === 'cancelled' || session.status === 'completed') {
         Alert.alert('Call Cancelled', 'This call has been cancelled by the user.', [{ text: 'OK' }]);
         setIncomingCalls(prev => prev.filter(c => c.callId !== callId));
@@ -96,7 +97,10 @@ export default function ListenerLayout() {
         avatarIndex,
         gender,
         callType,
-        isIncoming: 'true'
+        isIncoming: 'true',
+        // Session-scoped Zego credentials — both sides must join the same app
+        ...(session?.zegoAppId ? { zegoAppId: String(session.zegoAppId) } : {}),
+        ...(session?.zegoAppSign ? { zegoAppSign: String(session.zegoAppSign) } : {}),
       }
     });
   };
@@ -239,6 +243,9 @@ export default function ListenerLayout() {
                 gender: session.userId?.gender || 'Female',
                 callType: session.callType,
                 isIncoming: 'true',
+                // getActiveSession response carries the session's Zego creds
+                ...(session.zegoAppId ? { zegoAppId: String(session.zegoAppId) } : {}),
+                ...(session.zegoAppSign ? { zegoAppSign: String(session.zegoAppSign) } : {}),
               }
             });
           }

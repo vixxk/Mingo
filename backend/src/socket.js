@@ -10,6 +10,12 @@ const config = require('./config/env');
 const { redis, REDIS_KEYS } = require('./config/redis');
 const PushService = require('./services/pushService');
 const CallService = require('./services/callService');
+const { analyzeMessage } = require('./utils/contactSafety');
+const { analyzeAbuse } = require('./utils/abusiveLanguage');
+
+// Chat anti-abuse escalation thresholds
+const ABUSE_LOCK_THRESHOLD = 5;      // violations before a temporary 24h chat lock
+const ABUSE_LOCK_DURATION_MS = 24 * 60 * 60 * 1000;
 
 let io;
 
@@ -152,6 +158,16 @@ const initSocket = (server) => {
           return;
         }
 
+        // ─── TEMPORARY CHAT RESTRICTION (anti-abuse escalation) ───
+        // Repeated abusive messages lock chat sending for 24 hours.
+        if (sender.abuseLockedUntil && new Date(sender.abuseLockedUntil) > new Date()) {
+          socket.emit('message_error', {
+            type: 'chat_restricted',
+            error: 'Your chat access is temporarily restricted due to repeated abusive messages.',
+          });
+          return;
+        }
+
         // Prevent listener from sending messages if they are offline
         if (sender.role === 'LISTENER') {
           const listener = await Listener.findOne({ userId: senderId });
@@ -176,23 +192,109 @@ const initSocket = (server) => {
           }
         }
 
+        // ─── CONTACT-SHARING SAFETY BLOCK ──────────────────────
+        // Phone numbers can never be delivered — for BOTH users and
+        // listeners. Blocks even from modified clients; the UI shows a
+        // system message + the sender gets a dedicated event.
+        const isTextLike = !type || type === 'text';
+        if (isTextLike && typeof content === 'string' && content.trim()) {
+          const safety = analyzeMessage(content);
+          if (safety.hasPhone) {
+            console.log(`[Socket] Blocked contact sharing in conv ${conversationId} from ${senderId}`);
+            socket.emit('contact_share_blocked', {
+              conversationId,
+              content,
+              phoneNumbers: safety.phoneNumbers,
+              maskedNumber: safety.phoneNumbers.length ? safety.phoneNumbers[0].replace(/\d/g, '•') : null,
+              hasContactIntent: safety.hasContactIntent,
+            });
+            const blockedMsg = new Message({
+              conversationId,
+              sender: null,
+              senderModel: 'System',
+              content: 'Contact information sharing was blocked for safety.',
+              type: 'system',
+            });
+            await blockedMsg.save();
+            await Conversation.findByIdAndUpdate(conversationId, { lastMessage: blockedMsg._id });
+            io.to(conversationId).emit('receive_message', blockedMsg);
+            return;
+          }
+        }
+
+        // ─── ANTI-ABUSE BLOCK ──────────────────────────────────
+        // Abusive / offensive messages are never delivered — for BOTH users
+        // and listeners. The sender is asked to edit the message, and repeat
+        // SEVERE violations escalate to a temporary chat restriction.
+        // Mild words are also blocked from delivery but never count toward
+        // the lock, so a playful slip can't trigger a 24h ban.
+        if (isTextLike && typeof content === 'string' && content.trim()) {
+          const abuse = analyzeAbuse(content);
+          if (abuse.hasAbuse) {
+            const isSevere = abuse.severity === 'severe';
+            console.log(`[Socket] Blocked ${isSevere ? 'abusive' : 'disrespectful'} message in conv ${conversationId} from ${senderId}`);
+
+            let violationCount = sender.abuseViolations || 0;
+            let restriction = null;
+            if (isSevere) {
+              violationCount += 1;
+              sender.abuseViolations = violationCount;
+              if (violationCount >= ABUSE_LOCK_THRESHOLD && !sender.abuseLockedUntil) {
+                sender.abuseLockedUntil = new Date(Date.now() + ABUSE_LOCK_DURATION_MS);
+                restriction = sender.abuseLockedUntil;
+              }
+              await sender.save();
+            }
+
+            socket.emit('abusive_message_blocked', {
+              conversationId,
+              content,
+              matched: abuse.matched,
+              severity: abuse.severity,
+              violations: violationCount,
+            });
+
+            const blockedMsg = new Message({
+              conversationId,
+              sender: null,
+              senderModel: 'System',
+              content: restriction
+                ? 'Your chat access has been temporarily restricted for 24 hours due to repeated abusive messages.'
+                : (isSevere
+                    ? 'Please keep conversations respectful. Abusive language is not allowed.'
+                    : 'Please keep the conversation respectful and friendly.'),
+              type: 'system',
+            });
+            await blockedMsg.save();
+            await Conversation.findByIdAndUpdate(conversationId, { lastMessage: blockedMsg._id });
+            io.to(conversationId).emit('receive_message', blockedMsg);
+
+            if (restriction) {
+              io.to(`user_${senderId}`).emit('chat_restricted', {
+                conversationId,
+                lockedUntil: restriction,
+              });
+            }
+            return;
+          }
+        }
+
         // Determine if the sender is the USER (not the listener)
         const isUserRole = sender.role === 'USER';
 
-        // --- FREE FIRST MESSAGE LOGIC ---
-        // Check if this user has used their free message in this conversation
-        const freeUsed = conversation.freeMessageUsed
-          ? conversation.freeMessageUsed.get(senderId)
-          : false;
+        // --- FREE MESSAGE LOGIC (the user's first TWO messages are free) ---
+        // Count the user's earlier messages in this conversation to decide
+        // whether this message is still inside the free window.
+        let userMessageCount = 0;
+        if (isUserRole) {
+          userMessageCount = await Message.countDocuments({
+            conversationId,
+            sender: senderId,
+            senderModel: 'User',
+          });
+        }
 
-        if (isUserRole && !freeUsed) {
-          // This is the user's free first message — allow it
-          if (!conversation.freeMessageUsed) {
-            conversation.freeMessageUsed = new Map();
-          }
-          conversation.freeMessageUsed.set(senderId, true);
-          await conversation.save();
-
+        if (isUserRole && userMessageCount < 2) {
           // Save and send the message
           console.log(`[Socket] Saving FREE message in conv ${conversationId} from ${senderId}`);
           const message = new Message({
@@ -265,10 +367,15 @@ const initSocket = (server) => {
               });
             }
           }
+
+          // The chat session (and its timer) starts after the user's SECOND message.
+          if (userMessageCount === 1) {
+            await startChatSession(conversation, senderId);
+          }
           return;
         }
 
-        // --- BALANCE CHECK (after free message used) ---
+        // --- BALANCE CHECK (after free messages used) ---
         if (isUserRole) {
           // Check if there's an active chat session
           const hasActiveSession = conversation.chatSession && conversation.chatSession.active;
@@ -300,8 +407,8 @@ const initSocket = (server) => {
               }).catch(err => console.error('[Chat] Insufficient-balance push failed:', err.message));
               return;
             }
-            // User has balance but session not started yet — save message, 
-            // session will start when listener replies (handled in listener's reply flow below)
+            // User has balance but no session is active — save the message,
+            // then start the session below (the user's message initiates it).
           }
         }
 
@@ -403,99 +510,16 @@ const initSocket = (server) => {
           }
         }
 
-        // --- TIMED SESSION START ---
-        // If this message is from the LISTENER (reply to user), start the timed session
-        const isListenerRole = sender.role === 'LISTENER';
-        if (isListenerRole) {
+        // --- SESSION START (user-initiated) ---
+        // A chat session (and its timer) is started by the user's message when
+        // no session is active — the user's second message in a fresh
+        // conversation, or any message that restarts a finished session.
+        // Listener replies never start billing on their own.
+        if (isUserRole) {
           const sessionData = conversation.chatSession;
           const needsNewSession = !sessionData || !sessionData.active;
-          
           if (needsNewSession) {
-            // Find the user participant to deduct from
-            const userParticipantId = conversation.participants.find(
-              (p) => p.toString() !== senderId
-            );
-
-            if (userParticipantId) {
-              const userParticipant = await User.findById(userParticipantId);
-              
-              if (userParticipant && userParticipant.coins >= CHAT_COINS_PER_SESSION) {
-                // Deduct coins for the first 5-minute block
-                userParticipant.coins -= CHAT_COINS_PER_SESSION;
-                await userParticipant.save();
-
-                // Mark session active
-                const Session = require('./models/sessionModel');
-                const { v4: uuidv4 } = require('uuid');
-                let chatSessionDoc = null;
-                try {
-                  chatSessionDoc = await Session.create({
-                    userId: userParticipantId,
-                    listenerId: senderId,
-                    roomId: `chat_${uuidv4()}`,
-                    callType: 'chat',
-                    startTime: new Date(),
-                    status: 'active',
-                    coinsDeducted: CHAT_COINS_PER_SESSION,
-                    listenerEarnings: 0,
-                  });
-                } catch (sessErr) {
-                  console.error('Error creating chat Session document:', sessErr);
-                }
-
-                // Record transaction
-                await Transaction.create({
-                  userId: userParticipantId,
-                  type: 'call_debit',
-                  amount: 0,
-                  coins: -CHAT_COINS_PER_SESSION,
-                  description: 'Chat session - 5 min block',
-                  status: 'completed',
-                  metadata: { sessionId: chatSessionDoc ? chatSessionDoc._id : null },
-                });
-
-                conversation.chatSession = {
-                  active: true,
-                  startedBy: userParticipantId,
-                  startTime: new Date(),
-                  lastDeductionTime: new Date(),
-                  totalCoinsDeducted: CHAT_COINS_PER_SESSION,
-                  sessionId: chatSessionDoc ? chatSessionDoc._id : null,
-                };
-                await conversation.save();
-
-                // Increment listener's chat/session counters, but do NOT credit earnings yet
-                const listenerProfile = await Listener.findOne({ userId: senderId });
-                if (listenerProfile) {
-                  listenerProfile.totalChats = (listenerProfile.totalChats || 0) + 1;
-                  listenerProfile.todayChats = (listenerProfile.todayChats || 0) + 1;
-                  listenerProfile.totalSessions = (listenerProfile.totalSessions || 0) + 1;
-                  await listenerProfile.save();
-                }
-
-                 // Notify user of balance update
-                 io.to(`user_${userParticipantId}`).emit('balance_updated', {
-                   coins: userParticipant.coins,
-                   deducted: CHAT_COINS_PER_SESSION,
-                   reason: 'chat_session_start',
-                 });
-
-                 // Emit chat_session_started to both participants
-                 io.to(conversationId).emit('chat_session_started', {
-                   conversationId,
-                   chatSession: conversation.chatSession,
-                 });
-                 conversation.participants.forEach(p => {
-                   io.to(`user_${p}`).emit('chat_session_started', {
-                     conversationId,
-                     chatSession: conversation.chatSession,
-                   });
-                 });
- 
-                 // Start a timer for the next 5-minute block
-                 startChatSessionTimer(conversationId, userParticipantId.toString());
-              }
-            }
+            await startChatSession(conversation, senderId);
           }
         }
 
@@ -896,6 +920,112 @@ const initSocket = (server) => {
     });
   });
 };
+
+/**
+ * Start a paid chat session (first 5-minute block) for a conversation.
+ * Deducts the first block from the user, marks the session active, emits
+ * chat_session_started, and starts the recurring renewal timer.
+ * Returns the new chatSession object, or null if the user can't afford it.
+ */
+async function startChatSession(conversation, userParticipantId) {
+  const conversationId = conversation._id.toString();
+
+  // Guard against a concurrent message starting a second session: re-check the
+  // persisted state in case another in-flight request already activated it.
+  const freshConversation = await Conversation.findById(conversation._id);
+  if (freshConversation && freshConversation.chatSession && freshConversation.chatSession.active) {
+    return null;
+  }
+
+  const listenerUserId = conversation.participants.find(
+    (p) => p.toString() !== userParticipantId.toString()
+  );
+  if (!listenerUserId) return null;
+
+  const userParticipant = await User.findById(userParticipantId);
+  if (!userParticipant || userParticipant.coins < CHAT_COINS_PER_SESSION) {
+    return null;
+  }
+
+  // Deduct coins for the first 5-minute block
+  userParticipant.coins -= CHAT_COINS_PER_SESSION;
+  await userParticipant.save();
+
+  // Create the chat Session document
+  const Session = require('./models/sessionModel');
+  const { v4: uuidv4 } = require('uuid');
+  let chatSessionDoc = null;
+  try {
+    chatSessionDoc = await Session.create({
+      userId: userParticipantId,
+      listenerId: listenerUserId,
+      roomId: `chat_${uuidv4()}`,
+      callType: 'chat',
+      startTime: new Date(),
+      status: 'active',
+      coinsDeducted: CHAT_COINS_PER_SESSION,
+      listenerEarnings: 0,
+    });
+  } catch (sessErr) {
+    console.error('Error creating chat Session document:', sessErr);
+  }
+
+  // Record transaction
+  await Transaction.create({
+    userId: userParticipantId,
+    type: 'call_debit',
+    amount: 0,
+    coins: -CHAT_COINS_PER_SESSION,
+    description: 'Chat session - 5 min block',
+    status: 'completed',
+    metadata: { sessionId: chatSessionDoc ? chatSessionDoc._id : null },
+  });
+
+  conversation.chatSession = {
+    active: true,
+    startedBy: userParticipantId,
+    startTime: new Date(),
+    lastDeductionTime: new Date(),
+    totalCoinsDeducted: CHAT_COINS_PER_SESSION,
+    sessionId: chatSessionDoc ? chatSessionDoc._id : null,
+  };
+  await conversation.save();
+
+  // Increment listener's chat/session counters, but do NOT credit earnings yet
+  const listenerProfile = await Listener.findOne({ userId: listenerUserId });
+  if (listenerProfile) {
+    listenerProfile.totalChats = (listenerProfile.totalChats || 0) + 1;
+    listenerProfile.todayChats = (listenerProfile.todayChats || 0) + 1;
+    listenerProfile.totalSessions = (listenerProfile.totalSessions || 0) + 1;
+    await listenerProfile.save();
+  }
+
+  // Notify user of balance update
+  if (io) {
+    io.to(`user_${userParticipantId}`).emit('balance_updated', {
+      coins: userParticipant.coins,
+      deducted: CHAT_COINS_PER_SESSION,
+      reason: 'chat_session_start',
+    });
+
+    // Emit chat_session_started to both participants
+    io.to(conversationId).emit('chat_session_started', {
+      conversationId,
+      chatSession: conversation.chatSession,
+    });
+    conversation.participants.forEach(p => {
+      io.to(`user_${p}`).emit('chat_session_started', {
+        conversationId,
+        chatSession: conversation.chatSession,
+      });
+    });
+
+    // Start a timer for the next 5-minute block
+    startChatSessionTimer(conversationId, userParticipantId.toString());
+  }
+
+  return conversation.chatSession;
+}
 
 /**
  * Start a recurring timer that deducts coins every 5 minutes for an active chat session.

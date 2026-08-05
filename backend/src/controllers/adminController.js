@@ -10,6 +10,8 @@ const PayoutRequest = require('../models/PayoutRequest');
 const ApiResponse = require('../utils/apiResponse');
 const AppError = require('../utils/appError');
 const Notification = require('../models/Notification');
+const Conversation = require('../models/conversationModel');
+const Message = require('../models/messageModel');
 const { 
   sendListenerApprovalNotification, 
   sendListenerRejectionNotification, 
@@ -17,7 +19,7 @@ const {
 } = require('../../utils/notifications');
 
 class AdminController {
-static async getStats(req, res, next) {
+  static async getStats(req, res, next) {
     try {
       const { timeline = 7 } = req.query;
       const days = parseInt(timeline) || 7;
@@ -1777,6 +1779,150 @@ static async resetCoinPackages(req, res, next) {
       next(err);
     }
   }
-}
 
-module.exports = AdminController;
+  /**
+   * GET /admin/chat-logs
+   * Returns all chat conversations with their messages for admin review.
+   * Admin views from listener's POV - can scroll through all messages.
+   */
+  static async getChatLogs(req, res, next) {
+    try {
+      const { conversationId, search, userId, listenerId, startDate, endDate, page = 1, limit = 50 } = req.query;
+      const filter = {};
+      const and = [];
+
+      if (conversationId) {
+        filter._id = conversationId;
+      }
+
+      // Name / username / phone search — only return conversations that include
+      // a matching participant.
+      if (search) {
+        const matchingUsers = await User.find({
+          $or: [
+            { name: { $regex: search, $options: 'i' } },
+            { username: { $regex: search, $options: 'i' } },
+            { phone: { $regex: search, $options: 'i' } },
+          ],
+        }).select('_id');
+        const matchingIds = matchingUsers.map(u => u._id);
+        if (matchingIds.length === 0) {
+          return ApiResponse.success(res, {
+            conversations: [],
+            total: 0,
+            page: parseInt(page),
+            limit: parseInt(limit),
+          }, 'Chat logs retrieved');
+        }
+        and.push({ participants: { $in: matchingIds } });
+      }
+
+      // Participant filters — use $all when both sides are specified so only
+      // conversations containing BOTH participants are matched.
+      if (userId && listenerId) {
+        and.push({ participants: { $all: [userId, listenerId] } });
+      } else if (userId) {
+        and.push({ participants: { $in: [userId] } });
+      } else if (listenerId) {
+        and.push({ participants: { $in: [listenerId] } });
+      }
+
+      if (and.length > 0) {
+        filter.$and = and;
+      }
+
+      if (startDate || endDate) {
+        filter.createdAt = {};
+        if (startDate) filter.createdAt.$gte = new Date(startDate);
+        if (endDate) filter.createdAt.$lte = new Date(endDate);
+      }
+
+      const conversations = await Conversation.find(filter)
+        .populate('participants', 'name username avatarIndex gender role')
+        .sort({ updatedAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(parseInt(limit));
+
+      const total = await Conversation.countDocuments(filter);
+
+      const result = await Promise.all(conversations.map(async (conv) => {
+        const messages = await Message.find({ conversationId: conv._id })
+          .sort({ createdAt: 1 })
+          .populate('sender', 'name username')
+          .select('sender senderModel content type mediaUrl giftCount isAdminMessage createdAt');
+
+        // A conversation is a "Mingo Support" thread when any participant is an admin.
+        const adminParticipant = conv.participants.find(p => p && (p.role === 'ADMIN' || String(p.role || '').endsWith('_ADMIN')));
+        const isAdminConv = !!adminParticipant;
+
+        const populatedParticipants = (conv.participants || []).filter(Boolean);
+
+        // From the listener's point of view the "other" participant is the caller
+        // (the USER). For support threads it's whoever sits opposite the admin.
+        const otherParticipant = adminParticipant
+          ? populatedParticipants.find(p => p._id.toString() !== adminParticipant._id.toString()) || null
+          : populatedParticipants.find(p => p.role === 'USER') || populatedParticipants[0] || null;
+
+        const sessionInfo = conv.chatSession ? {
+          active: conv.chatSession.active,
+          startTime: conv.chatSession.startTime,
+          totalCoinsDeducted: conv.chatSession.totalCoinsDeducted,
+          sessionId: conv.chatSession.sessionId,
+        } : null;
+
+        // Last-message preview — messages are sorted oldest-first so the newest
+        // one is the final entry. Fall back to the raw reference only if empty.
+        const lastMessage = messages.length > 0 ? messages[messages.length - 1] : conv.lastMessage;
+
+        return {
+          id: conv._id,
+          participants: populatedParticipants.map(p => ({
+            id: p._id,
+            name: p.name || p.username || 'Unknown',
+            avatarIndex: p.avatarIndex || 0,
+            gender: p.gender,
+            role: p.role,
+          })),
+          otherParticipant: otherParticipant ? {
+            id: otherParticipant._id,
+            name: otherParticipant.name || otherParticipant.username || 'Unknown',
+            avatarIndex: otherParticipant.avatarIndex || 0,
+            gender: otherParticipant.gender,
+            role: otherParticipant.role,
+          } : null,
+          isAdminConversation: isAdminConv,
+          messages: messages.map(msg => ({
+            id: msg._id,
+            sender: msg.sender ? {
+              id: msg.sender._id || msg.sender,
+              name: msg.sender.name || msg.sender.username || 'Unknown',
+            } : null,
+            senderModel: msg.senderModel,
+            content: msg.content,
+            type: msg.type,
+            mediaUrl: msg.mediaUrl,
+            giftCount: msg.giftCount || 1,
+            isAdminMessage: msg.isAdminMessage || false,
+            createdAt: msg.createdAt,
+          })),
+          messageCount: messages.length,
+          session: sessionInfo,
+          lastMessage,
+          createdAt: conv.createdAt,
+          updatedAt: conv.updatedAt,
+        };
+      }));
+
+      return ApiResponse.success(res, {
+        conversations: result,
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+      }, 'Chat logs retrieved');
+    } catch (err) {
+      next(err);
+    }
+  }
+ }
+
+ module.exports = AdminController;

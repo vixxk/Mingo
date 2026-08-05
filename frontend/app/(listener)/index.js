@@ -290,6 +290,14 @@ export default function ListenerHomeScreen() {
           setChatEnabled(profileRes.data.chatEnabled !== false);
         }
 
+        // Ledger-reconciled earnings (always matches the transaction history)
+        try {
+          const statsRes = await listenerAPI.getEarningsStats();
+          if (statsRes?.data) setEarningsStats(statsRes.data);
+        } catch (statsErr) {
+          console.log('Error fetching earnings stats:', statsErr);
+        }
+
         const balRes = await walletAPI.getBalance();
         if (balRes?.data) setBalance(balRes.data.coins);
       }
@@ -338,6 +346,8 @@ export default function ListenerHomeScreen() {
   const [totalCalls, setTotalCalls] = useState({ audio: 0, video: 0 });
   const [totalChats, setTotalChats] = useState(0);
   const [balance, setBalance] = useState(0);
+  // Ledger-backed earnings stats (reconciled against transaction history)
+  const [earningsStats, setEarningsStats] = useState(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -384,6 +394,14 @@ export default function ListenerHomeScreen() {
               setAudioEnabled(profileRes.data.audioEnabled !== false);
               setVideoEnabled(profileRes.data.videoEnabled === true);
               setChatEnabled(profileRes.data.chatEnabled !== false);
+            }
+
+            // Ledger-reconciled earnings (always matches the transaction history)
+            try {
+              const statsRes = await listenerAPI.getEarningsStats();
+              if (statsRes?.data) setEarningsStats(statsRes.data);
+            } catch (statsErr) {
+              console.log('Error fetching earnings stats:', statsErr);
             }
 
             const balRes = await walletAPI.getBalance();
@@ -703,12 +721,47 @@ export default function ListenerHomeScreen() {
 
         {}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Total Earnings</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={[styles.cardTitle, { marginBottom: 0 }]}>Total Earnings</Text>
+            {earningsStats && (
+              <View style={[styles.syncBadge, earningsStats.synced ? styles.syncBadgeOk : styles.syncBadgeWarn]}>
+                <Ionicons
+                  name={earningsStats.synced ? 'checkmark-circle' : 'warning'}
+                  size={13}
+                  color={earningsStats.synced ? '#22C55E' : '#F59E0B'}
+                />
+                <Text style={[styles.syncBadgeText, { color: earningsStats.synced ? '#22C55E' : '#F59E0B' }]}>
+                  {earningsStats.synced ? 'Ledger synced' : 'Mismatch — showing ledger'}
+                </Text>
+              </View>
+            )}
+          </View>
 
           {}
-          <View style={styles.earningsRow}>
+          <View style={[styles.earningsRow, { marginTop: vs(8) }]}>
             <Text style={styles.earningsLabel}>Estimated Earnings</Text>
-            <Text style={styles.earningsValue}>₹{earnings}</Text>
+            <Text style={styles.earningsValue}>₹{earningsStats ? earningsStats.totalEarnings : earnings}</Text>
+          </View>
+
+          {}
+          <View style={styles.cardDivider} />
+
+          {}
+          <View style={styles.breakdownRow}>
+            <Text style={styles.breakdownLabel}><Ionicons name="mic" size={12} color="#22C55E" />  Audio</Text>
+            <Text style={styles.breakdownValue}>₹{earningsStats ? earningsStats.breakdown.audio : 0}</Text>
+          </View>
+          <View style={styles.breakdownRow}>
+            <Text style={styles.breakdownLabel}><Ionicons name="videocam" size={12} color="#3B82F6" />  Video</Text>
+            <Text style={styles.breakdownValue}>₹{earningsStats ? earningsStats.breakdown.video : 0}</Text>
+          </View>
+          <View style={styles.breakdownRow}>
+            <Text style={styles.breakdownLabel}><Ionicons name="chatbubble" size={12} color="#EC4899" />  Chat</Text>
+            <Text style={styles.breakdownValue}>₹{earningsStats ? earningsStats.breakdown.chat : 0}</Text>
+          </View>
+          <View style={styles.breakdownRow}>
+            <Text style={styles.breakdownLabel}><Ionicons name="heart" size={12} color="#EF4444" />  Gifts</Text>
+            <Text style={styles.breakdownValue}>₹{earningsStats ? earningsStats.breakdown.gifts : 0}</Text>
           </View>
 
           {}
@@ -717,14 +770,14 @@ export default function ListenerHomeScreen() {
           {}
           <View style={styles.earningsRow}>
             <Text style={styles.earningsLabel}>Total Calls</Text>
-            <Text style={styles.earningsCallsValue}>{String(totalCalls.audio).padStart(2, '0')} Audio  •  {String(totalCalls.video).padStart(2, '0')} Video</Text>
+            <Text style={styles.earningsCallsValue}>{String(earningsStats ? earningsStats.audioCalls : totalCalls.audio).padStart(2, '0')} Audio  •  {String(earningsStats ? earningsStats.videoCalls : totalCalls.video).padStart(2, '0')} Video</Text>
           </View>
 
           <View style={styles.cardDivider} />
 
           <View style={styles.earningsRow}>
             <Text style={styles.earningsLabel}>Total Chats</Text>
-            <Text style={styles.earningsCallsValue}>{String(totalChats).padStart(2, '0')} Chats</Text>
+            <Text style={styles.earningsCallsValue}>{String(earningsStats ? earningsStats.totalChats : totalChats).padStart(2, '0')} Chats</Text>
           </View>
         </View>
       </ScrollView>
@@ -1087,6 +1140,45 @@ const styles = StyleSheet.create({
     fontSize: ms(14, 0.3),
     color: '#E5E7EB',
     fontFamily: 'Inter_500Medium',
+  },
+
+  // Ledger reconciliation UI
+  syncBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: s(8),
+    paddingVertical: vs(3),
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  syncBadgeOk: {
+    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+    borderColor: 'rgba(34, 197, 94, 0.3)',
+  },
+  syncBadgeWarn: {
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+  },
+  syncBadgeText: {
+    fontSize: ms(10, 0.3),
+    fontFamily: 'Inter_700Bold',
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: vs(4),
+  },
+  breakdownLabel: {
+    fontSize: ms(13, 0.3),
+    color: '#9CA3AF',
+    fontFamily: 'Inter_500Medium',
+  },
+  breakdownValue: {
+    fontSize: ms(13, 0.3),
+    color: '#E5E7EB',
+    fontFamily: 'Inter_700Bold',
   },
 
   // FAB & Random Styles

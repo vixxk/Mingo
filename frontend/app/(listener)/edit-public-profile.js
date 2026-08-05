@@ -1,14 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity,
-  Dimensions, Alert, Image, ActivityIndicator, Platform, RefreshControl,
+  Dimensions, Alert, ActivityIndicator, Platform, RefreshControl,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Skeleton } from '../../components/admin/Skeleton';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as ImagePicker from 'expo-image-picker';
 import { listenerAPI } from '../../utils/api';
 import StatusPopup from '../../components/shared/StatusPopup';
 
@@ -49,9 +48,6 @@ export default function EditPublicProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [uploadingProfile, setUploadingProfile] = useState(false);
-  const [uploadingCover, setUploadingCover] = useState(false);
-  const [uploadingGallery, setUploadingGallery] = useState(false);
 
   // Popup state
   const [popup, setPopup] = useState({
@@ -79,9 +75,6 @@ export default function EditPublicProfileScreen() {
   const [aboutMe, setAboutMe] = useState('');
   const [selectedTags, setSelectedTags] = useState([]);
   const [selectedLanguages, setSelectedLanguages] = useState(['English']);
-  const [profileImage, setProfileImage] = useState(null);
-  const [coverImage, setCoverImage] = useState(null);
-  const [galleryImages, setGalleryImages] = useState([]);
   const [displayName, setDisplayName] = useState('');
   const originalRef = useRef(null);
 
@@ -93,9 +86,6 @@ export default function EditPublicProfileScreen() {
       || o.displayName !== displayName
       || !arraysEqualIgnoringOrder(o.selectedTags, selectedTags)
       || !arraysEqualIgnoringOrder(o.selectedLanguages, selectedLanguages)
-      || o.profileImage !== profileImage
-      || o.coverImage !== coverImage
-      || !arraysEqualIgnoringOrder(o.galleryImages, galleryImages)
   })()
 
   useFocusEffect(
@@ -117,18 +107,12 @@ export default function EditPublicProfileScreen() {
       setAboutMe(src.aboutMe || '');
       setSelectedTags(src.expertiseTags || []);
       setSelectedLanguages(src.languages?.length ? src.languages : ['English']);
-      setProfileImage(src.profileImage || null);
-      setCoverImage(src.coverImage || null);
-      setGalleryImages(src.galleryImages || []);
       originalRef.current = {
         hookline: src.hookline || '',
         aboutMe: src.aboutMe || '',
         displayName: d.displayName || '',
         selectedTags: src.expertiseTags || [],
         selectedLanguages: src.languages?.length ? src.languages : ['English'],
-        profileImage: src.profileImage || null,
-        coverImage: src.coverImage || null,
-        galleryImages: src.galleryImages || [],
       }
     } catch (err) {
       console.error('Refresh failed:', err);
@@ -153,18 +137,12 @@ export default function EditPublicProfileScreen() {
       setAboutMe(src.aboutMe || '');
       setSelectedTags(src.expertiseTags || []);
       setSelectedLanguages(src.languages?.length ? src.languages : ['English']);
-      setProfileImage(src.profileImage || null);
-      setCoverImage(src.coverImage || null);
-      setGalleryImages(src.galleryImages || []);
       originalRef.current = {
         hookline: src.hookline || '',
         aboutMe: src.aboutMe || '',
         displayName: d.displayName || '',
         selectedTags: src.expertiseTags || [],
         selectedLanguages: src.languages?.length ? src.languages : ['English'],
-        profileImage: src.profileImage || null,
-        coverImage: src.coverImage || null,
-        galleryImages: src.galleryImages || [],
       }
     } catch (err) {
       console.error('Failed to load profile:', err);
@@ -186,113 +164,17 @@ export default function EditPublicProfileScreen() {
     );
   };
 
-  const uploadFileToS3 = async (uri, category) => {
-    const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
-    const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp' };
-    const fileType = mimeMap[ext] || 'image/jpeg';
-
-    // Get presigned URL
-    const res = await listenerAPI.getMediaUploadUrls([{ fileType, extension: ext, category }]);
-    const upload = res.data.uploads[0];
-
-    // Read file and upload
-    const response = await fetch(uri);
-    const blob = await response.blob();
-
-    await fetch(upload.uploadUrl, {
-      method: 'PUT',
-      headers: { 'Content-Type': fileType },
-      body: blob,
-    });
-
-    return upload.fileUrl;
-  };
-
-  const pickProfileImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-
-    if (!result.canceled && result.assets[0]) {
-      try {
-        setUploadingProfile(true);
-        const fileUrl = await uploadFileToS3(result.assets[0].uri, 'profile_image');
-        setProfileImage(fileUrl);
-      } catch (err) {
-        console.error('Profile image upload failed:', err);
-        showPopup('error', 'Upload Failed', 'Could not upload profile image. Please check your connection and try again.');
-      } finally {
-        setUploadingProfile(false);
-      }
-    }
-  };
-
-  const pickCoverImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [16, 9],
-      quality: 0.8,
-    });
-
-    if (!result.canceled && result.assets[0]) {
-      try {
-        setUploadingCover(true);
-        const fileUrl = await uploadFileToS3(result.assets[0].uri, 'cover_image');
-        setCoverImage(fileUrl);
-      } catch (err) {
-        console.error('Cover image upload failed:', err);
-        showPopup('error', 'Upload Failed', 'Could not upload cover image. Please check your connection and try again.');
-      } finally {
-        setUploadingCover(false);
-      }
-    }
-  };
-
-  const pickGalleryImage = async () => {
-    if (galleryImages.length >= 6) {
-      showPopup('info', 'Limit Reached', 'You can upload a maximum of 6 images to your gallery.');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.8,
-    });
-
-    if (!result.canceled && result.assets[0]) {
-      try {
-        setUploadingGallery(true);
-        const fileUrl = await uploadFileToS3(result.assets[0].uri, 'gallery_image');
-        setGalleryImages((prev) => [...prev, fileUrl]);
-      } catch (err) {
-        console.error('Gallery upload failed:', err);
-        showPopup('error', 'Upload Failed', 'Could not upload gallery image.');
-      } finally {
-        setUploadingGallery(false);
-      }
-    }
-  };
-
-  const removeGalleryImage = (index) => {
-    showPopup('confirm', 'Remove Image?', 'Are you sure you want to remove this image from your gallery?', () => {
-      setGalleryImages((prev) => prev.filter((_, i) => i !== index));
-      closePopup();
-    }, 'close-circle');
-  };
+  // ── Avatar-only policy ─────────────────────────────────────
+  // Listeners can only use an avatar. Profile photos, cover photos and
+  // gallery images are not permitted — the backend enforces this too.
 
   const handleSaveDraft = async () => {
     try {
       setSaving(true);
       await listenerAPI.updatePublicProfile({
         hookline, aboutMe, expertiseTags: selectedTags,
-        languages: selectedLanguages, profileImage, coverImage,
-        galleryImages, displayName,
+        languages: selectedLanguages,
+        displayName,
       });
       setProfileStatus('draft');
       showPopup('success', 'Saved!', 'Your draft has been saved successfully.');
@@ -317,8 +199,8 @@ export default function EditPublicProfileScreen() {
         // Save draft first, then submit
         await listenerAPI.updatePublicProfile({
           hookline, aboutMe, expertiseTags: selectedTags,
-          languages: selectedLanguages, profileImage, coverImage,
-          galleryImages, displayName,
+          languages: selectedLanguages,
+          displayName,
         });
         await listenerAPI.submitProfileForApproval();
         setProfileStatus('pending');
@@ -369,51 +251,24 @@ export default function EditPublicProfileScreen() {
           Customize your public-facing profile. Changes require admin approval before going live.
         </Text>
 
-        {/* Profile Image */}
+        {/* Avatar-only policy notice */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Profile Photo</Text>
-          <TouchableOpacity style={styles.profileImagePicker} onPress={pickProfileImage} disabled={uploadingProfile} activeOpacity={0.7}>
-            {profileImage ? (
-              <Image source={{ uri: profileImage }} style={styles.profileImagePreview} />
-            ) : (
-              <View style={styles.profileImagePlaceholder}>
-                <Ionicons name="camera" size={32} color="#6B7280" />
-                <Text style={styles.uploadHint}>Tap to upload</Text>
-              </View>
-            )}
-            {uploadingProfile && (
-              <View style={styles.uploadOverlay}>
-                <ActivityIndicator size="small" color="#fff" />
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* Cover Photo */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Cover Photo</Text>
-          <Text style={[styles.charCount, { textAlign: 'left', marginTop: 0, marginBottom: 8 }]}>Banner image displayed at the top of your profile (16:9)</Text>
-          <TouchableOpacity style={styles.coverImagePicker} onPress={pickCoverImage} disabled={uploadingCover} activeOpacity={0.7}>
-            {coverImage ? (
-              <Image source={{ uri: coverImage }} style={styles.coverImagePreview} />
-            ) : (
-              <View style={styles.coverImagePlaceholder}>
-                <Ionicons name="image" size={36} color="#6B7280" />
-                <Text style={styles.uploadHint}>Tap to upload cover photo</Text>
-              </View>
-            )}
-            {uploadingCover && (
-              <View style={styles.uploadOverlay}>
-                <ActivityIndicator size="small" color="#fff" />
-              </View>
-            )}
-          </TouchableOpacity>
-          {coverImage && (
-            <TouchableOpacity onPress={() => setCoverImage(null)} style={styles.removeCoverBtn}>
-              <Ionicons name="trash-outline" size={16} color="#EF4444" />
-              <Text style={{ color: '#EF4444', fontSize: SW * 0.03, fontFamily: 'Inter_500Medium', marginLeft: 4 }}>Remove</Text>
-            </TouchableOpacity>
-          )}
+          <Text style={styles.label}>Profile & Cover Photos</Text>
+          <View style={styles.photoPolicyCard}>
+            <View style={styles.photoPolicyIcon}>
+              <Ionicons name="image-outline" size={24} color="#EF4444" />
+            </View>
+            <View style={styles.photoPolicyTextWrap}>
+              <Text style={styles.photoPolicyTitle}>Photos are not permitted</Text>
+              <Text style={styles.photoPolicyText}>
+                To keep the platform safe, professional and consistent, listeners can only use an avatar.
+                Uploading profile or cover photos is not allowed.
+              </Text>
+            </View>
+          </View>
+          <Text style={[styles.charCount, { textAlign: 'left', marginTop: 8, marginBottom: 0 }]}>
+            Only your avatar is used as your profile picture.
+          </Text>
         </View>
 
         {/* Display Name */}
@@ -498,33 +353,6 @@ export default function EditPublicProfileScreen() {
               );
             })}
           </View>
-        </View>
-
-        {/* Gallery Images */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Gallery Images ({galleryImages.length}/6)</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.galleryRow}>
-            {galleryImages.map((url, idx) => (
-              <View key={idx} style={styles.galleryThumb}>
-                <Image source={{ uri: url }} style={styles.galleryThumbImg} />
-                <TouchableOpacity style={styles.removeBtn} onPress={() => removeGalleryImage(idx)}>
-                  <Ionicons name="close-circle" size={22} color="#EF4444" />
-                </TouchableOpacity>
-              </View>
-            ))}
-            {galleryImages.length < 6 && (
-              <TouchableOpacity style={styles.addGalleryBtn} onPress={pickGalleryImage} disabled={uploadingGallery}>
-                {uploadingGallery ? (
-                  <ActivityIndicator size="small" color="#8B5CF6" />
-                ) : (
-                  <>
-                    <Ionicons name="add" size={28} color="#8B5CF6" />
-                    <Text style={styles.addGalleryText}>Add</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            )}
-          </ScrollView>
         </View>
 
         {/* Action Buttons */}
@@ -637,34 +465,37 @@ const styles = StyleSheet.create({
   textArea: { minHeight: SH * 0.13, textAlignVertical: 'top' },
   charCount: { color: '#4B5563', fontSize: SW * 0.028, marginTop: 4, textAlign: 'right', fontFamily: 'Inter_400Regular' },
 
-  // Profile Image
-  profileImagePicker: {
-    width: SW * 0.28, height: SW * 0.28, borderRadius: SW * 0.14,
-    overflow: 'hidden', alignSelf: 'center', borderWidth: 2, borderColor: '#333',
+  // Avatar-only policy notice
+  photoPolicyCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SW * 0.03,
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderRadius: SW * 0.035,
+    padding: SW * 0.04,
   },
-  profileImagePreview: { width: '100%', height: '100%' },
-  profileImagePlaceholder: {
-    flex: 1, backgroundColor: '#111', alignItems: 'center', justifyContent: 'center',
+  photoPolicyIcon: {
+    width: SW * 0.11,
+    height: SW * 0.11,
+    borderRadius: SW * 0.055,
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  uploadHint: { color: '#6B7280', fontSize: SW * 0.028, marginTop: 4, fontFamily: 'Inter_400Regular' },
-  uploadOverlay: {
-    ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)',
-    alignItems: 'center', justifyContent: 'center',
+  photoPolicyTextWrap: { flex: 1 },
+  photoPolicyTitle: {
+    color: '#F87171',
+    fontSize: SW * 0.037,
+    fontFamily: 'Inter_800ExtraBold',
+    marginBottom: 2,
   },
-
-  // Cover Image
-  coverImagePicker: {
-    width: '100%', height: SW * 0.45, borderRadius: 16,
-    overflow: 'hidden', borderWidth: 2, borderColor: '#333',
-  },
-  coverImagePreview: { width: '100%', height: '100%' },
-  coverImagePlaceholder: {
-    flex: 1, backgroundColor: '#111', alignItems: 'center', justifyContent: 'center',
-  },
-  removeCoverBtn: {
-    flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start',
-    marginTop: 8, paddingVertical: 6, paddingHorizontal: 12,
-    borderRadius: 8, backgroundColor: 'rgba(239,68,68,0.1)',
+  photoPolicyText: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: SW * 0.032,
+    fontFamily: 'Inter_400Regular',
+    lineHeight: SW * 0.048,
   },
 
   // Chips
@@ -678,21 +509,6 @@ const styles = StyleSheet.create({
   chipTextActive: { color: '#C4B5FD' },
   langChipActive: { borderColor: '#3B82F6', backgroundColor: 'rgba(59,130,246,0.15)' },
   langChipTextActive: { color: '#93C5FD' },
-
-  // Gallery
-  galleryRow: { paddingVertical: 4, gap: 10 },
-  galleryThumb: {
-    width: SW * 0.22, height: SW * 0.22, borderRadius: 12,
-    overflow: 'hidden', backgroundColor: '#111',
-  },
-  galleryThumbImg: { width: '100%', height: '100%' },
-  removeBtn: { position: 'absolute', top: 4, right: 4 },
-  addGalleryBtn: {
-    width: SW * 0.22, height: SW * 0.22, borderRadius: 12,
-    borderWidth: 1.5, borderColor: '#333', borderStyle: 'dashed',
-    alignItems: 'center', justifyContent: 'center', backgroundColor: '#0A0A0A',
-  },
-  addGalleryText: { color: '#8B5CF6', fontSize: SW * 0.028, marginTop: 2, fontFamily: 'Inter_500Medium' },
 
   // Buttons
   buttonsRow: { flexDirection: 'row', gap: 12, marginTop: '4%' },
@@ -746,16 +562,6 @@ const LoadingSkeleton = ({ insets }) => (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
           {[1, 2, 3, 4, 5, 6].map((i) => (
             <Skeleton key={i} width={SW * 0.2} height={35} borderRadius={20} />
-          ))}
-        </View>
-      </View>
-
-      {/* Gallery Skeleton */}
-      <View style={{ marginBottom: 32 }}>
-        <Skeleton width={140} height={14} borderRadius={4} style={{ marginBottom: 12 }} />
-        <View style={{ flexDirection: 'row', gap: 12 }}>
-          {[1, 2, 3].map((i) => (
-            <Skeleton key={i} width={SW * 0.22} height={SW * 0.22} borderRadius={12} />
           ))}
         </View>
       </View>

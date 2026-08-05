@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -21,7 +21,6 @@ export default function UserBusyScreen() {
   const pulseAnim = useRef(new Animated.Value(0.8)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
-  const [countdown, setCountdown] = useState(5);
 
   // Determine display message based on reason
   const getMessage = () => {
@@ -64,20 +63,7 @@ export default function UserBusyScreen() {
     ).start();
   }, []);
 
-  // Auto-redirect countdown
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          router.replace('/(tabs)');
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
+  // NOTE: no auto-redirect — this screen stays until the user taps a button.
 
   return (
     <View style={styles.container}>
@@ -148,11 +134,6 @@ export default function UserBusyScreen() {
             <Text style={styles.secondaryBtnText}>Go Back</Text>
           </TouchableOpacity>
         </View>
-
-        {/* Countdown */}
-        <Text style={styles.countdownText}>
-          Redirecting in {countdown}s...
-        </Text>
       </Animated.View>
     </View>
   );
@@ -262,9 +243,4 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_500Medium',
   },
 
-  countdownText: {
-    fontSize: ms(12, 0.3),
-    color: '#4B5563',
-    fontFamily: 'Inter_400Regular',
-  },
 });

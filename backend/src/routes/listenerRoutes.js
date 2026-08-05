@@ -14,6 +14,9 @@ router.patch('/public-profile', authenticate, authorize('LISTENER'), ListenerCon
 router.patch('/update-settings', authenticate, authorize('LISTENER'), ListenerController.updateSettings);
 router.post('/public-profile/submit', authenticate, authorize('LISTENER'), ListenerController.submitProfileForApproval);
 
+// Earnings reconciliation (ledger-backed dashboard stats)
+router.get('/earnings-stats', authenticate, authorize('LISTENER'), ListenerController.getEarningsStats);
+
 // Media upload
 router.post('/upload-media', authenticate, authorize('LISTENER'), ListenerController.getMediaUploadUrls);
 

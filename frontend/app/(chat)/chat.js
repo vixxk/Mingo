@@ -16,7 +16,12 @@ import { socketService } from '../../utils/socket';
 import GiftPopup from '../../components/shared/GiftPopup';
 import GiftAnimationOverlay from '../../components/call/GiftAnimationOverlay';
 import EndChatPopup from '../../components/shared/EndChatPopup';
+import ContactShareBlockPopup from '../../components/shared/ContactShareBlockPopup';
+import AbusiveMessagePopup from '../../components/shared/AbusiveMessagePopup';
+import InsufficientBalancePopup from '../../components/shared/InsufficientBalancePopup';
 import { getAvatarUrl } from '../../utils/avatars';
+import { analyzeMessage, containsPhoneNumber, maskPhoneNumbers, stripPhoneNumbers } from '../../utils/contactSafety';
+import { analyzeAbuse } from '../../utils/abusiveLanguage';
 
 
 
@@ -216,11 +221,25 @@ const MessageBubble = ({ item }) => {
     ? styles.mediaBubble
     : item.sent ? styles.bubbleSent : styles.bubbleReceived;
 
+  const isTextMsg = !item.type || item.type === 'text';
+  // Privacy: any phone number in an already-delivered message is masked on
+  // screen (applies to both sides — the sender and the receiver).
+  const hasContactInfo = isTextMsg && item.text && containsPhoneNumber(item.text);
+  const displayText = hasContactInfo ? maskPhoneNumbers(item.text) : item.text;
+
   return (
     <View style={[styles.bubbleRow, item.sent ? styles.bubbleRowSent : styles.bubbleRowReceived]}>
       <View style={[styles.bubble, bubbleStyle]}>
-        {(!item.type || item.type === 'text') && (
-          <Text style={styles.bubbleText}>{item.text}</Text>
+        {isTextMsg && (
+          <View>
+            {hasContactInfo && (
+              <View style={styles.contactMaskBadge}>
+                <Ionicons name="shield-checkmark" size={10} color="#F87171" style={{ marginRight: wp(1) }} />
+                <Text style={styles.contactMaskBadgeText}>CONTACT INFO HIDDEN</Text>
+              </View>
+            )}
+            <Text style={styles.bubbleText}>{displayText}</Text>
+          </View>
         )}
         {item.type === 'image' && (
           <Image source={{ uri: item.mediaUrl }} style={{ width: wp(52), height: hp(25), borderRadius: wp(2.5) }} resizeMode="cover" />
@@ -308,6 +327,16 @@ export default function ChatScreen() {
   const [showCostPopup, setShowCostPopup] = useState(false);
   const [showEndChatPopup, setShowEndChatPopup] = useState(false);
   const [isEndingSession, setIsEndingSession] = useState(false);
+
+  // ── Contact-sharing safety ─────────────────────────────────
+  const [showSafetyNotice, setShowSafetyNotice] = useState(true);
+  const [phoneDetected, setPhoneDetected] = useState(false);
+  const [blockedShare, setBlockedShare] = useState(null); // { text, phoneNumbers, intent }
+
+  // ── Anti-abuse + recharge gate ─────────────────────────────
+  const [abuseBlocked, setAbuseBlocked] = useState(null); // { text, matched }
+  const [showRechargeGate, setShowRechargeGate] = useState(false);
+  const [chatRestricted, setChatRestricted] = useState(false);
 
   const handleBack = useCallback(() => {
     if (router.canGoBack()) {
@@ -634,6 +663,8 @@ export default function ChatScreen() {
     };
     const handleInsufficientBalance = () => {
       setChatBlocked(true);
+      // Contextual recharge gate: "<name> is waiting. Please recharge to continue."
+      setShowRechargeGate(true);
     };
 
     const handleSessionStarted = (data) => {
@@ -643,6 +674,7 @@ export default function ChatScreen() {
       if (session?.sessionId) setActiveSessionId(session.sessionId);
       startElapsedTimer(session.startTime);
       setChatBlocked(false);
+      setShowRechargeGate(false);
     };
 
     const handleSessionRenewed = (data) => {
@@ -652,6 +684,7 @@ export default function ChatScreen() {
       if (session?.sessionId) setActiveSessionId(session.sessionId);
       startElapsedTimer(session.startTime);
       setChatBlocked(false);
+      setShowRechargeGate(false);
     };
 
     const handleSessionEnded = () => {
@@ -718,6 +751,55 @@ export default function ChatScreen() {
       }
     };
 
+    // Safety net: server blocked a contact-sharing attempt (modified/buggy client)
+    const handleContactShareBlocked = (data) => {
+      const msgConvId = (data?.conversationId || '').toString();
+      const currentConvId = (realConversationIdRef.current || '').toString();
+      if (msgConvId && currentConvId && msgConvId !== currentConvId) return;
+
+      // The server also emits the system bubble via receive_message,
+      // so we only surface the block popup here (no duplicate bubbles).
+      setBlockedShare((prev) => prev ?? {
+        text: data?.content || '',
+        phoneNumbers: data?.phoneNumbers || [],
+        intent: !!data?.hasContactIntent,
+      });
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+    };
+
+    // Safety net: server blocked an abusive message (modified/buggy client)
+    const handleAbusiveMessageBlocked = (data) => {
+      const msgConvId = (data?.conversationId || '').toString();
+      const currentConvId = (realConversationIdRef.current || '').toString();
+      if (msgConvId && currentConvId && msgConvId !== currentConvId) return;
+      setAbuseBlocked((prev) => prev ?? {
+        text: data?.content || '',
+        matched: data?.matched || null,
+        severity: data?.severity || 'severe',
+      });
+    };
+
+    // Server escalated: repeated violations -> temporary chat restriction
+    const handleChatRestricted = (data) => {
+      const msgConvId = (data?.conversationId || '').toString();
+      const currentConvId = (realConversationIdRef.current || '').toString();
+      if (msgConvId && currentConvId && msgConvId !== currentConvId) return;
+      setMessages((prev) => {
+        if (prev.some((m) => m.type === 'system' && m.text?.includes('temporarily restricted'))) return prev;
+        return [...prev, {
+          id: `restricted_${Date.now()}`,
+          text: 'Your chat access has been temporarily restricted for 24 hours due to repeated abusive messages.',
+          sent: false,
+          type: 'system',
+          createdAt: new Date().toISOString(),
+        }];
+      });
+      setChatRestricted(true);
+      setChatBlocked(true);
+      setShowRechargeGate(false);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+    };
+
     const handleListenerStatusChanged = (data) => {
       console.log('[Chat] Listener status changed:', data);
       const { userId, isOnline } = data;
@@ -749,6 +831,9 @@ export default function ChatScreen() {
     socketService.on('chat_user_offline', handleChatUserOffline);
     socketService.on('message_error', handleMessageError);
     socketService.on('listener_status_changed', handleListenerStatusChanged);
+    socketService.on('contact_share_blocked', handleContactShareBlocked);
+    socketService.on('abusive_message_blocked', handleAbusiveMessageBlocked);
+    socketService.on('chat_restricted', handleChatRestricted);
 
     return () => {
       socketService.off('receive_message', handleNewMessage);
@@ -763,6 +848,9 @@ export default function ChatScreen() {
       socketService.off('chat_user_offline', handleChatUserOffline);
       socketService.off('message_error', handleMessageError);
       socketService.off('listener_status_changed', handleListenerStatusChanged);
+      socketService.off('contact_share_blocked', handleContactShareBlocked);
+      socketService.off('abusive_message_blocked', handleAbusiveMessageBlocked);
+      socketService.off('chat_restricted', handleChatRestricted);
     };
   }, [currentUserId, sessionActive]);
 
@@ -780,46 +868,111 @@ export default function ChatScreen() {
     return result;
   };
 
+  // Actually deliver a text message (after safety checks have passed)
+  const performSend = (msgContent) => {
+    if (!msgContent || !realConversationId || !currentUserId) return;
+    if (chatBlocked) {
+      // Same gate as handleSend — never silently redirect
+      if (userRole === 'USER') setShowRechargeGate(true);
+      return;
+    }
+
+    const tempId = `temp_${Date.now()}`;
+
+    // Add optimistic message to the UI instantly
+    const optimisticMsg = {
+      id: tempId,
+      text: msgContent,
+      sent: true,
+      type: 'text',
+      senderId: currentUserId,
+      senderModel: userRole === 'LISTENER' ? 'Listener' : 'User',
+      createdAt: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, optimisticMsg]);
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+
+    const msgData = {
+      conversationId: realConversationId, 
+      senderId: currentUserId, 
+      senderModel: userRole === 'LISTENER' ? 'Listener' : 'User',
+      content: msgContent, 
+      type: 'text',
+    };
+    console.log('[Chat] Sending message:', msgData);
+    socketService.emit('send_message', msgData);
+    socketService.emit('stop_typing', { conversationId: realConversationId, userId: currentUserId });
+    setMessage('');
+    setShowEmojis(false);
+    setPhoneDetected(false);
+  };
+
   const handleSend = () => {
-    if (message.trim() && realConversationId && currentUserId) {
-      if (chatBlocked) {
-        if (userRole === 'USER') router.push('/balance');
+    const msgContent = message.trim();
+    if (!msgContent || !realConversationId || !currentUserId) return;
+    if (chatBlocked) {
+      // Gate: surface the contextual recharge prompt instead of silently failing
+      if (userRole === 'USER') setShowRechargeGate(true);
+      return;
+    }
+
+    // Safety guard: messages containing a phone number are never sent.
+    const analysis = analyzeMessage(msgContent);
+    if (analysis.hasPhone) {
+      setBlockedShare({
+        text: msgContent,
+        phoneNumbers: analysis.phoneNumbers,
+        intent: analysis.hasContactIntent,
+      });
+      return;
+    }
+
+    // Anti-abuse guard: offensive messages are stopped before sending.
+    const abuse = analyzeAbuse(msgContent);
+    if (abuse.hasAbuse) {
+      setAbuseBlocked({ text: msgContent, matched: abuse.matched, severity: abuse.severity });
+      return;
+    }
+
+    performSend(msgContent);
+  };
+
+  // Start an audio/video call straight from the chat header (user role).
+  const handleStartCall = async (callType) => {
+    if (!otherUserId) return;
+    try {
+      // Prompt recharge before the call can proceed when coins are short
+      const balRes = await walletAPI.getBalance();
+      const coins = balRes?.data?.coins ?? 0;
+      const minCoins = callType === 'video' ? 40 : 10;
+      if (coins < minCoins) {
+        setShowRechargeGate(true);
         return;
       }
-      
-      const tempId = `temp_${Date.now()}`;
-      const msgContent = message.trim();
-
-      // Add optimistic message to the UI instantly
-      const optimisticMsg = {
-        id: tempId,
-        text: msgContent,
-        sent: true,
-        type: 'text',
-        senderId: currentUserId,
-        senderModel: userRole === 'LISTENER' ? 'Listener' : 'User',
-        createdAt: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, optimisticMsg]);
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-
-      const msgData = {
-        conversationId: realConversationId, 
-        senderId: currentUserId, 
-        senderModel: userRole === 'LISTENER' ? 'Listener' : 'User',
-        content: msgContent, 
-        type: 'text',
-      };
-      console.log('[Chat] Sending message:', msgData);
-      socketService.emit('send_message', msgData);
-      socketService.emit('stop_typing', { conversationId: realConversationId, userId: currentUserId });
-      setMessage('');
-      setShowEmojis(false);
+      router.push({
+        pathname: '/(call)/connecting',
+        params: {
+          name: otherName,
+          callType,
+          callId: `call_${Date.now()}`,
+          roomId: `room_${Date.now()}`,
+          listenerId: otherUserId,
+          avatarIndex: otherAvatarIndex,
+          gender: otherGender,
+        },
+      });
+    } catch (e) {
+      console.log('[Chat] Balance check failed before call:', e);
     }
   };
 
   const handleTextChange = (text) => {
     setMessage(text);
+    const analysis = analyzeMessage(text);
+    const hasPhone = analysis.hasPhone;
+    setPhoneDetected(hasPhone);
+    // Reinforce the permanent reminder the moment a number is typed
+    if (hasPhone && !showSafetyNotice) setShowSafetyNotice(true);
     if (realConversationId && currentUserId) {
       socketService.emit('typing', { conversationId: realConversationId, userId: currentUserId });
       clearTimeout(typingTimeout.current);
@@ -924,6 +1077,28 @@ export default function ChatScreen() {
           </View>
         )}
 
+        {/* In-chat call buttons (users can jump straight to a call) */}
+        {userRole === 'USER' && !isAdminChat && otherUserId && (
+          <View style={styles.headerCallBtns}>
+            <TouchableOpacity
+              style={[styles.headerCallBtn, { borderColor: 'rgba(34,197,94,0.35)' }]}
+              activeOpacity={0.7}
+              onPress={() => handleStartCall('audio')}
+              accessibilityLabel="Start audio call"
+            >
+              <Ionicons name="call" size={wp(4.6)} color="#22C55E" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.headerCallBtn, { borderColor: 'rgba(59,130,246,0.35)' }]}
+              activeOpacity={0.7}
+              onPress={() => handleStartCall('video')}
+              accessibilityLabel="Start video call"
+            >
+              <Ionicons name="videocam" size={wp(4.6)} color="#3B82F6" />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Coin badge (Only for users) */}
         {userRole === 'USER' && (
           <TouchableOpacity style={styles.coinBadge} activeOpacity={0.7} onPress={() => router.push('/balance')}>
@@ -941,6 +1116,24 @@ export default function ChatScreen() {
         showsVerticalScrollIndicator={false}
         onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
       >
+        {/* Permanent safety reminder banner */}
+        {showSafetyNotice && (
+          <View style={styles.safetyNoticeBanner}>
+            <View style={styles.safetyNoticeIconWrap}>
+              <Ionicons name="shield-checkmark" size={wp(4.5)} color="#F87171" />
+            </View>
+            <Text style={styles.safetyNoticeText}>
+              Safety Reminder: Please do not share your phone number or other personal contact details.
+            </Text>
+            <TouchableOpacity
+              onPress={() => setShowSafetyNotice(false)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={styles.safetyNoticeClose}
+            >
+              <Ionicons name="close" size={wp(4.2)} color="rgba(255,255,255,0.5)" />
+            </TouchableOpacity>
+          </View>
+        )}
         {loading ? (
           <View style={{ paddingHorizontal: wp(4), paddingTop: hp(2) }}>
             {/* Skeleton message bubbles */}
@@ -959,7 +1152,7 @@ export default function ChatScreen() {
         ) : messages.length === 0 ? (
           <View style={styles.emptyChat}>
             <Ionicons name="chatbubbles-outline" size={wp(12)} color="#333" />
-            <Text style={styles.emptyChatText}>Say hello! Your first message is free.</Text>
+            <Text style={styles.emptyChatText}>Say hello! Your first 2 messages are free.</Text>
           </View>
         ) : (
           messages.map((item) => <MessageBubble key={item.id} item={item} />)
@@ -980,13 +1173,43 @@ export default function ChatScreen() {
         </View>
       )}
 
-      {/* Chat blocked banner */}
+      {/* Chat blocked banner (balance OR abuse restriction) */}
       {chatBlocked && userRole === 'USER' && (
-        <TouchableOpacity style={styles.blockedBanner} activeOpacity={0.85} onPress={() => router.push('/balance')}>
-          <Ionicons name="wallet-outline" size={wp(4.5)} color="#F59E0B" />
-          <Text style={styles.blockedBannerText}>Insufficient balance. Tap to recharge.</Text>
-          <Ionicons name="chevron-forward" size={wp(4)} color="#F59E0B" />
+        <TouchableOpacity
+          style={[styles.blockedBanner, chatRestricted && styles.blockedBannerDanger]}
+          activeOpacity={0.85}
+          onPress={chatRestricted ? null : () => setShowRechargeGate(true)}
+        >
+          <Ionicons
+            name={chatRestricted ? 'shield-outline' : 'wallet-outline'}
+            size={wp(4.5)}
+            color={chatRestricted ? '#EF4444' : '#F59E0B'}
+          />
+          <Text style={[styles.blockedBannerText, chatRestricted && { color: '#F87171' }]}>
+            {chatRestricted
+              ? 'Chat restricted due to repeated abusive messages.'
+              : 'Insufficient balance. Tap to recharge.'}
+          </Text>
+          {!chatRestricted && <Ionicons name="chevron-forward" size={wp(4)} color="#F59E0B" />}
         </TouchableOpacity>
+      )}
+
+      {/* Permanent contact-sharing ban banner (both roles) */}
+      {!isAdminChat && sessionStatus !== 'completed' && (
+        <View style={styles.phoneBanBanner}>
+          <Ionicons name="shield-checkmark" size={wp(4)} color="#F87171" />
+          <Text style={styles.phoneBanText}>
+            Phone numbers cannot be shared in chat. For your safety, sharing contact numbers is not allowed.
+          </Text>
+        </View>
+      )}
+
+      {/* Live warning while a phone number is being typed */}
+      {phoneDetected && !isAdminChat && sessionStatus !== 'completed' && (
+        <View style={styles.phoneWarningChip}>
+          <Ionicons name="alert-circle" size={wp(3.8)} color="#F87171" />
+          <Text style={styles.phoneWarningText}>Phone number detected — sharing contact info isn't allowed.</Text>
+        </View>
       )}
 
       {/* Input bar */}
@@ -1003,9 +1226,9 @@ export default function ChatScreen() {
           </Text>
         </View>
       ) : (
-        <View style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, hp(1.2)) }]}>
+        <View style={[styles.inputBar, phoneDetected && styles.inputBarDanger, { paddingBottom: Math.max(insets.bottom, hp(1.2)) }]}>
           <TextInput
-            style={styles.textInput}
+            style={[styles.textInput, phoneDetected && styles.textInputDanger]}
             placeholder={
               chatBlocked 
                 ? (userRole === 'LISTENER' 
@@ -1030,7 +1253,11 @@ export default function ChatScreen() {
               </TouchableOpacity>
             )}
             <TouchableOpacity activeOpacity={0.7} style={styles.inputAction} onPress={handleSend}>
-              <Ionicons name="send" size={wp(5.5)} color={chatBlocked ? '#4B5563' : '#EC4899'} />
+              <Ionicons
+                name={phoneDetected ? 'shield-checkmark' : 'send'}
+                size={wp(5.5)}
+                color={phoneDetected ? '#EF4444' : (chatBlocked ? '#4B5563' : '#EC4899')}
+              />
             </TouchableOpacity>
             <TouchableOpacity activeOpacity={0.7} style={styles.inputAction}
               onPress={() => setShowEmojis(!showEmojis)}>
@@ -1133,6 +1360,46 @@ export default function ChatScreen() {
         </View>
       </Modal>
 
+      {/* Contact Share Block Popup — phone numbers can't be sent */}
+      <ContactShareBlockPopup
+        visible={!!blockedShare}
+        maskedNumber={blockedShare?.phoneNumbers?.[0] ? maskPhoneNumbers(blockedShare.phoneNumbers[0]) : null}
+        hasContactIntent={blockedShare?.intent}
+        onCancel={() => setBlockedShare(null)}
+        onSendWithoutNumber={() => {
+          const stripped = stripPhoneNumbers(blockedShare.text).trim();
+          setBlockedShare(null);
+          if (stripped) performSend(stripped);
+        }}
+      />
+
+      {/* Anti-abuse popup — offensive language must be edited first */}
+      <AbusiveMessagePopup
+        visible={!!abuseBlocked}
+        matchedWord={abuseBlocked?.matched || null}
+        severity={abuseBlocked?.severity || 'severe'}
+        onEdit={() => setAbuseBlocked(null)}
+        onCancel={() => {
+          setMessage('');
+          setPhoneDetected(false);
+          setAbuseBlocked(null);
+        }}
+      />
+
+      {/* Recharge gate — "<name> is waiting. Please recharge to continue." */}
+      <InsufficientBalancePopup
+        visible={showRechargeGate}
+        balance={coinBalance}
+        title={`${otherName || 'The other person'} is waiting`}
+        subtitle={"Please recharge to continue chatting. Your conversation will resume as soon as you have enough coins."}
+        buttonLabel="Recharge Now"
+        onBuyCoins={() => {
+          setShowRechargeGate(false);
+          router.push('/balance');
+        }}
+        onClose={() => setShowRechargeGate(false)}
+      />
+
       {/* End Chat Confirmation Popup */}
       <EndChatPopup
         visible={showEndChatPopup}
@@ -1183,6 +1450,18 @@ const styles = StyleSheet.create({
   },
   coinEmoji: { fontSize: wp(3.5) },
   coinCount: { fontSize: wp(3.5), color: '#fff', fontWeight: '700' },
+
+  // In-chat call buttons
+  headerCallBtns: { flexDirection: 'row', alignItems: 'center', gap: wp(1.5) },
+  headerCallBtn: {
+    width: wp(9),
+    height: wp(9),
+    borderRadius: wp(4.5),
+    borderWidth: 1,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   // Messages
   messagesScroll: { flex: 1 },
@@ -1258,6 +1537,66 @@ const styles = StyleSheet.create({
     borderTopWidth: 1, borderTopColor: 'rgba(245,158,11,0.2)',
   },
   blockedBannerText: { fontSize: wp(3.2), color: '#F59E0B', fontWeight: '600' },
+  blockedBannerDanger: {
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    borderTopColor: 'rgba(239, 68, 68, 0.25)',
+  },
+
+  // Safety reminder banner (top of message list)
+  safetyNoticeBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: wp(2),
+    backgroundColor: 'rgba(127, 29, 29, 0.25)',
+    borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.35)',
+    borderRadius: wp(3.5), paddingHorizontal: wp(3), paddingVertical: hp(1),
+    marginBottom: hp(1.5),
+  },
+  safetyNoticeIconWrap: {
+    width: wp(7), height: wp(7), borderRadius: wp(3.5),
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  safetyNoticeText: {
+    flex: 1, fontSize: wp(3), color: 'rgba(255,255,255,0.85)',
+    fontFamily: 'Inter_500Medium', lineHeight: wp(4.4),
+  },
+  safetyNoticeClose: { padding: wp(0.5) },
+
+  // Permanent phone-ban banner (above input)
+  phoneBanBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: wp(2),
+    backgroundColor: 'rgba(127, 29, 29, 0.2)',
+    borderTopWidth: 1, borderTopColor: 'rgba(239, 68, 68, 0.3)',
+    borderBottomWidth: 1, borderBottomColor: 'rgba(239, 68, 68, 0.3)',
+    paddingHorizontal: wp(4), paddingVertical: hp(0.8),
+  },
+  phoneBanText: {
+    flex: 1, fontSize: wp(2.8), color: 'rgba(255,255,255,0.8)',
+    fontFamily: 'Inter_500Medium', lineHeight: wp(4),
+  },
+
+  // Live warning chip while a number is being typed
+  phoneWarningChip: {
+    flexDirection: 'row', alignItems: 'center', gap: wp(1.5),
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    paddingHorizontal: wp(4), paddingVertical: hp(0.7),
+  },
+  phoneWarningText: { fontSize: wp(2.9), color: '#F87171', fontWeight: '600' },
+
+  // Input danger state
+  inputBarDanger: { borderTopColor: 'rgba(239, 68, 68, 0.6)' },
+  textInputDanger: { borderColor: '#EF4444', backgroundColor: 'rgba(239, 68, 68, 0.07)' },
+
+  // Contact-info masked badge inside bubbles
+  contactMaskBadge: {
+    flexDirection: 'row', alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderRadius: wp(2.5), paddingHorizontal: wp(1.8), paddingVertical: hp(0.3),
+    marginBottom: hp(0.5),
+  },
+  contactMaskBadgeText: {
+    fontSize: wp(2.1), color: '#F87171', fontFamily: 'Inter_800ExtraBold', letterSpacing: 0.6,
+  },
 
   // Emoji
   emojiPanel: { backgroundColor: '#111', height: hp(22), borderTopWidth: 1, borderTopColor: '#222' },
@@ -1270,7 +1609,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: wp(3),
     paddingTop: hp(1), borderTopWidth: 1, borderTopColor: '#1A1A1A', backgroundColor: '#000',
   },
-  textInput: { flex: 1, fontSize: wp(3.6), color: '#fff', paddingVertical: hp(1), maxHeight: hp(12) },
+  textInput: {
+    flex: 1, fontSize: wp(3.6), color: '#fff', paddingVertical: hp(1), maxHeight: hp(12),
+    backgroundColor: '#0B0B0F', borderRadius: wp(4), borderWidth: 1, borderColor: '#1F2937',
+    paddingHorizontal: wp(3), marginVertical: hp(0.5),
+  },
   inputActions: { flexDirection: 'row', alignItems: 'center', gap: wp(1.5), paddingBottom: hp(0.7) },
   inputAction: { width: wp(9), height: wp(9), alignItems: 'center', justifyContent: 'center' },
 

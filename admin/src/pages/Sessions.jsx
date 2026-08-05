@@ -7,7 +7,8 @@ import {
 import { adminAPI } from '../utils/api'
 import { Skeleton } from '../components/admin/Skeleton'
 
-const STATUSES = ['All', 'Completed', 'Active', 'Cancelled']
+const CALL_TYPES = ['All', 'Audio', 'Video', 'Chat']
+const STATUSES = ['Completed', 'Active', 'Cancelled']
 
 function formatDuration(seconds) {
   if (!seconds && seconds !== 0) return '0 min 0 sec'
@@ -115,6 +116,7 @@ export default function Sessions() {
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [callType, setCallType] = useState('All')
   const [status, setStatus] = useState('All')
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -131,6 +133,7 @@ export default function Sessions() {
     try {
       const currentPage = isLoadMore ? Math.floor(offset / LIMIT) + 1 : 1
       const params = { limit: LIMIT, page: currentPage }
+      if (callType !== 'All') params.callType = callType.toLowerCase()
       if (status !== 'All') params.status = status.toLowerCase()
       if (debouncedSearch) params.search = debouncedSearch
 
@@ -153,7 +156,7 @@ export default function Sessions() {
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [status, debouncedSearch, offset])
+  }, [callType, status, debouncedSearch, offset])
 
   fetchRef.current = doFetch
 
@@ -173,7 +176,7 @@ export default function Sessions() {
     setHasMore(true)
     setLoading(true)
     fetchRef.current(false)
-  }, [status, debouncedSearch])
+  }, [callType, status, debouncedSearch])
 
   useEffect(() => {
     if (offset > 0) {
@@ -185,8 +188,13 @@ export default function Sessions() {
     setOffset(prev => prev + LIMIT)
   }
 
+  const handleCallTypeChange = (s) => {
+    setCallType(s)
+    if (s === 'Chat') setStatus('All')
+  }
+
   const handleStatusChange = (s) => {
-    setStatus(s)
+    setStatus(prev => prev === s ? 'All' : s)
   }
 
   const navigate = useNavigate()
@@ -258,27 +266,53 @@ export default function Sessions() {
         </div>
       </div>
 
-      {/* Status Filter Tabs */}
-      <div className="filter-tabs tabs-scroll" style={{ display: 'flex', gap: 8, marginBottom: 20, overflowX: 'auto' }}>
-        {STATUSES.map(s => {
-          const isActive = status === s
-          return (
-            <button
-              key={s}
-              onClick={() => handleStatusChange(s)}
-              style={{
-                padding: '8px 16px', borderRadius: 20, border: '1px solid',
-                borderColor: isActive ? 'var(--accent)' : 'var(--border)',
-                fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
-                backgroundColor: isActive ? 'var(--accent-mid)' : 'var(--bg-tertiary)',
-                color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
-                transition: 'all 0.2s',
-              }}
-            >
-              {s}
-            </button>
-          )
-        })}
+      {/* Filter Tabs */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+        {/* Call Type Filter Tabs */}
+        <div className="filter-tabs tabs-scroll" style={{ display: 'flex', gap: 8, overflowX: 'auto' }}>
+          {CALL_TYPES.map(ct => {
+            const isActive = callType === ct
+            return (
+              <button
+                key={ct}
+                onClick={() => handleCallTypeChange(ct)}
+                style={{
+                  padding: '8px 16px', borderRadius: 20, border: '1px solid',
+                  borderColor: isActive ? 'var(--accent)' : 'var(--border)',
+                  fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+                  backgroundColor: isActive ? 'var(--accent-mid)' : 'var(--bg-tertiary)',
+                  color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
+                  transition: 'all 0.2s',
+                }}
+              >
+                {ct}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Status Filter Tabs */}
+        <div className="filter-tabs tabs-scroll" style={{ display: 'flex', gap: 8, overflowX: 'auto' }}>
+          {STATUSES.filter(s => !(callType === 'Chat' && s === 'Cancelled')).map(s => {
+            const isActive = status === s
+            return (
+              <button
+                key={s}
+                onClick={() => handleStatusChange(s)}
+                style={{
+                  padding: '8px 16px', borderRadius: 20, border: '1px solid',
+                  borderColor: isActive ? 'var(--accent)' : 'var(--border)',
+                  fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+                  backgroundColor: isActive ? 'var(--accent-mid)' : 'var(--bg-tertiary)',
+                  color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
+                  transition: 'all 0.2s',
+                }}
+              >
+                {s}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {loading ? (

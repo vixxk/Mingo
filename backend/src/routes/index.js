@@ -14,6 +14,7 @@ const userRoutes = require('./userRoutes');
 const chatRoutes = require('./chatRoutes');
 const notificationRoutes = require('./notificationRoutes');
 const giftRoutes = require('./giftRoutes');
+const adRoutes = require('./adRoutes');
 
 router.use('/auth', authRoutes);
 router.use('/listener', listenerRoutes);
@@ -27,6 +28,7 @@ router.use('/user', userRoutes);
 router.use('/chat', chatRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/gifts', giftRoutes);
+router.use('/ads', adRoutes);
 
 router.get('/health', (req, res) => {
   res.json({

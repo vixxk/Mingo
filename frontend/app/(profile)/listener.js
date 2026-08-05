@@ -221,8 +221,13 @@ export default function ListenerScreen() {
       if (!uploadRes.ok) throw new Error('Failed to upload audio');
       await userAPI.applyAsListener({ introAudioUrl: fileUrl });
       await AsyncStorage.setItem('listenerStatus', 'pending');
+      await AsyncStorage.removeItem('useAppAsUser');
       setListenerStatus('pending');
       if (soundInstance) { await soundInstance.unloadAsync(); setSoundInstance(null); }
+      // Navigate to the new pending page after submission
+      setTimeout(() => {
+        router.replace('/(profile)/listener-pending');
+      }, 1500);
       setShowSuccess(true);
     } catch (e) {
       showToast(e?.message || 'Failed to submit application.', 'error');
@@ -250,6 +255,7 @@ export default function ListenerScreen() {
         let role = 'USER';
         if (userStr) { try { const userObj = JSON.parse(userStr); role = userObj.role || 'USER'; } catch (e) {} }
         if (status === 'approved' && role === 'LISTENER') { router.replace('/(listener)'); return; }
+        else if (status === 'pending') { router.replace('/(profile)/listener-pending'); return; }
         else if (status === 'rejected') {
           let userId = null;
           if (userStr) { try { const user = JSON.parse(userStr); userId = user._id || user.id; } catch (e) {} }
@@ -271,6 +277,7 @@ export default function ListenerScreen() {
         const userObj = res.data;
         if (userObj.role === 'LISTENER') { await AsyncStorage.setItem('listenerStatus', 'approved'); await AsyncStorage.setItem('user', JSON.stringify(userObj)); router.replace('/(listener)'); }
         else if (userObj.listener?.status === 'rejected') { await AsyncStorage.setItem('listenerStatus', 'rejected'); await AsyncStorage.setItem('user', JSON.stringify(userObj)); router.replace('/(auth)/verification-failed'); }
+        else if (userObj.listener?.status === 'pending') { router.replace('/(profile)/listener-pending'); }
         else { if (userObj.listener?.status) { await AsyncStorage.setItem('listenerStatus', userObj.listener.status); setListenerStatus(userObj.listener.status); } showToast('Application still under review.', 'warning'); }
       }
     } catch (err) { showToast('Failed to refresh.', 'error'); }
@@ -288,7 +295,7 @@ export default function ListenerScreen() {
   };
 
   useEffect(() => {
-    const backAction = () => { if (listenerStatus === 'pending') { setShowLogoutPopup(true); return true; } router.replace('/(auth)/role-selection'); return true; };
+    const backAction = () => { router.replace('/(auth)/role-selection'); return true; };
     const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
     return () => backHandler.remove();
   }, [listenerStatus]);
@@ -307,15 +314,11 @@ export default function ListenerScreen() {
       {/* Header */}
       <View style={[styles.headerContainer, { top: insets.top + vs(6) }]} pointerEvents="box-none">
         <TouchableOpacity
-          style={[styles.backBtn, listenerStatus === 'pending' && styles.logoutBtnPending]}
-          onPress={listenerStatus === 'pending' ? () => setShowLogoutPopup(true) : () => router.replace('/(auth)/role-selection')}
+          style={styles.backBtn}
+          onPress={() => router.replace('/(auth)/role-selection')}
           activeOpacity={0.7}
         >
-          {listenerStatus === 'pending' ? (
-            <><Ionicons name="log-out-outline" size={14} color="#EF4444" /><Text style={[styles.backText, { color: '#EF4444' }]}>Logout</Text></>
-          ) : (
-            <><Ionicons name="chevron-back" size={18} color="#fff" /><Text style={styles.backText}>Back</Text></>
-          )}
+          <><Ionicons name="chevron-back" size={18} color="#fff" /><Text style={styles.backText}>Back</Text></>
         </TouchableOpacity>
 
       </View>
@@ -323,28 +326,26 @@ export default function ListenerScreen() {
       {/* Top Content - scrollable area */}
       <View style={[styles.topContent, { paddingTop: insets.top + vs(32) }]}>
 
-        {listenerStatus !== 'pending' && (
-          <>
-            <View style={styles.centeredHeader}>
-              <Text style={styles.tagline}>Talk. Connect. Earn</Text>
-              <Text style={styles.heading}>Earn While You Listen!</Text>
-            </View>
+        <>
+          <View style={styles.centeredHeader}>
+            <Text style={styles.tagline}>Talk. Connect. Earn</Text>
+            <Text style={styles.heading}>Earn While You Listen!</Text>
+          </View>
 
-            <View style={styles.illustrationRow}>
-              <Image source={require('../../images/person_laptop.png')} style={styles.illustration} resizeMode="contain" />
-              <View style={styles.badgesContainer}>
-                <View style={styles.badge}>
-                  <Ionicons name="people" size={12} color="#9CA3AF" />
-                  <View><Text style={styles.badgeTitle}>1 Lakhs+ Listeners</Text><Text style={styles.badgeSub}>and Growing</Text></View>
-                </View>
-                <View style={styles.badge}>
-                  <Ionicons name="location" size={12} color="#9CA3AF" />
-                  <View><Text style={styles.badgeTitle}>Work from</Text><Text style={styles.badgeSub}>anywhere</Text></View>
-                </View>
+          <View style={styles.illustrationRow}>
+            <Image source={require('../../images/person_laptop.png')} style={styles.illustration} resizeMode="contain" />
+            <View style={styles.badgesContainer}>
+              <View style={styles.badge}>
+                <Ionicons name="people" size={12} color="#9CA3AF" />
+                <View><Text style={styles.badgeTitle}>1 Lakhs+ Listeners</Text><Text style={styles.badgeSub}>and Growing</Text></View>
+              </View>
+              <View style={styles.badge}>
+                <Ionicons name="location" size={12} color="#9CA3AF" />
+                <View><Text style={styles.badgeTitle}>Work from</Text><Text style={styles.badgeSub}>anywhere</Text></View>
               </View>
             </View>
-          </>
-        )}
+          </View>
+        </>
 
         {showVoiceSection && (
           <View style={styles.voiceSection}>
@@ -450,23 +451,7 @@ export default function ListenerScreen() {
         </View>
       )}
 
-      {/* Pending State */}
-      {listenerStatus === 'pending' && (
-        <View style={styles.pendingContainer}>
-          <View style={styles.pendingCenterContent}>
-            <Text style={styles.pendingTitle}>Application Pending</Text>
-            <Text style={styles.pendingSubtext}>Your application is under review.</Text>
-            <Text style={styles.pendingSubtext}>It takes about 12-24 hours.</Text>
-            <Image source={require('../../images/person_laptop.png')} style={styles.pendingImage} resizeMode="contain" />
-          </View>
-          <View style={[styles.bottomBtnContainer, { paddingBottom: insets.bottom + vs(16) }]}>
-            <TouchableOpacity style={styles.refreshBtnLarge} onPress={handleRefresh} activeOpacity={0.8}>
-              <Ionicons name="refresh" size={18} color="#fff" />
-              <Text style={styles.refreshBtnText}>Refresh Status</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
+
 
       {/* Approved State */}
       {listenerStatus === 'approved' && (
@@ -553,13 +538,7 @@ const styles = StyleSheet.create({
   submitBtn: { flex: 0.65, height: vs(48), borderRadius: 24, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   submitBtnText: { fontSize: ms(13), color: '#000', fontFamily: 'Inter_700Bold', fontWeight: '700' },
 
-  pendingContainer: { flex: 1, justifyContent: 'space-between' },
-  pendingCenterContent: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: s(24) },
-  pendingImage: { width: SCREEN_WIDTH * 0.75, height: SCREEN_HEIGHT * 0.35, marginBottom: vs(20) },
-  pendingTitle: { fontSize: ms(22), color: '#F59E0B', fontFamily: 'Inter_700Bold', marginBottom: vs(8), textAlign: 'center' },
-  pendingSubtext: { fontSize: ms(15), color: '#D1D5DB', fontFamily: 'Inter_400Regular', textAlign: 'center', lineHeight: ms(22), marginTop: vs(4) },
-  refreshBtnLarge: { width: '100%', height: vs(52), borderRadius: 26, backgroundColor: '#374151', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  refreshBtnText: { fontSize: ms(15), color: '#fff', fontFamily: 'Inter_700Bold', fontWeight: '700' },
+
   approvedBtn: { backgroundColor: '#7C3AED', borderRadius: 24, paddingVertical: vs(12), alignItems: 'center' },
   approvedBtnText: { fontSize: ms(13), color: '#fff', fontFamily: 'Inter_700Bold' },
 

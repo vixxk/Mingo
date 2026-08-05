@@ -1,35 +1,60 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform, ScrollView, useWindowDimensions } from 'react-native';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform, ScrollView, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ms, s, vs } from '../../utils/responsive';
-
-const { width: SW, height: SH } = Dimensions.get('window');
+import { ms, s, vs, wp, hp, SCREEN_HEIGHT } from '../../utils/responsive';
 
 const DELETION_REASONS = [
-  { id: 'not_useful', label: 'App is not useful for me' },
-  { id: 'privacy', label: 'Privacy concerns' },
-  { id: 'too_expensive', label: 'Too expensive' },
-  { id: 'bad_experience', label: 'Bad experience with a user' },
-  { id: 'found_alternative', label: 'Found a better alternative' },
-  { id: 'other', label: 'Other reason' },
+  { id: 'not_hear', label: 'Not able to hear listener' },
+  { id: 'abusive', label: 'Abusive language' },
+  { id: 'not_polite', label: 'Listener not polite' },
+  { id: 'not_interested', label: 'Listener not interested' },
+  { id: 'asked_money', label: 'Asked for money' },
+  { id: 'other', label: 'Other' },
+];
+
+const DELETION_INFO = [
+  [
+    { text: 'Your account information will be kept for ' },
+    { text: '30 days', bold: true },
+    { text: ' after your deletion request. If you do not log in during this period, your account will be permanently deleted.' },
+  ],
+  [
+    { text: 'Once your account is permanently deleted, you ' },
+    { text: 'cannot log in or recover your account', bold: true },
+    { text: '.' },
+  ],
+  [
+    { text: 'After deletion, your personal information, profile, wallet balance, transaction history, coins, and other account data will be permanently removed, except where we are required by law to retain certain records.' },
+  ],
+  [
+    { text: 'Unused coins, wallet balance, rewards, or credits will not be refunded', bold: true },
+    { text: ' and will be permanently forfeited after your account is deleted.' },
+  ],
+  [
+    { text: 'If your account is under investigation for fraud, abuse, illegal activity, or a legal request, Mingo may delay or deny the deletion request until the investigation is complete.' },
+  ],
+  [
+    { text: 'Deleting your account ' },
+    { text: 'does not release you from any legal obligations or liabilities', bold: true },
+    { text: ' arising from your use of the platform before deletion.' },
+  ],
 ];
 
 export default function DeleteAccountPopup({ visible, onClose, onConfirm, isDeleting = false }) {
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const [selectedReason, setSelectedReason] = useState(null);
   const [customReason, setCustomReason] = useState('');
-  const [step, setStep] = useState(1); // 1 = reason selection, 2 = confirmation
+  const [showMore, setShowMore] = useState(false);
 
   const scrollViewRef = useRef(null);
-  const slideAnim = useRef(new Animated.Value(SH)).current;
+  const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
       setSelectedReason(null);
       setCustomReason('');
-      setStep(1);
+      setShowMore(false);
       Animated.parallel([
         Animated.timing(overlayAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
         Animated.spring(slideAnim, { toValue: 0, friction: 9, tension: 40, useNativeDriver: true }),
@@ -37,7 +62,7 @@ export default function DeleteAccountPopup({ visible, onClose, onConfirm, isDele
     } else {
       Animated.parallel([
         Animated.timing(overlayAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
-        Animated.timing(slideAnim, { toValue: SH, duration: 200, useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: SCREEN_HEIGHT, duration: 200, useNativeDriver: true }),
       ]).start();
     }
   }, [visible]);
@@ -50,17 +75,14 @@ export default function DeleteAccountPopup({ visible, onClose, onConfirm, isDele
     }
   }, [selectedReason]);
 
-  const handleNext = () => {
-    if (!selectedReason) return;
-    setStep(2);
-  };
-
-  const handleConfirm = () => {
+  const handleConfirm = useCallback(() => {
     const reason = selectedReason === 'other'
-      ? customReason.trim() || 'Other reason'
+      ? customReason.trim()
       : DELETION_REASONS.find(r => r.id === selectedReason)?.label || '';
     onConfirm(reason);
-  };
+  }, [selectedReason, customReason, onConfirm]);
+
+  const canConfirm = !!selectedReason && (selectedReason !== 'other' || customReason.trim().length > 0);
 
   if (!visible) return null;
 
@@ -75,7 +97,7 @@ export default function DeleteAccountPopup({ visible, onClose, onConfirm, isDele
         style={StyleSheet.absoluteFill}
         pointerEvents="box-none"
       >
-        <Animated.View style={[st.popupContainer, { transform: [{ translateY: slideAnim }], maxHeight: '85%' }]}>
+        <Animated.View style={[st.popupContainer, { transform: [{ translateY: slideAnim }], maxHeight: '90%' }]}>
           <LinearGradient
             colors={['#1A0505', '#0D0D10', '#000']}
             start={{ x: 0.5, y: 0 }}
@@ -90,125 +112,115 @@ export default function DeleteAccountPopup({ visible, onClose, onConfirm, isDele
             <ScrollView
               ref={scrollViewRef}
               style={{ width: '100%' }}
-              contentContainerStyle={{ alignItems: 'center', paddingBottom: windowHeight * 0.03 }}
+              contentContainerStyle={st.scrollContent}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
               {/* Icon */}
               <View style={st.iconCircle}>
-                <Ionicons name={step === 1 ? "trash" : "alert-circle"} size={32} color="#EF4444" />
+                <Ionicons name="trash" size={wp(8)} color="#EF4444" />
               </View>
 
-              {step === 1 ? (
-                <>
-                  <Text style={st.title}>Delete Account</Text>
-                  <Text style={st.description}>
-                    We're sorry to see you go. Please tell us why you want to delete your account.
-                  </Text>
+              <Text style={st.title}>Delete Account</Text>
 
-                  {/* Reasons */}
-                  <View style={st.reasonsList}>
-                    {DELETION_REASONS.map((reason) => (
-                      <TouchableOpacity
-                        key={reason.id}
-                        style={[st.reasonItem, selectedReason === reason.id && st.reasonItemActive]}
-                        onPress={() => setSelectedReason(reason.id)}
-                        activeOpacity={0.7}
-                      >
-                        <View style={[st.radioOuter, selectedReason === reason.id && st.radioOuterActive]}>
-                          {selectedReason === reason.id && <View style={st.radioInner} />}
-                        </View>
-                        <Text style={[st.reasonLabel, selectedReason === reason.id && st.reasonLabelActive]}>
-                          {reason.label}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-
-                  {/* Custom reason input */}
-                  {selectedReason === 'other' && (
-                    <View style={st.inputBox}>
-                      <TextInput
-                        style={st.input}
-                        placeholder="Please specify..."
-                        placeholderTextColor="#4B5563"
-                        value={customReason}
-                        onChangeText={setCustomReason}
-                        multiline
-                        maxLength={300}
-                        textAlignVertical="top"
-                        onFocus={() => {
-                          setTimeout(() => {
-                            scrollViewRef.current?.scrollToEnd({ animated: true });
-                          }, 150);
-                        }}
-                      />
-                    </View>
-                  )}
-
-                  {/* Next Button */}
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={handleNext}
-                    disabled={!selectedReason}
-                    style={[st.btnWrap, !selectedReason && { opacity: 0.4 }]}
-                  >
-                    <LinearGradient
-                      colors={['#EF4444', '#B91C1C']}
-                      style={st.actionBtn}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                    >
-                      <Text style={st.actionBtnText}>Continue</Text>
-                      <Ionicons name="arrow-forward" size={SW * 0.04} color="#fff" />
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <>
-                  <Text style={st.title}>Are you sure?</Text>
-                  <Text style={st.description}>
-                    This action is permanent. You will lose your profile, chat history, favourite listeners, and any remaining coins. This cannot be undone.
-                  </Text>
-
-                  <View style={st.warningBox}>
-                    <Ionicons name="warning" size={SW * 0.045} color="#F59E0B" />
-                    <Text style={st.warningText}>
-                      All your data will be permanently removed from Mingo.
+              {/* Deletion Information */}
+              <View style={st.infoContainer}>
+                <Text style={st.infoHeaderText}>Before you delete your account, please read the following:</Text>
+                
+                {(showMore ? DELETION_INFO : DELETION_INFO.slice(0, 3)).map((info, index) => (
+                  <View key={index} style={st.infoItem}>
+                    <Ionicons name="close-circle" size={wp(4)} color="#EF4444" style={st.infoIcon} />
+                    <Text style={st.infoText}>
+                      {info.map((part, i) => (
+                        <Text key={i} style={part.bold ? st.infoTextBold : null}>{part.text}</Text>
+                      ))}
                     </Text>
                   </View>
+                ))}
 
-                  <View style={st.buttonRow}>
-                    <TouchableOpacity
-                      style={st.cancelBtn}
-                      activeOpacity={0.7}
-                      onPress={onClose}
-                    >
-                      <Text style={st.cancelText}>Cancel</Text>
-                    </TouchableOpacity>
+                <TouchableOpacity 
+                  style={st.viewMoreBtn}
+                  onPress={() => setShowMore(!showMore)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={st.viewMoreText}>{showMore ? 'View less' : 'View more'}</Text>
+                  <Ionicons name={showMore ? "chevron-up" : "chevron-down"} size={wp(4)} color="#9CA3AF" />
+                </TouchableOpacity>
 
-                    <TouchableOpacity
-                      style={st.deleteBtn}
-                      activeOpacity={0.85}
-                      onPress={handleConfirm}
-                      disabled={isDeleting}
-                    >
-                      <LinearGradient
-                        colors={['#EF4444', '#991B1B']}
-                        style={st.deleteBtnGradient}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                      >
-                        {isDeleting ? (
-                          <ActivityIndicator size="small" color="#fff" />
-                        ) : (
-                          <Text style={st.deleteBtnText}>Delete Forever</Text>
-                        )}
-                      </LinearGradient>
-                    </TouchableOpacity>
-                  </View>
-                </>
+                <Text style={st.infoFooter}>
+                  For more information, please refer to our{'\n'}
+                  <Text style={st.linkText} onPress={() => Linking.openURL('https://www.talkmingo.com/privacy-policy')}>Privacy Policy</Text> and{' '}
+                  <Text style={st.linkText} onPress={() => Linking.openURL('https://www.talkmingo.com/terms')}>Terms of Service</Text>
+                </Text>
+              </View>
+
+              {/* Reason Selection */}
+              <Text style={st.reasonTitle}>Please select at least one reason for deleting your account</Text>
+              
+              <View style={st.reasonsContainer}>
+                {DELETION_REASONS.map((reason) => (
+                  <TouchableOpacity
+                    key={reason.id}
+                    style={[st.reasonChip, selectedReason === reason.id && st.reasonChipActive]}
+                    onPress={() => setSelectedReason(reason.id)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[st.reasonChipText, selectedReason === reason.id && st.reasonChipTextActive]}>
+                      {reason.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Custom reason input */}
+              {selectedReason === 'other' && (
+                <View style={st.inputBox}>
+                  <TextInput
+                    style={st.input}
+                    placeholder="Please specify..."
+                    placeholderTextColor="#4B5563"
+                    value={customReason}
+                    onChangeText={setCustomReason}
+                    multiline
+                    maxLength={300}
+                    textAlignVertical="top"
+                    onFocus={() => {
+                      setTimeout(() => {
+                        scrollViewRef.current?.scrollToEnd({ animated: true });
+                      }, 150);
+                    }}
+                  />
+                </View>
               )}
+
+              {/* Help Text */}
+              <Text style={st.helpText}>
+                Need help? Please write to:{' '}
+                <Text style={st.helpEmail} onPress={() => Linking.openURL('mailto:support@talkmingo.com')}>
+                  support@talkmingo.com
+                </Text>
+              </Text>
+
+              {/* Delete Button */}
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={handleConfirm}
+                disabled={!canConfirm || isDeleting}
+                style={[st.btnWrap, (!canConfirm || isDeleting) && { opacity: 0.4 }]}
+              >
+                <LinearGradient
+                  colors={['#EF4444', '#B91C1C']}
+                  style={st.actionBtn}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  {isDeleting ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={st.actionBtnText}>Delete Account</Text>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
             </ScrollView>
           </LinearGradient>
         </Animated.View>
@@ -233,118 +245,171 @@ const st = StyleSheet.create({
   popup: {
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
-    paddingHorizontal: SW * 0.06,
-    paddingTop: SH * 0.035,
-    paddingBottom: SH * 0.02,
+    paddingHorizontal: wp(6),
+    paddingTop: hp(3.5),
+    paddingBottom: hp(2),
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(239, 68, 68, 0.15)',
   },
   closeBtn: {
     position: 'absolute',
-    top: SH * 0.018,
-    right: SW * 0.06,
-    width: SW * 0.08,
-    height: SW * 0.08,
-    borderRadius: SW * 0.04,
+    top: hp(1.8),
+    right: wp(6),
+    width: wp(8),
+    height: wp(8),
+    borderRadius: wp(4),
     backgroundColor: 'rgba(255,255,255,0.1)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
   },
   iconCircle: {
-    width: SW * 0.16,
-    height: SW * 0.16,
-    borderRadius: SW * 0.08,
+    width: wp(16),
+    height: wp(16),
+    borderRadius: wp(8),
     backgroundColor: 'rgba(239,68,68,0.1)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: SH * 0.015,
+    marginBottom: hp(1.5),
     borderWidth: 1,
     borderColor: 'rgba(239,68,68,0.2)',
   },
   title: {
-    fontSize: SW * 0.055,
+    fontSize: ms(22),
     fontWeight: '900',
     color: '#fff',
     fontFamily: 'Inter_900Black',
-    marginBottom: SH * 0.008,
+    marginBottom: hp(1.5),
     textAlign: 'center',
+    letterSpacing: 0.4,
   },
-  description: {
-    fontSize: SW * 0.034,
-    color: 'rgba(255,255,255,0.6)',
-    fontFamily: 'Inter_400Regular',
-    textAlign: 'center',
-    lineHeight: SW * 0.052,
-    marginBottom: SH * 0.02,
-  },
-  reasonsList: {
+  infoContainer: {
     width: '100%',
-    gap: SH * 0.01,
-    marginBottom: SH * 0.015,
-  },
-  reasonItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: SH * 0.015,
-    paddingHorizontal: SW * 0.04,
-    borderRadius: SW * 0.03,
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: 'rgba(239, 68, 68, 0.05)',
+    borderRadius: 16,
+    padding: wp(4),
+    marginBottom: hp(2),
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    gap: SW * 0.03,
+    borderColor: 'rgba(239, 68, 68, 0.1)',
   },
-  reasonItemActive: {
-    backgroundColor: 'rgba(239,68,68,0.08)',
-    borderColor: 'rgba(239,68,68,0.3)',
+  infoHeaderText: {
+    color: '#FCA5A5',
+    fontSize: ms(13),
+    fontFamily: 'Inter_600SemiBold',
+    marginBottom: hp(1),
   },
-  radioOuter: {
-    width: SW * 0.05,
-    height: SW * 0.05,
-    borderRadius: SW * 0.025,
-    borderWidth: 2,
-    borderColor: '#4B5563',
-    alignItems: 'center',
-    justifyContent: 'center',
+  infoItem: {
+    flexDirection: 'row',
+    marginBottom: hp(1),
+    alignItems: 'flex-start',
   },
-  radioOuterActive: {
-    borderColor: '#EF4444',
+  infoIcon: {
+    marginTop: 3,
+    marginRight: wp(2),
   },
-  radioInner: {
-    width: SW * 0.025,
-    height: SW * 0.025,
-    borderRadius: SW * 0.0125,
-    backgroundColor: '#EF4444',
-  },
-  reasonLabel: {
-    color: '#9CA3AF',
-    fontSize: SW * 0.035,
-    fontFamily: 'Inter_500Medium',
+  infoText: {
+    color: '#F3F4F6',
+    fontSize: ms(12),
+    fontFamily: 'Inter_400Regular',
+    lineHeight: ms(18),
     flex: 1,
   },
-  reasonLabelActive: {
+  infoTextBold: {
+    color: '#FCA5A5',
+    fontFamily: 'Inter_700Bold',
+  },
+  viewMoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    marginTop: hp(0.5),
+    gap: wp(1),
+  },
+  viewMoreText: {
+    color: '#9CA3AF',
+    fontSize: ms(12),
+    fontFamily: 'Inter_500Medium',
+  },
+  infoFooter: {
+    color: '#9CA3AF',
+    fontSize: ms(11),
+    fontFamily: 'Inter_400Regular',
+    textAlign: 'center',
+    marginTop: hp(1.5),
+  },
+  linkText: {
+    color: '#3B82F6',
+    textDecorationLine: 'underline',
+  },
+  reasonTitle: {
+    color: '#fff',
+    fontSize: ms(14),
+    fontFamily: 'Inter_600SemiBold',
+    marginBottom: hp(1.5),
+    textAlign: 'center',
+  },
+  reasonsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: wp(3),
+    justifyContent: 'center',
+    marginBottom: hp(2),
+  },
+  scrollContent: {
+    alignItems: 'center',
+    paddingBottom: hp(3),
+  },
+  reasonChip: {
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1.2),
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  reasonChipActive: {
+    backgroundColor: 'rgba(239,68,68,0.15)',
+    borderColor: '#EF4444',
+  },
+  reasonChipText: {
+    color: '#9CA3AF',
+    fontSize: ms(12),
+    fontFamily: 'Inter_500Medium',
+  },
+  reasonChipTextActive: {
     color: '#FCA5A5',
   },
   inputBox: {
     width: '100%',
     backgroundColor: '#000',
-    borderRadius: SW * 0.03,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#1F1F1F',
-    height: SH * 0.08,
-    paddingHorizontal: SW * 0.035,
-    paddingVertical: SH * 0.01,
-    marginBottom: SH * 0.015,
+    height: hp(10),
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1.5),
+    marginBottom: hp(1.5),
   },
   input: {
     color: '#fff',
-    fontSize: SW * 0.034,
+    fontSize: ms(13),
     fontFamily: 'Inter_400Regular',
     height: '100%',
     textAlignVertical: 'top',
     padding: 0,
     margin: 0,
+  },
+  helpText: {
+    color: '#6B7280',
+    fontSize: ms(12),
+    fontFamily: 'Inter_400Regular',
+    marginBottom: hp(2),
+    textAlign: 'center',
+  },
+  helpEmail: {
+    color: '#3B82F6',
+    textDecorationLine: 'underline',
   },
   btnWrap: {
     width: '100%',
@@ -353,69 +418,13 @@ const st = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: SH * 0.018,
-    borderRadius: SW * 0.04,
-    gap: SW * 0.02,
+    paddingVertical: hp(1.8),
+    borderRadius: 24,
+    gap: wp(2),
   },
   actionBtnText: {
     color: '#fff',
-    fontSize: SW * 0.04,
-    fontFamily: 'Inter_700Bold',
-  },
-  warningBox: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(245,158,11,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(245,158,11,0.2)',
-    borderRadius: SW * 0.03,
-    paddingVertical: SH * 0.015,
-    paddingHorizontal: SW * 0.04,
-    gap: SW * 0.025,
-    marginBottom: SH * 0.025,
-  },
-  warningText: {
-    color: '#FCD34D',
-    fontSize: SW * 0.032,
-    fontFamily: 'Inter_400Regular',
-    flex: 1,
-    lineHeight: SW * 0.048,
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: SW * 0.03,
-    width: '100%',
-  },
-  cancelBtn: {
-    flex: 1,
-    height: SH * 0.065,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  cancelText: {
-    fontSize: SW * 0.038,
-    color: '#fff',
-    fontFamily: 'Inter_600SemiBold',
-  },
-  deleteBtn: {
-    flex: 1.2,
-    height: SH * 0.065,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  deleteBtnGradient: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deleteBtnText: {
-    fontSize: SW * 0.038,
-    color: '#fff',
+    fontSize: ms(16),
     fontFamily: 'Inter_700Bold',
   },
 });

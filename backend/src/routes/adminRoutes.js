@@ -58,4 +58,7 @@ router.patch('/profile-approvals/:id/reject', AdminController.rejectProfileChang
 router.get('/sessions', AdminController.getSessions);
 router.get('/ratings', AdminController.getRatings);
 
+// Chat Logs
+router.get('/chat-logs', AdminController.getChatLogs);
+
 module.exports = router;

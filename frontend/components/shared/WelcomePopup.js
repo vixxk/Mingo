@@ -90,12 +90,14 @@ const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.6)',
+    zIndex: 99999,
   },
   popupContainer: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
+    zIndex: 100000,
   },
   popup: {
     backgroundColor: '#1A1A1A',

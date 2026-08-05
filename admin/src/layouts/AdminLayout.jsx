@@ -5,7 +5,8 @@ import LogoutPopup from '../components/shared/LogoutPopup'
 import { authAPI } from '../utils/api'
 import {
   IoGrid, IoPeople, IoHeadset, IoCall, IoShieldCheckmark,
-  IoSettings, IoLogOut, IoMenu, IoChevronForward, IoClose, IoChevronBack,
+  IoSettings, IoLogOut, IoMenu, IoChevronForward, IoClose, IoChevronBack, IoImage,
+  IoChatbubble,
 } from 'react-icons/io5'
 
 const navItems = [
@@ -13,8 +14,10 @@ const navItems = [
   { to: '/users', icon: IoPeople, label: 'Users' },
   { to: '/listeners', icon: IoHeadset, label: 'Listeners' },
   { to: '/sessions', icon: IoCall, label: 'Sessions' },
+  { to: '/chat-logs', icon: IoChatbubble, label: 'Chat Logs' },
   { to: '/approvals', icon: IoShieldCheckmark, label: 'Approvals' },
   { to: '/settings', icon: IoSettings, label: 'Settings' },
+  { to: '/ads', icon: IoImage, label: 'Ads' },
 ]
 
 function Tooltip({ label, visible, x, y }) {

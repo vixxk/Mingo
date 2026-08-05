@@ -1,8 +1,7 @@
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Image } from 'react-native';
 import { useRef, useEffect, useState } from 'react';
-import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ms, s, vs } from '../../utils/responsive';
+import { ms, s, vs, wp, hp, SCREEN_WIDTH, SCREEN_HEIGHT } from '../../utils/responsive';
 
 const formatTime = (totalSeconds) => {
   const h = Math.floor(totalSeconds / 3600);
@@ -16,7 +15,6 @@ export default function CoinsOfferPopup({ visible, onClose, onAddCoins, timeLeft
   const overlayAnim = useRef(new Animated.Value(0)).current;
   const [internalTimeLeft, setInternalTimeLeft] = useState(timeLeftProp || 0);
 
-  
   useEffect(() => {
     if (timeLeftProp !== undefined) {
       setInternalTimeLeft(timeLeftProp);
@@ -37,9 +35,9 @@ export default function CoinsOfferPopup({ visible, onClose, onAddCoins, timeLeft
     }
   }, [visible]);
 
-  if (!visible || internalTimeLeft <= 0) return null;
+  if (!visible) return null;
 
-  const defaultOffer = { title: '80% Off', coins: 80, originalPrice: 55, newPrice: 11 };
+  const defaultOffer = { title: '80% Off', coins: 100, originalPrice: 82, newPrice: 17 };
   const offer = offerData || defaultOffer;
 
   return (
@@ -49,29 +47,14 @@ export default function CoinsOfferPopup({ visible, onClose, onAddCoins, timeLeft
       </Animated.View>
       <Animated.View style={[styles.popupContainer, { transform: [{ translateY: slideAnim }] }]}>
         <LinearGradient
-          colors={['#3D0000', '#1A0000', '#111']}
-          locations={[0, 0.4, 1]}
+          colors={['#7F1D1D', '#B91C1C', '#0A0A0A']}
+          locations={[0, 0.5, 1]}
           style={styles.popup}
         >
-          <View style={styles.timerBadge}>
-            <Ionicons name="timer-outline" size={14} color="#000" />
-            <Text style={styles.timerText}>{formatTime(internalTimeLeft)}</Text>
-          </View>
+          <View style={styles.handleBar} />
+          <Text style={styles.offerSubtitle}>Limited Time Offer</Text>
+          <Text style={styles.offerTitle}>Flat <Text style={styles.offerTitleBold}>{offer.title}</Text></Text>
 
-          {}
-          <TouchableOpacity 
-            style={styles.closeBtn} 
-            activeOpacity={0.7} 
-            onPress={onClose}
-          >
-            <Ionicons name="close" size={24} color="rgba(255,255,255,0.6)" />
-          </TouchableOpacity>
-
-          {}
-          <Text style={styles.offerTitle}>Flat <Text style={{fontWeight: '900'}}>{offer.title}</Text></Text>
-          <Text style={styles.offerSubtitle}>First Time Signup Offer</Text>
-
-          {}
           <View style={styles.coinsImageWrap}>
             <Image
               source={require('../../images/coins image for popup.png')}
@@ -80,23 +63,22 @@ export default function CoinsOfferPopup({ visible, onClose, onAddCoins, timeLeft
             />
           </View>
 
-          {}
-          <Text style={styles.coinsAmount}>{offer.coins} Coins</Text>
+          <Text style={styles.coinsAmount}>{offer.coins} coins</Text>
+          
           <View style={styles.priceRow}>
             <Text style={styles.priceAt}>@ </Text>
             <Text style={styles.priceOld}>₹{offer.originalPrice}</Text>
             <Text style={styles.priceNew}> ₹{offer.newPrice}</Text>
           </View>
 
-          {}
           <TouchableOpacity activeOpacity={0.8} onPress={onAddCoins} style={styles.addBtnWrap}>
             <LinearGradient
-              colors={['#3B82F6', '#EC4899', '#F59E0B']}
+              colors={['#EF4444', '#B91C1C']}
               start={{ x: 0, y: 0.5 }}
               end={{ x: 1, y: 0.5 }}
               style={styles.addBtn}
             >
-              <Text style={styles.addBtnText}>Add Coins</Text>
+              <Text style={styles.addBtnText}>Add {offer.coins} Coins</Text>
             </LinearGradient>
           </TouchableOpacity>
         </LinearGradient>
@@ -116,64 +98,50 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
   },
+  handleBar: {
+    width: wp(12),
+    height: hp(0.5),
+    borderRadius: 100,
+    backgroundColor: 'rgba(255,255,255,0.5)',
+    marginBottom: hp(2),
+  },
   popup: {
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    paddingHorizontal: s(24),
-    paddingTop: vs(20),
-    paddingBottom: vs(28),
+    paddingHorizontal: wp(6),
+    paddingTop: hp(2),
+    paddingBottom: hp(4),
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#3A1010',
+    borderColor: '#7F1D1D',
     borderBottomWidth: 0,
-  },
-  timerBadge: {
-    position: 'absolute',
-    top: -15,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    paddingHorizontal: s(16),
-    paddingVertical: vs(6),
-    gap: 6,
-    zIndex: 10,
-  },
-  timerText: {
-    fontSize: ms(12, 0.3),
-    color: '#000',
-    fontFamily: 'Inter_700Bold',
-    fontWeight: '700',
-  },
-  closeBtn: {
-    position: 'absolute',
-    top: vs(16),
-    right: s(24),
-    width: s(32),
-    height: s(32),
-    borderRadius: s(16),
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10,
-  },
-  offerTitle: {
-    fontSize: ms(32, 0.3),
-    fontWeight: '800',
-    color: '#fff',
-    fontFamily: 'Inter_900Black',
-    marginBottom: vs(2),
-    marginTop: vs(12),
+    overflow: 'hidden',
   },
   offerSubtitle: {
-    fontSize: ms(14, 0.3),
-    color: '#D1D5DB',
-    fontFamily: 'Inter_400Regular',
+    fontSize: ms(14),
+    color: '#FFFFFF',
+    fontFamily: 'Inter_500Medium',
+    marginBottom: vs(4),
+    marginTop: vs(8),
+  },
+  offerTitle: {
+    fontSize: ms(30),
+    fontWeight: '900',
+    color: '#fff',
+    fontFamily: 'Inter_900Black',
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
     marginBottom: vs(16),
   },
+  offerTitleBold: {
+    fontWeight: '900',
+    color: '#FFFFFF',
+  },
   coinsImageWrap: {
-    width: s(180),
-    height: vs(120),
+    width: wp(45),
+    height: hp(15),
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: vs(16),
@@ -183,11 +151,11 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   coinsAmount: {
-    fontSize: ms(24, 0.3),
+    fontSize: ms(24),
     fontWeight: '800',
     color: '#fff',
     fontFamily: 'Inter_900Black',
-    marginBottom: vs(4),
+    marginBottom: vs(8),
   },
   priceRow: {
     flexDirection: 'row',
@@ -195,18 +163,18 @@ const styles = StyleSheet.create({
     marginBottom: vs(20),
   },
   priceAt: {
-    fontSize: ms(14, 0.3),
+    fontSize: ms(14),
     color: '#9CA3AF',
     fontFamily: 'Inter_400Regular',
   },
   priceOld: {
-    fontSize: ms(14, 0.3),
+    fontSize: ms(14),
     color: '#6B7280',
     fontFamily: 'Inter_400Regular',
     textDecorationLine: 'line-through',
   },
   priceNew: {
-    fontSize: ms(18, 0.3),
+    fontSize: ms(18),
     color: '#fff',
     fontWeight: '700',
     fontFamily: 'Inter_700Bold',
@@ -215,7 +183,7 @@ const styles = StyleSheet.create({
     width: '100%',
     borderRadius: 30,
     overflow: 'hidden',
-    height: vs(52),
+    height: hp(6),
   },
   addBtn: {
     flex: 1,
@@ -224,7 +192,7 @@ const styles = StyleSheet.create({
   },
   addBtnText: {
     color: '#fff',
-    fontSize: ms(18, 0.3),
+    fontSize: ms(16),
     fontWeight: '700',
     fontFamily: 'Inter_700Bold',
   },

@@ -298,6 +298,7 @@ class AuthService {
       avatarIndex: user.avatarIndex,
       coins: user.coins,
       interests: user.interests,
+      billingAddress: user.billingAddress,
       isFirstSignup: user.isFirstSignup,
       signupTimestamp: user.signupTimestamp,
       favouriteListeners: user.favouriteListeners,

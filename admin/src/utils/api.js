@@ -279,6 +279,15 @@ export const adminAPI = {
     return apiRequest(`/admin/sessions?${query}`)
   },
 
+  getChatLogs: async (params = {}) => {
+    const query = new URLSearchParams(params).toString()
+    return apiRequest(`/admin/chat-logs?${query}`)
+  },
+
+  getChatLogDetail: async (conversationId) => {
+    return apiRequest(`/admin/chat-logs?conversationId=${conversationId}&limit=1`)
+  },
+
   getRatings: async (params = {}) => {
     const query = new URLSearchParams(params).toString()
     return apiRequest(`/admin/ratings?${query}`)
@@ -375,6 +384,32 @@ export const adminAPI = {
     return apiRequest('/admin/notifications/send', {
       method: 'POST',
       body: JSON.stringify(data),
+    })
+  },
+
+  // Ads
+  getAds: async () => {
+    return apiRequest('/ads')
+  },
+  createAd: async (data) => {
+    return apiRequest('/ads', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+  updateAd: async (id, data) => {
+    return apiRequest(`/ads/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  },
+  deleteAd: async (id) => {
+    return apiRequest(`/ads/${id}`, { method: 'DELETE' })
+  },
+  getAdUploadUrl: async (payload) => {
+    return apiRequest('/ads/upload-url', {
+      method: 'POST',
+      body: JSON.stringify(payload),
     })
   },
 }

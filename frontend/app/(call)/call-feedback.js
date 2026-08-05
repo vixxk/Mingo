@@ -9,24 +9,78 @@ import {
   Platform,
   ScrollView,
   BackHandler,
+  Animated,
+  ActivityIndicator,
+  LayoutAnimation,
+  UIManager,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
-import { ActivityIndicator } from 'react-native';
-import { ms, s, vs, SCREEN_HEIGHT } from '../../utils/responsive';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ms, s, vs } from '../../utils/responsive';
 
-import { ratingAPI } from '../../utils/api';
+import { ratingAPI, walletAPI } from '../../utils/api';
+import StatusPopup from '../../components/shared/StatusPopup';
+import CenteredOfferPopup from '../../components/shared/CenteredOfferPopup';
 
-const TAGS = [
-  'Fun Conversation',
-  'Helpful Advice',
-  'Friendly Listener',
-  'Sweet Personality',
-];
+// Enable smooth chip re-layout animations on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+// Feedback options change with the star rating so we capture the user's
+// actual sentiment — appreciation for high ratings, issues for low ones.
+const TIERS = {
+  high: {
+    prompt: 'What did you love about this session?',
+    icon: 'heart',
+    color: '#22C55E',
+    textColor: '#4ADE80',
+    tags: ['Fun Conversation', 'Helpful Advice', 'Friendly Listener', 'Sweet Personality'],
+  },
+  mid: {
+    prompt: 'What could have been better?',
+    icon: 'bulb-outline',
+    color: '#F59E0B',
+    textColor: '#FBBF24',
+    tags: ['Average Conversation', 'Okay Advice', 'Could Be Friendlier', 'Short Session'],
+  },
+  low: {
+    prompt: 'What went wrong? Help us improve.',
+    icon: 'warning',
+    color: '#EF4444',
+    textColor: '#F87171',
+    tags: ['Not Listening Properly', 'Rude Behavior', 'Poor Connection', 'Unhelpful Advice'],
+  },
+};
+
+const getTier = (rating) => (rating <= 2 ? 'low' : rating === 3 ? 'mid' : 'high');
+
+function StarButton({ filled, size, onPress }) {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const handlePress = () => {
+    Animated.sequence([
+      Animated.spring(scale, { toValue: 1.35, friction: 3, tension: 200, useNativeDriver: true }),
+      Animated.spring(scale, { toValue: 1, friction: 3, tension: 200, useNativeDriver: true }),
+    ]).start();
+    onPress();
+  };
+
+  return (
+    <TouchableOpacity activeOpacity={0.7} onPress={handlePress}>
+      <Animated.View style={{ transform: [{ scale }] }}>
+        <Ionicons
+          name={filled ? 'star' : 'star-outline'}
+          size={size}
+          color={filled ? '#FBBF24' : '#6B7280'}
+        />
+      </Animated.View>
+    </TouchableOpacity>
+  );
+}
 
 export default function CallFeedbackScreen() {
   const insets = useSafeAreaInsets();
@@ -37,7 +91,34 @@ export default function CallFeedbackScreen() {
   const [selectedTags, setSelectedTags] = useState([]);
   const [feedback, setFeedback] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [popup, setPopup] = useState({
+    visible: false,
+    type: 'success',
+    title: '',
+    message: '',
+    onClose: null,
+  });
+  const [showCoinOffer, setShowCoinOffer] = useState(false);
+  const [offerData, setOfferData] = useState(null);
+  const [offerLoading, setOfferLoading] = useState(false);
   const allowNavigationRef = useRef(false);
+
+  const tier = getTier(rating);
+  const tierInfo = TIERS[tier];
+  const tagsAnim = useRef(new Animated.Value(1)).current;
+  const prevTierRef = useRef(tier);
+
+  // When the rating crosses into a new sentiment tier, swap the tag set
+  // with a short fade/slide and drop tags that no longer apply.
+  useEffect(() => {
+    if (prevTierRef.current !== tier) {
+      prevTierRef.current = tier;
+      setSelectedTags((prev) => prev.filter((t) => TIERS[tier].tags.includes(t)));
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      tagsAnim.setValue(0);
+      Animated.timing(tagsAnim, { toValue: 1, duration: 280, useNativeDriver: true }).start();
+    }
+  }, [tier, tagsAnim]);
 
   useEffect(() => {
     navigation.setOptions({
@@ -72,34 +153,117 @@ export default function CallFeedbackScreen() {
     );
   };
 
-  const handleSubmit = async () => {
-    let target = '/';
-
-    if (!sessionId) {
+  // Go straight to the home tab — avoids re-showing the splash screen,
+  // which made the app look like it was restarting.
+  const goHomeRef = useRef(false);
+  const goHome = () => {
+    if (goHomeRef.current) return;
+    goHomeRef.current = true;
+    setTimeout(() => {
       allowNavigationRef.current = true;
       try {
         router.dismissAll();
       } catch (e) {}
-      router.replace(target);
+      router.replace('/(tabs)');
+    }, 200);
+  };
+
+  // Send the user straight to the coin wallet to top up.
+  const goToWallet = () => {
+    if (goHomeRef.current) return;
+    goHomeRef.current = true;
+    setTimeout(() => {
+      allowNavigationRef.current = true;
+      try {
+        router.dismissAll();
+      } catch (e) {}
+      router.replace('/(tabs)');
+      router.push('/balance');
+    }, 200);
+  };
+
+  // Show the post-feedback upsell offer. No mock data: the popup renders a
+  // loader until the real coin pack arrives, then shows the actual deal.
+  const openCoinOffer = () => {
+    setShowCoinOffer(true);
+    setOfferLoading(true);
+    setOfferData(null);
+    (async () => {
+      try {
+        const pkgRes = await walletAPI.getPackages();
+        if (pkgRes?.data?.packages?.length) {
+          // Pick the real best deal — highest discount, ties broken by coin count.
+          const bestPkg = pkgRes.data.packages.reduce((best, pkg) => {
+            const bestScore = (best?.discount || 0) * 1000 + (best?.coins || 0);
+            const pkgScore = (pkg?.discount || 0) * 1000 + (pkg?.coins || 0);
+            return pkgScore > bestScore ? pkg : best;
+          });
+          // Only swap in the real offer when every field is present — otherwise
+          // leave offerData null so the popup shows its graceful empty state.
+          if (
+            bestPkg &&
+            bestPkg.discount !== undefined &&
+            bestPkg.coins > 0 &&
+            bestPkg.originalPrice > 0 &&
+            bestPkg.price > 0
+          ) {
+            setOfferData({
+              title: `${bestPkg.discount}% Off`,
+              coins: bestPkg.coins,
+              originalPrice: bestPkg.originalPrice,
+              newPrice: bestPkg.price,
+            });
+          }
+        }
+      } catch (e) {
+        console.log('Failed to load coin offer:', e);
+      } finally {
+        setOfferLoading(false);
+      }
+    })();
+  };
+
+  const handleSuccessPopupClose = () => {
+    setPopup((prev) => ({ ...prev, visible: false }));
+    // Show coin offer after a short delay to ensure success popup is closed
+    setTimeout(() => {
+      openCoinOffer();
+    }, 300);
+  };
+
+  const handleSubmit = async () => {
+    if (isSubmitting) return;
+
+    if (!sessionId) {
+      goHome();
       return;
     }
 
     try {
       setIsSubmitting(true);
-      const combinedFeedback = selectedTags.length > 0 
+      const combinedFeedback = selectedTags.length > 0
         ? `${selectedTags.join(', ')}. ${feedback}`
         : feedback;
-        
+
       await ratingAPI.submit(sessionId, rating, combinedFeedback);
+      setPopup({
+        visible: true,
+        type: 'success',
+        title: 'Feedback Submitted',
+        message: 'Thanks for sharing your experience. Your feedback helps us improve Mingo.',
+        onClose: handleSuccessPopupClose,
+      });
     } catch (e) {
       console.log('Error submitting feedback:', e);
+      setPopup({
+        visible: true,
+        type: 'error',
+        title: 'Submission Failed',
+        message: "We couldn't submit your feedback. Please check your connection and try again.",
+        onClose: () => setPopup((prev) => ({ ...prev, visible: false })),
+      });
     } finally {
       setIsSubmitting(false);
-      allowNavigationRef.current = true;
-      try {
-        router.dismissAll();
-      } catch (e) {}
-      router.replace(target);
     }
   };
 
@@ -123,48 +287,62 @@ export default function CallFeedbackScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {}
           <Text style={styles.heading}>
             How was your session with{'\n'}{name}?
           </Text>
 
-          {}
           <View style={styles.starsRow}>
             {[1, 2, 3, 4, 5].map((star) => (
-              <TouchableOpacity
+              <StarButton
                 key={star}
-                activeOpacity={0.7}
+                filled={star <= rating}
+                size={38}
                 onPress={() => setRating(star)}
-              >
-                <Ionicons
-                  name={star <= rating ? 'star' : 'star-outline'}
-                  size={36}
-                  color="#fff"
-                />
-              </TouchableOpacity>
+              />
             ))}
           </View>
 
-          {}
-          <View style={styles.tagsWrap}>
-            {TAGS.map((tag) => {
-              const selected = selectedTags.includes(tag);
-              return (
-                <TouchableOpacity
-                  key={tag}
-                  style={[styles.tag, selected && styles.tagSelected]}
-                  activeOpacity={0.7}
-                  onPress={() => toggleTag(tag)}
-                >
-                  <Text style={[styles.tagText, selected && styles.tagTextSelected]}>
-                    {tag}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          <Animated.View
+            style={{
+              alignItems: 'center',
+              opacity: tagsAnim,
+              transform: [
+                { translateY: tagsAnim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) },
+              ],
+            }}
+          >
+            <View style={styles.promptRow}>
+              <Ionicons name={tierInfo.icon} size={16} color={tierInfo.color} />
+              <Text style={[styles.promptText, { color: tierInfo.textColor }]}>
+                {tierInfo.prompt}
+              </Text>
+            </View>
 
-          {}
+            <View style={styles.tagsWrap}>
+              {tierInfo.tags.map((tag) => {
+                const selected = selectedTags.includes(tag);
+                return (
+                  <TouchableOpacity
+                    key={tag}
+                    style={[
+                      styles.tag,
+                      selected && {
+                        backgroundColor: `${tierInfo.color}26`,
+                        borderColor: tierInfo.color,
+                      },
+                    ]}
+                    activeOpacity={0.7}
+                    onPress={() => toggleTag(tag)}
+                  >
+                    <Text style={[styles.tagText, selected && { color: tierInfo.textColor }]}>
+                      {tag}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </Animated.View>
+
           <View style={styles.inputWrap}>
             <TextInput
               style={styles.input}
@@ -178,7 +356,6 @@ export default function CallFeedbackScreen() {
             <Text style={styles.charCount}>{feedback.length}/100</Text>
           </View>
 
-          {}
           <TouchableOpacity
             style={[styles.submitBtn, isSubmitting && { opacity: 0.7 }]}
             activeOpacity={0.85}
@@ -195,6 +372,28 @@ export default function CallFeedbackScreen() {
           <View style={{ height: vs(40) }} />
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <StatusPopup
+        visible={popup.visible}
+        type={popup.type}
+        title={popup.title}
+        message={popup.message}
+        onClose={popup.onClose}
+      />
+
+      <CenteredOfferPopup
+        visible={showCoinOffer}
+        onClose={() => {
+          setShowCoinOffer(false);
+          goHome();
+        }}
+        onAddCoins={() => {
+          setShowCoinOffer(false);
+          goToWallet();
+        }}
+        offerData={offerData}
+        loading={offerLoading}
+      />
     </View>
   );
 }
@@ -209,7 +408,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
-  
   heading: {
     fontSize: ms(24, 0.3),
     fontWeight: '900',
@@ -220,14 +418,23 @@ const styles = StyleSheet.create({
     marginBottom: vs(24),
   },
 
-  
   starsRow: {
     flexDirection: 'row',
     gap: s(8),
     marginBottom: vs(24),
   },
 
-  
+  promptRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(8),
+    marginBottom: vs(14),
+  },
+  promptText: {
+    fontSize: ms(14, 0.3),
+    fontFamily: 'Inter_600SemiBold',
+  },
+
   tagsWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -242,20 +449,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: s(16),
     paddingVertical: vs(9),
   },
-  tagSelected: {
-    backgroundColor: '#1F2937',
-    borderColor: '#9CA3AF',
-  },
   tagText: {
     fontSize: ms(13, 0.3),
     color: '#9CA3AF',
     fontFamily: 'Inter_500Medium',
   },
-  tagTextSelected: {
-    color: '#fff',
-  },
 
-  
   inputWrap: {
     width: '100%',
     backgroundColor: '#141414',
@@ -284,7 +483,6 @@ const styles = StyleSheet.create({
     marginTop: vs(4),
   },
 
-  
   submitBtn: {
     backgroundColor: '#fff',
     borderRadius: 28,

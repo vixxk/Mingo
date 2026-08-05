@@ -7,13 +7,14 @@ const AppError = require('../utils/appError');
 class UserController {
   static async updateProfile(req, res, next) {
     try {
-      const { name, username, gender, language, avatarIndex, interests } = req.body;
+      const { name, username, gender, language, avatarIndex, interests, billingAddress } = req.body;
       const update = {};
       if (name !== undefined) update.name = name;
       if (gender !== undefined) update.gender = gender;
       if (language !== undefined) update.language = language;
       if (avatarIndex !== undefined) update.avatarIndex = avatarIndex;
       if (interests !== undefined) update.interests = interests;
+      if (billingAddress !== undefined) update.billingAddress = billingAddress;
 
       // Handle username update with uniqueness check
       if (username !== undefined) {
@@ -50,6 +51,7 @@ class UserController {
         avatarIndex: user.avatarIndex,
         coins: user.coins,
         interests: user.interests,
+        billingAddress: user.billingAddress,
       }, 'Profile updated');
     } catch (err) {
       next(err);

@@ -244,6 +244,10 @@ export const listenerAPI = {
     return apiRequest('/listener/my-profile');
   },
 
+  getEarningsStats: async () => {
+    return apiRequest('/listener/earnings-stats');
+  },
+
   updatePublicProfile: async (data) => {
     return apiRequest('/listener/public-profile', {
       method: 'PATCH',
@@ -457,6 +461,12 @@ export const chatAPI = {
   },
   getMessages: async (conversationId) => {
     return apiRequest(`/chat/conversations/${conversationId}/messages`);
+  },
+};
+
+export const adsAPI = {
+  getActiveAds: async () => {
+    return apiRequest('/ads/active');
   },
 };
 

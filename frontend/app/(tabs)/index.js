@@ -7,10 +7,7 @@ import {
   Image,
   TouchableOpacity,
   FlatList,
-  Dimensions,
   Animated,
-  Modal,
-  Pressable,
   RefreshControl,
   BackHandler,
   AppState,
@@ -23,12 +20,14 @@ import { useRouter, useFocusEffect, useNavigation } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, wp, hp, SCREEN_WIDTH } from '../../utils/responsive';
 import { getAvatarUrl } from '../../utils/avatars';
-import { walletAPI, listenersAPI, authAPI, callAPI } from '../../utils/api';
+import { walletAPI, listenersAPI, authAPI, callAPI, notificationAPI, adsAPI } from '../../utils/api';
 import { socketService } from '../../utils/socket';
 import WelcomePopup from '../../components/shared/WelcomePopup';
 import CoinsOfferPopup from '../../components/shared/CoinsOfferPopup';
+import CenteredOfferPopup from '../../components/shared/CenteredOfferPopup';
 import InsufficientBalancePopup from '../../components/shared/InsufficientBalancePopup';
 import NotificationsPopup from '../../components/shared/NotificationsPopup';
+import AdSlider from '../../components/shared/AdSlider';
 import { useStatusSSE } from '../../utils/useStatusSSE';
 import HomeSkeleton from '../../components/HomeSkeleton';
 
@@ -364,9 +363,12 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  const [ads, setAds] = useState([]);
   const [showWelcome, setShowWelcome] = useState(false);
+  const [showCenteredOffer, setShowCenteredOffer] = useState(false);
   const [showCoinsOffer, setShowCoinsOffer] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
   const [signupTimestamp, setSignupTimestamp] = useState(Date.now());
 
   const loadRealData = useCallback(async () => {
@@ -464,6 +466,15 @@ export default function HomeScreen() {
       console.log('Listeners fetch fallback:', e.message);
     } finally {
       setLoading(false);
+    }
+
+    try {
+      const adsRes = await adsAPI.getActiveAds();
+      if (adsRes?.data) {
+        setAds(adsRes.data);
+      }
+    } catch (e) {
+      console.log('Ads fetch fallback:', e.message);
     }
   }, []);
 
@@ -571,6 +582,22 @@ export default function HomeScreen() {
     setRefreshing(false);
   }, [loadRealData]);
 
+  const fetchUnreadNotifications = useCallback(async () => {
+    try {
+      const res = await notificationAPI.getNotifications(1, 20);
+      const list = res?.data?.notifications || [];
+      setHasUnreadNotifications(list.some(n => !n.isRead));
+    } catch (e) {
+      console.log('Failed to fetch unread notifications:', e);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchUnreadNotifications();
+    }, [fetchUnreadNotifications])
+  );
+
   useEffect(() => {
     if (discountTimeLeft <= 0) return;
     const interval = setInterval(() => {
@@ -589,11 +616,31 @@ export default function HomeScreen() {
     const checkFirstSignup = async () => {
       try {
         const hasSeenWelcome = await AsyncStorage.getItem('hasSeenWelcomePopup');
-        if (!hasSeenWelcome) {
+        const hasSeenCoins = await AsyncStorage.getItem('hasSeenCoinsPopup');
+        const showLoginOffers = await AsyncStorage.getItem('showLoginOffers');
+        
+        let balance = coinBalance;
+        if (showLoginOffers === 'true' || !hasSeenWelcome || !hasSeenCoins) {
+          try {
+            const balRes = await walletAPI.getBalance();
+            if (balRes?.data?.coins !== undefined) {
+              balance = balRes.data.coins;
+            }
+          } catch (e) {}
+        }
+
+        if (showLoginOffers === 'true' && balance === 0) {
+          // Show both popups on login only for users with 0 coins
+          setShowCenteredOffer(true);
+          await AsyncStorage.removeItem('showLoginOffers');
+        } else if (showLoginOffers === 'true') {
+          await AsyncStorage.removeItem('showLoginOffers');
+        } else if (!hasSeenWelcome) {
+          // Only show welcome popup on login, not every app open
           setShowWelcome(true);
+          await AsyncStorage.setItem('hasSeenWelcomePopup', 'true');
         } else {
-          const hasSeenCoins = await AsyncStorage.getItem('hasSeenCoinsPopup');
-          if (!hasSeenCoins && isFirstPurchaseEligible) {
+          if (!hasSeenCoins && isFirstPurchaseEligible && balance === 0) {
             setShowCoinsOffer(true);
           }
         }
@@ -620,13 +667,34 @@ export default function HomeScreen() {
     handleAppOpenCount();
   }, []);
 
+  const handleAppStateChange = (nextAppState) => {
+    if (nextAppState === 'active') {
+      console.log('[Home] App came to foreground, refreshing data...');
+      loadRealData();
+      
+      // Check if this is the first time the app has been opened (not login)
+      const checkAppOpenCount = async () => {
+        try {
+          const countStr = await AsyncStorage.getItem('appOpenCount');
+          const count = countStr ? parseInt(countStr, 10) : 0;
+          
+          // Only run welcome check if app has been opened once (on first open after login)
+          if (count > 0) {
+            const hasSeenWelcome = await AsyncStorage.getItem('hasSeenWelcomePopup');
+            if (!hasSeenWelcome && !showWelcome && !showCenteredOffer && !showCoinsOffer) {
+              setShowWelcome(true);
+            }
+          }
+        } catch (e) {
+          console.log('Error checking app open count:', e);
+        }
+      };
+      
+      checkAppOpenCount();
+    }
+  };
+  
   useEffect(() => {
-    const handleAppStateChange = (nextAppState) => {
-      if (nextAppState === 'active') {
-        console.log('[Home] App came to foreground, refreshing data...');
-        loadRealData();
-      }
-    };
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     return () => {
       subscription.remove();
@@ -638,6 +706,18 @@ export default function HomeScreen() {
     await AsyncStorage.setItem('hasSeenWelcomePopup', 'true');
     
     setTimeout(() => setShowCoinsOffer(true), 400);
+  };
+
+  const handleCenteredOfferClose = async () => {
+    setShowCenteredOffer(false);
+    // Show the second popup after the first one is closed
+    setTimeout(() => setShowCoinsOffer(true), 400);
+  };
+
+  const handleCenteredOfferAddCoins = async () => {
+    setShowCenteredOffer(false);
+    await AsyncStorage.setItem('hasSeenCoinsPopup', 'true');
+    router.push('/balance');
   };
 
   const handleCoinsClose = async () => {
@@ -677,16 +757,12 @@ export default function HomeScreen() {
         }
       });
     } else {
-      // Random call
+      // Random call — show the dedicated matching screen first
       router.push({
-        pathname: '/(call)/connecting',
+        pathname: '/(call)/finding-listener',
         params: {
-          name: 'Random User',
           callType,
-          callId: `call_${Date.now()}`,
-          roomId: `room_${Date.now()}`,
-          isRandom: 'true',
-          role: 'USER'
+          isRandom: 'true'
         }
       });
     }
@@ -712,42 +788,22 @@ export default function HomeScreen() {
 
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: 50,
-  }).current;
-
-  
-  const [showFab, setShowFab] = useState(false);
-
-  const handleRandomClick = () => {
-    setShowFab(true);
-    // Hide the random button
-    Animated.timing(randomAnim, { toValue: 120, duration: 200, useNativeDriver: true }).start();
-  };
-
-  const handleCloseFab = () => {
-    setShowFab(false);
-    // Bring random button back if scrolled
-    if (showRandom) {
-      Animated.spring(randomAnim, { toValue: 0, friction: 6, useNativeDriver: true }).start();
-    }
-  };
-
-  
-  const [showRandom, setShowRandom] = useState(false);
-  const randomAnim = useRef(new Animated.Value(120)).current; 
+  }).current;  const [showBottomBar, setShowBottomBar] = useState(true);
+  const bottomBarAnim = useRef(new Animated.Value(0)).current;
 
   const scrollViewRef = useRef(null);
 
   const handleScroll = (event) => {
     const { contentOffset } = event.nativeEvent;
     const y = contentOffset.y;
-    const isScrolledDown = y > 100;
+    const isScrolledDown = y > 50;
 
-    if (isScrolledDown && !showRandom) {
-      setShowRandom(true);
-      Animated.spring(randomAnim, { toValue: 0, friction: 6, useNativeDriver: true }).start();
-    } else if (!isScrolledDown && showRandom) {
-      setShowRandom(false);
-      Animated.timing(randomAnim, { toValue: 120, duration: 200, useNativeDriver: true }).start();
+    if (isScrolledDown && showBottomBar) {
+      setShowBottomBar(false);
+      Animated.timing(bottomBarAnim, { toValue: 100, duration: 200, useNativeDriver: true }).start();
+    } else if (!isScrolledDown && !showBottomBar) {
+      setShowBottomBar(true);
+      Animated.spring(bottomBarAnim, { toValue: 0, friction: 6, useNativeDriver: true }).start();
     }
   };
 
@@ -786,15 +842,11 @@ export default function HomeScreen() {
       {}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity
-            style={styles.coinBadge}
-            activeOpacity={0.7}
-            onPress={() => router.push('/balance')}
-          >
-            <Text style={styles.coinEmoji}>🪙</Text>
-            <Text style={styles.coinCount}>{coinBalance}</Text>
-          </TouchableOpacity>
-
+          <Image
+            source={require('../../images/Mingo Splash Text.png')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
           {discountTimeLeft > 0 && (
             <TouchableOpacity
               style={styles.timerCapsule}
@@ -809,21 +861,24 @@ export default function HomeScreen() {
           )}
         </View>
         <View style={styles.headerRight}>
-          <TouchableOpacity 
-            activeOpacity={0.7} 
-            onPress={() => router.push('/profile')}
+          <TouchableOpacity
+            style={styles.coinBadge}
+            activeOpacity={0.7}
+            onPress={() => router.push('/balance')}
           >
-            <Image
-              source={userAvatar ? { uri: userAvatar } : require('../../images/user_avatar.png')}
-              style={styles.avatar}
-            />
+            <Text style={styles.coinEmoji}>🪙</Text>
+            <Text style={styles.coinCount}>{coinBalance}</Text>
           </TouchableOpacity>
           <TouchableOpacity 
             style={styles.notificationBtn} 
             activeOpacity={0.7}
-            onPress={() => setShowNotifications(true)}
+            onPress={() => {
+              setHasUnreadNotifications(false);
+              setShowNotifications(true);
+            }}
           >
             <Ionicons name="notifications-outline" size={24} color="#fff" />
+            {hasUnreadNotifications && <View style={styles.notifDot} />}
           </TouchableOpacity>
         </View>
       </View>
@@ -846,6 +901,7 @@ export default function HomeScreen() {
           />
         }
       >
+        <AdSlider ads={ads} />
         {}
         <Text style={styles.sectionTitle}>Best Choice</Text>
 
@@ -926,95 +982,57 @@ export default function HomeScreen() {
       </ScrollView>
 
       {}
-      {!showFab && (
+      {/* Fixed Bottom Find Me Button */}
+      {!(showCenteredOffer || showCoinsOffer) && (
         <Animated.View
           style={[
-            styles.floatingRandomWrapper,
-            { bottom: hp(18), right: wp(5), transform: [{ translateX: randomAnim }] },
+            styles.findMeContainer,
+            { bottom: insets.bottom + hp(2), transform: [{ translateY: bottomBarAnim }] },
           ]}
           pointerEvents="box-none"
         >
-          <TouchableOpacity
-            style={styles.randomBtn}
-            activeOpacity={0.85}
-            onPress={handleRandomClick}
+          <LinearGradient
+            colors={['#DC2626', '#991B1B', '#000000']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.findMeButton}
           >
-            <Text style={styles.randomBtnText}>Random </Text>
-            <Ionicons name="shuffle" size={ms(18)} color="#fff" />
-          </TouchableOpacity>
+            <View style={styles.findMeContent}>
+              <View style={styles.findMeLeft}>
+                <Ionicons name="sparkles" size={wp(4.5)} color="#fff" />
+                <Text style={styles.findMeText}>Find me the right one</Text>
+              </View>
+              <View style={styles.findMeActions}>
+                <TouchableOpacity
+                  style={styles.findMeCallBtn}
+                  activeOpacity={0.8}
+                  onPress={() => handleCallPress(null, 'audio')}
+                >
+                  <Ionicons name="call" size={wp(5)} color="#fff" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.findMeCallBtn}
+                  activeOpacity={0.8}
+                  onPress={() => handleCallPress(null, 'video')}
+                >
+                  <Ionicons name="videocam" size={wp(5)} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </LinearGradient>
         </Animated.View>
       )}
-
-      {/* FAB Menu Modal */}
-      <Modal
-        transparent
-        visible={showFab}
-        animationType="fade"
-        statusBarTranslucent
-        onRequestClose={handleCloseFab}
-      >
-        <Pressable style={styles.fabOverlay} onPress={handleCloseFab}>
-          <View style={styles.fabMenu}>
-            {/* Video Call — top, right-aligned */}
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => {
-                handleCloseFab();
-                handleCallPress(null, 'video');
-              }}
-              style={styles.fabVideoRow}
-            >
-              <LinearGradient
-                colors={['#3B82F6', '#2563EB']}
-                style={styles.fabCircle}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
-                <Ionicons name="videocam" size={hp(3)} color="#fff" />
-              </LinearGradient>
-            </TouchableOpacity>
-
-            {/* Bottom row: Audio (left) + Close (right) */}
-            <View style={styles.fabBottomRow}>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => {
-                  handleCloseFab();
-                  handleCallPress(null, 'audio');
-                }}
-              >
-                <LinearGradient
-                  colors={['#22C55E', '#16A34A']}
-                  style={styles.fabCircle}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                >
-                  <Ionicons name="call" size={hp(3)} color="#fff" />
-                </LinearGradient>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={handleCloseFab}
-              >
-                <LinearGradient
-                  colors={['#3B82F6', '#EC4899', '#F59E0B']}
-                  style={styles.fabCloseCircle}
-                  start={{ x: 0, y: 0.5 }}
-                  end={{ x: 1, y: 0.5 }}
-                >
-                  <Ionicons name="close" size={hp(3.5)} color="#fff" />
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Pressable>
-      </Modal>
 
       {}
       <WelcomePopup visible={showWelcome} onAgree={handleWelcomeAgree} />
 
 
+      <CenteredOfferPopup
+        visible={showCenteredOffer}
+        onClose={handleCenteredOfferClose}
+        onAddCoins={handleCenteredOfferAddCoins}
+        offerData={topOffer}
+      />
       <CoinsOfferPopup
         visible={showCoinsOffer}
         onClose={handleCoinsClose}
@@ -1024,7 +1042,10 @@ export default function HomeScreen() {
       />
       <NotificationsPopup
         visible={showNotifications}
-        onClose={() => setShowNotifications(false)}
+        onClose={() => {
+          setShowNotifications(false);
+          fetchUnreadNotifications();
+        }}
       />
       <InsufficientBalancePopup
         visible={showInsufficientBalance}
@@ -1037,7 +1058,10 @@ export default function HomeScreen() {
       />
       <NotificationsPopup
         visible={showNotifications}
-        onClose={() => setShowNotifications(false)}
+        onClose={() => {
+          setShowNotifications(false);
+          fetchUnreadNotifications();
+        }}
       />
     </View>
   );
@@ -1071,6 +1095,11 @@ const styles = StyleSheet.create({
     borderRadius: wp(5),
     borderWidth: 2,
     borderColor: '#EC4899',
+  },
+  logoImage: {
+    width: wp(38),
+    height: hp(5),
+    marginLeft: -wp(6),
   },
   coinBadge: {
     flexDirection: 'row',
@@ -1113,6 +1142,17 @@ const styles = StyleSheet.create({
     borderRadius: wp(5),
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  notifDot: {
+    position: 'absolute',
+    top: wp(1.2),
+    right: wp(1.2),
+    width: wp(2.5),
+    height: wp(2.5),
+    borderRadius: wp(1.25),
+    backgroundColor: '#EF4444',
+    borderWidth: 1.5,
+    borderColor: '#000',
   },
   scrollView: {
     flex: 1,
@@ -1285,28 +1325,48 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_500Medium',
     marginTop: hp(1),
   },
-  floatingRandomWrapper: {
+  findMeContainer: {
     position: 'absolute',
+    left: wp(4),
+    right: wp(4),
     zIndex: 50,
   },
-  randomBtn: {
+  findMeButton: {
+    borderRadius: wp(8),
+    overflow: 'hidden',
+  },
+  findMeContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#38BDF8',
-    borderRadius: wp(6),
+    justifyContent: 'space-between',
+    paddingVertical: hp(1.8),
     paddingHorizontal: wp(4),
-    paddingVertical: hp(1.2),
-    shadowColor: '#38BDF8',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 6,
   },
-  randomBtnText: {
-    fontSize: ms(14, 0.3),
+  findMeLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: wp(2.5),
+    flex: 1,
+  },
+  findMeText: {
+    fontSize: wp(4),
     color: '#fff',
-    fontWeight: '700',
     fontFamily: 'Inter_700Bold',
+  },
+  findMeActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: wp(2),
+  },
+  findMeCallBtn: {
+    width: wp(11),
+    height: wp(11),
+    borderRadius: wp(5.5),
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
   },
   peopleCardWrapper: {
     width: wp(45),
@@ -1378,43 +1438,4 @@ const styles = StyleSheet.create({
   },
 
   
-  fabOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'flex-end',
-    alignItems: 'flex-end',
-  },
-  fabMenu: {
-    marginBottom: hp(10),
-    marginRight: wp(5),
-    alignItems: 'flex-end',
-    gap: hp(2),
-  },
-  fabVideoRow: {
-    alignSelf: 'flex-end',
-  },
-  fabBottomRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: wp(4),
-  },
-  fabCircle: {
-    width: wp(14),
-    height: wp(14),
-    borderRadius: wp(7),
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 8,
-  },
-  fabCloseCircle: {
-    width: wp(16),
-    height: wp(16),
-    borderRadius: wp(8),
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 10,
-  },
-
-  
-
 });

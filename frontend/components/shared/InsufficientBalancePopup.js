@@ -51,7 +51,7 @@ export default function InsufficientBalancePopup({
 
       <Animated.View style={[styles.popupContainer, { transform: [{ translateY: slideAnim }] }]}>
         <LinearGradient
-          colors={['#1C0530', '#0F0A1A', '#080212']}
+          colors={['#1C0505', '#0F0A0A', '#080202']}
           locations={[0, 0.5, 1]}
           style={styles.popup}
         >
@@ -64,7 +64,7 @@ export default function InsufficientBalancePopup({
           <View style={styles.iconSection}>
             <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
               <LinearGradient
-                colors={['#A855F7', '#7C3AED']}
+                colors={['#DC2626', '#991B1B']}
                 style={styles.iconCircle}
               >
                 <Ionicons name="wallet-outline" size={wp(10)} color="#fff" />
@@ -74,7 +74,7 @@ export default function InsufficientBalancePopup({
 
           <View style={styles.balanceRow}>
             <LinearGradient
-              colors={['rgba(245,158,11,0.2)', 'rgba(245,158,11,0.05)']}
+              colors={['rgba(220,38,38,0.2)', 'rgba(220,38,38,0.05)']}
               style={styles.coinBadge}
             >
               <Text style={styles.coinIcon}>🪙</Text>
@@ -85,18 +85,17 @@ export default function InsufficientBalancePopup({
           <Text style={styles.title}>{title}</Text>
 
           <Text style={styles.subtitle}>
-            {subtitle || "You currently don't have enough balance{'\n'}to make a call or chat, kindly recharge{'\n'}first and then enjoy."}
+            {subtitle || "You currently don't have enough balance.\nTo make a call or chat, kindly recharge first and then enjoy."}
           </Text>
 
           <TouchableOpacity style={styles.buyBtn} activeOpacity={0.85} onPress={onBuyCoins}>
             <LinearGradient
-              colors={['#A855F7', '#7C3AED', '#6D28D9']}
+              colors={['#DC2626', '#991B1B', '#7F1D1D']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.buyBtnGradient}
             >
-              <Ionicons name="flash" size={wp(4.5)} color="#fff" style={{ marginRight: 6 }} />
-              <Text style={styles.buyBtnText}>{buttonLabel}</Text>
+<Text style={styles.buyBtnText}>{buttonLabel}</Text>
             </LinearGradient>
           </TouchableOpacity>
         </LinearGradient>
@@ -111,16 +110,16 @@ const styles = StyleSheet.create({
   popup: {
     width: '100%', borderTopLeftRadius: wp(8), borderTopRightRadius: wp(8),
     paddingHorizontal: wp(7), paddingTop: hp(1.5), paddingBottom: hp(4.5),
-    alignItems: 'center', borderWidth: 1, borderColor: '#2A1540', borderBottomWidth: 0,
+    alignItems: 'center', borderWidth: 1, borderColor: '#3B0000', borderBottomWidth: 0,
   },
   handleBar: {
     width: wp(12), height: 4, borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.15)', marginBottom: hp(2),
+    backgroundColor: 'rgba(255,0,0,0.1)', marginBottom: hp(2),
   },
   closeBtn: {
     position: 'absolute', top: hp(2), right: wp(5),
     width: wp(8), height: wp(8), borderRadius: wp(4),
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,0,0,0.08)',
     alignItems: 'center', justifyContent: 'center', zIndex: 10,
   },
   iconSection: {
@@ -129,7 +128,7 @@ const styles = StyleSheet.create({
   iconCircle: {
     width: wp(20), height: wp(20), borderRadius: wp(10),
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#A855F7', shadowOffset: { width: 0, height: 0 },
+    shadowColor: '#DC2626', shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.6, shadowRadius: 20, elevation: 10,
   },
   balanceRow: {
@@ -138,10 +137,10 @@ const styles = StyleSheet.create({
   coinBadge: {
     flexDirection: 'row', alignItems: 'center', gap: wp(2),
     paddingHorizontal: wp(5), paddingVertical: hp(0.8),
-    borderRadius: wp(5), borderWidth: 1, borderColor: 'rgba(245,158,11,0.3)',
+    borderRadius: wp(5), borderWidth: 1, borderColor: 'rgba(220,38,38,0.3)',
   },
   coinIcon: { fontSize: wp(4.5) },
-  coinCount: { fontSize: wp(4.5), fontWeight: '900', color: '#F59E0B' },
+  coinCount: { fontSize: wp(4.5), fontWeight: '900', color: '#EF4444' },
   title: {
     fontSize: wp(6), fontWeight: '900', color: '#fff',
     marginBottom: hp(1.2), textAlign: 'center', fontFamily: 'Inter_900Black',
