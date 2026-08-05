@@ -73,11 +73,17 @@ export async function initializeOneSignal(userId, role) {
       OneSignal.Notifications.addEventListener('click', (event) => {
         try {
           const data = event.notification?.additionalData;
-          const actionId = event.action?.actionId;
+          // v5 exposes the action id on `result`, older versions on `action`
+          const actionId = event.result?.actionId || event.action?.actionId;
           console.log('[OneSignal] Notification clicked, data:', JSON.stringify(data), 'actionId:', actionId);
           
           if (data?.type === 'incoming_call') {
             const { socketService } = require('./socket');
+            // Carry the Android notification id through to the accept handler
+            // so it can remove this exact notification from the tray.
+            if (event.notification?.androidNotificationId != null) {
+              data.androidNotificationId = event.notification.androidNotificationId;
+            }
             if (actionId === 'accept') {
               console.log('[OneSignal] User clicked Accept button on call notification');
               socketService.triggerLocalEvent('accept_incoming_call', data);
@@ -109,6 +115,28 @@ export async function initializeOneSignal(userId, role) {
     console.log('[OneSignal] Setup finished successfully!');
   } catch (err) {
     console.error('[OneSignal] Failed to initialize push services:', err.message);
+  }
+}
+
+/**
+ * Removes the incoming-call push notification from the system tray once the
+ * call has been picked up, so it doesn't linger behind the active call.
+ *
+ * Android: removes the exact notification when its id was captured (from the
+ * OneSignal click event). Fallback (app opened directly) / iOS: clears the
+ * delivered notifications from the shade.
+ * @param {Object} data - incoming-call payload, may carry androidNotificationId
+ */
+export function dismissCallNotification(data) {
+  if (!OneSignal || !isOneSignalInitialized) return;
+  try {
+    if (Platform.OS === 'android' && data?.androidNotificationId != null) {
+      OneSignal.Notifications.removeNotification(data.androidNotificationId);
+    } else {
+      OneSignal.Notifications.clearAll();
+    }
+  } catch (err) {
+    console.error('[OneSignal] Failed to dismiss call notification:', err.message);
   }
 }
 

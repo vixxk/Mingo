@@ -16,6 +16,10 @@ const systemSettingsSchema = new mongoose.Schema(
       type: Number,
       default: 10, // 10 coins = 1 diamond
     },
+    sliderInterval: {
+      type: Number,
+      default: 4, // Seconds between automatic ad slider rotations
+    },
     diamondToInrRatio: {
       type: Number,
       default: 1, // 1 diamond = 1 INR (as per requirement ₹1.5/min, ₹4/min)

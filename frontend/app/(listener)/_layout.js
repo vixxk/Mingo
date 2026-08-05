@@ -10,9 +10,10 @@ import { ms, vs } from '../../utils/responsive';
 import { socketService } from '../../utils/socket';
 import { userAPI, callAPI } from '../../utils/api';
 import IncomingCallPopup from '../../components/shared/IncomingCallPopup';
+import CallCancelledPopup from '../../components/shared/CallCancelledPopup';
 import { useSSE } from '../../utils/useSSE';
 
-import { initializeOneSignal } from '../../utils/notifications';
+import { initializeOneSignal, dismissCallNotification } from '../../utils/notifications';
 
 export default function ListenerLayout() {
   const insets = useSafeAreaInsets();
@@ -20,6 +21,7 @@ export default function ListenerLayout() {
   const segments = useSegments();
   
   const [incomingCalls, setIncomingCalls] = useState([]);
+  const [callCancelledVisible, setCallCancelledVisible] = useState(false);
   const { unreadPeopleCount } = useSSE();
 
   const isChatOpenRef = React.useRef(false);
@@ -48,7 +50,7 @@ export default function ListenerLayout() {
       const sessionRes = await callAPI.getSession(callId);
       session = sessionRes?.data;
       if (!session || session.status === 'cancelled' || session.status === 'completed') {
-        Alert.alert('Call Cancelled', 'This call has been cancelled by the user.', [{ text: 'OK' }]);
+        setCallCancelledVisible(true);
         setIncomingCalls(prev => prev.filter(c => c.callId !== callId));
         return;
       }
@@ -73,6 +75,9 @@ export default function ListenerLayout() {
     socketService.emit('call_accepted', { userId: callerId, sessionId: callId, roomId });
     
     setIncomingCalls([]);
+
+    // Remove the incoming-call push notification from the system tray
+    dismissCallNotification(acceptedCall);
     
     // Get listener's own userId
     let myUserId = '';
@@ -376,6 +381,12 @@ export default function ListenerLayout() {
         calls={incomingCalls}
         onAccept={handleAcceptCall}
         onReject={handleRejectCall}
+      />
+
+      <CallCancelledPopup
+        visible={callCancelledVisible}
+        message="This call has been cancelled by the user."
+        onClose={() => setCallCancelledVisible(false)}
       />
     </View>
   );

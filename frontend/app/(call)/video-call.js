@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Animated, Dimensions, BackHandler, Alert, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Animated, Dimensions, BackHandler, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { Camera, CameraView } from 'expo-camera';
@@ -11,6 +11,8 @@ import Constants from 'expo-constants';
 import SafetyPopup from '../../components/call/SafetyPopup';
 import InCallRechargePopup from '../../components/call/InCallRechargePopup';
 import EndCallPopup from '../../components/call/EndCallPopup';
+import CallControls from '../../components/call/CallControls';
+import CallCancelledPopup from '../../components/shared/CallCancelledPopup';
 import GiftPopup from '../../components/shared/GiftPopup';
 import GiftAnimationOverlay from '../../components/call/GiftAnimationOverlay';
 import { callAPI, walletAPI } from '../../utils/api';
@@ -104,6 +106,7 @@ export default function VideoCallScreen() {
 
   const [showSafety, setShowSafety] = useState(true);
   const [showEndCallPopup, setShowEndCallPopup] = useState(false);
+  const [showCallCancelled, setShowCallCancelled] = useState(false);
   const [showRecharge, setShowRecharge] = useState(false);
   const [showGiftPopup, setShowGiftPopup] = useState(false);
   const [receivedGift, setReceivedGift] = useState(null);
@@ -124,6 +127,8 @@ export default function VideoCallScreen() {
   const controlsOpacity = useRef(new Animated.Value(1)).current;
   const intervalRef = useRef(null);
   const callEndedRef = useRef(false);
+  const exitCallScreenRef = useRef(null);
+  const cancelledExitTimerRef = useRef(null);
 
   const resolvedAppId = zegoAppId ? parseInt(zegoAppId) : ZEGO_APP_ID;
   const resolvedAppSign = zegoAppSign || ZEGO_APP_SIGN;
@@ -238,6 +243,8 @@ export default function VideoCallScreen() {
       }, 800);
     };
 
+    exitCallScreenRef.current = exitCallScreen;
+
     const handleAutoEnded = async (data) => {
       if (data.sessionId === callId) {
         await exitCallScreen();
@@ -252,8 +259,15 @@ export default function VideoCallScreen() {
 
     const handleCallCancelled = async (data) => {
       if (data.sessionId === callId || data.callId === callId) {
-        Alert.alert('Call Cancelled', 'The call was cancelled by the user.', [{ text: 'OK' }]);
-        await exitCallScreen();
+        setShowCallCancelled(true);
+        // Fallback auto-exit: if the user doesn't dismiss the popup, leave the
+        // call so billing doesn't keep running on an already-cancelled session.
+        cancelledExitTimerRef.current = setTimeout(() => {
+          setShowCallCancelled(false);
+          if (exitCallScreenRef.current) {
+            exitCallScreenRef.current();
+          }
+        }, 5000);
       }
     };
 
@@ -273,6 +287,10 @@ export default function VideoCallScreen() {
     setupBilling();
 
     return () => {
+      if (cancelledExitTimerRef.current) {
+        clearTimeout(cancelledExitTimerRef.current);
+        cancelledExitTimerRef.current = null;
+      }
       socketService.off('balance_updated', handleBalanceUpdate);
       socketService.off('low_balance_warning', handleLowBalance);
       socketService.off('call_auto_ended', handleAutoEnded);
@@ -365,6 +383,17 @@ export default function VideoCallScreen() {
     }
   }, [callId, name, listenerId, isListener, roomId]);
 
+  const handleCallCancelledClose = useCallback(() => {
+    if (cancelledExitTimerRef.current) {
+      clearTimeout(cancelledExitTimerRef.current);
+      cancelledExitTimerRef.current = null;
+    }
+    setShowCallCancelled(false);
+    if (exitCallScreenRef.current) {
+      exitCallScreenRef.current();
+    }
+  }, []);
+
   const handleRechargeSuccess = useCallback(async () => {
     try {
       const res = await walletAPI.getBalance();
@@ -381,7 +410,7 @@ export default function VideoCallScreen() {
   // Tap anywhere on the screen (except the video feeds) toggles all controls.
   const toggleControls = useCallback(() => {
     // Don't toggle while a popup is open — its backdrop may pass taps through.
-    if (showEndCallPopup || showSafety || showRecharge || showGiftPopup) return;
+    if (showEndCallPopup || showCallCancelled || showSafety || showRecharge || showGiftPopup) return;
     const next = !controlsVisible;
     setControlsVisible(next);
     Animated.timing(controlsOpacity, {
@@ -453,42 +482,32 @@ export default function VideoCallScreen() {
             )}
           </View>
 
-          {/* Floating safety shield — left of the screen, above the call controls */}
-          <TouchableOpacity
-            style={styles.floatingSafetyBtn}
-            onPress={() => setShowSafety(true)}
-            activeOpacity={0.8}
-            accessibilityLabel="Open safety guidance"
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons name="shield-checkmark" size={wp(6)} color="#4ADE80" />
-          </TouchableOpacity>
-
-          {/* End-call button — opens the confirmation popup */}
-          <TouchableOpacity
-            style={styles.floatingEndBtn}
-            onPress={() => setShowEndCallPopup(true)}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="call" size={26} color="#fff" style={{ transform: [{ rotate: '135deg' }] }} />
-          </TouchableOpacity>
-
-          {/* Camera toggle — flips the Zego camera device */}
-          <TouchableOpacity
-            style={styles.floatingCameraBtn}
-            onPress={handleFlipCamera}
-            activeOpacity={0.8}
-            accessibilityLabel="Switch camera"
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons name="camera-reverse-outline" size={wp(6)} color="#fff" />
-          </TouchableOpacity>
+          {/* Call control dock — safety, camera flip + end call */}
+          <View style={styles.zegoControls}>
+            <CallControls
+              buttons={[
+                {
+                  id: 'flip',
+                  icon: 'camera-reverse-outline',
+                  label: 'Flip',
+                  onPress: handleFlipCamera,
+                },
+              ]}
+              onEndCall={() => setShowEndCallPopup(true)}
+              onSafety={() => setShowSafety(true)}
+            />
+          </View>
         </Animated.View>
 
         <EndCallPopup
           visible={showEndCallPopup}
           onEndCall={handleEndCall}
           onDismiss={() => setShowEndCallPopup(false)}
+        />
+        <CallCancelledPopup
+          visible={showCallCancelled}
+          message="The call was cancelled by the user."
+          onClose={handleCallCancelledClose}
         />
         <SafetyPopup
           visible={showSafety}
@@ -552,13 +571,6 @@ export default function VideoCallScreen() {
               <Text style={styles.coinsBadgeInlineText}>{currentCoins}</Text>
             </View>
           )}
-          <TouchableOpacity
-            style={styles.flipBtn}
-            onPress={handleFlipCamera}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="camera-reverse-outline" size={22} color="#fff" />
-          </TouchableOpacity>
         </View>
       </View>
       </Animated.View>
@@ -627,72 +639,55 @@ export default function VideoCallScreen() {
         </View>
       </View>
 
-      <Animated.View
-        style={[styles.controlsSection, { opacity: controlsOpacity }]}
-        pointerEvents={controlsVisible ? 'auto' : 'none'}
-      >
-        <TouchableOpacity
-          style={[styles.controlBtn, isMuted && styles.controlBtnActive]}
-          onPress={() => setIsMuted(!isMuted)}
-          activeOpacity={0.7}
-        >
-          <Ionicons
-            name={isMuted ? 'mic-off' : 'mic'}
-            size={24}
-            color={isMuted ? '#EF4444' : '#fff'}
-          />
-          <Text style={styles.controlLabel}>{isMuted ? 'Unmute' : 'Mute'}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.controlBtn, isCameraOff && styles.controlBtnActive]}
-          onPress={() => {
-            const next = !isCameraOff;
-            setIsCameraOff(next);
-            // Clear any previous mount error so the camera can retry when re-enabled.
-            if (!next) setCameraError(false);
-          }}
-          activeOpacity={0.7}
-        >
-          <Ionicons
-            name={isCameraOff ? 'videocam-off' : 'videocam'}
-            size={24}
-            color={isCameraOff ? '#EF4444' : '#fff'}
-          />
-          <Text style={styles.controlLabel}>Camera</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.endCallBtn}
-          onPress={() => setShowEndCallPopup(true)}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name="call"
-            size={28}
-            color="#fff"
-            style={{ transform: [{ rotate: '135deg' }] }}
-          />
-        </TouchableOpacity>
-      </Animated.View>
-
-      {/* Floating safety shield — left of the screen, above the three controls */}
       <Animated.View style={{ opacity: controlsOpacity }} pointerEvents={controlsVisible ? 'auto' : 'none'}>
-        <TouchableOpacity
-          style={styles.floatingSafetyBtn}
-          onPress={() => setShowSafety(true)}
-          activeOpacity={0.8}
-          accessibilityLabel="Open safety guidance"
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons name="shield-checkmark" size={wp(6)} color="#4ADE80" />
-        </TouchableOpacity>
+        <View style={[styles.fallbackControls, { paddingBottom: Math.max(insets.bottom, vs(24)) }]}>
+          <CallControls
+            buttons={[
+              {
+                id: 'mute',
+                icon: 'mic',
+                iconActive: 'mic-off',
+                label: 'Mute',
+                labelActive: 'Unmute',
+                active: isMuted,
+                onPress: () => setIsMuted(!isMuted),
+              },
+              {
+                id: 'camera',
+                icon: 'videocam',
+                iconActive: 'videocam-off',
+                label: 'Camera',
+                active: isCameraOff,
+                onPress: () => {
+                  const next = !isCameraOff;
+                  setIsCameraOff(next);
+                  // Clear any previous mount error so the camera can retry when re-enabled.
+                  if (!next) setCameraError(false);
+                },
+              },
+              {
+                id: 'flip',
+                icon: 'camera-reverse-outline',
+                label: 'Flip',
+                onPress: handleFlipCamera,
+              },
+            ]}
+            onEndCall={() => setShowEndCallPopup(true)}
+            onSafety={() => setShowSafety(true)}
+          />
+        </View>
       </Animated.View>
 
       <EndCallPopup
         visible={showEndCallPopup}
         onEndCall={handleEndCall}
         onDismiss={() => setShowEndCallPopup(false)}
+      />
+
+      <CallCancelledPopup
+        visible={showCallCancelled}
+        message="The call was cancelled by the user."
+        onClose={handleCallCancelledClose}
       />
 
       <SafetyPopup
@@ -781,15 +776,6 @@ const styles = StyleSheet.create({
     fontSize: ms(12, 0.3),
     fontFamily: 'Inter_700Bold',
   },
-  flipBtn: {
-    width: s(40),
-    height: s(40),
-    borderRadius: s(20),
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
   videoArea: {
     flex: 1,
     alignItems: 'center',
@@ -841,93 +827,19 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
 
-  controlsSection: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: SCREEN_WIDTH * 0.05,
-    paddingVertical: SH * 0.03,
-    paddingHorizontal: s(16),
-  },
-  controlBtn: {
-    width: SCREEN_WIDTH * 0.14,
-    height: SCREEN_WIDTH * 0.14,
-    borderRadius: SCREEN_WIDTH * 0.07,
-    backgroundColor: '#1A1A1A',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#2A2A2A',
-  },
-  controlBtnActive: {
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-    borderColor: '#EF4444',
-  },
-  controlLabel: {
-    fontSize: ms(8, 0.3),
-    color: '#9CA3AF',
-    fontFamily: 'Inter_400Regular',
-    marginTop: 2,
-  },
-  endCallBtn: {
-    width: SCREEN_WIDTH * 0.16,
-    height: SCREEN_WIDTH * 0.16,
-    borderRadius: SCREEN_WIDTH * 0.08,
-    backgroundColor: '#EF4444',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#EF4444',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  floatingSafetyBtn: {
+  zegControls: {
     position: 'absolute',
-    left: s(12),
-    bottom: hp(16),
-    width: wp(11),
-    height: wp(11),
-    borderRadius: wp(5.5),
-    backgroundColor: 'rgba(34, 197, 94, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#22C55E',
-    zIndex: 9999,
-    elevation: 9999,
-  },
-  floatingEndBtn: {
-    position: 'absolute',
-    bottom: hp(16),
+    bottom: hp(18),
     alignSelf: 'center',
-    width: wp(15),
-    height: wp(15),
-    borderRadius: wp(7.5),
-    backgroundColor: '#EF4444',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 9999,
-    elevation: 9999,
-    shadowColor: '#EF4444',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
+    // Moderate layer — floats above the native call surface but stays below
+    // the in-call recharge/gift popups (which layer higher).
+    zIndex: 50,
+    elevation: 50,
   },
-  floatingCameraBtn: {
-    position: 'absolute',
-    right: s(20),
-    bottom: hp(22),
-    width: wp(12),
-    height: wp(12),
-    borderRadius: wp(6),
-    backgroundColor: 'rgba(255,255,255,0.15)',
+  fallbackControls: {
     alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.35)',
-    zIndex: 9999,
-    elevation: 9999,
+    paddingTop: vs(10),
+    paddingBottom: vs(24),
   },
   fallbackTopRight: {
     position: 'absolute',
@@ -936,36 +848,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: vs(8),
     zIndex: 999,
-  },
-  floatingTopLeft: {
-    position: 'absolute',
-    left: s(12),
-    top: hp(28),
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    borderRadius: 16,
-    padding: s(12),
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    gap: vs(12),
-    zIndex: 999,
-  },
-  floatingControlsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: s(12),
-    zIndex: 999,
-  },
-  floatingControlBtn: {
-    width: SCREEN_WIDTH * 0.22,
-    height: SCREEN_WIDTH * 0.22,
-    borderRadius: 12,
-    backgroundColor: '#1A1A1A',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#2A2A2A',
   },
   floatingRechargeGift: {
     backgroundColor: 'rgba(0,0,0,0.7)',

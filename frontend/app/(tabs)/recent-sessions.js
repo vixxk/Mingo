@@ -430,7 +430,7 @@ export default function RecentSessionsScreen() {
               onShowOfflinePopup={(name) => {
                 setStatusPopupTitle('Unavailable Right Now');
                 setStatusPopupMessage(`${name} is currently offline. We will let you know when they are back!`);
-                setStatusPopupType('info');
+                setStatusPopupType('error');
                 setStatusPopupVisible(true);
               }}
             />

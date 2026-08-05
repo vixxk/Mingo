@@ -364,6 +364,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const [ads, setAds] = useState([]);
+  const [sliderInterval, setSliderInterval] = useState(4);
   const [showWelcome, setShowWelcome] = useState(false);
   const [showCenteredOffer, setShowCenteredOffer] = useState(false);
   const [showCoinsOffer, setShowCoinsOffer] = useState(false);
@@ -471,7 +472,10 @@ export default function HomeScreen() {
     try {
       const adsRes = await adsAPI.getActiveAds();
       if (adsRes?.data) {
-        setAds(adsRes.data);
+        // Backend may still return a bare array while the new shape is rolling out
+        const adsData = Array.isArray(adsRes.data) ? adsRes.data : (adsRes.data.ads || []);
+        setAds(adsData);
+        if (adsRes.data.sliderInterval) setSliderInterval(adsRes.data.sliderInterval);
       }
     } catch (e) {
       console.log('Ads fetch fallback:', e.message);
@@ -901,7 +905,7 @@ export default function HomeScreen() {
           />
         }
       >
-        <AdSlider ads={ads} />
+        <AdSlider ads={ads} intervalSec={sliderInterval} />
         {}
         <Text style={styles.sectionTitle}>Best Choice</Text>
 

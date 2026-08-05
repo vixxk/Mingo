@@ -147,7 +147,7 @@ export default function HomeSkeleton() {
           ))}
         </View>
 
-        <View style={{ height: hp(22) }} />
+        <View style={{ height: hp(15) }} />
       </ScrollView>
 
       {/* ── Floating Random button ── */}

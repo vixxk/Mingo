@@ -83,7 +83,7 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
   if (!visible) return null;
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+    <View style={[StyleSheet.absoluteFill, styles.root]} pointerEvents="box-none">
       <Animated.View style={[styles.overlay, { opacity: overlayAnim }]}>
         <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
       </Animated.View>
@@ -181,6 +181,12 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
 }
 
 const styles = StyleSheet.create({
+  root: {
+    // This popup renders inline (not a native Modal), so it must layer above
+    // every call-screen element — including the call control dock.
+    zIndex: 1000,
+    elevation: 1000,
+  },
   overlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.5)',

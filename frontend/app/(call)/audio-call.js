@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Animated, Dimensions, BackHandler, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Animated, Dimensions, BackHandler } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { Camera } from 'expo-camera';
@@ -11,6 +11,8 @@ import Constants from 'expo-constants';
 import SafetyPopup from '../../components/call/SafetyPopup';
 import InCallRechargePopup from '../../components/call/InCallRechargePopup';
 import EndCallPopup from '../../components/call/EndCallPopup';
+import CallControls from '../../components/call/CallControls';
+import CallCancelledPopup from '../../components/shared/CallCancelledPopup';
 import GiftPopup from '../../components/shared/GiftPopup';
 import GiftAnimationOverlay from '../../components/call/GiftAnimationOverlay';
 import { callAPI, walletAPI } from '../../utils/api';
@@ -89,6 +91,7 @@ export default function AudioCallScreen() {
 
   const [showSafety, setShowSafety] = useState(true);
   const [showEndCallPopup, setShowEndCallPopup] = useState(false);
+  const [showCallCancelled, setShowCallCancelled] = useState(false);
   const [showRecharge, setShowRecharge] = useState(false);
   const [showGiftPopup, setShowGiftPopup] = useState(false);
   const [receivedGift, setReceivedGift] = useState(null);
@@ -105,6 +108,8 @@ export default function AudioCallScreen() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const intervalRef = useRef(null);
   const callEndedRef = useRef(false);
+  const exitCallScreenRef = useRef(null);
+  const cancelledExitTimerRef = useRef(null);
 
   const resolvedAppId = zegoAppId ? parseInt(zegoAppId) : ZEGO_APP_ID;
   const resolvedAppSign = zegoAppSign || ZEGO_APP_SIGN;
@@ -209,6 +214,8 @@ export default function AudioCallScreen() {
       }, 800);
     };
 
+    exitCallScreenRef.current = exitCallScreen;
+
     const handleAutoEnded = async (data) => {
       if (data.sessionId === callId) {
         await exitCallScreen();
@@ -223,8 +230,15 @@ export default function AudioCallScreen() {
 
     const handleCallCancelled = async (data) => {
       if (data.sessionId === callId || data.callId === callId) {
-        Alert.alert('Call Cancelled', 'The call was cancelled by the user.', [{ text: 'OK' }]);
-        await exitCallScreen();
+        setShowCallCancelled(true);
+        // Fallback auto-exit: if the user doesn't dismiss the popup, leave the
+        // call so billing doesn't keep running on an already-cancelled session.
+        cancelledExitTimerRef.current = setTimeout(() => {
+          setShowCallCancelled(false);
+          if (exitCallScreenRef.current) {
+            exitCallScreenRef.current();
+          }
+        }, 5000);
       }
     };
 
@@ -244,6 +258,10 @@ export default function AudioCallScreen() {
     setupBilling();
 
     return () => {
+      if (cancelledExitTimerRef.current) {
+        clearTimeout(cancelledExitTimerRef.current);
+        cancelledExitTimerRef.current = null;
+      }
       socketService.off('balance_updated', handleBalanceUpdate);
       socketService.off('low_balance_warning', handleLowBalance);
       socketService.off('call_auto_ended', handleAutoEnded);
@@ -337,6 +355,17 @@ export default function AudioCallScreen() {
     }
   }, [callId, name, listenerId, isListener, roomId]);
 
+  const handleCallCancelledClose = useCallback(() => {
+    if (cancelledExitTimerRef.current) {
+      clearTimeout(cancelledExitTimerRef.current);
+      cancelledExitTimerRef.current = null;
+    }
+    setShowCallCancelled(false);
+    if (exitCallScreenRef.current) {
+      exitCallScreenRef.current();
+    }
+  }, []);
+
   const handleRechargeSuccess = useCallback(async () => {
     // After successful in-call recharge, refresh balance
     try {
@@ -394,30 +423,24 @@ export default function AudioCallScreen() {
           )}
         </View>
 
-        {/* Floating safety shield — reopens the safety popup */}
-        <TouchableOpacity
-          style={styles.floatingSafetyBtn}
-          onPress={() => setShowSafety(true)}
-          activeOpacity={0.8}
-          accessibilityLabel="Open safety guidance"
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons name="shield-checkmark" size={wp(6)} color="#4ADE80" />
-        </TouchableOpacity>
-
-        {/* End-call button — opens the confirmation popup */}
-        <TouchableOpacity
-          style={styles.floatingEndBtn}
-          onPress={() => setShowEndCallPopup(true)}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="call" size={26} color="#fff" style={{ transform: [{ rotate: '135deg' }] }} />
-        </TouchableOpacity>
+        {/* Call control dock — safety + end call (floats above the call surface) */}
+        <View style={styles.zegoControls}>
+          <CallControls
+            buttons={[]}
+            onEndCall={() => setShowEndCallPopup(true)}
+            onSafety={() => setShowSafety(true)}
+          />
+        </View>
 
         <EndCallPopup
           visible={showEndCallPopup}
           onEndCall={handleEndCall}
           onDismiss={() => setShowEndCallPopup(false)}
+        />
+        <CallCancelledPopup
+          visible={showCallCancelled}
+          message="The call was cancelled by the user."
+          onClose={handleCallCancelledClose}
         />
         <SafetyPopup
           visible={showSafety}
@@ -520,57 +543,43 @@ export default function AudioCallScreen() {
       </View>
 
       {}
-      <View style={styles.controlsSection}>
-        <TouchableOpacity
-          style={[styles.controlBtn, isMuted && styles.controlBtnActive]}
-          onPress={() => setIsMuted(!isMuted)}
-          activeOpacity={0.7}
-        >
-          <Ionicons
-            name={isMuted ? 'mic-off' : 'mic'}
-            size={28}
-            color={isMuted ? '#EF4444' : '#fff'}
-          />
-          <Text style={styles.controlLabel}>{isMuted ? 'Unmute' : 'Mute'}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.endCallBtn}
-          onPress={() => setShowEndCallPopup(true)}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="call" size={32} color="#fff" style={{ transform: [{ rotate: '135deg' }] }} />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.controlBtn, isSpeaker && styles.controlBtnActive]}
-          onPress={() => setIsSpeaker(!isSpeaker)}
-          activeOpacity={0.7}
-        >
-          <Ionicons
-            name={isSpeaker ? 'volume-high' : 'volume-mute'}
-            size={28}
-            color={isSpeaker ? '#A855F7' : '#fff'}
-          />
-          <Text style={styles.controlLabel}>Speaker</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={[styles.bottomSection, { paddingBottom: Math.max(insets.bottom + vs(16), vs(32)) }]}>
-        <TouchableOpacity
-          style={styles.safetyIconBtn}
-          onPress={() => setShowSafety(true)}
-          activeOpacity={0.7}
-          accessibilityLabel="Open safety guidance"
-        >
-          <Ionicons name="shield-checkmark" size={wp(6)} color="#4ADE80" />
-        </TouchableOpacity>
+      <View style={[styles.fallbackControls, { paddingBottom: Math.max(insets.bottom, vs(28)) }]}>
+        <CallControls
+          buttons={[
+            {
+              id: 'mute',
+              icon: 'mic',
+              iconActive: 'mic-off',
+              label: 'Mute',
+              labelActive: 'Unmute',
+              active: isMuted,
+              onPress: () => setIsMuted(!isMuted),
+            },
+            {
+              id: 'speaker',
+              icon: 'volume-high',
+              iconActive: 'volume-mute',
+              label: 'Speaker',
+              active: isSpeaker,
+              activeColor: '#A855F7',
+              onPress: () => setIsSpeaker(!isSpeaker),
+            },
+          ]}
+          onEndCall={() => setShowEndCallPopup(true)}
+          onSafety={() => setShowSafety(true)}
+        />
       </View>
 
       <EndCallPopup
         visible={showEndCallPopup}
         onEndCall={handleEndCall}
         onDismiss={() => setShowEndCallPopup(false)}
+      />
+
+      <CallCancelledPopup
+        visible={showCallCancelled}
+        message="The call was cancelled by the user."
+        onClose={handleCallCancelledClose}
       />
 
       <SafetyPopup
@@ -693,93 +702,19 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
   },
 
-  controlsSection: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: SCREEN_WIDTH * 0.08,
-    paddingVertical: SH * 0.04,
-  },
-  controlBtn: {
-    width: SCREEN_WIDTH * 0.16,
-    height: SCREEN_WIDTH * 0.16,
-    borderRadius: SCREEN_WIDTH * 0.08,
-    backgroundColor: '#1A1A1A',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#2A2A2A',
-  },
-  controlBtnActive: {
-    backgroundColor: 'rgba(168, 85, 247, 0.15)',
-    borderColor: '#A855F7',
-  },
-  controlLabel: {
-    fontSize: ms(9, 0.3),
-    color: '#9CA3AF',
-    fontFamily: 'Inter_400Regular',
-    marginTop: 4,
-  },
-  endCallBtn: {
-    width: SCREEN_WIDTH * 0.18,
-    height: SCREEN_WIDTH * 0.18,
-    borderRadius: SCREEN_WIDTH * 0.09,
-    backgroundColor: '#EF4444',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#EF4444',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-
-  bottomSection: {
-    alignItems: 'center',
-    paddingHorizontal: s(24),
-  },
-  safetyIconBtn: {
-    width: wp(12),
-    height: wp(12),
-    borderRadius: wp(6),
-    backgroundColor: 'rgba(34, 197, 94, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#22C55E',
-    marginTop: vs(12),
-  },
-  floatingSafetyBtn: {
+  zegControls: {
     position: 'absolute',
-    left: s(12),
-    bottom: hp(15),
-    width: wp(11),
-    height: wp(11),
-    borderRadius: wp(5.5),
-    backgroundColor: 'rgba(34, 197, 94, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#22C55E',
-    zIndex: 9999,
-    elevation: 9999,
-  },
-  floatingEndBtn: {
-    position: 'absolute',
-    bottom: hp(16),
+    bottom: hp(18),
     alignSelf: 'center',
-    width: wp(15),
-    height: wp(15),
-    borderRadius: wp(7.5),
-    backgroundColor: '#EF4444',
+    // Moderate layer — floats above the native call surface but stays below
+    // the in-call recharge/gift popups (which layer higher).
+    zIndex: 50,
+    elevation: 50,
+  },
+  fallbackControls: {
     alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 9999,
-    elevation: 9999,
-    shadowColor: '#EF4444',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
+    paddingTop: vs(14),
+    paddingBottom: vs(28),
   },
 
   // Zego mode floating elements

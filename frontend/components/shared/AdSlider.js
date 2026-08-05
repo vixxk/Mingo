@@ -1,16 +1,20 @@
 import { useState, useRef, useEffect } from 'react';
 import { View, StyleSheet, Image, TouchableOpacity, Dimensions, Linking } from 'react-native';
 import Animated, { useAnimatedRef, useSharedValue } from 'react-native-reanimated';
+import { Ionicons } from '@expo/vector-icons';
 import { wp, hp } from '../../utils/responsive';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ITEM_WIDTH = SCREEN_WIDTH * 0.9;
 const ITEM_SPACING = wp(2);
 
-export default function AdSlider({ ads }) {
+export default function AdSlider({ ads, intervalSec = 4 }) {
   const flatListRef = useAnimatedRef();
   const scrollX = useSharedValue(0);
   const [currentIndex, setCurrentIndex] = useState(0);
+
+  // Auto-advance interval in ms, clamped to a sane minimum of 2s (> 1s)
+  const intervalMs = Math.max(2, Number(intervalSec) || 4) * 1000;
 
   useEffect(() => {
     if (!ads || ads.length <= 1) return;
@@ -21,15 +25,17 @@ export default function AdSlider({ ads }) {
         flatListRef.current?.scrollToOffset({ offset: next * (ITEM_WIDTH + ITEM_SPACING), animated: true });
         return next;
       });
-    }, 4000);
+    }, intervalMs);
 
     return () => clearInterval(interval);
-  }, [ads, flatListRef]);
+  }, [ads, flatListRef, intervalMs]);
 
   const handlePress = (url) => {
-    if (url && url !== '#') {
-      Linking.openURL(url).catch(err => console.warn("Couldn't open URL:", err));
+    if (!url || url === '#') {
+      console.warn('No link provided for this ad');
+      return;
     }
+    Linking.openURL(url).catch(err => console.warn("Couldn't open URL:", err));
   };
 
   if (!ads || ads.length === 0) return null;
@@ -50,6 +56,14 @@ export default function AdSlider({ ads }) {
           scrollX.value = e.nativeEvent.contentOffset.x;
         }}
         scrollEventThrottle={16}
+        onMomentumScrollEnd={(e) => {
+          const index = Math.round(e.nativeEvent.contentOffset.x / (ITEM_WIDTH + ITEM_SPACING));
+          setCurrentIndex(index);
+        }}
+        onScrollEndDrag={(e) => {
+          const index = Math.round(e.nativeEvent.contentOffset.x / (ITEM_WIDTH + ITEM_SPACING));
+          setCurrentIndex(index);
+        }}
         renderItem={({ item }) => (
           <TouchableOpacity
             activeOpacity={0.9}
@@ -61,13 +75,14 @@ export default function AdSlider({ ads }) {
               style={styles.image}
               resizeMode="cover"
             />
+            <View style={styles.arrowContainer}>
+              <View style={styles.arrowCircle}>
+                <Ionicons name="chevron-forward" size={wp(5)} color="#fff" />
+              </View>
+            </View>
           </TouchableOpacity>
         )}
       />
-      onMomentumScrollEnd={(e) => {
-        const index = Math.round(e.nativeEvent.contentOffset.x / (ITEM_WIDTH + ITEM_SPACING));
-        setCurrentIndex(index);
-      }}
       {/* Pagination Dots */}
       {ads.length > 1 && (
         <View style={styles.pagination}>
@@ -93,10 +108,11 @@ const styles = StyleSheet.create({
   container: {
     marginBottom: hp(2),
     marginTop: hp(1),
+    position: 'relative',
   },
   itemContainer: {
     width: ITEM_WIDTH,
-    height: hp(22),
+    height: hp(15),
     borderRadius: wp(4),
     overflow: 'hidden',
     backgroundColor: '#1A1A1A',
@@ -107,10 +123,26 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  arrowContainer: {
+    position: 'absolute',
+    right: wp(2),
+    top: '50%',
+    marginTop: -wp(3),
+  },
+  arrowCircle: {
+    width: wp(7),
+    height: wp(7),
+    borderRadius: wp(3.5),
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   pagination: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: hp(1),
+    position: 'absolute',
+    bottom: hp(1),
+    alignSelf: 'center',
     gap: wp(1.5),
   },
   dot: {

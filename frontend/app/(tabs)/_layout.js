@@ -10,9 +10,10 @@ import { authAPI, userAPI, callAPI, walletAPI } from '../../utils/api';
 import { socketService } from '../../utils/socket';
 import IncomingCallPopup from '../../components/shared/IncomingCallPopup';
 import InsufficientBalancePopup from '../../components/shared/InsufficientBalancePopup';
+import CallCancelledPopup from '../../components/shared/CallCancelledPopup';
 import { useSSE } from '../../utils/useSSE';
 
-import { initializeOneSignal } from '../../utils/notifications';
+import { initializeOneSignal, dismissCallNotification } from '../../utils/notifications';
 
 export default function TabLayout() {
   const router = useRouter();
@@ -21,6 +22,7 @@ export default function TabLayout() {
   const [incomingCalls, setIncomingCalls] = useState([]);
   // Recharge gate: user tried to answer a call without enough coins
   const [rechargeGate, setRechargeGate] = useState(null); // { callerName, callType, minCoins, balance }
+  const [callCancelledVisible, setCallCancelledVisible] = useState(false);
   const { unreadCount } = useSSE();
 
   const isChatOpenRef = React.useRef(false);
@@ -85,7 +87,7 @@ export default function TabLayout() {
       const sessionRes = await callAPI.getSession(callId);
       const session = sessionRes?.data;
       if (!session || session.status === 'cancelled' || session.status === 'completed') {
-        Alert.alert('Call Cancelled', 'This call has been cancelled by the other participant.', [{ text: 'OK' }]);
+        setCallCancelledVisible(true);
         setIncomingCalls(prev => prev.filter(c => c.callId !== callId));
         return;
       }
@@ -131,6 +133,9 @@ export default function TabLayout() {
     socketService.emit('call_accepted', { userId: callerId, sessionId: callId, roomId });
     
     setIncomingCalls([]);
+
+    // Remove the incoming-call push notification from the system tray
+    dismissCallNotification(acceptedCall);
     
     // Route to call screen
     const targetScreen = callType === 'video' ? '/(call)/video-call' : '/(call)/audio-call';
@@ -333,6 +338,12 @@ export default function TabLayout() {
         calls={incomingCalls}
         onAccept={handleAcceptCall}
         onReject={handleRejectCall}
+      />
+
+      <CallCancelledPopup
+        visible={callCancelledVisible}
+        message="This call has been cancelled by the other participant."
+        onClose={() => setCallCancelledVisible(false)}
       />
 
       {/* Recharge gate — user tried to answer a call without enough coins */}

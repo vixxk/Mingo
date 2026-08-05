@@ -1093,6 +1093,16 @@ static async resetCoinPackages(req, res, next) {
         }
       });
 
+      // Ad slider interval must be greater than 1 second
+      if (req.body.sliderInterval !== undefined) {
+        const val = Number(req.body.sliderInterval);
+        if (isNaN(val) || val < 2 || val > 30) {
+          throw new AppError('sliderInterval must be greater than 1 (between 2 and 30 seconds)', 400);
+        }
+        settings.sliderInterval = val;
+        hasChanges = true;
+      }
+
       if (req.body.otpSettings !== undefined) {
         settings.otpSettings = req.body.otpSettings;
         hasChanges = true;

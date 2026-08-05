@@ -1,7 +1,7 @@
 import { useState, useEffect, useSyncExternalStore } from 'react'
 import { adminAPI } from '../utils/api'
 import { Skeleton } from '../components/admin/Skeleton'
-import { IoAdd, IoTrash, IoPencil, IoEye, IoEyeOff, IoImage, IoImages, IoClose, IoChevronBack } from 'react-icons/io5'
+import { IoAdd, IoTrash, IoPencil, IoEye, IoEyeOff, IoImage, IoImages, IoClose, IoChevronBack, IoCheckmarkCircle, IoAlertCircle, IoTimer } from 'react-icons/io5'
 import { useNavigate } from 'react-router-dom'
 
 const useIsMobile = (breakpoint = 767) => {
@@ -22,11 +22,18 @@ export default function Ads() {
   const [ads, setAds] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [showSavePopup, setShowSavePopup] = useState(false)
+  const [showDeletePopup, setShowDeletePopup] = useState(false)
+  const [popupType, setPopupType] = useState('success')
+  const [popupMessage, setPopupMessage] = useState('')
   const [editingAd, setEditingAd] = useState(null)
   const [form, setForm] = useState({ title: '', link: '', isActive: true, order: 0 })
   const [imageFile, setImageFile] = useState(null)
   const [previewUrl, setPreviewUrl] = useState('')
   const [uploading, setUploading] = useState(false)
+  const [deletingId, setDeletingId] = useState(null)
+  const [intervalDraft, setIntervalDraft] = useState('4')
+  const [savingInterval, setSavingInterval] = useState(false)
 
   const fetchAds = async () => {
     try {
@@ -41,7 +48,45 @@ export default function Ads() {
 
   useEffect(() => {
     fetchAds()
+
+    const loadSliderInterval = async () => {
+      try {
+        const res = await adminAPI.getSettings()
+        const saved = res?.data?.sliderInterval
+        if (saved !== undefined && saved !== null) {
+          setIntervalDraft(String(saved))
+        }
+      } catch (e) {
+        console.error('Failed to load ad slider interval', e)
+      }
+    }
+    loadSliderInterval()
   }, [])
+
+  const handleSaveInterval = async () => {
+    const val = parseInt(intervalDraft, 10)
+    if (!val || isNaN(val) || val < 2 || val > 30) {
+      setPopupType('error')
+      setPopupMessage('Ad slider interval must be greater than 1 (between 2 and 30 seconds)')
+      setShowSavePopup(true)
+      return
+    }
+    setSavingInterval(true)
+    try {
+      await adminAPI.updateSettings({ sliderInterval: val })
+      setIntervalDraft(String(val))
+      setPopupType('success')
+      setPopupMessage(`Ad slider interval saved to ${val} sec`)
+      setShowSavePopup(true)
+    } catch (err) {
+      console.error('Failed to save slider interval', err)
+      setPopupType('error')
+      setPopupMessage('Failed to save slider interval: ' + (err.message || 'Unknown error'))
+      setShowSavePopup(true)
+    } finally {
+      setSavingInterval(false)
+    }
+  }
 
   const handleFileChange = (e) => {
     const file = e.target.files[0]
@@ -72,11 +117,9 @@ export default function Ads() {
       let imageUrl = form.imageUrl || previewUrl
 
       if (imageFile) {
-        // Get presigned URL
         const urlRes = await adminAPI.getAdUploadUrl({ fileName: imageFile.name, fileType: imageFile.type })
         const { uploadUrl, fileUrl } = urlRes.data
 
-        // Upload to S3
         await fetch(uploadUrl, {
           method: 'PUT',
           body: imageFile,
@@ -94,38 +137,54 @@ export default function Ads() {
       }
 
       setShowModal(false)
+      setPopupType('success')
+      setPopupMessage(editingAd ? 'Ad updated successfully' : 'Ad created successfully')
+      setShowSavePopup(true)
       fetchAds()
     } catch (err) {
       console.error('Save failed', err)
-      alert('Failed to save ad: ' + (err.message || 'Unknown error'))
+      setPopupType('error')
+      setPopupMessage('Failed to save ad: ' + (err.message || 'Unknown error'))
+      setShowSavePopup(true)
     } finally {
       setUploading(false)
     }
   }
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this ad?')) return
+    setDeletingId(id)
+    setShowDeletePopup(false)
     try {
       await adminAPI.deleteAd(id)
+      setPopupType('success')
+      setPopupMessage('Ad deleted successfully')
+      setShowSavePopup(true)
       fetchAds()
     } catch (err) {
       console.error('Delete failed', err)
+      setPopupType('error')
+      setPopupMessage('Failed to delete ad')
+      setShowSavePopup(true)
+    } finally {
+      setDeletingId(null)
     }
   }
 
   const handleToggleActive = async (ad) => {
+    const prevAds = [...ads]
+    setAds(ads.map(a => a._id === ad._id ? { ...a, isActive: !a.isActive } : a))
     try {
       await adminAPI.updateAd(ad._id, { ...ad, isActive: !ad.isActive })
-      fetchAds()
     } catch (err) {
       console.error('Toggle failed', err)
+      setAds(prevAds)
     }
   }
 
   return (
     <div className="page-wrap" style={{ backgroundColor: 'var(--bg-primary)', minHeight: '100vh', padding: 'var(--page-padding)' }}>
       {/* Header */}
-      <div className="page-hdr-row" style={{ display: 'flex', alignItems: 'center', marginBottom: 16, gap: isMobile ? 8 : 12 }}>
+      <div className="page-hdr-row ads-page-hdr" style={{ display: 'flex', alignItems: 'center', marginBottom: isMobile ? 10 : 16, gap: isMobile ? 8 : 12, flexWrap: 'wrap' }}>
         <button className="back-btn" onClick={() => navigate(-1)}
           style={{
             background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: isMobile ? 10 : 12,
@@ -134,7 +193,7 @@ export default function Ads() {
           }}>
           <IoChevronBack size={isMobile ? 16 : 20} color="#fff" />
         </button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 10, flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 10, flex: 1, minWidth: 0, flexWrap: 'wrap' }}>
           <div className="icon-box" style={{
             width: isMobile ? 28 : 36, height: isMobile ? 28 : 36, borderRadius: isMobile ? 8 : 10,
             background: 'var(--accent-gradient)',
@@ -149,6 +208,51 @@ export default function Ads() {
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
           }}>Ads Management</h1>
           <div style={{ flex: 1 }} />
+          {/* Slider interval: timer icon + input + save button. Own full-width row on mobile. */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            width: isMobile ? '100%' : undefined,
+            order: isMobile ? 10 : undefined,
+            marginRight: isMobile ? 0 : 8,
+            marginTop: isMobile ? 4 : 0,
+          }}>
+            <div style={{
+              flex: isMobile ? 1 : undefined,
+              display: 'flex', alignItems: 'center', gap: 8,
+              background: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)', padding: isMobile ? '7px 12px' : '5px 12px',
+            }}>
+              <IoTimer size={isMobile ? 14 : 16} color="var(--text-muted)" style={{ flexShrink: 0 }} />
+              <input
+                type="number"
+                min={2}
+                max={30}
+                value={intervalDraft}
+                onChange={e => setIntervalDraft(e.target.value)}
+                aria-label="Ad slider interval in seconds"
+                style={{
+                  width: 44, background: 'transparent', border: 'none', outline: 'none',
+                  color: 'var(--text-primary)', fontSize: 13, textAlign: 'center',
+                  padding: 0, boxSizing: 'border-box',
+                }}
+              />
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>sec</span>
+            </div>
+            <button
+              onClick={handleSaveInterval}
+              disabled={savingInterval}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: isMobile ? '8px 20px' : '8px 18px',
+                borderRadius: 'var(--radius-sm)', border: 'none',
+                background: 'var(--accent-gradient)', color: '#fff', fontWeight: 600,
+                fontSize: 12, cursor: savingInterval ? 'not-allowed' : 'pointer',
+                opacity: savingInterval ? 0.7 : 1, whiteSpace: 'nowrap', flexShrink: 0,
+              }}
+            >
+              {savingInterval ? 'Saving...' : 'Save'}
+            </button>
+          </div>
           <button
             onClick={() => handleOpenModal()}
             style={{
@@ -218,7 +322,9 @@ export default function Ads() {
               }}>
                 <div style={{ width: isMobile ? '100%' : 240, height: isMobile ? 140 : 120, borderRadius: 'var(--radius-sm)', overflow: 'hidden', background: 'var(--bg-tertiary)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {ad.imageUrl ? (
-                    <img src={ad.imageUrl} alt={ad.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <a href={ad.imageUrl} target="_blank" rel="noopener noreferrer" style={{ width: '100%', height: '100%', display: 'block' }}>
+                      <img src={ad.imageUrl} alt={ad.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </a>
                   ) : (
                     <IoImage size={40} color="var(--text-muted)" />
                   )}
@@ -237,20 +343,32 @@ export default function Ads() {
                     <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Order: {ad.order}</span>
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 8, width: isMobile ? '100%' : undefined }}>
-                  <button onClick={() => handleToggleActive(ad)} style={{
-                    flex: isMobile ? 1 : undefined, height: 36, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-tertiary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: ad.isActive ? '#22C55E' : 'var(--text-muted)'
-                  }}>
+                <div className="ad-actions" style={{ width: isMobile ? '100%' : undefined }}>
+                  <button
+                    onClick={() => handleToggleActive(ad)}
+                    className={`ad-action-btn ${ad.isActive ? 'ad-action-btn--view' : 'ad-action-btn--view-off'}`}
+                    style={{ flex: isMobile ? 1 : undefined, color: ad.isActive ? '#22C55E' : '#6B7280' }}
+                    data-tooltip={ad.isActive ? 'Deactivate' : 'Activate'}
+                    aria-label={ad.isActive ? 'Deactivate ad' : 'Activate ad'}
+                  >
                     {ad.isActive ? <IoEye size={18} /> : <IoEyeOff size={18} />}
                   </button>
-                  <button onClick={() => handleOpenModal(ad)} style={{
-                    flex: isMobile ? 1 : undefined, height: 36, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-tertiary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)'
-                  }}>
+                  <button
+                    onClick={() => handleOpenModal(ad)}
+                    className="ad-action-btn ad-action-btn--edit"
+                    style={{ flex: isMobile ? 1 : undefined, color: '#A855F7' }}
+                    data-tooltip="Edit"
+                    aria-label="Edit ad"
+                  >
                     <IoPencil size={18} />
                   </button>
-                  <button onClick={() => handleDelete(ad._id)} style={{
-                    flex: isMobile ? 1 : undefined, height: 36, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-tertiary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EF4444'
-                  }}>
+                  <button
+                    onClick={() => { setDeletingId(ad._id); setShowDeletePopup(true) }}
+                    className="ad-action-btn ad-action-btn--delete ad-action-btn--last"
+                    style={{ flex: isMobile ? 1 : undefined, color: '#EF4444' }}
+                    data-tooltip="Delete"
+                    aria-label="Delete ad"
+                  >
                     <IoTrash size={18} />
                   </button>
                 </div>
@@ -260,91 +378,225 @@ export default function Ads() {
         </div>
       )}
 
-      {/* Modal */}
-      {showModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 20
-        }}>
-          <div style={{
-            background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', padding: 24,
-            width: '100%', maxWidth: 500, border: '1px solid var(--border)', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <h2 style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)' }}>{editingAd ? 'Edit Ad' : 'Create New Ad'}</h2>
-              <button type="button" onClick={() => setShowModal(false)} style={{
-                width: 32, height: 32, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-tertiary)',
-                color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
-              }}>
-                <IoClose size={18} />
-              </button>
-            </div>
-            <form onSubmit={handleSubmit}>
-              <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
-                <div style={{ flex: 2 }}>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Title</label>
-                  <input
-                    type="text"
-                    value={form.title}
-                    onChange={e => setForm({ ...form, title: e.target.value })}
-                    required
-                    style={{ width: '100%', padding: '10px 14px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }}
-                  />
-                </div>
+       {/* Save Result Popup */}
+       {showSavePopup && (
+         <div
+           style={{
+             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+             backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 9999,
+             display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+           }}
+           onClick={() => setShowSavePopup(false)}
+         >
+           <div
+             style={{
+               width: '100%', maxWidth: 340, backgroundColor: 'var(--bg-secondary)',
+               borderRadius: 24, border: '1px solid var(--border)',
+               padding: '32px 24px 24px',
+               display: 'flex', flexDirection: 'column', alignItems: 'center',
+             }}
+             onClick={e => e.stopPropagation()}
+           >
+             <div style={{
+               width: 64, height: 64, borderRadius: 32,
+               backgroundColor: popupType === 'success' ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
+               display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+             }}>
+               {popupType === 'success'
+                 ? <IoCheckmarkCircle size={32} color="#10B981" />
+                 : <IoAlertCircle size={32} color="#EF4444" />
+               }
+             </div>
+             <span style={{ fontSize: 18, fontWeight: 800, color: '#fff', marginBottom: 8, textAlign: 'center' }}>
+               {popupType === 'success' ? 'Success' : 'Error'}
+             </span>
+             <span style={{ fontSize: 14, color: 'var(--text-secondary)', textAlign: 'center', lineHeight: 1.5, marginBottom: 24 }}>
+               {popupMessage}
+             </span>
+             <button
+               onClick={() => setShowSavePopup(false)}
+               style={{
+                 width: '100%', padding: '12px 0', borderRadius: 14, border: 'none',
+                 background: popupType === 'success'
+                   ? 'linear-gradient(135deg, #10B981, #059669)'
+                   : 'linear-gradient(135deg, #EF4444, #DC2626)',
+                 color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer',
+               }}
+             >
+               Close
+             </button>
+           </div>
+         </div>
+       )}
 
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Display Order</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={form.order}
-                    onChange={e => setForm({ ...form, order: parseInt(e.target.value) || 0 })}
-                    style={{ width: '100%', padding: '10px 14px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }}
-                  />
-                </div>
-              </div>
+       {/* Delete Confirmation Popup */}
+       {showDeletePopup && (
+         <div
+           style={{
+             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+             backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 9999,
+             display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+           }}
+           onClick={() => setShowDeletePopup(false)}
+         >
+           <div
+             style={{
+               width: '100%', maxWidth: 340, backgroundColor: 'var(--bg-secondary)',
+               borderRadius: 24, border: '1px solid var(--border)',
+               padding: '32px 24px 24px',
+               display: 'flex', flexDirection: 'column', alignItems: 'center',
+             }}
+             onClick={e => e.stopPropagation()}
+           >
+             <div style={{
+               width: 64, height: 64, borderRadius: 32,
+               backgroundColor: 'rgba(239,68,68,0.15)',
+               display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+             }}>
+               <IoAlertCircle size={32} color="#EF4444" />
+             </div>
+             <span style={{ fontSize: 18, fontWeight: 800, color: '#fff', marginBottom: 8, textAlign: 'center' }}>
+               Delete Ad
+             </span>
+             <span style={{ fontSize: 14, color: 'var(--text-secondary)', textAlign: 'center', lineHeight: 1.5, marginBottom: 24 }}>
+               Are you sure you want to delete this ad? This action cannot be undone.
+             </span>
+             <div style={{ display: 'flex', gap: 12, width: '100%' }}>
+               <button
+                 onClick={() => setShowDeletePopup(false)}
+                 style={{
+                   flex: 1, padding: '12px 0', borderRadius: 14, border: '1px solid var(--border)',
+                   background: 'transparent', color: 'var(--text-secondary)', fontSize: 15, fontWeight: 700, cursor: 'pointer',
+                 }}
+               >
+                 Cancel
+               </button>
+                  <button
+                    onClick={() => deletingId && handleDelete(deletingId)}
+                    disabled={!deletingId}
+                    style={{
+                      flex: 1, padding: '12px 0', borderRadius: 14, border: 'none',
+                      background: !deletingId ? 'var(--bg-tertiary)' : 'linear-gradient(135deg, #EF4444, #DC2626)',
+                      color: '#fff', fontSize: 15, fontWeight: 800, cursor: !deletingId ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                     {!deletingId ? 'Delete' : 'Delete'}
+                  </button>
+             </div>
+           </div>
+         </div>
+       )}
 
-              <div style={{ marginBottom: 20 }}>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Ad Image</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  {previewUrl && (
-                    <div style={{ width: 120, height: 60, borderRadius: 8, overflow: 'hidden', background: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}>
-                      <img src={previewUrl} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    </div>
-                  )}
-                  <label style={{
-                    display: 'inline-block', padding: '8px 16px', background: 'var(--bg-tertiary)',
-                    border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)',
-                    cursor: 'pointer', fontSize: 13, fontWeight: 600
-                  }}>
-                    Choose Image
-                    <input type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
-                  </label>
-                </div>
-                {!editingAd && !imageFile && (
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>Recommended size: 1200x600px or 2:1 ratio</p>
-                )}
-              </div>
+       {/* Modal */}
+       {showModal && (
+         <div style={{
+           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+           background: 'rgba(0,0,0,0.7)', zIndex: 9999,
+           display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+         }}>
+           <div style={{
+             background: 'var(--bg-secondary)', borderRadius: 24, padding: 28,
+             width: '100%', maxWidth: 520, border: '1px solid var(--border)',
+             boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+           }}>
+             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                 <div style={{
+                   width: 40, height: 40, borderRadius: 12,
+                   background: 'var(--accent-gradient)',
+                   display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                 }}>
+                   <IoImages size={20} color="#fff" />
+                 </div>
+                 <h2 style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+                   {editingAd ? 'Edit Ad' : 'Create New Ad'}
+                 </h2>
+               </div>
+               <button type="button" onClick={() => setShowModal(false)} style={{
+                 width: 36, height: 36, borderRadius: 10, border: '1px solid var(--border)',
+                 background: 'var(--bg-tertiary)', color: 'var(--text-muted)', cursor: 'pointer',
+                 display: 'flex', alignItems: 'center', justifyContent: 'center',
+               }}>
+                 <IoClose size={18} />
+               </button>
+             </div>
+             <form onSubmit={handleSubmit}>
+               <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+                 <div style={{ flex: 2 }}>
+                   <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Title</label>
+                   <input
+                     type="text"
+                     value={form.title}
+                     onChange={e => setForm({ ...form, title: e.target.value })}
+                     required
+                     style={{ width: '100%', padding: '10px 14px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }}
+                   />
+                 </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-                <button type="button" onClick={() => setShowModal(false)} style={{
-                  padding: '10px 20px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)',
-                  background: 'transparent', color: 'var(--text-secondary)', fontWeight: 600, cursor: 'pointer', fontSize: 14
-                }}>
-                  Cancel
-                </button>
-                <button type="submit" disabled={uploading} style={{
-                  padding: '10px 24px', borderRadius: 'var(--radius-md)', border: 'none',
-                  background: uploading ? 'var(--bg-tertiary)' : 'var(--accent-gradient)',
-                  color: '#fff', fontWeight: 600, cursor: uploading ? 'not-allowed' : 'pointer', fontSize: 14
-                }}>
-                  {uploading ? 'Uploading...' : (editingAd ? 'Update Ad' : 'Create Ad')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+                 <div style={{ flex: 2 }}>
+                   <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Link URL</label>
+                   <input
+                     type="url"
+                     value={form.link}
+                     onChange={e => setForm({ ...form, link: e.target.value })}
+                     placeholder="https://example.com"
+                     style={{ width: '100%', padding: '10px 14px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }}
+                   />
+                 </div>
+
+                 <div style={{ flex: 1 }}>
+                   <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Order</label>
+                   <input
+                     type="text"
+                     inputMode="numeric"
+                     value={form.order}
+                     onChange={e => setForm({ ...form, order: parseInt(e.target.value) || 0 })}
+                     style={{ width: '100%', padding: '10px 14px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }}
+                   />
+                 </div>
+               </div>
+
+               <div style={{ marginBottom: 20 }}>
+                 <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Ad Image</label>
+                 <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                   {previewUrl && (
+                     <div style={{ width: 120, height: 60, borderRadius: 8, overflow: 'hidden', background: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}>
+                       <img src={previewUrl} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                     </div>
+                   )}
+                   <label style={{
+                     display: 'inline-block', padding: '8px 16px', background: 'var(--bg-tertiary)',
+                     border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)',
+                     cursor: 'pointer', fontSize: 13, fontWeight: 600
+                   }}>
+                     Choose Image
+                     <input type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
+                   </label>
+                 </div>
+                 {!editingAd && !imageFile && (
+                   <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>Recommended size: 1200x600px or 2:1 ratio</p>
+                 )}
+               </div>
+
+               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+                 <button type="button" onClick={() => setShowModal(false)} style={{
+                   padding: '10px 20px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)',
+                   background: 'transparent', color: 'var(--text-secondary)', fontWeight: 600, cursor: 'pointer', fontSize: 14
+                 }}>
+                   Cancel
+                 </button>
+                 <button type="submit" disabled={uploading} style={{
+                   padding: '10px 24px', borderRadius: 'var(--radius-md)', border: 'none',
+                   background: uploading ? 'var(--bg-tertiary)' : 'var(--accent-gradient)',
+                   color: '#fff', fontWeight: 600, cursor: uploading ? 'not-allowed' : 'pointer', fontSize: 14
+                 }}>
+                   {uploading ? 'Saving...' : (editingAd ? 'Update Ad' : 'Create Ad')}
+                 </button>
+               </div>
+             </form>
+           </div>
+         </div>
+       )}
     </div>
   )
 }

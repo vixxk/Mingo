@@ -577,10 +577,13 @@ export default function ConnectingScreen() {
         onRequestClose={handleErrorModalClose}
       >
         <View style={styles.errorOverlay}>
-          <View style={styles.errorModalBox}>
+          <LinearGradient
+            colors={['#1A0505', '#0A0000']}
+            style={styles.errorModalBox}
+          >
             <View style={styles.errorIconContainer}>
               <Ionicons
-                name="alert-circle-outline"
+                name="close-circle"
                 size={SW * 0.12}
                 color="#EF4444"
               />
@@ -595,7 +598,7 @@ export default function ConnectingScreen() {
               activeOpacity={0.8}
             >
               <LinearGradient
-                colors={['#A855F7', '#EC4899']}
+                colors={['#EF4444', '#B91C1C']}
                 style={styles.errorBtnGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
@@ -603,7 +606,7 @@ export default function ConnectingScreen() {
                 <Text style={styles.errorBtnText}>Okay</Text>
               </LinearGradient>
             </TouchableOpacity>
-          </View>
+          </LinearGradient>
         </View>
       </Modal>
     </View>
@@ -727,15 +730,14 @@ const styles = StyleSheet.create({
   },
   errorModalBox: {
     width: SW * 0.85,
-    backgroundColor: '#0D0D10',
     borderRadius: SW * 0.06,
     borderWidth: 1.5,
-    borderColor: '#1F1F24',
+    borderColor: 'rgba(239, 68, 68, 0.25)',
     padding: SW * 0.06,
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: '#EF4444',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 8,
   },

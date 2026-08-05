@@ -7,7 +7,16 @@ class AdController {
   static async getActiveAds(req, res, next) {
     try {
       const ads = await Ad.find({ isActive: true }).sort({ order: 1, createdAt: -1 });
-      return ApiResponse.success(res, ads, 'Active ads retrieved');
+      // Best-effort settings read — a settings failure must never break ads delivery
+      let sliderInterval = 4;
+      try {
+        const SystemSettings = require('../models/SystemSettings');
+        const settings = await SystemSettings.getSettings();
+        sliderInterval = settings.sliderInterval || 4;
+      } catch (e) {
+        console.error('Failed to read sliderInterval settings:', e.message);
+      }
+      return ApiResponse.success(res, { ads, sliderInterval }, 'Active ads retrieved');
     } catch (err) {
       next(err);
     }
