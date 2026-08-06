@@ -39,7 +39,7 @@ try {
   console.log('ZegoCloud not available (Expo Go mode)');
 }
 
-const ZegoCallWrapper = React.memo(({ appId, appSign, userId, userName, roomId, onCallEnd }) => {
+const ZegoCallWrapper = React.memo(({ appId, appSign, userId, userName, roomId, onCallEnd, myAvatarUrl, listenerAvatarUrl }) => {
   if (!ZegoUIKitPrebuiltCall) return null;
 
   // Remove Zego's built-in hang-up button so every end-call request goes
@@ -68,6 +68,20 @@ const ZegoCallWrapper = React.memo(({ appId, appSign, userId, userName, roomId, 
         // Route audio through the loudspeaker by default — the SDK's default
         // routes to the earpiece, which is easily mistaken for no audio at all.
         useSpeakerWhenJoining: false,
+        // Replace Zego's default initials-circle avatar with the real avatar
+        // image for each participant (me vs the listener).
+        avatarBuilder: (userInfo) => {
+          const isMe = String(userInfo?.userID) === String(userId);
+          const uri = isMe ? myAvatarUrl : listenerAvatarUrl;
+          if (!uri) return null;
+          return (
+            <Image
+              source={{ uri }}
+              style={styles.zegoAvatar}
+              resizeMode="cover"
+            />
+          );
+        },
       }}
     />
   );
@@ -89,7 +103,7 @@ export default function AudioCallScreen() {
     zegoAppSign,
   } = useLocalSearchParams();
 
-  const [showSafety, setShowSafety] = useState(true);
+  const [showSafety, setShowSafety] = useState(false);
   const [showEndCallPopup, setShowEndCallPopup] = useState(false);
   const [showCallCancelled, setShowCallCancelled] = useState(false);
   const [showRecharge, setShowRecharge] = useState(false);
@@ -97,6 +111,7 @@ export default function AudioCallScreen() {
   const [receivedGift, setReceivedGift] = useState(null);
   const [userID, setUserID] = useState('');
   const [userName, setUserName] = useState('');
+  const [myAvatarUrl, setMyAvatarUrl] = useState('');
   const [callDuration, setCallDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isSpeaker, setIsSpeaker] = useState(true);
@@ -113,6 +128,9 @@ export default function AudioCallScreen() {
 
   const resolvedAppId = zegoAppId ? parseInt(zegoAppId) : ZEGO_APP_ID;
   const resolvedAppSign = zegoAppSign || ZEGO_APP_SIGN;
+
+  // The listener's avatar shown on the call screen (from the route params).
+  const listenerAvatarUrl = getAvatarUrl(gender, avatarIndex);
 
   useEffect(() => {
     const requestPermissions = async () => {
@@ -137,6 +155,11 @@ export default function AudioCallScreen() {
           setUserID(user._id || user.id || `user_${Date.now()}`);
           setUserName(user.name || user.username || 'User');
           setIsListener(user.role === 'LISTENER');
+          // Build my own avatar URL the same way the profile screen does.
+          const rawGender = user.gender || 'Male';
+          const normalizedGender = rawGender.charAt(0).toUpperCase() + rawGender.slice(1).toLowerCase();
+          const avatarIndex = user.avatarIndex !== undefined && user.avatarIndex !== null ? String(user.avatarIndex) : '0';
+          setMyAvatarUrl(getAvatarUrl(normalizedGender, avatarIndex));
         } else {
           setUserID(`user_${Date.now()}`);
           setUserName('User');
@@ -390,6 +413,8 @@ export default function AudioCallScreen() {
           userName={userName}
           roomId={roomId}
           onCallEnd={handleEndCall}
+          myAvatarUrl={myAvatarUrl}
+          listenerAvatarUrl={listenerAvatarUrl}
         />
 
         {/* Balance badge + Recharge + Gift — stacked on the top right */}
@@ -413,7 +438,7 @@ export default function AudioCallScreen() {
 
           {!isListener && (
             <TouchableOpacity
-              style={[styles.floatingRechargeGift, { backgroundColor: 'rgba(168, 85, 247, 0.15)', borderColor: 'rgba(168, 85, 247, 0.3)' }]}
+              style={styles.floatingRechargeGift}
               onPress={() => setShowGiftPopup(true)}
               activeOpacity={0.8}
             >
@@ -423,14 +448,28 @@ export default function AudioCallScreen() {
           )}
         </View>
 
-        {/* Call control dock — safety + end call (floats above the call surface) */}
-        <View style={styles.zegoControls}>
-          <CallControls
-            buttons={[]}
-            onEndCall={() => setShowEndCallPopup(true)}
-            onSafety={() => setShowSafety(true)}
-          />
+        {/* End call — floating above the Zego native bottom bar */}
+        <View style={styles.zegEndCallWrap}>
+          <TouchableOpacity
+            style={styles.endCallPill}
+            onPress={() => setShowEndCallPopup(true)}
+            activeOpacity={0.8}
+            accessibilityLabel="End call"
+          >
+            <Ionicons name="call" size={18} color="#EF4444" style={{ transform: [{ rotate: '135deg' }] }} />
+            <Text style={styles.endCallPillText}>End Call</Text>
+          </TouchableOpacity>
         </View>
+
+        {/* Safety — left side, middle of the page */}
+        <TouchableOpacity
+          style={styles.safetyFloat}
+          onPress={() => setShowSafety(true)}
+          activeOpacity={0.8}
+          accessibilityLabel="Open safety guidance"
+        >
+          <Ionicons name="shield-checkmark" size={22} color="#4ADE80" />
+        </TouchableOpacity>
 
         <EndCallPopup
           visible={showEndCallPopup}
@@ -509,7 +548,7 @@ export default function AudioCallScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.floatingRechargeGift, { backgroundColor: 'rgba(168, 85, 247, 0.15)', borderColor: 'rgba(168, 85, 247, 0.3)' }]}
+            style={styles.floatingRechargeGift}
             onPress={() => setShowGiftPopup(true)}
             activeOpacity={0.8}
           >
@@ -531,7 +570,7 @@ export default function AudioCallScreen() {
 
         <Animated.View style={[styles.avatarRing, { transform: [{ scale: pulseAnim }] }]}>
           <Image
-            source={{ uri: getAvatarUrl(gender, avatarIndex) }}
+            source={{ uri: listenerAvatarUrl }}
             style={styles.avatar}
           />
         </Animated.View>
@@ -542,32 +581,52 @@ export default function AudioCallScreen() {
         </View>
       </View>
 
-      {}
+      {/* Safety — left side, middle of the page */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+        <TouchableOpacity
+          style={styles.safetyFloat}
+          onPress={() => setShowSafety(true)}
+          activeOpacity={0.8}
+          accessibilityLabel="Open safety guidance"
+        >
+          <Ionicons name="shield-checkmark" size={22} color="#4ADE80" />
+        </TouchableOpacity>
+      </View>
+
       <View style={[styles.fallbackControls, { paddingBottom: Math.max(insets.bottom, vs(28)) }]}>
-        <CallControls
-          buttons={[
-            {
-              id: 'mute',
-              icon: 'mic',
-              iconActive: 'mic-off',
-              label: 'Mute',
-              labelActive: 'Unmute',
-              active: isMuted,
-              onPress: () => setIsMuted(!isMuted),
-            },
-            {
-              id: 'speaker',
-              icon: 'volume-high',
-              iconActive: 'volume-mute',
-              label: 'Speaker',
-              active: isSpeaker,
-              activeColor: '#A855F7',
-              onPress: () => setIsSpeaker(!isSpeaker),
-            },
-          ]}
-          onEndCall={() => setShowEndCallPopup(true)}
-          onSafety={() => setShowSafety(true)}
-        />
+        <View style={styles.fallbackDockRow}>
+          <CallControls
+            buttons={[
+              {
+                id: 'mute',
+                icon: 'mic',
+                iconActive: 'mic-off',
+                label: 'Mute',
+                labelActive: 'Unmute',
+                active: isMuted,
+                onPress: () => setIsMuted(!isMuted),
+              },
+              {
+                id: 'speaker',
+                icon: 'volume-high',
+                iconActive: 'volume-mute',
+                label: 'Speaker',
+                active: isSpeaker,
+                activeColor: '#A855F7',
+                onPress: () => setIsSpeaker(!isSpeaker),
+              },
+            ]}
+          />
+          <TouchableOpacity
+            style={styles.endCallPill}
+            onPress={() => setShowEndCallPopup(true)}
+            activeOpacity={0.8}
+            accessibilityLabel="End call"
+          >
+            <Ionicons name="call" size={18} color="#EF4444" style={{ transform: [{ rotate: '135deg' }] }} />
+            <Text style={styles.endCallPillText}>End Call</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <EndCallPopup
@@ -634,6 +693,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
+  },
+  // Avatar rendered inside Zego's circle for each participant.
+  zegoAvatar: {
+    width: '100%',
+    height: '100%',
   },
 
   topSection: {
@@ -702,14 +766,52 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
   },
 
-  zegControls: {
+  zegEndCallWrap: {
     position: 'absolute',
-    bottom: hp(18),
+    bottom: hp(16),
     alignSelf: 'center',
-    // Moderate layer — floats above the native call surface but stays below
-    // the in-call recharge/gift popups (which layer higher).
+    // Moderate layer — floats above the Zego native bottom bar but stays
+    // below the in-call recharge/gift popups (which layer higher).
     zIndex: 50,
     elevation: 50,
+  },
+  endCallPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(6),
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderRadius: 24,
+    paddingHorizontal: s(16),
+    paddingVertical: vs(9),
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.55)',
+  },
+  endCallPillText: {
+    color: '#EF4444',
+    fontSize: ms(12, 0.3),
+    fontFamily: 'Inter_600SemiBold',
+  },
+  safetyFloat: {
+    position: 'absolute',
+    left: s(12),
+    top: '50%',
+    marginTop: -wp(6.25),
+    width: wp(12.5),
+    height: wp(12.5),
+    borderRadius: wp(6.25),
+    backgroundColor: 'rgba(34, 197, 94, 0.14)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(34, 197, 94, 0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 999,
+    elevation: 999,
+  },
+  fallbackDockRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: s(10),
   },
   fallbackControls: {
     alignItems: 'center',

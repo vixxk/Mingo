@@ -9,6 +9,7 @@ import { listenersAPI, userAPI } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SkeletonProfile from '../../components/SkeletonProfile';
 import ReportUserPopup from '../../components/shared/ReportUserPopup';
+import BlockUserPopup from '../../components/shared/BlockUserPopup';
 import { getAvatarUrl } from '../../utils/avatars';
 
 const { width: SW, height: SH } = Dimensions.get('window');
@@ -22,12 +23,12 @@ export default function ListenerProfileScreen() {
 
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [coverError, setCoverError] = useState(false);
   const [isFavourite, setIsFavourite] = useState(false);
   const [viewerVisible, setViewerVisible] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const [showActions, setShowActions] = useState(false);
   const [showReportPopup, setShowReportPopup] = useState(false);
+  const [showBlockPopup, setShowBlockPopup] = useState(false);
   const [isBlocking, setIsBlocking] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -36,9 +37,9 @@ export default function ListenerProfileScreen() {
   const headerOpacity = useRef(new Animated.Value(1)).current;
   const statsAnim = useRef(new Animated.Value(1)).current;
   const actionsAnim = useRef(new Animated.Value(1)).current;
-  const coverOpacity = useRef(new Animated.Value(1)).current;
 
   const [refreshing, setRefreshing] = useState(false);
+  const favBusyRef = useRef(false);
 
   useEffect(() => {
     fetchProfile();
@@ -47,24 +48,24 @@ export default function ListenerProfileScreen() {
   const fetchProfile = async (isRefreshing = false) => {
     try {
       if (!isRefreshing) setLoading(true);
-      setCoverError(false);
       const res = await listenersAPI.getPublicProfile(id);
       setProfile(res.data);
 
-      // Check if listener is in user's favourites
+      // Check if listener is in user's favourites. Query the backend (authoritative),
+      // since the cached user object may be stale or missing favouriteListeners.
       try {
-        const userData = await AsyncStorage.getItem('user');
-        if (userData) {
-          const user = JSON.parse(userData);
-          const favs = user.favouriteListeners || [];
-          setIsFavourite(favs.includes(id));
-        }
+        const favRes = await userAPI.getFavourites();
+        const favIds = (favRes.data || []).map(f => String(f._id || f.userId?._id || f));
+        setIsFavourite(favIds.includes(String(id)));
       } catch (e) {
-        // If that fails, try fetching from API
+        // Fallback to the cached user object if the API call fails
         try {
-          const favRes = await userAPI.getFavourites();
-          const favIds = (favRes.data || []).map(f => f._id || f.userId?._id || f);
-          setIsFavourite(favIds.includes(id));
+          const userData = await AsyncStorage.getItem('user');
+          if (userData) {
+            const user = JSON.parse(userData);
+            const favs = (user.favouriteListeners || []).map(f => String(f));
+            setIsFavourite(favs.includes(String(id)));
+          }
         } catch (_) {}
       }
 
@@ -83,12 +84,39 @@ export default function ListenerProfileScreen() {
   };
 
   const handleToggleFavourite = async () => {
-    setIsFavourite(!isFavourite);
+    // Ignore taps while a toggle is already in flight (prevents double-fire/stale toggles)
+    if (favBusyRef.current) return;
+    favBusyRef.current = true;
+    const prev = isFavourite;
+    const next = !prev;
+    setIsFavourite(next);
     try {
-      await userAPI.toggleFavourite(id);
+      const res = await userAPI.toggleFavourite(id);
+      // Trust the backend's authoritative state
+      const isNowFavourite = res?.data?.isFavourite;
+      if (typeof isNowFavourite === 'boolean') {
+        setIsFavourite(isNowFavourite);
+      }
+      // Keep the cached user object in sync so other screens see the change
+      try {
+        const userData = await AsyncStorage.getItem('user');
+        if (userData) {
+          const user = JSON.parse(userData);
+          const favs = user.favouriteListeners || [];
+          if (isNowFavourite === true) {
+            if (!favs.some(f => String(f) === String(id))) favs.push(id);
+            user.favouriteListeners = favs;
+          } else if (isNowFavourite === false) {
+            user.favouriteListeners = favs.filter(f => String(f) !== String(id));
+          }
+          await AsyncStorage.setItem('user', JSON.stringify(user));
+        }
+      } catch (e) {}
     } catch (err) {
-      setIsFavourite(isFavourite); // revert
+      setIsFavourite(prev); // revert
       console.error('Toggle favourite failed:', err);
+    } finally {
+      favBusyRef.current = false;
     }
   };
 
@@ -126,14 +154,12 @@ export default function ListenerProfileScreen() {
 
   const handleBlockUser = async () => {
     setIsBlocking(true);
-    setShowActions(false);
     try {
-      const { userAPI: uAPI } = require('../../utils/api');
-      await uAPI.blockUser(id);
+      await userAPI.blockUser(id);
+      setShowBlockPopup(false);
       router.back();
     } catch (err) {
       console.error('Block user failed:', err);
-    } finally {
       setIsBlocking(false);
     }
   };
@@ -150,7 +176,7 @@ export default function ListenerProfileScreen() {
         activeOpacity={1} 
         onPress={() => setShowActions(false)}
       >
-        <View style={styles.actionMenuBox}>
+        <View style={[styles.actionMenuBox, { marginTop: insets.top + SH * 0.015 }]}>
           <TouchableOpacity
             style={styles.actionMenuItem}
             onPress={() => {
@@ -165,9 +191,11 @@ export default function ListenerProfileScreen() {
           <View style={styles.actionMenuDivider} />
           <TouchableOpacity
             style={styles.actionMenuItem}
-            onPress={handleBlockUser}
+            onPress={() => {
+              setShowActions(false);
+              setShowBlockPopup(true);
+            }}
             activeOpacity={0.7}
-            disabled={isBlocking}
           >
             <Ionicons name="ban-outline" size={SW * 0.05} color="#EF4444" />
             <Text style={[styles.actionMenuLabel, { color: '#EF4444' }]}>Block User</Text>
@@ -194,10 +222,8 @@ export default function ListenerProfileScreen() {
   }
 
   const pub = profile.publicProfile || {};
-  const avatarSource = pub.profileImage || profile.profileImage
-    ? { uri: pub.profileImage || profile.profileImage }
-    : { uri: getAvatarUrl(profile.gender, profile.avatarIndex) };
-  const coverImage = pub.coverImage || null;
+  // Listeners use only their avatar — profile pictures are not shown.
+  const avatarSource = { uri: getAvatarUrl(profile.gender, profile.avatarIndex) };
   const gradientColors = profile.gradientColors?.length >= 2
     ? profile.gradientColors
     : ['#7C3AED', '#6D28D9', '#4C1D95'];
@@ -245,28 +271,16 @@ export default function ListenerProfileScreen() {
       >
         {/* Hero Section */}
         <Animated.View style={[styles.heroSection, { opacity: headerOpacity }]}>
-          {coverImage && !coverError ? (
-            <Animated.View style={{ opacity: coverOpacity }}>
-              <TouchableOpacity onPress={() => openViewer(coverImage)} activeOpacity={0.9}>
-                <Image source={{ uri: coverImage }} style={styles.coverPhoto} resizeMode="cover" onError={() => setCoverError(true)} />
-                <LinearGradient
-                  colors={['transparent', 'rgba(0,0,0,0.7)']}
-                  style={styles.coverOverlay}
-                />
-              </TouchableOpacity>
-            </Animated.View>
-          ) : (
-            <LinearGradient
-              colors={gradientColors.length >= 3 ? gradientColors : [...gradientColors, gradientColors[1]]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.coverGradient}
-            >
-              <View style={styles.decoCircle1} />
-              <View style={styles.decoCircle2} />
-              <View style={styles.decoCircle3} />
-            </LinearGradient>
-          )}
+          <LinearGradient
+            colors={gradientColors.length >= 3 ? gradientColors : [...gradientColors, gradientColors[1]]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.coverGradient}
+          >
+            <View style={styles.decoCircle1} />
+            <View style={styles.decoCircle2} />
+            <View style={styles.decoCircle3} />
+          </LinearGradient>
 
           <Animated.View style={[styles.avatarContainer, { transform: [{ scale: avatarScale }] }]}>
             <TouchableOpacity onPress={() => openViewer(avatarSource)} activeOpacity={0.9}>
@@ -494,6 +508,14 @@ export default function ListenerProfileScreen() {
         reportType="user_report"
         userName={profile?.displayName || profile?.name || 'this listener'}
       />
+
+      <BlockUserPopup
+        visible={showBlockPopup}
+        userName={profile?.displayName || profile?.name || ''}
+        onCancel={() => setShowBlockPopup(false)}
+        onConfirm={handleBlockUser}
+        loading={isBlocking}
+      />
     </View>
   );
 }
@@ -521,8 +543,6 @@ const styles = StyleSheet.create({
 
   heroSection: { alignItems: 'center', marginBottom: SH * 0.01 },
   coverGradient: { width: '100%', height: SH * 0.18, overflow: 'hidden' },
-  coverPhoto: { width: '100%', height: SH * 0.18, overflow: 'hidden' },
-  coverOverlay: { ...StyleSheet.absoluteFillObject },
   decoCircle1: {
     position: 'absolute', width: SW * 0.4, height: SW * 0.4, borderRadius: SW * 0.2,
     backgroundColor: 'rgba(255,255,255,0.06)', top: -SW * 0.15, right: -SW * 0.1,
@@ -628,8 +648,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'flex-start',
     alignItems: 'flex-end',
-    paddingTop: SH * 0.12,
-    paddingRight: SW * 0.04,
+    paddingTop: 0,
+    paddingRight: SW * 0.015,
   },
   actionMenuBox: {
     backgroundColor: '#1A1A1F',

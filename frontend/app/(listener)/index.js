@@ -760,7 +760,7 @@ export default function ListenerHomeScreen() {
             <Text style={styles.breakdownValue}>₹{earningsStats ? earningsStats.breakdown.chat : 0}</Text>
           </View>
           <View style={styles.breakdownRow}>
-            <Text style={styles.breakdownLabel}><Ionicons name="heart" size={12} color="#EF4444" />  Gifts</Text>
+            <Text style={styles.breakdownLabel}><Ionicons name="gift" size={12} color="#EF4444" />  Gifts</Text>
             <Text style={styles.breakdownValue}>₹{earningsStats ? earningsStats.breakdown.gifts : 0}</Text>
           </View>
 

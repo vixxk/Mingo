@@ -11,6 +11,7 @@ import {
   BackHandler,
   Platform,
   Vibration,
+  ScrollView,
 } from 'react-native';
 import { Audio } from 'expo-av';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -363,7 +364,13 @@ export default function ListenerScreen() {
               </TouchableOpacity>
               {dropdownOpen && (
                 <View style={styles.dropdownMenu}>
-                  <View style={styles.languageGrid}>
+                  <ScrollView
+                    style={styles.dropdownScroll}
+                    contentContainerStyle={styles.languageGrid}
+                    nestedScrollEnabled
+                    bounces={false}
+                    showsVerticalScrollIndicator={false}
+                  >
                     {languageSamples.map((item) => {
                       const isActive = item.language === selectedLanguage;
                       return (
@@ -377,7 +384,7 @@ export default function ListenerScreen() {
                         </TouchableOpacity>
                       );
                     })}
-                  </View>
+                  </ScrollView>
                 </View>
               )}
             </View>
@@ -498,9 +505,10 @@ const styles = StyleSheet.create({
   dropdownCard: { width: '100%', height: vs(52), backgroundColor: '#141414', borderRadius: 10, borderWidth: 1, borderColor: '#2B2B2B', flexDirection: 'row', alignItems: 'center', paddingHorizontal: s(14) },
   dropdownLabel: { fontSize: ms(11), color: '#6B7280', fontFamily: 'Inter_400Regular', marginBottom: 2 },
   dropdownSelected: { fontSize: ms(14), color: '#fff', fontFamily: 'Inter_700Bold', fontWeight: '700' },
-  dropdownMenu: { position: 'absolute', top: vs(46), left: 0, right: 0, backgroundColor: '#1A1A1A', borderRadius: 12, borderWidth: 1, borderColor: '#333', padding: s(8), maxHeight: vs(320), zIndex: 200, elevation: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 10 },
+  dropdownMenu: { position: 'absolute', top: vs(46), left: 0, right: 0, backgroundColor: '#1A1A1A', borderRadius: 12, borderWidth: 1, borderColor: '#333', padding: s(8), zIndex: 200, elevation: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 10 },
+  dropdownScroll: { maxHeight: vs(320), zIndex: 200 },
   languageGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: s(6) },
-  languageGridItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: vs(12), paddingHorizontal: s(12), backgroundColor: '#252525', borderRadius: 8, borderWidth: 1, borderColor: '#333', flexBasis: '48%' },
+  languageGridItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: vs(8), paddingHorizontal: s(10), backgroundColor: '#252525', borderRadius: 8, borderWidth: 1, borderColor: '#333', flexBasis: '47.5%' },
   languageGridItemActive: { backgroundColor: 'rgba(255,215,0,0.1)', borderColor: '#FFD700' },
   languageGridText: { fontSize: ms(13), color: '#D1D5DB', fontFamily: 'Inter_500Medium', flex: 1 },
   languageGridTextActive: { color: '#FFD700', fontFamily: 'Inter_700Bold' },

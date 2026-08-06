@@ -164,10 +164,6 @@ export default function EditPublicProfileScreen() {
     );
   };
 
-  // ── Avatar-only policy ─────────────────────────────────────
-  // Listeners can only use an avatar. Profile photos, cover photos and
-  // gallery images are not permitted — the backend enforces this too.
-
   const handleSaveDraft = async () => {
     try {
       setSaving(true);
@@ -250,26 +246,6 @@ export default function EditPublicProfileScreen() {
         <Text style={styles.infoText}>
           Customize your public-facing profile. Changes require admin approval before going live.
         </Text>
-
-        {/* Avatar-only policy notice */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Profile & Cover Photos</Text>
-          <View style={styles.photoPolicyCard}>
-            <View style={styles.photoPolicyIcon}>
-              <Ionicons name="image-outline" size={24} color="#EF4444" />
-            </View>
-            <View style={styles.photoPolicyTextWrap}>
-              <Text style={styles.photoPolicyTitle}>Photos are not permitted</Text>
-              <Text style={styles.photoPolicyText}>
-                To keep the platform safe, professional and consistent, listeners can only use an avatar.
-                Uploading profile or cover photos is not allowed.
-              </Text>
-            </View>
-          </View>
-          <Text style={[styles.charCount, { textAlign: 'left', marginTop: 8, marginBottom: 0 }]}>
-            Only your avatar is used as your profile picture.
-          </Text>
-        </View>
 
         {/* Display Name */}
         <View style={styles.inputGroup}>
@@ -464,39 +440,6 @@ const styles = StyleSheet.create({
   },
   textArea: { minHeight: SH * 0.13, textAlignVertical: 'top' },
   charCount: { color: '#4B5563', fontSize: SW * 0.028, marginTop: 4, textAlign: 'right', fontFamily: 'Inter_400Regular' },
-
-  // Avatar-only policy notice
-  photoPolicyCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SW * 0.03,
-    backgroundColor: 'rgba(239, 68, 68, 0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
-    borderRadius: SW * 0.035,
-    padding: SW * 0.04,
-  },
-  photoPolicyIcon: {
-    width: SW * 0.11,
-    height: SW * 0.11,
-    borderRadius: SW * 0.055,
-    backgroundColor: 'rgba(239, 68, 68, 0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  photoPolicyTextWrap: { flex: 1 },
-  photoPolicyTitle: {
-    color: '#F87171',
-    fontSize: SW * 0.037,
-    fontFamily: 'Inter_800ExtraBold',
-    marginBottom: 2,
-  },
-  photoPolicyText: {
-    color: 'rgba(255,255,255,0.75)',
-    fontSize: SW * 0.032,
-    fontFamily: 'Inter_400Regular',
-    lineHeight: SW * 0.048,
-  },
 
   // Chips
   chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

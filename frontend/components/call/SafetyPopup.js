@@ -4,8 +4,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ms, s, vs } from '../../utils/responsive';
 
-const AUTO_DISMISS_MS = 3000;
-
 export default function SafetyPopup({ visible, onDismiss }) {
   const slideAnim = useRef(new Animated.Value(400)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
@@ -27,11 +25,6 @@ export default function SafetyPopup({ visible, onDismiss }) {
         Animated.timing(overlayAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
         Animated.spring(slideAnim, { toValue: 0, friction: 8, tension: 40, useNativeDriver: true }),
       ]).start();
-
-      const timer = setTimeout(() => {
-        if (onDismiss) onDismiss();
-      }, AUTO_DISMISS_MS);
-      return () => clearTimeout(timer);
     }
   }, [visible]);
 

@@ -24,7 +24,7 @@ import { getAvatarUrl } from '../../utils/avatars';
 const { height: SH } = Dimensions.get('window');
 const isExpoGo = Constants.appOwnership === 'expo';
 
-let ZegoUIKitPrebuiltCall, ONE_ON_ONE_VIDEO_CALL_CONFIG, ZegoMenuBarButtonName, ZegoUIKit;
+let ZegoUIKitPrebuiltCall, ONE_ON_ONE_VIDEO_CALL_CONFIG, ZegoMenuBarButtonName;
 try {
   if (!isExpoGo) {
     const zegoModule = require('@zegocloud/zego-uikit-prebuilt-call-rn');
@@ -32,10 +32,6 @@ try {
     ZegoMenuBarButtonName = zegoModule.ZegoMenuBarButtonName;
     ONE_ON_ONE_VIDEO_CALL_CONFIG =
       zegoModule.ONE_ON_ONE_VIDEO_CALL_CONFIG || ZegoMenuBarButtonName;
-    // ZegoUIKit drives the actual camera device; used to flip front/back from
-    // the floating overlay (the prebuilt SDK keeps its own menu bar button).
-    const uikitModule = require('@zegocloud/zego-uikit-rn');
-    ZegoUIKit = uikitModule.default || uikitModule;
   } else {
     console.log('Skipping ZegoCloud load in Expo Go mode');
   }
@@ -43,7 +39,7 @@ try {
   console.log('ZegoCloud not available (Expo Go mode)');
 }
 
-const ZegoCallWrapper = React.memo(({ appId, appSign, userId, userName, roomId, onCallEnd, turnOnCamera = true, turnOnMic = true }) => {
+const ZegoCallWrapper = React.memo(({ appId, appSign, userId, userName, roomId, onCallEnd, turnOnCamera = true, turnOnMic = true, myAvatarUrl, listenerAvatarUrl }) => {
   if (!ZegoUIKitPrebuiltCall) return null;
 
   // Remove Zego's built-in hang-up button so every end-call request goes
@@ -83,6 +79,20 @@ const ZegoCallWrapper = React.memo(({ appId, appSign, userId, userName, roomId, 
           showMicrophoneStateOnView: false,
           showCameraStateOnView: false,
         },
+        // When a participant's camera is off, show their real avatar instead of
+        // Zego's default initials card. Me vs the remote participant.
+        avatarBuilder: (userInfo) => {
+          const isMe = String(userInfo?.userID) === String(userId);
+          const uri = isMe ? myAvatarUrl : listenerAvatarUrl;
+          if (!uri) return null;
+          return (
+            <Image
+              source={{ uri }}
+              style={styles.zegoAvatar}
+              resizeMode="cover"
+            />
+          );
+        },
       }}
     />
   );
@@ -104,7 +114,7 @@ export default function VideoCallScreen() {
     zegoAppSign,
   } = useLocalSearchParams();
 
-  const [showSafety, setShowSafety] = useState(true);
+  const [showSafety, setShowSafety] = useState(false);
   const [showEndCallPopup, setShowEndCallPopup] = useState(false);
   const [showCallCancelled, setShowCallCancelled] = useState(false);
   const [showRecharge, setShowRecharge] = useState(false);
@@ -112,10 +122,10 @@ export default function VideoCallScreen() {
   const [receivedGift, setReceivedGift] = useState(null);
   const [userID, setUserID] = useState('');
   const [userName, setUserName] = useState('');
+  const [myAvatarUrl, setMyAvatarUrl] = useState('');
   const [callDuration, setCallDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
-  const [isFrontCamera, setIsFrontCamera] = useState(true);
   const [currentCoins, setCurrentCoins] = useState(null);
   const [lowBalanceMessage, setLowBalanceMessage] = useState('');
   const [permission, setPermission] = useState({ camera: false, mic: false });
@@ -132,6 +142,10 @@ export default function VideoCallScreen() {
 
   const resolvedAppId = zegoAppId ? parseInt(zegoAppId) : ZEGO_APP_ID;
   const resolvedAppSign = zegoAppSign || ZEGO_APP_SIGN;
+
+  // The remote participant's avatar (from the route params) — stands in when
+  // their camera is off.
+  const listenerAvatarUrl = getAvatarUrl(gender, avatarIndex);
 
   // Live camera (fallback path) only needs the camera permission. The Zego
   // path joins the real call when EITHER camera or mic is granted, so a denied
@@ -166,6 +180,11 @@ export default function VideoCallScreen() {
           setUserID(user._id || user.id || `user_${Date.now()}`);
           setUserName(user.name || user.username || 'User');
           setIsListener(user.role === 'LISTENER');
+          // Build my own avatar URL the same way the profile screen does.
+          const rawGender = user.gender || 'Male';
+          const normalizedGender = rawGender.charAt(0).toUpperCase() + rawGender.slice(1).toLowerCase();
+          const avatarIndex = user.avatarIndex !== undefined && user.avatarIndex !== null ? String(user.avatarIndex) : '0';
+          setMyAvatarUrl(getAvatarUrl(normalizedGender, avatarIndex));
         } else {
           setUserID(`user_${Date.now()}`);
           setUserName('User');
@@ -420,18 +439,6 @@ export default function VideoCallScreen() {
     }).start();
   }, [controlsVisible, controlsOpacity, showEndCallPopup, showSafety, showRecharge, showGiftPopup]);
 
-  // Flip the camera. In the fallback path this just re-points the expo-camera
-  // preview; in a Zego call it switches the actual SDK camera device.
-  const handleFlipCamera = useCallback(() => {
-    const next = !isFrontCamera;
-    setIsFrontCamera(next);
-    // Allow the newly selected camera to retry if it previously failed.
-    setCameraError(false);
-    if (!isExpoGo && ZegoUIKit) {
-      ZegoUIKit.useFrontFacingCamera(next);
-    }
-  }, [isFrontCamera]);
-
   if (!isExpoGo && ZegoUIKitPrebuiltCall && userID && roomId && canJoinRealCall) {
     return (
       <Pressable style={{ flex: 1 }} onPress={toggleControls}>
@@ -444,6 +451,8 @@ export default function VideoCallScreen() {
           onCallEnd={handleEndCall}
           turnOnCamera={permission.camera}
           turnOnMic={permission.mic}
+          myAvatarUrl={myAvatarUrl}
+          listenerAvatarUrl={listenerAvatarUrl}
         />
 
         {/* Floating overlay — tap anywhere toggles it (video feeds stay) */}
@@ -472,7 +481,7 @@ export default function VideoCallScreen() {
 
             {!isListener && (
               <TouchableOpacity
-                style={[styles.floatingRechargeGift, { backgroundColor: 'rgba(168, 85, 247, 0.15)', borderColor: 'rgba(168, 85, 247, 0.3)' }]}
+                style={styles.floatingRechargeGift}
                 onPress={() => setShowGiftPopup(true)}
                 activeOpacity={0.8}
               >
@@ -482,21 +491,28 @@ export default function VideoCallScreen() {
             )}
           </View>
 
-          {/* Call control dock — safety, camera flip + end call */}
-          <View style={styles.zegoControls}>
-            <CallControls
-              buttons={[
-                {
-                  id: 'flip',
-                  icon: 'camera-reverse-outline',
-                  label: 'Flip',
-                  onPress: handleFlipCamera,
-                },
-              ]}
-              onEndCall={() => setShowEndCallPopup(true)}
-              onSafety={() => setShowSafety(true)}
-            />
+          {/* End call — floating above the Zego native bottom bar */}
+          <View style={styles.zegEndCallWrap}>
+            <TouchableOpacity
+              style={styles.endCallPill}
+              onPress={() => setShowEndCallPopup(true)}
+              activeOpacity={0.8}
+              accessibilityLabel="End call"
+            >
+              <Ionicons name="call" size={18} color="#EF4444" style={{ transform: [{ rotate: '135deg' }] }} />
+              <Text style={styles.endCallPillText}>End Call</Text>
+            </TouchableOpacity>
           </View>
+
+          {/* Safety — left side, middle of the page */}
+          <TouchableOpacity
+            style={styles.safetyFloat}
+            onPress={() => setShowSafety(true)}
+            activeOpacity={0.8}
+            accessibilityLabel="Open safety guidance"
+          >
+            <Ionicons name="shield-checkmark" size={22} color="#4ADE80" />
+          </TouchableOpacity>
         </Animated.View>
 
         <EndCallPopup
@@ -589,7 +605,7 @@ export default function VideoCallScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.floatingRechargeGift, { backgroundColor: 'rgba(168, 85, 247, 0.15)', borderColor: 'rgba(168, 85, 247, 0.3)' }]}
+            style={styles.floatingRechargeGift}
             onPress={() => setShowGiftPopup(true)}
             activeOpacity={0.8}
           >
@@ -626,10 +642,10 @@ export default function VideoCallScreen() {
         <View style={styles.selfCamera}>
           {showCamera ? (
             <CameraView
-              key={isFrontCamera ? 'front' : 'back'}
+              key="front"
               style={StyleSheet.absoluteFill}
-              facing={isFrontCamera ? 'front' : 'back'}
-              mirror={isFrontCamera}
+              facing="front"
+              mirror
               active
               onMountError={() => setCameraError(true)}
             />
@@ -639,42 +655,60 @@ export default function VideoCallScreen() {
         </View>
       </View>
 
+      {/* Safety — left side, middle of the page */}
+      <Animated.View
+        style={[StyleSheet.absoluteFill, { opacity: controlsOpacity }]}
+        pointerEvents={controlsVisible ? 'box-none' : 'none'}
+      >
+        <TouchableOpacity
+          style={styles.safetyFloat}
+          onPress={() => setShowSafety(true)}
+          activeOpacity={0.8}
+          accessibilityLabel="Open safety guidance"
+        >
+          <Ionicons name="shield-checkmark" size={22} color="#4ADE80" />
+        </TouchableOpacity>
+      </Animated.View>
+
       <Animated.View style={{ opacity: controlsOpacity }} pointerEvents={controlsVisible ? 'auto' : 'none'}>
         <View style={[styles.fallbackControls, { paddingBottom: Math.max(insets.bottom, vs(24)) }]}>
-          <CallControls
-            buttons={[
-              {
-                id: 'mute',
-                icon: 'mic',
-                iconActive: 'mic-off',
-                label: 'Mute',
-                labelActive: 'Unmute',
-                active: isMuted,
-                onPress: () => setIsMuted(!isMuted),
-              },
-              {
-                id: 'camera',
-                icon: 'videocam',
-                iconActive: 'videocam-off',
-                label: 'Camera',
-                active: isCameraOff,
-                onPress: () => {
-                  const next = !isCameraOff;
-                  setIsCameraOff(next);
-                  // Clear any previous mount error so the camera can retry when re-enabled.
-                  if (!next) setCameraError(false);
+          <View style={styles.fallbackDockRow}>
+            <CallControls
+              buttons={[
+                {
+                  id: 'mute',
+                  icon: 'mic',
+                  iconActive: 'mic-off',
+                  label: 'Mute',
+                  labelActive: 'Unmute',
+                  active: isMuted,
+                  onPress: () => setIsMuted(!isMuted),
                 },
-              },
-              {
-                id: 'flip',
-                icon: 'camera-reverse-outline',
-                label: 'Flip',
-                onPress: handleFlipCamera,
-              },
-            ]}
-            onEndCall={() => setShowEndCallPopup(true)}
-            onSafety={() => setShowSafety(true)}
-          />
+                {
+                  id: 'camera',
+                  icon: 'videocam',
+                  iconActive: 'videocam-off',
+                  label: 'Camera',
+                  active: isCameraOff,
+                  onPress: () => {
+                    const next = !isCameraOff;
+                    setIsCameraOff(next);
+                    // Clear any previous mount error so the camera can retry when re-enabled.
+                    if (!next) setCameraError(false);
+                  },
+                },
+              ]}
+            />
+            <TouchableOpacity
+              style={styles.endCallPill}
+              onPress={() => setShowEndCallPopup(true)}
+              activeOpacity={0.8}
+              accessibilityLabel="End call"
+            >
+              <Ionicons name="call" size={18} color="#EF4444" style={{ transform: [{ rotate: '135deg' }] }} />
+              <Text style={styles.endCallPillText}>End Call</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </Animated.View>
 
@@ -742,6 +776,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
+  },
+
+  // Avatar rendered inside Zego's circle when a participant's camera is off.
+  zegoAvatar: {
+    width: '100%',
+    height: '100%',
   },
 
   topBar: {
@@ -827,14 +867,52 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
 
-  zegControls: {
+  zegEndCallWrap: {
     position: 'absolute',
-    bottom: hp(18),
+    bottom: hp(16),
     alignSelf: 'center',
-    // Moderate layer — floats above the native call surface but stays below
-    // the in-call recharge/gift popups (which layer higher).
+    // Moderate layer — floats above the Zego native bottom bar but stays
+    // below the in-call recharge/gift popups (which layer higher).
     zIndex: 50,
     elevation: 50,
+  },
+  endCallPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(6),
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderRadius: 24,
+    paddingHorizontal: s(16),
+    paddingVertical: vs(9),
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.55)',
+  },
+  endCallPillText: {
+    color: '#EF4444',
+    fontSize: ms(12, 0.3),
+    fontFamily: 'Inter_600SemiBold',
+  },
+  safetyFloat: {
+    position: 'absolute',
+    left: s(12),
+    top: '50%',
+    marginTop: -wp(6.25),
+    width: wp(12.5),
+    height: wp(12.5),
+    borderRadius: wp(6.25),
+    backgroundColor: 'rgba(34, 197, 94, 0.14)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(34, 197, 94, 0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 999,
+    elevation: 999,
+  },
+  fallbackDockRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: s(10),
   },
   fallbackControls: {
     alignItems: 'center',

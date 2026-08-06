@@ -165,21 +165,28 @@ class UserController {
   static async toggleFavourite(req, res, next) {
     try {
       const { listenerId } = req.body;
+      if (!listenerId) throw new AppError('Listener ID is required', 400);
+
       const user = await User.findById(req.user.id);
       if (!user) throw new AppError('User not found', 404);
 
-      const idx = user.favouriteListeners.indexOf(listenerId);
-      if (idx === -1) {
+      // Normalize to strings for comparison so this works regardless of whether
+      // stored entries are ObjectIds or strings (and across Mongoose versions).
+      const idStr = String(listenerId);
+      const exists = user.favouriteListeners.some(f => String(f) === idStr);
+
+      if (!exists) {
         user.favouriteListeners.push(listenerId);
       } else {
-        user.favouriteListeners.splice(idx, 1);
+        // Remove every matching entry so stale duplicates can never stick around.
+        user.favouriteListeners = user.favouriteListeners.filter(f => String(f) !== idStr);
       }
       await user.save();
 
       return ApiResponse.success(res, {
         favouriteListeners: user.favouriteListeners,
-        isFavourite: idx === -1,
-      }, idx === -1 ? 'Added to favourites' : 'Removed from favourites');
+        isFavourite: !exists,
+      }, !exists ? 'Added to favourites' : 'Removed from favourites');
     } catch (err) {
       next(err);
     }

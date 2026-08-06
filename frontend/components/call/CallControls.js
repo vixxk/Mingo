@@ -71,27 +71,29 @@ const CallControls = ({ buttons = [], onEndCall, onSafety }) => (
         </TouchableOpacity>
       ))}
 
-      <TouchableOpacity
-        style={styles.endBtn}
-        onPress={onEndCall}
-        activeOpacity={0.85}
-        accessibilityLabel="End call"
-        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-      >
-        <LinearGradient
-          colors={['#EF4444', '#B91C1C']}
-          style={styles.endBtnGradient}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+      {onEndCall && (
+        <TouchableOpacity
+          style={styles.endBtn}
+          onPress={onEndCall}
+          activeOpacity={0.85}
+          accessibilityLabel="End call"
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
-          <Ionicons
-            name="call"
-            size={s(24)}
-            color="#fff"
-            style={{ transform: [{ rotate: '135deg' }] }}
-          />
-        </LinearGradient>
-      </TouchableOpacity>
+          <LinearGradient
+            colors={['#EF4444', '#B91C1C']}
+            style={styles.endBtnGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <Ionicons
+              name="call"
+              size={s(24)}
+              color="#fff"
+              style={{ transform: [{ rotate: '135deg' }] }}
+            />
+          </LinearGradient>
+        </TouchableOpacity>
+      )}
     </View>
   </View>
 );

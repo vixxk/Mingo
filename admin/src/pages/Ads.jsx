@@ -194,10 +194,11 @@ export default function Ads() {
           <IoChevronBack size={isMobile ? 16 : 20} color="#fff" />
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 10, flex: 1, minWidth: 0, flexWrap: 'wrap' }}>
+          {/* Icon box hidden on mobile so the back arrow sits directly left of the title */}
           <div className="icon-box" style={{
             width: isMobile ? 28 : 36, height: isMobile ? 28 : 36, borderRadius: isMobile ? 8 : 10,
             background: 'var(--accent-gradient)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+            display: isMobile ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
           }}>
             <IoImages size={isMobile ? 14 : 18} color="#fff" />
           </div>
@@ -208,63 +209,66 @@ export default function Ads() {
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
           }}>Ads Management</h1>
           <div style={{ flex: 1 }} />
-          {/* Slider interval: timer icon + input + save button. Own full-width row on mobile. */}
+          {/* Mobile: timer + save + add-new-ad share their own full-width row (shrunk to fit). Desktop: unchanged inline controls. */}
           <div style={{
             display: 'flex', alignItems: 'center', gap: 8,
             width: isMobile ? '100%' : undefined,
             order: isMobile ? 10 : undefined,
             marginRight: isMobile ? 0 : 8,
             marginTop: isMobile ? 4 : 0,
+            justifyContent: isMobile ? 'space-between' : undefined,
           }}>
-            <div style={{
-              flex: isMobile ? 1 : undefined,
-              display: 'flex', alignItems: 'center', gap: 8,
-              background: 'var(--bg-tertiary)', border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)', padding: isMobile ? '7px 12px' : '5px 12px',
-            }}>
-              <IoTimer size={isMobile ? 14 : 16} color="var(--text-muted)" style={{ flexShrink: 0 }} />
-              <input
-                type="number"
-                min={2}
-                max={30}
-                value={intervalDraft}
-                onChange={e => setIntervalDraft(e.target.value)}
-                aria-label="Ad slider interval in seconds"
+            <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 8, flexShrink: 0 }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 8,
+                background: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)', padding: isMobile ? '6px 10px' : '5px 12px',
+                flexShrink: 0,
+              }}>
+                <IoTimer size={isMobile ? 14 : 16} color="var(--text-muted)" style={{ flexShrink: 0 }} />
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={intervalDraft}
+                  onChange={e => setIntervalDraft(e.target.value.replace(/\D/g, ''))}
+                  aria-label="Ad slider interval in seconds"
+                  style={{
+                    width: isMobile ? 34 : 44, background: 'transparent', border: 'none', outline: 'none',
+                    color: 'var(--text-primary)', fontSize: 13, textAlign: 'center',
+                    padding: 0, boxSizing: 'border-box',
+                  }}
+                />
+                <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>sec</span>
+              </div>
+              <button
+                onClick={handleSaveInterval}
+                disabled={savingInterval}
                 style={{
-                  width: 44, background: 'transparent', border: 'none', outline: 'none',
-                  color: 'var(--text-primary)', fontSize: 13, textAlign: 'center',
-                  padding: 0, boxSizing: 'border-box',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  padding: isMobile ? '7px 14px' : '8px 18px',
+                  borderRadius: 'var(--radius-sm)', border: 'none',
+                  background: 'var(--accent-gradient)', color: '#fff', fontWeight: 600,
+                  fontSize: 12, cursor: savingInterval ? 'not-allowed' : 'pointer',
+                  opacity: savingInterval ? 0.7 : 1, whiteSpace: 'nowrap', flexShrink: 0,
                 }}
-              />
-              <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>sec</span>
+              >
+                {savingInterval ? 'Saving...' : 'Save'}
+              </button>
             </div>
             <button
-              onClick={handleSaveInterval}
-              disabled={savingInterval}
+              onClick={() => handleOpenModal()}
               style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                padding: isMobile ? '8px 20px' : '8px 18px',
-                borderRadius: 'var(--radius-sm)', border: 'none',
-                background: 'var(--accent-gradient)', color: '#fff', fontWeight: 600,
-                fontSize: 12, cursor: savingInterval ? 'not-allowed' : 'pointer',
-                opacity: savingInterval ? 0.7 : 1, whiteSpace: 'nowrap', flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: isMobile ? 4 : 8,
+                padding: isMobile ? '7px 10px' : '10px 20px',
+                borderRadius: 'var(--radius-md)', border: 'none',
+                background: 'var(--accent-gradient)', color: '#fff', fontWeight: 600, cursor: 'pointer',
+                fontFamily: 'var(--font-body)', fontSize: isMobile ? 12 : 14, whiteSpace: 'nowrap', flexShrink: 0
               }}
             >
-              {savingInterval ? 'Saving...' : 'Save'}
+              <IoAdd size={isMobile ? 14 : 18} /> Add New Ad
             </button>
           </div>
-          <button
-            onClick={() => handleOpenModal()}
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: isMobile ? 4 : 8,
-              padding: isMobile ? '7px 10px' : '10px 20px',
-              borderRadius: 'var(--radius-md)', border: 'none',
-              background: 'var(--accent-gradient)', color: '#fff', fontWeight: 600, cursor: 'pointer',
-              fontFamily: 'var(--font-body)', fontSize: isMobile ? 12 : 14, whiteSpace: 'nowrap', flexShrink: 0
-            }}
-          >
-            <IoAdd size={isMobile ? 14 : 18} /> Add New Ad
-          </button>
         </div>
       </div>
 

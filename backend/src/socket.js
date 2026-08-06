@@ -57,6 +57,9 @@ const initSocket = (server) => {
     }
   });
 
+  const sseService = require('./services/sseService');
+  sseService.setIo(io);
+
   io.on('connection', (socket) => {
     console.log('User connected to socket:', socket.id);
     socket.connectTime = Date.now();
@@ -282,7 +285,7 @@ const initSocket = (server) => {
         // Determine if the sender is the USER (not the listener)
         const isUserRole = sender.role === 'USER';
 
-        // --- FREE MESSAGE LOGIC (the user's first TWO messages are free) ---
+        // --- FREE MESSAGE LOGIC (the user's FIRST message is free) ---
         // Count the user's earlier messages in this conversation to decide
         // whether this message is still inside the free window.
         let userMessageCount = 0;
@@ -294,7 +297,7 @@ const initSocket = (server) => {
           });
         }
 
-        if (isUserRole && userMessageCount < 2) {
+        if (isUserRole && userMessageCount < 1) {
           // Save and send the message
           console.log(`[Socket] Saving FREE message in conv ${conversationId} from ${senderId}`);
           const message = new Message({
@@ -368,10 +371,9 @@ const initSocket = (server) => {
             }
           }
 
-          // The chat session (and its timer) starts after the user's SECOND message.
-          if (userMessageCount === 1) {
-            await startChatSession(conversation, senderId);
-          }
+          // The chat session (and its timer) does NOT start on a free user
+          // message. It starts when the listener replies (handled in the
+          // paid path below). This way the user only gets one free message.
           return;
         }
 
@@ -407,8 +409,25 @@ const initSocket = (server) => {
               }).catch(err => console.error('[Chat] Insufficient-balance push failed:', err.message));
               return;
             }
-            // User has balance but no session is active — save the message,
-            // then start the session below (the user's message initiates it).
+            // User has balance but no session is active.
+            // The session only starts once the LISTENER is online — otherwise
+            // the second message is blocked (a session cannot begin "live").
+            const userListener = conversation.participants.find(
+              (p) => p.toString() !== senderId.toString()
+            );
+            const listenerOnline = userListener
+              ? await redis.exists(REDIS_KEYS.ONLINE(userListener.toString()))
+              : false;
+            if (!listenerOnline) {
+              console.log(
+                `[Socket] Blocking paid msg in conv ${conversationId}: listener ${userListener} is offline`
+              );
+              socket.emit('listener_offline', {
+                conversationId,
+                listenerId: userListener ? userListener.toString() : null,
+              });
+              return;
+            }
           }
         }
 
@@ -510,17 +529,16 @@ const initSocket = (server) => {
           }
         }
 
-        // --- SESSION START (user-initiated) ---
-        // A chat session (and its timer) is started by the user's message when
-        // no session is active — the user's second message in a fresh
-        // conversation, or any message that restarts a finished session.
-        // Listener replies never start billing on their own.
-        if (isUserRole) {
-          const sessionData = conversation.chatSession;
-          const needsNewSession = !sessionData || !sessionData.active;
-          if (needsNewSession) {
-            await startChatSession(conversation, senderId);
-          }
+        // --- SESSION START ---
+        // A chat session (and its timer) starts ONLY when the USER sends a
+        // message with no active session (and enough coins). It does NOT start
+        // on a listener reply — the listener's reply merely unlocks the user's
+        // message box. The listener must be online for the user's message to
+        // begin the session (guarded in the balance-check block above).
+        const sessionData = conversation.chatSession;
+        const needsNewSession = !sessionData || !sessionData.active;
+        if (isUserRole && needsNewSession) {
+          await startChatSession(conversation, senderId.toString());
         }
 
       } catch (error) {

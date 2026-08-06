@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ActivityIndicator,
   TouchableOpacity,
   FlatList,
 } from 'react-native';
@@ -15,6 +14,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { ms, s, vs, wp, hp } from '../../utils/responsive';
 import { callAPI } from '../../utils/api';
 import RaiseIssuePopup from '../../components/shared/RaiseIssuePopup';
+import SkeletonRecentList from '../../components/SkeletonRecentList';
 
 const GRADIENTS = [
   ['#5C21B6', '#121212'],
@@ -126,20 +126,20 @@ export default function RecentSessionsScreen() {
         </TouchableOpacity>
       </View>
 
-      <FlatList
-        style={styles.list}
-        data={sessions}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        ListHeaderComponent={
-          <Text style={styles.sectionTitle}>Your last 5 sessions</Text>
-        }
-        renderItem={({ item, index }) => <SessionCard item={item} index={index} />}
-        ListEmptyComponent={
-          loading ? (
-            <ActivityIndicator size="large" color="#EF4444" style={styles.loader} />
-          ) : (
+      {loading ? (
+        <SkeletonRecentList variant="sessions" />
+      ) : (
+        <FlatList
+          style={styles.list}
+          data={sessions}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            <Text style={styles.sectionTitle}>Your last 5 sessions</Text>
+          }
+          renderItem={({ item, index }) => <SessionCard item={item} index={index} />}
+          ListEmptyComponent={
             <View style={styles.emptyState}>
               <Ionicons name="call-outline" size={wp(14)} color="#4B5563" />
               <Text style={styles.emptyTitle}>No Sessions Yet</Text>
@@ -147,9 +147,9 @@ export default function RecentSessionsScreen() {
                 Your recent call sessions will appear here.
               </Text>
             </View>
-          )
-        }
-      />
+          }
+        />
+      )}
 
       <View style={styles.reportFooter}>
         <TouchableOpacity
@@ -223,9 +223,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontFamily: 'Inter_700Bold',
     marginBottom: hp(1),
-  },
-  loader: {
-    marginTop: hp(8),
   },
 
   /* Empty State */

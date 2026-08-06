@@ -23,7 +23,7 @@ export default function TabLayout() {
   // Recharge gate: user tried to answer a call without enough coins
   const [rechargeGate, setRechargeGate] = useState(null); // { callerName, callType, minCoins, balance }
   const [callCancelledVisible, setCallCancelledVisible] = useState(false);
-  const { unreadCount } = useSSE();
+  const { unreadPeopleCount } = useSSE();
 
   const isChatOpenRef = React.useRef(false);
 
@@ -308,10 +308,10 @@ export default function TabLayout() {
                   size={22}
                   color={color}
                 />
-                {unreadCount > 0 && (
+                {unreadPeopleCount > 0 && (
                   <View style={styles.unreadBadge}>
                     <Text style={styles.unreadBadgeText}>
-                      {unreadCount > 99 ? '99+' : unreadCount}
+                      {unreadPeopleCount > 99 ? '99+' : unreadPeopleCount}
                     </Text>
                   </View>
                 )}

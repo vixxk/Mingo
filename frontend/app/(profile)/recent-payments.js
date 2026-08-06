@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ActivityIndicator,
   TouchableOpacity,
   FlatList,
 } from 'react-native';
@@ -16,6 +15,7 @@ import * as Clipboard from 'expo-clipboard';
 import { ms, s, vs, wp, hp } from '../../utils/responsive';
 import { walletAPI } from '../../utils/api';
 import RaiseIssuePopup from '../../components/shared/RaiseIssuePopup';
+import SkeletonRecentList from '../../components/SkeletonRecentList';
 
 const formatDate = (dateString) => {
   const date = new Date(dateString);
@@ -146,20 +146,20 @@ export default function RecentPaymentsScreen() {
         </TouchableOpacity>
       </View>
 
-      <FlatList
-        style={styles.list}
-        data={payments}
-        keyExtractor={(item) => item._id}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        ListHeaderComponent={
-          <Text style={styles.sectionTitle}>Your last 5 payments</Text>
-        }
-        renderItem={({ item }) => <PaymentCard item={item} />}
-        ListEmptyComponent={
-          loading ? (
-            <ActivityIndicator size="large" color="#EF4444" style={styles.loader} />
-          ) : (
+      {loading ? (
+        <SkeletonRecentList variant="payments" />
+      ) : (
+        <FlatList
+          style={styles.list}
+          data={payments}
+          keyExtractor={(item) => item._id}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            <Text style={styles.sectionTitle}>Your last 5 payments</Text>
+          }
+          renderItem={({ item }) => <PaymentCard item={item} />}
+          ListEmptyComponent={
             <View style={styles.emptyState}>
               <Ionicons name="wallet-outline" size={wp(14)} color="#4B5563" />
               <Text style={styles.emptyTitle}>No Payments Yet</Text>
@@ -167,9 +167,9 @@ export default function RecentPaymentsScreen() {
                 Your recent wallet transactions will appear here.
               </Text>
             </View>
-          )
-        }
-      />
+          }
+        />
+      )}
 
       <View style={styles.reportFooter}>
         <TouchableOpacity
@@ -243,9 +243,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontFamily: 'Inter_700Bold',
     marginBottom: hp(1),
-  },
-  loader: {
-    marginTop: hp(8),
   },
 
   /* Empty State */

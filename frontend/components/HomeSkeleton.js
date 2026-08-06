@@ -49,11 +49,13 @@ export default function HomeSkeleton() {
       {/* ── Header ── */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <ShimmerBlock style={styles.avatar} opacity={opacity} />
-          <ShimmerBlock style={styles.coinBadge} opacity={opacity} />
+          <ShimmerBlock style={styles.logo} opacity={opacity} />
           <ShimmerBlock style={styles.timerCapsule} opacity={opacity} />
         </View>
-        <ShimmerBlock style={styles.notificationBtn} opacity={opacity} />
+        <View style={styles.headerRight}>
+          <ShimmerBlock style={styles.coinBadge} opacity={opacity} />
+          <ShimmerBlock style={styles.notificationBtn} opacity={opacity} />
+        </View>
       </View>
 
       <ScrollView
@@ -61,6 +63,11 @@ export default function HomeSkeleton() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* ── Ad Slider ── */}
+        <View style={styles.adSliderWrap}>
+          <ShimmerBlock style={styles.adSlider} opacity={opacity} />
+        </View>
+
         {/* ── Best Choice title ── */}
         <ShimmerBlock style={styles.sectionTitle} opacity={opacity} />
 
@@ -150,9 +157,9 @@ export default function HomeSkeleton() {
         <View style={{ height: hp(15) }} />
       </ScrollView>
 
-      {/* ── Floating Random button ── */}
-      <View style={[styles.floatingRandomWrapper, { bottom: hp(18), right: wp(5) }]}>
-        <ShimmerBlock style={styles.randomBtn} opacity={opacity} />
+      {/* ── Find Me bar ── */}
+      <View style={styles.findMeWrapper}>
+        <ShimmerBlock style={styles.findMeBar} opacity={opacity} />
       </View>
     </View>
   );
@@ -186,10 +193,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: wp(2),
   },
-  avatar: {
-    width: wp(10),
-    height: wp(10),
-    borderRadius: wp(5),
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: wp(2),
+  },
+  logo: {
+    width: wp(38),
+    height: hp(5),
+    borderRadius: 4,
+    marginLeft: -wp(6),
   },
   coinBadge: {
     width: wp(18),
@@ -213,6 +226,17 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: vss(10),
+  },
+
+  /* ═══ Ad Slider ═══ */
+  adSliderWrap: {
+    paddingHorizontal: wp(5),
+    paddingTop: hp(1),
+  },
+  adSlider: {
+    width: '100%',
+    height: hp(15),
+    borderRadius: wp(4),
   },
 
   /* ═══ Section title ═══ */
@@ -393,14 +417,17 @@ const styles = StyleSheet.create({
     borderColor: '#1C1C1C',
   },
 
-  /* ═══ Floating Random button ═══ */
-  floatingRandomWrapper: {
+  /* ═══ Find Me bar ═══ */
+  findMeWrapper: {
     position: 'absolute',
+    left: wp(4),
+    right: wp(4),
+    bottom: hp(2),
     zIndex: 50,
   },
-  randomBtn: {
-    width: wp(28),
-    height: hp(5.5),
-    borderRadius: wp(6),
+  findMeBar: {
+    width: '100%',
+    height: hp(6.5),
+    borderRadius: wp(8),
   },
 });

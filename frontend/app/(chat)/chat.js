@@ -1,13 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Image, TouchableOpacity, ScrollView,
-  TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Dimensions,
-  Animated, Modal, Pressable, AppState, BackHandler,
+  TextInput, Keyboard, KeyboardAvoidingView, Platform, ActivityIndicator, Dimensions,
+  Animated, Modal, Pressable, AppState, BackHandler, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { hp, wp, ms } from '../../utils/responsive';
@@ -257,6 +257,12 @@ const EMOJIS = [
   '🙄','😔','😏','💕','👏','😁','😌','😅','😜','💖','✌️','😉','🎉','🌟','💯','🔥',
 ];
 
+// Minimum coins required to start/resume a 5-minute chat session — must stay
+// in sync with the backend's CHAT_COINS_PER_SESSION constant.
+const MIN_CHAT_COINS = 10;
+// System bubble the backend persists when a chat gets blocked on balance.
+const RECHARGE_PROMPT_TEXT = 'Please recharge to continue chatting.';
+
 export default function ChatScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -272,6 +278,10 @@ export default function ChatScreen() {
   const [otherName, setOtherName] = useState(paramName);
   const [otherAvatarIndex, setOtherAvatarIndex] = useState(paramAvatarIndex);
   const [otherGender, setOtherGender] = useState(paramGender);
+  // Call options the listener chose while going live (audio defaults to on,
+  // video defaults to off — same convention used across the app).
+  const [otherAudioEnabled, setOtherAudioEnabled] = useState(true);
+  const [otherVideoEnabled, setOtherVideoEnabled] = useState(false);
 
   const avatarSource = { uri: getAvatarUrl(otherGender, otherAvatarIndex) };
 
@@ -320,6 +330,8 @@ export default function ChatScreen() {
   const [otherUserId, setOtherUserId] = useState(null);
   const [showGiftPopup, setShowGiftPopup] = useState(false);
   const [sessionActive, setSessionActive] = useState(false);
+  const [everHadSession, setEverHadSession] = useState(false);
+  const [waitingForReply, setWaitingForReply] = useState(false);
   const [isListenerOnline, setIsListenerOnline] = useState(true);
   const [sessionRemaining, setSessionRemaining] = useState(0);
   const [activeSessionId, setActiveSessionId] = useState(null);
@@ -337,6 +349,13 @@ export default function ChatScreen() {
   const [abuseBlocked, setAbuseBlocked] = useState(null); // { text, matched }
   const [showRechargeGate, setShowRechargeGate] = useState(false);
   const [chatRestricted, setChatRestricted] = useState(false);
+
+  // Refs mirror the above so socket handlers and focus refreshes (which don't
+  // re-register on every state change) always read the current values.
+  const userRoleRef = useRef(userRole);
+  const chatRestrictedRef = useRef(chatRestricted);
+  useEffect(() => { userRoleRef.current = userRole; }, [userRole]);
+  useEffect(() => { chatRestrictedRef.current = chatRestricted; }, [chatRestricted]);
 
   const handleBack = useCallback(() => {
     if (router.canGoBack()) {
@@ -360,11 +379,50 @@ export default function ChatScreen() {
     return () => subscription.remove();
   }, [handleBack]);
 
+  // Once the balance is sufficient again, clear the balance gate so the
+  // banner, placeholder, recharge popup and stale prompts don't linger.
+  const resumeChatIfRecharged = useCallback((coins) => {
+    if (
+      userRoleRef.current === 'USER' &&
+      !chatRestrictedRef.current &&
+      coins >= MIN_CHAT_COINS
+    ) {
+      setChatBlocked(false);
+      setShowRechargeGate(false);
+      // Also clear the "waiting for listener's reply" gate: after a recharge
+      // the user's next paid message can start/resume the session right away
+      // (the backend re-validates balance and listener availability anyway).
+      setWaitingForReply(false);
+    }
+  }, []);
+
+  // Refresh the chat page when it regains focus — e.g. the user recharged on
+  // the balance page and navigated back. Without this the insufficient-balance
+  // UI stays visible even though the wallet is topped up.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      (async () => {
+        try {
+          const balRes = await walletAPI.getBalance();
+          const coins = balRes?.data?.coins ?? 0;
+          if (cancelled) return;
+          setCoinBalance(coins);
+          resumeChatIfRecharged(coins);
+        } catch (e) {
+          console.log('[Chat] Balance refresh on focus failed:', e);
+        }
+      })();
+      return () => { cancelled = true; };
+    }, [resumeChatIfRecharged])
+  );
+
   const giftAnim = useRef(new Animated.Value(0)).current;
   const sessionTimerRef = useRef(null);
   const scrollRef = useRef(null);
   const typingTimeout = useRef(null);
   const realConversationIdRef = useRef(conversationId);
+  const otherUserIdRef = useRef(null);
 
   useEffect(() => {
     realConversationIdRef.current = realConversationId;
@@ -431,6 +489,7 @@ export default function ChatScreen() {
             const other = parts.find(p => p.toString() !== myId?.toString());
             if (other) {
               setOtherUserId(other.toString());
+              otherUserIdRef.current = other.toString();
               
               // Fetch the other user's profile for display (name, avatar, gender)
               try {
@@ -441,6 +500,9 @@ export default function ChatScreen() {
                     setOtherName(profileRes.data.name || paramName);
                     setOtherAvatarIndex(String(profileRes.data.avatarIndex ?? paramAvatarIndex));
                     setOtherGender(profileRes.data.gender || paramGender);
+                    // Show call buttons only for the options this listener enabled while going live.
+                    setOtherAudioEnabled(profileRes.data.audioEnabled !== false);
+                    setOtherVideoEnabled(profileRes.data.videoEnabled === true);
                   }
                 } else {
                   // I'm listener, other is user → use response data or params
@@ -478,6 +540,7 @@ export default function ChatScreen() {
             let blockedBySession = false;
             if (session && session.active) {
               setSessionActive(true);
+              setEverHadSession(true);
               setActiveSessionId(session.sessionId);
               startElapsedTimer(session.startTime);
               blockedBySession = false;
@@ -494,6 +557,18 @@ export default function ChatScreen() {
                 }
               } else {
                 blockedBySession = false;
+                // No active session — if the user already sent their free
+                // message and a session has never been created, they must
+                // wait for the listener's reply before they can type again.
+                if (!session || !session.sessionId) {
+                  const apiMessages = response.data.messages || [];
+                  const nonSystemMessages = apiMessages.filter(m => m.senderModel !== 'System' && m.type !== 'system');
+                  const lastMessage = nonSystemMessages[nonSystemMessages.length - 1];
+                  const lastSenderId = lastMessage ? String(lastMessage.sender?._id || lastMessage.sender || '') : '';
+                  if (lastMessage && lastSenderId && lastSenderId === String(myId)) {
+                    setWaitingForReply(true);
+                  }
+                }
               }
             }
 
@@ -607,8 +682,13 @@ export default function ChatScreen() {
         });
       }
 
+      // Listener replies unlock the user's message box (session billing starts
+      // only on the user's next message, guarded by the backend).
       if (userRole === 'LISTENER' && !isSent && !isSystem && msg.senderModel === 'User') {
         setChatBlocked(false);
+      }
+      if (userRole === 'USER' && !isSent && !isSystem && msg.senderModel === 'Listener') {
+        setWaitingForReply(false);
       }
 
       setMessages((prev) => {
@@ -660,9 +740,16 @@ export default function ChatScreen() {
     const handleStopTyping = () => setIsTyping(false);
     const handleBalanceUpdate = (data) => {
       setCoinBalance(data.coins);
+      // A recharge pushes the fresh balance over the socket — clear the
+      // balance gate immediately so the chat can resume without navigating.
+      resumeChatIfRecharged(data.coins);
     };
-    const handleInsufficientBalance = () => {
+    const handleInsufficientBalance = (data) => {
       setChatBlocked(true);
+      // Sync the badge and prompt visibility with the server's actual balance.
+      if (typeof data?.currentCoins === 'number') {
+        setCoinBalance(data.currentCoins);
+      }
       // Contextual recharge gate: "<name> is waiting. Please recharge to continue."
       setShowRechargeGate(true);
     };
@@ -670,6 +757,8 @@ export default function ChatScreen() {
     const handleSessionStarted = (data) => {
       console.log('[Chat] Session started:', data);
       setSessionActive(true);
+      setEverHadSession(true);
+      setWaitingForReply(false);
       const session = data.chatSession;
       if (session?.sessionId) setActiveSessionId(session.sessionId);
       startElapsedTimer(session.startTime);
@@ -680,6 +769,8 @@ export default function ChatScreen() {
     const handleSessionRenewed = (data) => {
       console.log('[Chat] Session renewed:', data);
       setSessionActive(true);
+      setEverHadSession(true);
+      setWaitingForReply(false);
       const session = data.chatSession;
       if (session?.sessionId) setActiveSessionId(session.sessionId);
       startElapsedTimer(session.startTime);
@@ -690,6 +781,7 @@ export default function ChatScreen() {
     const handleSessionEnded = () => {
       console.log('[Chat] Session ended');
       setSessionActive(false);
+      setWaitingForReply(false);
       setSessionRemaining(0);
       setActiveSessionId(null);
       if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
@@ -772,6 +864,8 @@ export default function ChatScreen() {
       const msgConvId = (data?.conversationId || '').toString();
       const currentConvId = (realConversationIdRef.current || '').toString();
       if (msgConvId && currentConvId && msgConvId !== currentConvId) return;
+      // Close the keyboard first so the popup appears over a clean screen.
+      Keyboard.dismiss();
       setAbuseBlocked((prev) => prev ?? {
         text: data?.content || '',
         matched: data?.matched || null,
@@ -803,8 +897,16 @@ export default function ChatScreen() {
     const handleListenerStatusChanged = (data) => {
       console.log('[Chat] Listener status changed:', data);
       const { userId, isOnline } = data;
-      if (currentUserId && userId.toString() === currentUserId.toString()) {
-        setIsListenerOnline(isOnline);
+      const selfIsListener = userRole === 'LISTENER';
+      // For a listener, the event is about their OWN online state. For a user,
+      // it's about the listener they're chatting with.
+      const targetId = selfIsListener
+        ? (currentUserId || '').toString()
+        : (otherUserIdRef.current || '').toString();
+      if (!targetId || userId.toString() !== targetId) return;
+
+      setIsListenerOnline(isOnline);
+      if (selfIsListener) {
         if (!isOnline) {
           setChatBlocked(true);
         } else {
@@ -819,6 +921,20 @@ export default function ChatScreen() {
       }
     };
 
+    const handleListenerOffline = (data) => {
+      console.log('[Chat] Listener offline, send blocked:', data);
+      setIsListenerOnline(false);
+      // Remove the optimistic (unsent) message that this blocked send left behind.
+      setMessages((prev) =>
+        prev.filter((m) => !(typeof m.id === 'string' && m.id.startsWith('temp_')))
+      );
+      Alert.alert(
+        'Listener is offline',
+        "The listener isn't online right now. Please try again when they're back online.",
+        [{ text: 'OK' }]
+      );
+    };
+
     socketService.on('receive_message', handleNewMessage);
     socketService.on('user_typing', handleTyping);
     socketService.on('user_stop_typing', handleStopTyping);
@@ -831,6 +947,7 @@ export default function ChatScreen() {
     socketService.on('chat_user_offline', handleChatUserOffline);
     socketService.on('message_error', handleMessageError);
     socketService.on('listener_status_changed', handleListenerStatusChanged);
+    socketService.on('listener_offline', handleListenerOffline);
     socketService.on('contact_share_blocked', handleContactShareBlocked);
     socketService.on('abusive_message_blocked', handleAbusiveMessageBlocked);
     socketService.on('chat_restricted', handleChatRestricted);
@@ -848,6 +965,7 @@ export default function ChatScreen() {
       socketService.off('chat_user_offline', handleChatUserOffline);
       socketService.off('message_error', handleMessageError);
       socketService.off('listener_status_changed', handleListenerStatusChanged);
+      socketService.off('listener_offline', handleListenerOffline);
       socketService.off('contact_share_blocked', handleContactShareBlocked);
       socketService.off('abusive_message_blocked', handleAbusiveMessageBlocked);
       socketService.off('chat_restricted', handleChatRestricted);
@@ -905,11 +1023,21 @@ export default function ChatScreen() {
     setMessage('');
     setShowEmojis(false);
     setPhoneDetected(false);
+
+    // Only one free message: once the user sends their first message with no
+    // session, lock the input until the listener replies and the session starts.
+    if (userRole === 'USER' && !sessionActive && !everHadSession) {
+      setWaitingForReply(true);
+    }
   };
 
   const handleSend = () => {
     const msgContent = message.trim();
     if (!msgContent || !realConversationId || !currentUserId) return;
+    if (waitingForReply) {
+      // Free message already sent — waiting for the listener's reply to start the session
+      return;
+    }
     if (chatBlocked) {
       // Gate: surface the contextual recharge prompt instead of silently failing
       if (userRole === 'USER') setShowRechargeGate(true);
@@ -930,6 +1058,8 @@ export default function ChatScreen() {
     // Anti-abuse guard: offensive messages are stopped before sending.
     const abuse = analyzeAbuse(msgContent);
     if (abuse.hasAbuse) {
+      // Close the keyboard first so the popup appears over a clean screen.
+      Keyboard.dismiss();
       setAbuseBlocked({ text: msgContent, matched: abuse.matched, severity: abuse.severity });
       return;
     }
@@ -983,6 +1113,15 @@ export default function ChatScreen() {
   };
 
   const handleEmojiPress = (emoji) => setMessage((prev) => prev + emoji);
+
+  // The backend persists "Please recharge to continue chatting." as a system
+  // message, so show those prompt bubbles only while the user is actually
+  // blocked on balance — once they can chat again (post-recharge) the stale
+  // prompts are hidden instead of lingering in the visible history forever.
+  const isBalanceBlocked = userRole === 'USER' && chatBlocked && !chatRestricted;
+  const displayedMessages = isBalanceBlocked
+    ? messages
+    : messages.filter((m) => !(m.type === 'system' && m.text === RECHARGE_PROMPT_TEXT));
 
   if (loading) {
     return (
@@ -1077,25 +1216,29 @@ export default function ChatScreen() {
           </View>
         )}
 
-        {/* In-chat call buttons (users can jump straight to a call) */}
+        {/* In-chat call buttons — only shown for the options the listener enabled while going live */}
         {userRole === 'USER' && !isAdminChat && otherUserId && (
           <View style={styles.headerCallBtns}>
-            <TouchableOpacity
-              style={[styles.headerCallBtn, { borderColor: 'rgba(34,197,94,0.35)' }]}
-              activeOpacity={0.7}
-              onPress={() => handleStartCall('audio')}
-              accessibilityLabel="Start audio call"
-            >
-              <Ionicons name="call" size={wp(4.6)} color="#22C55E" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.headerCallBtn, { borderColor: 'rgba(59,130,246,0.35)' }]}
-              activeOpacity={0.7}
-              onPress={() => handleStartCall('video')}
-              accessibilityLabel="Start video call"
-            >
-              <Ionicons name="videocam" size={wp(4.6)} color="#3B82F6" />
-            </TouchableOpacity>
+            {otherAudioEnabled && (
+              <TouchableOpacity
+                style={[styles.headerCallBtn, { borderColor: 'rgba(34,197,94,0.35)' }]}
+                activeOpacity={0.7}
+                onPress={() => handleStartCall('audio')}
+                accessibilityLabel="Start audio call"
+              >
+                <Ionicons name="call" size={wp(4.6)} color="#22C55E" />
+              </TouchableOpacity>
+            )}
+            {otherVideoEnabled && (
+              <TouchableOpacity
+                style={[styles.headerCallBtn, { borderColor: 'rgba(59,130,246,0.35)' }]}
+                activeOpacity={0.7}
+                onPress={() => handleStartCall('video')}
+                accessibilityLabel="Start video call"
+              >
+                <Ionicons name="videocam" size={wp(4.6)} color="#3B82F6" />
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -1149,13 +1292,13 @@ export default function ChatScreen() {
               </View>
             ))}
           </View>
-        ) : messages.length === 0 ? (
+        ) : displayedMessages.length === 0 ? (
           <View style={styles.emptyChat}>
             <Ionicons name="chatbubbles-outline" size={wp(12)} color="#333" />
-            <Text style={styles.emptyChatText}>Say hello! Your first 2 messages are free.</Text>
+            <Text style={styles.emptyChatText}>Say hello! Your first message is free.</Text>
           </View>
         ) : (
-          messages.map((item) => <MessageBubble key={item.id} item={item} />)
+          displayedMessages.map((item) => <MessageBubble key={item.id} item={item} />)
         )}
         <View style={{ height: hp(1) }} />
       </ScrollView>
@@ -1194,16 +1337,6 @@ export default function ChatScreen() {
         </TouchableOpacity>
       )}
 
-      {/* Permanent contact-sharing ban banner (both roles) */}
-      {!isAdminChat && sessionStatus !== 'completed' && (
-        <View style={styles.phoneBanBanner}>
-          <Ionicons name="shield-checkmark" size={wp(4)} color="#F87171" />
-          <Text style={styles.phoneBanText}>
-            Phone numbers cannot be shared in chat. For your safety, sharing contact numbers is not allowed.
-          </Text>
-        </View>
-      )}
-
       {/* Live warning while a phone number is being typed */}
       {phoneDetected && !isAdminChat && sessionStatus !== 'completed' && (
         <View style={styles.phoneWarningChip}>
@@ -1230,13 +1363,15 @@ export default function ChatScreen() {
           <TextInput
             style={[styles.textInput, phoneDetected && styles.textInputDanger]}
             placeholder={
-              chatBlocked 
-                ? (userRole === 'LISTENER' 
-                    ? (!isListenerOnline 
-                        ? 'Please go online to send messages.' 
-                        : 'Waiting for user to send a message...') 
-                    : 'Recharge to continue...') 
-                : 'Enter your message...'
+              waitingForReply
+                ? 'Waiting for listener to reply...'
+                : (chatBlocked 
+                    ? (userRole === 'LISTENER' 
+                        ? (!isListenerOnline 
+                            ? 'Please go online to send messages.' 
+                            : 'Waiting for user to send a message...') 
+                        : 'Recharge to continue...') 
+                    : 'Enter your message...')
             }
             placeholderTextColor="#6B7280"
             value={message}
@@ -1244,19 +1379,19 @@ export default function ChatScreen() {
             onSubmitEditing={handleSend}
             blurOnSubmit={false}
             multiline
-            editable={!chatBlocked}
+            editable={!chatBlocked && !waitingForReply}
           />
           <View style={styles.inputActions}>
             {userRole === 'USER' && (
-              <TouchableOpacity activeOpacity={0.7} style={styles.inputAction} onPress={() => setShowGiftPopup(true)}>
-                <Ionicons name="gift-outline" size={wp(5.5)} color="#A855F7" />
+              <TouchableOpacity activeOpacity={0.7} style={styles.inputAction} onPress={() => !chatBlocked && !waitingForReply && setShowGiftPopup(true)}>
+                <Ionicons name="gift-outline" size={wp(5.5)} color={waitingForReply ? '#4B5563' : '#A855F7'} />
               </TouchableOpacity>
             )}
             <TouchableOpacity activeOpacity={0.7} style={styles.inputAction} onPress={handleSend}>
               <Ionicons
                 name={phoneDetected ? 'shield-checkmark' : 'send'}
                 size={wp(5.5)}
-                color={phoneDetected ? '#EF4444' : (chatBlocked ? '#4B5563' : '#EC4899')}
+                color={phoneDetected ? '#EF4444' : ((chatBlocked || waitingForReply) ? '#4B5563' : '#EC4899')}
               />
             </TouchableOpacity>
             <TouchableOpacity activeOpacity={0.7} style={styles.inputAction}
@@ -1562,18 +1697,6 @@ const styles = StyleSheet.create({
   safetyNoticeClose: { padding: wp(0.5) },
 
   // Permanent phone-ban banner (above input)
-  phoneBanBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: wp(2),
-    backgroundColor: 'rgba(127, 29, 29, 0.2)',
-    borderTopWidth: 1, borderTopColor: 'rgba(239, 68, 68, 0.3)',
-    borderBottomWidth: 1, borderBottomColor: 'rgba(239, 68, 68, 0.3)',
-    paddingHorizontal: wp(4), paddingVertical: hp(0.8),
-  },
-  phoneBanText: {
-    flex: 1, fontSize: wp(2.8), color: 'rgba(255,255,255,0.8)',
-    fontFamily: 'Inter_500Medium', lineHeight: wp(4),
-  },
-
   // Live warning chip while a number is being typed
   phoneWarningChip: {
     flexDirection: 'row', alignItems: 'center', gap: wp(1.5),

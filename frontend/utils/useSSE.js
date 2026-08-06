@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { socketService } from './socket';
 
 export function useSSE() {
   const [unreadCount, setUnreadCount] = useState(0);
@@ -10,6 +11,22 @@ export function useSSE() {
     let xhr = null;
     let keepConnecting = true;
     let reconnectTimeout = null;
+
+    // Real-time unread count updates over socket.io (reliable on RN)
+    const handleUnreadUpdate = (data) => {
+      if (data && typeof data.unreadCount === 'number') {
+        setUnreadCount(data.unreadCount);
+      }
+      if (data && typeof data.unreadPeopleCount === 'number') {
+        setUnreadPeopleCount(data.unreadPeopleCount);
+      }
+    };
+
+    const connectSocketListener = async () => {
+      await socketService.connect();
+      socketService.on('unread_count_update', handleUnreadUpdate);
+    };
+    connectSocketListener();
 
     const connectSSE = async () => {
       if (!keepConnecting) return;
@@ -123,6 +140,7 @@ export function useSSE() {
 
     return () => {
       subscription.remove();
+      socketService.off('unread_count_update', handleUnreadUpdate);
       keepConnecting = false;
       disconnectSSE();
     };
