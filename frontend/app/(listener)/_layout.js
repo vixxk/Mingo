@@ -106,6 +106,9 @@ export default function ListenerLayout() {
         // Session-scoped Zego credentials — both sides must join the same app
         ...(session?.zegoAppId ? { zegoAppId: String(session.zegoAppId) } : {}),
         ...(session?.zegoAppSign ? { zegoAppSign: String(session.zegoAppSign) } : {}),
+        // Session-scoped Agora credentials for video calls
+        ...(session?.agoraAppId ? { agoraAppId: String(session.agoraAppId) } : {}),
+        ...(session?.agoraToken ? { agoraToken: String(session.agoraToken) } : {}),
       }
     });
   };
@@ -251,6 +254,9 @@ export default function ListenerLayout() {
                 // getActiveSession response carries the session's Zego creds
                 ...(session.zegoAppId ? { zegoAppId: String(session.zegoAppId) } : {}),
                 ...(session.zegoAppSign ? { zegoAppSign: String(session.zegoAppSign) } : {}),
+                // getActiveSession response carries the session's Agora creds
+                ...(session.agoraAppId ? { agoraAppId: String(session.agoraAppId) } : {}),
+                ...(session.agoraToken ? { agoraToken: String(session.agoraToken) } : {}),
               }
             });
           }

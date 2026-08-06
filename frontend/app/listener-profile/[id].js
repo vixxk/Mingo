@@ -615,7 +615,7 @@ const styles = StyleSheet.create({
   tag: { paddingVertical: SH * 0.01, paddingHorizontal: SW * 0.045, borderRadius: SW * 0.05, borderWidth: 1, borderColor: 'rgba(139,92,246,0.25)' },
   tagText: { color: '#C4B5FD', fontSize: SW * 0.033, fontFamily: 'Inter_500Medium', fontWeight: '500' },
 
-  languagesRow: { flexDirection: 'row', gap: SW * 0.025 },
+  languagesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SW * 0.025 },
   languageChip: { backgroundColor: 'rgba(59,130,246,0.12)', paddingVertical: SH * 0.01, paddingHorizontal: SW * 0.045, borderRadius: SW * 0.05, borderWidth: 1, borderColor: 'rgba(59,130,246,0.2)' },
   languageText: { color: '#93C5FD', fontSize: SW * 0.033, fontFamily: 'Inter_500Medium', fontWeight: '500' },
 

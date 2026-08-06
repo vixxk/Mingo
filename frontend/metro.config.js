@@ -10,6 +10,7 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     moduleName.includes('@zegocloud') ||
     moduleName.includes('zego-express-engine') ||
     moduleName.includes('zego-zim') ||
+    moduleName.includes('react-native-agora') ||
     moduleName.includes('react-native-encrypted-storage') ||
     moduleName.includes('react-native-sound')
   )) {

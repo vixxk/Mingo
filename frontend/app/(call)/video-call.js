@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Animated, Dimensions, BackHandler, Pressable } from 'react-native';
+import React, { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Animated, Dimensions, BackHandler, Pressable, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { Camera, CameraView } from 'expo-camera';
@@ -17,88 +17,241 @@ import GiftPopup from '../../components/shared/GiftPopup';
 import GiftAnimationOverlay from '../../components/call/GiftAnimationOverlay';
 import { callAPI, walletAPI } from '../../utils/api';
 import { socketService } from '../../utils/socket';
-import { ZEGO_APP_ID, ZEGO_APP_SIGN } from '../../utils/zegoConfig';
+import { AGORA_APP_ID } from '../../utils/agoraConfig';
 import { ms, s, vs, SCREEN_WIDTH, hp, wp } from '../../utils/responsive';
 import { getAvatarUrl } from '../../utils/avatars';
 
 const { height: SH } = Dimensions.get('window');
 const isExpoGo = Constants.appOwnership === 'expo';
 
-let ZegoUIKitPrebuiltCall, ONE_ON_ONE_VIDEO_CALL_CONFIG, ZegoMenuBarButtonName;
+// Agora RTC SDK — native module, only available on dev/native builds.
+let AgoraSDK = null;
 try {
   if (!isExpoGo) {
-    const zegoModule = require('@zegocloud/zego-uikit-prebuilt-call-rn');
-    ZegoUIKitPrebuiltCall = zegoModule.ZegoUIKitPrebuiltCall;
-    ZegoMenuBarButtonName = zegoModule.ZegoMenuBarButtonName;
-    ONE_ON_ONE_VIDEO_CALL_CONFIG =
-      zegoModule.ONE_ON_ONE_VIDEO_CALL_CONFIG || ZegoMenuBarButtonName;
+    AgoraSDK = require('react-native-agora');
   } else {
-    console.log('Skipping ZegoCloud load in Expo Go mode');
+    console.log('Skipping Agora SDK load in Expo Go mode');
   }
 } catch (e) {
-  console.log('ZegoCloud not available (Expo Go mode)');
+  console.log('Agora SDK not available (Expo Go mode):', e.message);
 }
 
-const ZegoCallWrapper = React.memo(({ appId, appSign, userId, userName, roomId, onCallEnd, turnOnCamera = true, turnOnMic = true, myAvatarUrl, listenerAvatarUrl }) => {
-  if (!ZegoUIKitPrebuiltCall) return null;
+const {
+  createAgoraRtcEngine,
+  RtcSurfaceView,
+  ChannelProfileType,
+  ClientRoleType,
+  ConnectionStateType,
+  RemoteVideoState,
+  RenderModeType,
+  VideoMirrorModeType,
+} = AgoraSDK || {};
 
-  // Remove Zego's built-in hang-up button so every end-call request goes
-  // through the end-call confirmation popup (falls back to default if the
-  // config keys are unavailable).
-  const menuBar = ONE_ON_ONE_VIDEO_CALL_CONFIG?.bottomMenuBarConfig;
-  const safeButtons = Array.isArray(menuBar?.buttons)
-    ? menuBar.buttons.filter((b) => b !== ZegoMenuBarButtonName?.hangUpButton)
-    : undefined;
+/**
+ * Owns the Agora engine for the duration of the video call and renders the
+ * remote participant's video surface. Controls are exposed imperatively via
+ * the ref so the screen can wire them to the existing UI buttons.
+ *
+ * The engine is created once per mount and only re-created if the channel
+ * credentials change. uid 0 is used when joining — the SDK assigns each
+ * participant a unique uid — which is why the same backend token works for
+ * both sides.
+ */
+const AgoraVideoView = forwardRef(
+  (
+    {
+      appId,
+      token,
+      channelName,
+      cameraEnabled,
+      onRemoteVideoActiveChange,
+      onRemoteJoinedChange,
+      onRemoteLeft,
+      onFailedToConnect,
+      onEngineError,
+    },
+    ref
+  ) => {
+    const engineRef = useRef(null);
+    const [remoteUid, setRemoteUid] = useState(null);
+    const [remoteVideoActive, setRemoteVideoActive] = useState(false);
 
-  return (
-    <ZegoUIKitPrebuiltCall
-      appID={appId}
-      appSign={appSign}
-      userID={userId}
-      userName={userName}
-      callID={roomId}
-      config={{
-        ...ONE_ON_ONE_VIDEO_CALL_CONFIG,
-        ...(safeButtons ? { bottomMenuBarConfig: { ...menuBar, buttons: safeButtons } } : {}),
-        onCallEnd: onCallEnd,
-        onHangUp: onCallEnd,
-        onOnlySelfInRoom: onCallEnd,
-        // Enable a device only when its permission was granted — a denied mic
-        // (or camera) must not silently kill the whole call.
-        turnOnCameraWhenJoining: turnOnCamera,
-        turnOnMicrophoneWhenJoining: turnOnMic,
-        // Route audio through the loudspeaker by default — the SDK's default
-        // can fall back to the earpiece, which sounds like "no audio".
-        useSpeakerWhenJoining: false,
-        layout: {
-          // pictureInPicture (0) — remote fills the screen, the local camera
-          // shows as a draggable PiP in the bottom-right corner (standard 1-on-1).
-          mode: 0,
-        },
-        audioVideoViewConfig: {
-          showMicrophoneStateOnView: false,
-          showCameraStateOnView: false,
-        },
-        // When a participant's camera is off, show their real avatar instead of
-        // Zego's default initials card. Me vs the remote participant.
-        avatarBuilder: (userInfo) => {
-          const isMe = String(userInfo?.userID) === String(userId);
-          const uri = isMe ? myAvatarUrl : listenerAvatarUrl;
-          if (!uri) return null;
-          return (
-            <Image
-              source={{ uri }}
-              style={styles.zegoAvatar}
-              resizeMode="cover"
-            />
-          );
-        },
-      }}
-    />
-  );
-});
+    const onRemoteVideoActiveChangeRef = useRef(onRemoteVideoActiveChange);
+    const onRemoteJoinedChangeRef = useRef(onRemoteJoinedChange);
+    const onRemoteLeftRef = useRef(onRemoteLeft);
+    const onFailedToConnectRef = useRef(onFailedToConnect);
+    const onEngineErrorRef = useRef(onEngineError);
 
+    useEffect(() => { onRemoteVideoActiveChangeRef.current = onRemoteVideoActiveChange; });
+    useEffect(() => { onRemoteJoinedChangeRef.current = onRemoteJoinedChange; });
+    useEffect(() => { onRemoteLeftRef.current = onRemoteLeft; });
+    useEffect(() => { onFailedToConnectRef.current = onFailedToConnect; });
+    useEffect(() => { onEngineErrorRef.current = onEngineError; });
 
+    const setRemoteActive = useCallback((active) => {
+      setRemoteVideoActive(active);
+      if (onRemoteVideoActiveChangeRef.current) {
+        onRemoteVideoActiveChangeRef.current(active);
+      }
+    }, []);
+
+    // Remote "joined" is tracked separately from "video active": a participant
+    // who joins but has their camera off (or whose video stalls) is still in
+    // the call, so the caller must not keep showing "Connecting…" or hit the
+    // "remote never joined" timeout.
+    const setRemoteJoined = useCallback((joined) => {
+      if (onRemoteJoinedChangeRef.current) {
+        onRemoteJoinedChangeRef.current(joined);
+      }
+    }, []);
+
+    useEffect(() => {
+      if (!appId || !token || !channelName) return;
+
+      let engine = null;
+      let active = true;
+      // Tracks whether the local user successfully joined — connection failures
+      // before this point mean the channel is unreachable (bad credentials,
+      // blocked network) and the call cannot proceed.
+      let joinedSuccessfully = false;
+
+      const setup = () => {
+        try {
+          engine = createAgoraRtcEngine();
+          engineRef.current = engine;
+
+          engine.initialize({ appId });
+          engine.setChannelProfile(ChannelProfileType.ChannelProfileCommunication);
+          engine.setClientRole(ClientRoleType.ClientRoleBroadcaster);
+          engine.enableVideo();
+
+          engine.registerEventHandler({
+            onJoinChannelSuccess: () => {
+              if (!active) return;
+              joinedSuccessfully = true;
+              console.log('[Agora] Joined channel:', channelName);
+              // Route audio through the loudspeaker by default — mirrors the
+              // old Zego config so "no audio" is never mistaken for a failure.
+              try { engine.setEnableSpeakerphone(true); } catch (e) {}
+            },
+            onUserJoined: (connection, uid) => {
+              if (!active) return;
+              console.log('[Agora] Remote user joined:', uid);
+              setRemoteUid(uid);
+              setRemoteJoined(true);
+            },
+            onUserOffline: (connection, uid, reason) => {
+              if (!active) return;
+              console.log('[Agora] Remote user offline:', uid, 'reason:', reason);
+              setRemoteUid(null);
+              setRemoteActive(false);
+              setRemoteJoined(false);
+              // In a 1-on-1 call the other participant leaving ends the call —
+              // same behavior as Zego's onOnlySelfInRoom.
+              if (onRemoteLeftRef.current) onRemoteLeftRef.current();
+            },
+            onFirstRemoteVideoDecoded: (connection, uid) => {
+              if (!active) return;
+              console.log('[Agora] First remote video decoded for uid:', uid);
+              setRemoteUid(uid);
+              setRemoteActive(true);
+              setRemoteJoined(true);
+            },
+            onRemoteVideoStateChanged: (connection, uid, state) => {
+              if (!active) return;
+              // Decoding (2) → video playing. Stopped (0) → camera off/black —
+              // fade back to the avatar, mirroring Zego's avatarBuilder.
+              const decoded = state === RemoteVideoState.RemoteVideoStateDecoding;
+              console.log('[Agora] Remote video state:', uid, state, 'decoded:', decoded);
+              setRemoteUid(uid);
+              setRemoteActive(decoded);
+              setRemoteJoined(true);
+            },
+            onTokenPrivilegeWillExpire: () => {
+              console.log('[Agora] Token privilege about to expire');
+            },
+            onError: (err, msg) => {
+              console.log('[Agora] Engine error:', err, msg);
+              if (onEngineErrorRef.current) onEngineErrorRef.current(err, msg);
+            },
+            onConnectionStateChanged: (connection, state, reason) => {
+              console.log('[Agora] Connection state:', state, 'reason:', reason);
+              // If the channel is unreachable before we ever joined, the call
+              // cannot proceed — surface it so the screen ends instead of
+              // showing "Connecting…" forever.
+              if (
+                !joinedSuccessfully &&
+                state === ConnectionStateType.ConnectionStateFailed
+              ) {
+                if (onFailedToConnectRef.current) onFailedToConnectRef.current();
+              }
+            },
+          });
+
+          const ret = engine.joinChannel(token, channelName, 0, {
+            clientRoleType: ClientRoleType.ClientRoleBroadcaster,
+            channelProfile: ChannelProfileType.ChannelProfileCommunication,
+            publishCameraTrack: !!cameraEnabled,
+            publishMicrophoneTrack: true,
+            autoSubscribeAudio: true,
+            autoSubscribeVideo: true,
+          });
+          console.log('[Agora] joinChannel result:', ret);
+        } catch (e) {
+          console.log('[Agora] Engine setup failed:', e.message);
+          if (onEngineErrorRef.current) onEngineErrorRef.current(-1, e.message);
+        }
+      };
+
+      setup();
+
+      return () => {
+        active = false;
+        if (engineRef.current) {
+          try { engineRef.current.leaveChannel(); } catch (e) {}
+          try { engineRef.current.release(); } catch (e) {}
+        }
+        engineRef.current = null;
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [appId, token, channelName]);
+
+    useImperativeHandle(ref, () => ({
+      mute(muted) {
+        if (!engineRef.current) return;
+        try { engineRef.current.muteLocalAudioStream(!!muted); } catch (e) {}
+      },
+      setCameraEnabled(enabled) {
+        if (!engineRef.current) return;
+        try { engineRef.current.enableLocalVideo(!!enabled); } catch (e) {}
+      },
+      switchCamera() {
+        if (!engineRef.current) return;
+        try { engineRef.current.switchCamera(); } catch (e) {}
+      },
+      setSpeaker(on) {
+        if (!engineRef.current) return;
+        try { engineRef.current.setEnableSpeakerphone(!!on); } catch (e) {}
+      },
+      leave() {
+        if (!engineRef.current) return;
+        try { engineRef.current.leaveChannel(); } catch (e) {}
+      },
+    }));
+
+    return (
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        {remoteUid != null && remoteVideoActive && (
+          <RtcSurfaceView
+            canvas={{ uid: remoteUid, renderMode: RenderModeType.RenderModeFit }}
+            zOrderMediaOverlay={Platform.OS === 'android'}
+            style={StyleSheet.absoluteFill}
+          />
+        )}
+      </View>
+    );
+  }
+);
 
 export default function VideoCallScreen() {
   const insets = useSafeAreaInsets();
@@ -110,8 +263,8 @@ export default function VideoCallScreen() {
     listenerId = '',
     avatarIndex = '0',
     gender = 'Female',
-    zegoAppId,
-    zegoAppSign,
+    agoraAppId,
+    agoraToken,
   } = useLocalSearchParams();
 
   const [showSafety, setShowSafety] = useState(false);
@@ -120,10 +273,7 @@ export default function VideoCallScreen() {
   const [showRecharge, setShowRecharge] = useState(false);
   const [showGiftPopup, setShowGiftPopup] = useState(false);
   const [receivedGift, setReceivedGift] = useState(null);
-  const [userID, setUserID] = useState('');
-  const [userName, setUserName] = useState('');
   const [myAvatarUrl, setMyAvatarUrl] = useState('');
-  const [callDuration, setCallDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
   const [currentCoins, setCurrentCoins] = useState(null);
@@ -132,26 +282,55 @@ export default function VideoCallScreen() {
   const [isListener, setIsListener] = useState(false);
   const [cameraError, setCameraError] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
+  const [remoteVideoActive, setRemoteVideoActive] = useState(false);
+  const [remoteJoined, setRemoteJoined] = useState(false);
+  const [callCancelledMessage, setCallCancelledMessage] = useState(
+    'The call was cancelled by the user.'
+  );
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const controlsOpacity = useRef(new Animated.Value(1)).current;
-  const intervalRef = useRef(null);
+  const remoteAvatarOpacity = useRef(new Animated.Value(1)).current;
+  const agoraRef = useRef(null);
   const callEndedRef = useRef(false);
   const exitCallScreenRef = useRef(null);
   const cancelledExitTimerRef = useRef(null);
+  const failureEndRef = useRef(false);
+  const remoteJoinedRef = useRef(false);
+  // Agora credentials — the backend mints a session-scoped token for video
+  // calls (agoraAppId + agoraToken). Falls back to the bundled App ID only
+  // when the server did not attach one.
+  const resolvedAppId = agoraAppId || AGORA_APP_ID;
 
-  const resolvedAppId = zegoAppId ? parseInt(zegoAppId) : ZEGO_APP_ID;
-  const resolvedAppSign = zegoAppSign || ZEGO_APP_SIGN;
-
-  // The remote participant's avatar (from the route params) — stands in when
-  // their camera is off.
-  const listenerAvatarUrl = getAvatarUrl(gender, avatarIndex);
-
-  // Live camera (fallback path) only needs the camera permission. The Zego
-  // path joins the real call when EITHER camera or mic is granted, so a denied
-  // mic doesn't silently remove all audio (and vice-versa).
+  // Live camera (fallback path) only needs the camera permission. The Agora
+  // path joins the real call when EITHER camera or mic is granted, so a
+  // denied mic doesn't silently remove all audio (and vice-versa).
   const showCamera = permission.camera && !isCameraOff && !cameraError;
   const canJoinRealCall = permission.camera || permission.mic;
+
+  const hasPlaceholderAppId = !resolvedAppId || /your_agora|placeholder|change_me/i.test(resolvedAppId);
+  const canUseAgora =
+    !isExpoGo &&
+    !!AgoraSDK &&
+    !hasPlaceholderAppId &&
+    !!agoraToken &&
+    !!roomId &&
+    canJoinRealCall;
+
+  // The remote avatar fades out once the remote camera feed actually decodes.
+  // "Joined" (audio or video) is tracked separately so the UI never falls back
+  // to "Connecting…" for a participant who is in the call with their camera off.
+  useEffect(() => {
+    remoteJoinedRef.current = remoteJoined;
+  }, [remoteJoined]);
+
+  useEffect(() => {
+    Animated.timing(remoteAvatarOpacity, {
+      toValue: remoteVideoActive ? 0 : 1,
+      duration: 350,
+      useNativeDriver: true,
+    }).start();
+  }, [remoteVideoActive, remoteAvatarOpacity]);
 
   useEffect(() => {
     const requestPermissions = async () => {
@@ -177,8 +356,6 @@ export default function VideoCallScreen() {
         const userData = await AsyncStorage.getItem('user');
         if (userData) {
           const user = JSON.parse(userData);
-          setUserID(user._id || user.id || `user_${Date.now()}`);
-          setUserName(user.name || user.username || 'User');
           setIsListener(user.role === 'LISTENER');
           // Build my own avatar URL the same way the profile screen does.
           const rawGender = user.gender || 'Male';
@@ -186,13 +363,9 @@ export default function VideoCallScreen() {
           const avatarIndex = user.avatarIndex !== undefined && user.avatarIndex !== null ? String(user.avatarIndex) : '0';
           setMyAvatarUrl(getAvatarUrl(normalizedGender, avatarIndex));
         } else {
-          setUserID(`user_${Date.now()}`);
-          setUserName('User');
           setIsListener(false);
         }
       } catch {
-        setUserID(`user_${Date.now()}`);
-        setUserName('User');
         setIsListener(false);
       }
     };
@@ -234,8 +407,7 @@ export default function VideoCallScreen() {
     const exitCallScreen = async () => {
       if (callEndedRef.current) return;
       callEndedRef.current = true;
-      clearInterval(intervalRef.current);
-      
+
       let role = 'USER';
       try {
         const userData = await AsyncStorage.getItem('user');
@@ -278,6 +450,7 @@ export default function VideoCallScreen() {
 
     const handleCallCancelled = async (data) => {
       if (data.sessionId === callId || data.callId === callId) {
+        setCallCancelledMessage('The call was cancelled by the user.');
         setShowCallCancelled(true);
         // Fallback auto-exit: if the user doesn't dismiss the popup, leave the
         // call so billing doesn't keep running on an already-cancelled session.
@@ -321,20 +494,12 @@ export default function VideoCallScreen() {
   }, [callId]);
 
   useEffect(() => {
-    intervalRef.current = setInterval(() => {
-      setCallDuration((prev) => prev + 1);
-    }, 1000);
-
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, { toValue: 1.05, duration: 1500, useNativeDriver: true }),
         Animated.timing(pulseAnim, { toValue: 1, duration: 1500, useNativeDriver: true }),
       ])
     ).start();
-
-    return () => {
-      clearInterval(intervalRef.current);
-    };
   }, []);
 
   // Block back button and gestures
@@ -372,7 +537,12 @@ export default function VideoCallScreen() {
   const handleEndCall = useCallback(async () => {
     if (callEndedRef.current) return;
     callEndedRef.current = true;
-    clearInterval(intervalRef.current);
+
+    // Leave the Agora channel immediately so the other participant gets the
+    // userOffline callback and their side can end too.
+    if (agoraRef.current) {
+      agoraRef.current.leave();
+    }
 
     try {
       if (callId && callId !== 'demo_zego_call' && callId !== 'test_call_id') {
@@ -402,16 +572,62 @@ export default function VideoCallScreen() {
     }
   }, [callId, name, listenerId, isListener, roomId]);
 
+  // The remote participant hung up / dropped — treat it as the call ending
+  // (mirrors Zego's onOnlySelfInRoom + onCallEnd behavior).
+  const handleRemoteLeft = useCallback(() => {
+    console.log('[Agora] Remote participant left — ending call');
+    handleEndCall();
+  }, [handleEndCall]);
+
+  // Agora could not establish the channel (bad credentials / blocked
+  // network). Show a message, then end the call so billing doesn't run on a
+  // call that never connected.
+  const handleAgoraFailedToConnect = useCallback(() => {
+    if (callEndedRef.current) return;
+    console.log('[Agora] Failed to connect to the channel — ending call');
+    failureEndRef.current = true;
+    setCallCancelledMessage("Couldn't connect to the video call. Please try again.");
+    setShowCallCancelled(true);
+    cancelledExitTimerRef.current = setTimeout(() => {
+      setShowCallCancelled(false);
+      handleEndCall();
+    }, 3500);
+  }, [handleEndCall]);
+
+  // If the remote never joins the channel, end the call after a generous
+  // window instead of leaving "Connecting…" (and billing) running forever.
+  // This keys off the remote JOINING (audio or video), not video decoding, so
+  // a camera-off participant is never treated as "never joined".
+  useEffect(() => {
+    if (!canUseAgora) return;
+    const timer = setTimeout(() => {
+      if (remoteJoinedRef.current || callEndedRef.current) return;
+      console.log('[Agora] Remote never joined — ending call');
+      failureEndRef.current = true;
+      setCallCancelledMessage("The other person couldn't join the call. Please try again.");
+      setShowCallCancelled(true);
+      cancelledExitTimerRef.current = setTimeout(() => {
+        setShowCallCancelled(false);
+        handleEndCall();
+      }, 3500);
+    }, 45000);
+    return () => clearTimeout(timer);
+  }, [canUseAgora, handleEndCall]);
+
   const handleCallCancelledClose = useCallback(() => {
     if (cancelledExitTimerRef.current) {
       clearTimeout(cancelledExitTimerRef.current);
       cancelledExitTimerRef.current = null;
     }
     setShowCallCancelled(false);
-    if (exitCallScreenRef.current) {
+    if (failureEndRef.current) {
+      // Connection failure — the session is still active, end it properly.
+      failureEndRef.current = false;
+      handleEndCall();
+    } else if (exitCallScreenRef.current) {
       exitCallScreenRef.current();
     }
-  }, []);
+  }, [handleEndCall]);
 
   const handleRechargeSuccess = useCallback(async () => {
     try {
@@ -424,6 +640,24 @@ export default function VideoCallScreen() {
     }
     setLowBalanceMessage('');
     setShowRecharge(false);
+  }, []);
+
+  const toggleMute = useCallback(() => {
+    const next = !isMuted;
+    setIsMuted(next);
+    if (agoraRef.current) agoraRef.current.mute(next);
+  }, [isMuted]);
+
+  const toggleCamera = useCallback(() => {
+    const next = !isCameraOff;
+    setIsCameraOff(next);
+    // Clear any previous mount error so the camera can retry when re-enabled.
+    if (!next) setCameraError(false);
+    if (agoraRef.current) agoraRef.current.setCameraEnabled(!next);
+  }, [isCameraOff]);
+
+  const handleSwitchCamera = useCallback(() => {
+    if (agoraRef.current) agoraRef.current.switchCamera();
   }, []);
 
   // Tap anywhere on the screen (except the video feeds) toggles all controls.
@@ -439,21 +673,81 @@ export default function VideoCallScreen() {
     }).start();
   }, [controlsVisible, controlsOpacity, showEndCallPopup, showSafety, showRecharge, showGiftPopup]);
 
-  if (!isExpoGo && ZegoUIKitPrebuiltCall && userID && roomId && canJoinRealCall) {
+  if (canUseAgora) {
     return (
-      <Pressable style={{ flex: 1 }} onPress={toggleControls}>
-        <ZegoCallWrapper
-          appId={resolvedAppId}
-          appSign={resolvedAppSign}
-          userId={userID}
-          userName={userName}
-          roomId={roomId}
-          onCallEnd={handleEndCall}
-          turnOnCamera={permission.camera}
-          turnOnMic={permission.mic}
-          myAvatarUrl={myAvatarUrl}
-          listenerAvatarUrl={listenerAvatarUrl}
+      <Pressable style={styles.container} onPress={toggleControls}>
+        <LinearGradient
+          colors={['#000000', '#0C0C0E', '#151518']}
+          locations={[0, 0.5, 1]}
+          style={StyleSheet.absoluteFill}
         />
+
+        {/* Remote participant — the avatar stands in until their live camera
+            feed decodes (and whenever they turn their camera off). */}
+        <Animated.View
+          style={[styles.remoteAvatarLayer, { opacity: remoteAvatarOpacity }]}
+          pointerEvents="none"
+        >
+          <Animated.View style={[styles.avatarContainer, { transform: [{ scale: pulseAnim }] }]}>
+            <Image
+              source={{ uri: getAvatarUrl(gender, avatarIndex) }}
+              style={styles.mainAvatar}
+            />
+          </Animated.View>
+          <Text style={styles.callerName}>{name}</Text>
+          <View style={styles.statusRow}>
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: remoteJoined ? '#22C55E' : '#F59E0B' },
+              ]}
+            />
+            <Text style={styles.statusText}>
+              {!remoteJoined
+                ? 'Connecting...'
+                : remoteVideoActive
+                  ? 'Video Call in Progress'
+                  : 'Call in Progress'}
+            </Text>
+          </View>
+        </Animated.View>
+
+        {/* Agora engine + remote video surface */}
+        <AgoraVideoView
+          ref={agoraRef}
+          appId={resolvedAppId}
+          token={agoraToken}
+          channelName={roomId}
+          cameraEnabled={showCamera}
+          onRemoteVideoActiveChange={setRemoteVideoActive}
+          onRemoteJoinedChange={setRemoteJoined}
+          onRemoteLeft={handleRemoteLeft}
+          onFailedToConnect={handleAgoraFailedToConnect}
+          onEngineError={(err, msg) => console.log('[Agora] Engine error:', err, msg)}
+        />
+
+        {/* Self-view preview — my own live camera in the bottom-right corner.
+            Like the main video feeds, this is NOT toggled by the tap gesture. */}
+        <View style={styles.selfPreview} pointerEvents="none">
+          <View style={styles.selfCamera}>
+            {showCamera && !!AgoraSDK ? (
+              <RtcSurfaceView
+                key="agora-local"
+                canvas={{
+                  uid: 0,
+                  renderMode: RenderModeType.RenderModeFit,
+                  mirrorMode: VideoMirrorModeType.VideoMirrorModeEnabled,
+                }}
+                zOrderMediaOverlay={Platform.OS === 'android'}
+                style={StyleSheet.absoluteFill}
+              />
+            ) : myAvatarUrl ? (
+              <Image source={{ uri: myAvatarUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+            ) : (
+              <Ionicons name="videocam-off" size={32} color="#6B7280" />
+            )}
+          </View>
+        </View>
 
         {/* Floating overlay — tap anywhere toggles it (video feeds stay) */}
         <Animated.View
@@ -491,7 +785,7 @@ export default function VideoCallScreen() {
             )}
           </View>
 
-          {/* End call — floating above the Zego native bottom bar */}
+          {/* End call — floating above the controls dock */}
           <View style={styles.zegEndCallWrap}>
             <TouchableOpacity
               style={styles.endCallPill}
@@ -515,6 +809,45 @@ export default function VideoCallScreen() {
           </TouchableOpacity>
         </Animated.View>
 
+        {/* Bottom controls dock — replaces Zego's native bottom bar. The
+            layer is anchored to the bottom of the screen so the dock inside
+            it renders at the bottom, not off-screen. */}
+        <Animated.View
+          style={[styles.agoraControlsLayer, { opacity: controlsOpacity }]}
+          pointerEvents={controlsVisible ? 'auto' : 'none'}
+        >
+          <View style={[styles.agoraControlsWrap, { paddingBottom: Math.max(insets.bottom, vs(12)) }]}>
+            <CallControls
+              buttons={[
+                {
+                  id: 'mute',
+                  icon: 'mic',
+                  iconActive: 'mic-off',
+                  label: 'Mute',
+                  labelActive: 'Unmute',
+                  active: isMuted,
+                  onPress: toggleMute,
+                },
+                {
+                  id: 'camera',
+                  icon: 'videocam',
+                  iconActive: 'videocam-off',
+                  label: 'Camera',
+                  active: isCameraOff,
+                  onPress: toggleCamera,
+                },
+                {
+                  id: 'switch',
+                  icon: 'camera-reverse',
+                  label: 'Flip',
+                  active: false,
+                  onPress: handleSwitchCamera,
+                },
+              ]}
+            />
+          </View>
+        </Animated.View>
+
         <EndCallPopup
           visible={showEndCallPopup}
           onEndCall={handleEndCall}
@@ -522,7 +855,7 @@ export default function VideoCallScreen() {
         />
         <CallCancelledPopup
           visible={showCallCancelled}
-          message="The call was cancelled by the user."
+          message={callCancelledMessage}
           onClose={handleCallCancelledClose}
         />
         <SafetyPopup
@@ -618,7 +951,7 @@ export default function VideoCallScreen() {
 
       <View style={styles.videoArea}>
         {/* Remote participant — the avatar stands in for their live feed (only
-            the Zego path on native builds streams their actual camera). */}
+            the Agora path on native builds streams their actual camera). */}
         <Animated.View
           style={{ opacity: controlsOpacity, alignItems: 'center', justifyContent: 'center' }}
           pointerEvents={controlsVisible ? 'auto' : 'none'}
@@ -633,12 +966,9 @@ export default function VideoCallScreen() {
         </Animated.View>
       </View>
 
-      {/* Remote participant preview — the other side's camera feed is only
-          available through the Zego SDK on native builds, so the partner's
-          avatar stands in for it here. */}
       {/* Self-view preview — my own live camera in the bottom-right corner.
           Like the main video feeds, this is NOT toggled by the tap gesture. */}
-      <View style={styles.selfPreview}>
+      <View style={styles.selfPreview} pointerEvents="none">
         <View style={styles.selfCamera}>
           {showCamera ? (
             <CameraView
@@ -720,7 +1050,7 @@ export default function VideoCallScreen() {
 
       <CallCancelledPopup
         visible={showCallCancelled}
-        message="The call was cancelled by the user."
+        message={callCancelledMessage}
         onClose={handleCallCancelledClose}
       />
 
@@ -778,10 +1108,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
 
-  // Avatar rendered inside Zego's circle when a participant's camera is off.
-  zegoAvatar: {
-    width: '100%',
-    height: '100%',
+  // Full-screen layer that hosts the remote avatar while their video is not
+  // decoded (connecting / camera off).
+  remoteAvatarLayer: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
   },
 
   topBar: {
@@ -849,6 +1182,21 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_900Black',
     marginBottom: vs(6),
   },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(6),
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  statusText: {
+    fontSize: ms(13, 0.3),
+    color: '#9CA3AF',
+    fontFamily: 'Inter_400Regular',
+  },
   selfPreview: {
     position: 'absolute',
     bottom: vs(120),
@@ -871,8 +1219,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: hp(16),
     alignSelf: 'center',
-    // Moderate layer — floats above the Zego native bottom bar but stays
-    // below the in-call recharge/gift popups (which layer higher).
+    // Moderate layer — floats above the controls dock but stays below the
+    // in-call recharge/gift popups (which layer higher).
     zIndex: 50,
     elevation: 50,
   },
@@ -940,7 +1288,7 @@ const styles = StyleSheet.create({
     zIndex: 999,
   },
 
-  // Zego mode floating elements
+  // Agora mode floating elements
   floatingTopRight: {
     position: 'absolute',
     top: SH * 0.08,
@@ -965,25 +1313,30 @@ const styles = StyleSheet.create({
     fontSize: ms(13, 0.3),
     fontFamily: 'Inter_700Bold',
   },
-  floatingRechargeBtn: {
-    backgroundColor: 'rgba(236, 72, 153, 0.9)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: s(12),
-    paddingVertical: vs(8),
-    borderRadius: 20,
-    gap: s(6),
-    shadowColor: '#EC4899',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 8,
-  },
   floatingRechargeText: {
     color: '#fff',
     fontSize: ms(12, 0.3),
     fontFamily: 'Inter_600SemiBold',
   },
+
+  // Bottom controls dock (Agora mode) — sits where Zego's native bar used to.
+  // The layer is absolutely anchored to the bottom of the screen; the dock is
+  // a normal in-flow child so the layer's height matches the dock.
+  agoraControlsLayer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 60,
+    elevation: 60,
+  },
+  agoraControlsWrap: {
+    width: '100%',
+    alignItems: 'center',
+    paddingTop: vs(10),
+  },
+
   giftNotification: {
     position: 'absolute',
     top: hp(15),

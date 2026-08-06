@@ -23,6 +23,11 @@ module.exports = {
     appSign: process.env.ZEGO_APP_SIGN || '',
   },
 
+  agora: {
+    appId: process.env.AGORA_APP_ID || '',
+    appCertificate: process.env.AGORA_APP_CERTIFICATE || '',
+  },
+
   fast2sms: {
     apiKey: process.env.FAST2SMS_API_KEY || '',
     otpId: process.env.FAST2SMS_OTP_ID || '',

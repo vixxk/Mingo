@@ -7,9 +7,32 @@ const Transaction = require('../models/transactionModel');
 const MatchingService = require('./matchingService');
 const PresenceService = require('./presenceService');
 const { getZegoCredentials } = require('../utils/zegoToken');
+const { getAgoraCredentials, buildAgoraRtcToken } = require('../utils/agoraToken');
 const AppError = require('../utils/appError');
 const ActivityLog = require('../models/ActivityLog');
 const PushService = require('./pushService');
+
+/**
+ * Builds the Agora call payload for a session, or an empty object when the
+ * session is not a video call or Agora is not configured yet. Returning an
+ * empty payload lets the app keep working (audio on Zego, video falls back
+ * to the avatar preview UI) until AGORA_APP_ID/AGORA_APP_CERTIFICATE are set.
+ */
+function getAgoraCallPayload(roomId, callType) {
+  if (callType !== 'video') return {};
+  try {
+    const { appId } = getAgoraCredentials();
+    const token = buildAgoraRtcToken(roomId);
+    return {
+      agoraAppId: appId,
+      agoraToken: token,
+      agoraChannel: roomId,
+    };
+  } catch (e) {
+    console.log('[CallService] Agora credentials unavailable (video call will use fallback UI):', e.message);
+    return {};
+  }
+}
 
 class CallService {
     static async incrementListenerCounters(listenerId, callType) {
@@ -148,6 +171,9 @@ class CallService {
     
     const roomId = `call_${uuidv4()}`;
 
+    // Agora credentials are only minted for video calls — audio stays on Zego.
+    const agoraPayload = getAgoraCallPayload(roomId, callType);
+
     
     const session = await Session.create({
       userId,
@@ -204,6 +230,8 @@ class CallService {
           // Same app-scoped credentials for the accepting side (notification path)
           zegoAppId: zegoCredentials.appId,
           zegoAppSign: zegoCredentials.appSign,
+          // Agora credentials for video calls (accepting side / notification path)
+          ...agoraPayload,
         }
       }).catch(err => {
         console.error('[CallService] Push notification promise failed:', err.message);
@@ -224,6 +252,7 @@ class CallService {
       listenerRating: listenerProfile?.rating || 0,
       zegoAppId: zegoCredentials.appId,
       zegoAppSign: zegoCredentials.appSign,
+      ...agoraPayload,
       startTime: session.startTime,
     };
   }
@@ -380,9 +409,14 @@ class CallService {
       console.log('[CallService] Zego credentials unavailable:', e.message);
     }
 
+    // Agora credentials are minted per request for video sessions so both
+    // participants get a fresh token for the same channel.
+    const agoraPayload = getAgoraCallPayload(session.roomId, session.callType);
+
     return {
       ...session.toObject(),
       ...(credentials ? { zegoAppId: credentials.appId, zegoAppSign: credentials.appSign } : {}),
+      ...agoraPayload,
     };
   }
 
@@ -414,9 +448,14 @@ class CallService {
     } catch (e) {
       console.log('[CallService] Zego credentials unavailable:', e.message);
     }
+
+    // Agora credentials for resumed video sessions.
+    const agoraPayload = getAgoraCallPayload(session.roomId, session.callType);
+
     return {
       ...session.toObject(),
       ...(credentials ? { zegoAppId: credentials.appId, zegoAppSign: credentials.appSign } : {}),
+      ...agoraPayload,
     };
   }
 }

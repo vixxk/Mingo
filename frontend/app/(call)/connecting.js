@@ -47,6 +47,8 @@ export default function ConnectingScreen() {
     gender,
     zegoAppId,
     zegoAppSign,
+    agoraAppId,
+    agoraToken,
     callType = 'audio',
     isRandom,
     matched,
@@ -79,6 +81,11 @@ export default function ConnectingScreen() {
   // params, then to the config defaults in the call screen).
   const zegoAppIdRef = useRef(zegoAppId);
   const zegoAppSignRef = useRef(zegoAppSign);
+
+  // Agora credentials (video calls) resolved from the backend session — the
+  // token is session-scoped so both participants join the same channel.
+  const agoraAppIdRef = useRef(agoraAppId);
+  const agoraTokenRef = useRef(agoraToken);
   
   useEffect(() => {
     realCallIdRef.current = realCallId;
@@ -253,6 +260,8 @@ export default function ConnectingScreen() {
               gender: partnerGenderRef.current, 
               ...(zegoAppIdRef.current ? { zegoAppId: String(zegoAppIdRef.current) } : {}),
               ...(zegoAppSignRef.current ? { zegoAppSign: String(zegoAppSignRef.current) } : {}),
+              ...(agoraAppIdRef.current ? { agoraAppId: String(agoraAppIdRef.current) } : {}),
+              ...(agoraTokenRef.current ? { agoraToken: String(agoraTokenRef.current) } : {}),
               callType 
             } 
           });
@@ -294,6 +303,9 @@ export default function ConnectingScreen() {
               // participants always join the same Zego app.
               if (sessionRes.data?.zegoAppId) zegoAppIdRef.current = sessionRes.data.zegoAppId;
               if (sessionRes.data?.zegoAppSign) zegoAppSignRef.current = sessionRes.data.zegoAppSign;
+              // Agora credentials (video calls) — session-scoped token.
+              if (sessionRes.data?.agoraAppId) agoraAppIdRef.current = sessionRes.data.agoraAppId;
+              if (sessionRes.data?.agoraToken) agoraTokenRef.current = sessionRes.data.agoraToken;
 
               setRealCallId(finalSessionId);
               setRealRoomId(finalRoomId);
@@ -325,6 +337,8 @@ export default function ConnectingScreen() {
                   role: data.role,
                   ...(sessionRes.data?.zegoAppId ? { zegoAppId: sessionRes.data.zegoAppId } : {}),
                   ...(sessionRes.data?.zegoAppSign ? { zegoAppSign: sessionRes.data.zegoAppSign } : {}),
+                  ...(sessionRes.data?.agoraAppId ? { agoraAppId: sessionRes.data.agoraAppId } : {}),
+                  ...(sessionRes.data?.agoraToken ? { agoraToken: sessionRes.data.agoraToken } : {}),
                 }
               });
 
@@ -401,6 +415,9 @@ export default function ConnectingScreen() {
             // participants always join the same Zego app.
             if (sessionRes.data?.zegoAppId) zegoAppIdRef.current = sessionRes.data.zegoAppId;
             if (sessionRes.data?.zegoAppSign) zegoAppSignRef.current = sessionRes.data.zegoAppSign;
+            // Agora credentials (video calls) — session-scoped token.
+            if (sessionRes.data?.agoraAppId) agoraAppIdRef.current = sessionRes.data.agoraAppId;
+            if (sessionRes.data?.agoraToken) agoraTokenRef.current = sessionRes.data.agoraToken;
             
             setRealCallId(finalSessionId);
             setRealRoomId(finalRoomId);
@@ -418,6 +435,8 @@ export default function ConnectingScreen() {
                 gender: userGender,
                 ...(sessionRes.data?.zegoAppId ? { zegoAppId: sessionRes.data.zegoAppId } : {}),
                 ...(sessionRes.data?.zegoAppSign ? { zegoAppSign: sessionRes.data.zegoAppSign } : {}),
+                ...(sessionRes.data?.agoraAppId ? { agoraAppId: sessionRes.data.agoraAppId } : {}),
+                ...(sessionRes.data?.agoraToken ? { agoraToken: sessionRes.data.agoraToken } : {}),
               }
             });
           } catch (err) {
