@@ -29,6 +29,26 @@ class ChatController {
 
       const cards = [];
 
+      // Build a map of listener online state for the conversation partners so
+      // the messages list can show a real online dot (regular users are not
+      // presence-tracked). Uses the same persisted flag as the profile/chat.
+      const listenerOnlineMap = {};
+      try {
+        const otherUserIds = [];
+        for (const conv of conversations) {
+          const otherUser = conv.participants.find(p => p._id.toString() !== userId);
+          if (otherUser && (otherUser.role === 'LISTENER' || (otherUser.role || '').endsWith('_LISTENER'))) {
+            otherUserIds.push(otherUser._id);
+          }
+        }
+        if (otherUserIds.length) {
+          const listenerDocs = await Listener.find({ userId: { $in: otherUserIds } }).select('userId isOnline');
+          listenerDocs.forEach(l => { listenerOnlineMap[l.userId.toString()] = !!l.isOnline; });
+        }
+      } catch (mapErr) {
+        console.error('Error building listener online map:', mapErr.message);
+      }
+
       for (const conv of conversations) {
         // Find all sessions for this conversation
         const convSessions = chatSessions.filter(s => {
@@ -48,6 +68,7 @@ class ChatController {
           // No sessions at all: push a default card
           cards.push({
             id: conv._id,
+            otherUserId: otherUser?._id?.toString(),
             sessionId: null,
             name: isSupport ? 'Mingo Support' : (otherUser?.name || otherUser?.username || 'Unknown'),
             gender: otherUser?.gender,
@@ -56,7 +77,7 @@ class ChatController {
             lastMessage: conv.lastMessage?.content || 'Say hello!',
             time: conv.lastMessage?.createdAt || conv.updatedAt,
             unread: unreadCount,
-            isOnline: false,
+            isOnline: !!listenerOnlineMap[otherUser?._id?.toString()],
             sessionStatus: 'none',
             isAdmin: isSupport
           });
@@ -116,6 +137,7 @@ class ChatController {
 
             cards.push({
               id: conv._id,
+              otherUserId: otherUser?._id?.toString(),
               sessionId: isNewerMessageAfterSession ? null : session._id,
               name: isSupport ? 'Mingo Support' : (otherUser?.name || otherUser?.username || 'Unknown'),
               gender: otherUser?.gender,
@@ -124,7 +146,7 @@ class ChatController {
               lastMessage: isNewerMessageAfterSession ? (conversationLastMessage.content || 'Say hello!') : (lastMsg?.content || 'Session started'),
               time: isNewerMessageAfterSession ? conversationLastMessage.createdAt : (lastMsg?.createdAt || session.startTime),
               unread: isNewerMessageAfterSession ? unreadCount : (session.status === 'active' ? unreadCount : 0),
-              isOnline: false,
+              isOnline: !!listenerOnlineMap[otherUser?._id?.toString()],
               sessionStatus: isNewerMessageAfterSession ? 'none' : session.status,
               duration: session.duration,
               startTime: session.startTime,

@@ -1,202 +1,29 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Tabs, useRouter, useSegments } from 'expo-router';
+import React, { useState, useEffect } from 'react';
+import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { View, StyleSheet, Platform, Alert, AppState } from 'react-native';
+import { View, StyleSheet, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as Device from 'expo-device';
-import Constants from 'expo-constants';
 import { ms, vs } from '../../utils/responsive';
 import { socketService } from '../../utils/socket';
 import { userAPI, callAPI } from '../../utils/api';
-import IncomingCallPopup from '../../components/shared/IncomingCallPopup';
-import CallCancelledPopup from '../../components/shared/CallCancelledPopup';
 import { useSSE } from '../../utils/useSSE';
 
-import { initializeOneSignal, dismissCallNotification } from '../../utils/notifications';
+import { initializeOneSignal } from '../../utils/notifications';
 
 export default function ListenerLayout() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const segments = useSegments();
   
-  const [incomingCalls, setIncomingCalls] = useState([]);
-  const [callCancelledVisible, setCallCancelledVisible] = useState(false);
   const { unreadPeopleCount } = useSSE();
-
-  const isChatOpenRef = React.useRef(false);
-  const incomingCallsRef = useRef([]);
-  
-  useEffect(() => {
-    incomingCallsRef.current = incomingCalls;
-  }, [incomingCalls]);
-
-  // Track whether listener is on a chat screen
-  useEffect(() => {
-    isChatOpenRef.current = segments && (segments.includes('(chat)') || segments.includes('chat'));
-  }, [segments]);
-
-  const handleAcceptCall = async (acceptedCall) => {
-    if (!acceptedCall) return;
-    
-    // Ensure socket is connected before emitting events
-    await socketService.connect();
-    
-    const { callerId, callerName, callType, callId, roomId, avatarIndex, gender } = acceptedCall;
-    
-    let session;
-    try {
-      // Validate that the session is still active
-      const sessionRes = await callAPI.getSession(callId);
-      session = sessionRes?.data;
-      if (!session || session.status === 'cancelled' || session.status === 'completed') {
-        setCallCancelledVisible(true);
-        setIncomingCalls(prev => prev.filter(c => c.callId !== callId));
-        return;
-      }
-    } catch (err) {
-      console.log('Error validating session before accept:', err);
-      Alert.alert('Call Unavailable', 'This call is no longer available.', [{ text: 'OK' }]);
-      setIncomingCalls(prev => prev.filter(c => c.callId !== callId));
-      return;
-    }
-    
-    // Automatically reject all other active requests
-    const otherCalls = incomingCallsRef.current.filter(c => c.callId !== callId);
-    otherCalls.forEach(otherCall => {
-      socketService.emit('call_rejected', { 
-        userId: otherCall.callerId, 
-        sessionId: otherCall.callId,
-        reason: 'busy' 
-      });
-    });
-
-    // Notify caller we accepted
-    socketService.emit('call_accepted', { userId: callerId, sessionId: callId, roomId });
-    
-    setIncomingCalls([]);
-
-    // Remove the incoming-call push notification from the system tray
-    dismissCallNotification(acceptedCall);
-    
-    // Get listener's own userId
-    let myUserId = '';
-    try {
-      const userData = await AsyncStorage.getItem('user');
-      if (userData) {
-        const u = JSON.parse(userData);
-        myUserId = u._id || u.id || '';
-      }
-    } catch (e) {}
-    
-    // Route to call screen — listenerId is the listener's own ID (us)
-    const targetScreen = callType === 'video' ? '/(call)/video-call' : '/(call)/audio-call';
-    router.push({
-      pathname: targetScreen,
-      params: {
-        name: callerName,
-        callId,
-        roomId,
-        listenerId: myUserId, // Listener's own userId for gifting/endCall
-        userId: callerId,     // The user who called us
-        avatarIndex,
-        gender,
-        callType,
-        isIncoming: 'true',
-        // Session-scoped Zego credentials — both sides must join the same app
-        ...(session?.zegoAppId ? { zegoAppId: String(session.zegoAppId) } : {}),
-        ...(session?.zegoAppSign ? { zegoAppSign: String(session.zegoAppSign) } : {}),
-        // Session-scoped Agora credentials for video calls
-        ...(session?.agoraAppId ? { agoraAppId: String(session.agoraAppId) } : {}),
-        ...(session?.agoraToken ? { agoraToken: String(session.agoraToken) } : {}),
-      }
-    });
-  };
-
-  const handleRejectCall = async (rejectedCall) => {
-    if (!rejectedCall) return;
-    
-    // Ensure socket is connected before emitting events
-    await socketService.connect();
-
-    socketService.emit('call_rejected', { 
-      userId: rejectedCall.callerId, 
-      sessionId: rejectedCall.callId,
-      reason: 'busy' 
-    });
-    setIncomingCalls(prev => prev.filter(c => c.callId !== rejectedCall.callId));
-  };
-
-  const handleAcceptCallRef = useRef(handleAcceptCall);
-  const handleRejectCallRef = useRef(handleRejectCall);
-
-  useEffect(() => {
-    handleAcceptCallRef.current = handleAcceptCall;
-    handleRejectCallRef.current = handleRejectCall;
-  }, [handleAcceptCall, handleRejectCall]);
 
   useEffect(() => {
     const setupSocket = async () => {
       await socketService.connect();
       
-      socketService.on('incoming_call', (callData) => {
-        console.log('Incoming call received:', callData);
-        setIncomingCalls((prev) => {
-          if (prev.some(c => c.callId === callData.callId)) return prev;
-          return [...prev, callData];
-        });
-      });
-
-      socketService.on('accept_incoming_call', (callData) => {
-        console.log('Incoming call accepted via local trigger:', callData);
-        handleAcceptCallRef.current(callData);
-      });
-
-      socketService.on('reject_incoming_call', (callData) => {
-        console.log('Incoming call rejected via local trigger:', callData);
-        handleRejectCallRef.current(callData);
-      });
-
-      // Check for pending local triggers from notification clicks
-      if (socketService.pendingAcceptCall) {
-        const pending = socketService.pendingAcceptCall;
-        socketService.pendingAcceptCall = null;
-        console.log('[ListenerLayout] Found pending accept call event, executing:', pending);
-        handleAcceptCallRef.current(pending);
-      } else if (socketService.pendingRejectCall) {
-        const pending = socketService.pendingRejectCall;
-        socketService.pendingRejectCall = null;
-        console.log('[ListenerLayout] Found pending reject call event, executing:', pending);
-        handleRejectCallRef.current(pending);
-      } else if (socketService.pendingIncomingCall) {
-        const pending = socketService.pendingIncomingCall;
-        socketService.pendingIncomingCall = null;
-        console.log('[ListenerLayout] Found pending incoming call event, displaying popup:', pending);
-        setIncomingCalls((prev) => {
-          if (prev.some(c => c.callId === pending.callId)) return prev;
-          return [...prev, pending];
-        });
-      }
-
-      socketService.on('call_cancelled', (data) => {
-        console.log('Call cancelled by user:', data);
-        setIncomingCalls((prev) => prev.filter(c => c.callId !== data.callId && c.callId !== data.sessionId));
-      });
-
-      socketService.on('account_banned', (data) => {
-        console.log('Account banned event received:', data);
-        Alert.alert('Account Suspended', data.message || 'Your account has been suspended.', [
-          {
-            text: 'OK',
-            onPress: async () => {
-              await AsyncStorage.removeItem('token');
-              await AsyncStorage.removeItem('userToken');
-              await AsyncStorage.removeItem('user');
-              router.replace('/banned');
-            }
-          }
-        ]);
-      });
+      // NOTE: Incoming-call handling (popup, accept/reject, call_cancelled,
+      // account_banned) now lives in the ROOT layout so the incoming-call
+      // popup is visible on every screen — including chat — not just the tabs.
 
       // OneSignal push notification initialization
       try {
@@ -265,14 +92,6 @@ export default function ListenerLayout() {
     };
 
     setupSocket();
-
-    return () => {
-      socketService.off('incoming_call');
-      socketService.off('accept_incoming_call');
-      socketService.off('reject_incoming_call');
-      socketService.off('call_cancelled');
-      socketService.off('account_banned');
-    };
   }, []);
 
   useEffect(() => {
@@ -383,17 +202,6 @@ export default function ListenerLayout() {
         />
       </Tabs>
 
-      <IncomingCallPopup
-        calls={incomingCalls}
-        onAccept={handleAcceptCall}
-        onReject={handleRejectCall}
-      />
-
-      <CallCancelledPopup
-        visible={callCancelledVisible}
-        message="This call has been cancelled by the user."
-        onClose={() => setCallCancelledVisible(false)}
-      />
     </View>
   );
 }

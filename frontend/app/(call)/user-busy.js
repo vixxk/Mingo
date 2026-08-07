@@ -16,7 +16,7 @@ import { ms, s, vs, SCREEN_WIDTH } from '../../utils/responsive';
 export default function UserBusyScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { name = 'Listener', reason } = useLocalSearchParams();
+  const { name = 'Listener', reason, callType = 'audio' } = useLocalSearchParams();
 
   const pulseAnim = useRef(new Animated.Value(0.8)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -113,7 +113,10 @@ export default function UserBusyScreen() {
           <TouchableOpacity
             style={styles.primaryBtn}
             activeOpacity={0.85}
-            onPress={() => router.replace('/(tabs)')}
+            onPress={() => router.push({
+              pathname: '/(call)/finding-listener',
+              params: { callType, isRandom: 'true' }
+            })}
           >
             <LinearGradient
               colors={['#A855F7', '#7C3AED']}

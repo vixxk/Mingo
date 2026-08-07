@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Image, TouchableOpacity, ScrollView,
   TextInput, Keyboard, KeyboardAvoidingView, Platform, ActivityIndicator, Dimensions,
-  Animated, Modal, Pressable, AppState, BackHandler, Alert,
+  Animated, Modal, Pressable, AppState, BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +19,7 @@ import EndChatPopup from '../../components/shared/EndChatPopup';
 import ContactShareBlockPopup from '../../components/shared/ContactShareBlockPopup';
 import AbusiveMessagePopup from '../../components/shared/AbusiveMessagePopup';
 import InsufficientBalancePopup from '../../components/shared/InsufficientBalancePopup';
+import StatusPopup from '../../components/shared/StatusPopup';
 import { getAvatarUrl } from '../../utils/avatars';
 import { analyzeMessage, containsPhoneNumber, maskPhoneNumbers, stripPhoneNumbers } from '../../utils/contactSafety';
 import { analyzeAbuse } from '../../utils/abusiveLanguage';
@@ -336,6 +337,7 @@ export default function ChatScreen() {
   const [sessionRemaining, setSessionRemaining] = useState(0);
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [receivedGift, setReceivedGift] = useState(null);
+  const [showListenerOfflinePopup, setShowListenerOfflinePopup] = useState(false);
   const [showCostPopup, setShowCostPopup] = useState(false);
   const [showEndChatPopup, setShowEndChatPopup] = useState(false);
   const [isEndingSession, setIsEndingSession] = useState(false);
@@ -418,6 +420,10 @@ export default function ChatScreen() {
   );
 
   const giftAnim = useRef(new Animated.Value(0)).current;
+  // Header swap: fades the name/online block out while the session timer
+  // capsule fades in (and back when the session ends).
+  const headerSwapAnim = useRef(new Animated.Value(0)).current;
+  const timerEnterAnim = useRef(new Animated.Value(0)).current;
   const sessionTimerRef = useRef(null);
   const scrollRef = useRef(null);
   const typingTimeout = useRef(null);
@@ -427,6 +433,23 @@ export default function ChatScreen() {
   useEffect(() => {
     realConversationIdRef.current = realConversationId;
   }, [realConversationId]);
+
+  // Animate the header swap between the name/online label and the timer capsule
+  useEffect(() => {
+    Animated.timing(headerSwapAnim, {
+      toValue: sessionActive ? 1 : 0,
+      duration: 250,
+      useNativeDriver: true,
+    }).start();
+    if (sessionActive) {
+      timerEnterAnim.setValue(0);
+      Animated.timing(timerEnterAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [sessionActive, headerSwapAnim, timerEnterAnim]);
 
   useEffect(() => {
     const handleAppStateChange = (nextAppState) => {
@@ -503,6 +526,8 @@ export default function ChatScreen() {
                     // Show call buttons only for the options this listener enabled while going live.
                     setOtherAudioEnabled(profileRes.data.audioEnabled !== false);
                     setOtherVideoEnabled(profileRes.data.videoEnabled === true);
+                    // Show the listener's real online state in the header.
+                    setIsListenerOnline(profileRes.data.isOnline !== false);
                   }
                 } else {
                   // I'm listener, other is user → use response data or params
@@ -547,10 +572,15 @@ export default function ChatScreen() {
             } else {
               setSessionActive(false);
               if (myRole === 'LISTENER') {
+                // The listener is never limited to one free message — only the
+                // user is. The listener's input is locked only when a paid
+                // session was started and has ended, and the user hasn't sent a
+                // new message to restart it yet.
+                const hadSession = !!(session && session.sessionId);
                 const apiMessages = response.data.messages || [];
                 const nonSystemMessages = apiMessages.filter(m => m.senderModel !== 'System' && m.type !== 'system');
                 const lastMessage = nonSystemMessages[nonSystemMessages.length - 1];
-                if (!lastMessage || lastMessage.senderModel !== 'User') {
+                if (hadSession && (!lastMessage || lastMessage.senderModel !== 'User')) {
                   blockedBySession = true;
                 } else {
                   blockedBySession = false;
@@ -913,7 +943,10 @@ export default function ChatScreen() {
           setMessages(prev => {
             const nonSystemMessages = prev.filter(m => m.type !== 'system' && m.type !== 'date');
             const lastMessage = nonSystemMessages[nonSystemMessages.length - 1];
-            const isBlockedBySession = !sessionActive && (!lastMessage || !lastMessage.sent);
+            // Never gate the listener during the free-message phase — only
+            // after a paid session has ended, when the listener must wait for
+            // the user to send a new message that restarts it.
+            const isBlockedBySession = everHadSession && !sessionActive && (!lastMessage || lastMessage.sent);
             setChatBlocked(isBlockedBySession);
             return prev;
           });
@@ -928,11 +961,9 @@ export default function ChatScreen() {
       setMessages((prev) =>
         prev.filter((m) => !(typeof m.id === 'string' && m.id.startsWith('temp_')))
       );
-      Alert.alert(
-        'Listener is offline',
-        "The listener isn't online right now. Please try again when they're back online.",
-        [{ text: 'OK' }]
-      );
+      // Close the keyboard so the themed popup appears over a clean screen.
+      Keyboard.dismiss();
+      setShowListenerOfflinePopup(true);
     };
 
     socketService.on('receive_message', handleNewMessage);
@@ -970,7 +1001,7 @@ export default function ChatScreen() {
       socketService.off('abusive_message_blocked', handleAbusiveMessageBlocked);
       socketService.off('chat_restricted', handleChatRestricted);
     };
-  }, [currentUserId, sessionActive]);
+  }, [currentUserId, sessionActive, everHadSession]);
 
   const insertDateLabels = (msgs) => {
     const result = [];
@@ -1177,7 +1208,7 @@ export default function ChatScreen() {
         
         <TouchableOpacity
           activeOpacity={0.7}
-          disabled={userRole !== 'USER'}
+          disabled={userRole !== 'USER' || !isListenerOnline}
           onPress={() => {
             if (userRole === 'USER' && otherUserId) {
               router.push({
@@ -1186,18 +1217,54 @@ export default function ChatScreen() {
               });
             }
           }}
-          style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: wp(2) }}
+          style={{
+            flexDirection: 'row', alignItems: 'center', flex: 1, gap: wp(2),
+            opacity: userRole === 'USER' && !isListenerOnline ? 0.5 : 1,
+          }}
         >
           <Image source={avatarSource} style={styles.headerAvatar} />
-          <View style={styles.headerInfo}>
+          {/* Once the paid session timer starts, the name + online label fade
+              out (sliding up) while the timer capsule fades in below. */}
+          <Animated.View
+            style={[
+              styles.headerInfo,
+              {
+                opacity: headerSwapAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
+                transform: [
+                  { translateY: headerSwapAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }) },
+                ],
+              },
+            ]}
+            pointerEvents={sessionActive ? 'none' : 'auto'}
+          >
             <Text style={styles.headerName} numberOfLines={1}>{otherName}</Text>
-            <Text style={styles.headerStatus}>{isTyping ? 'Typing...' : 'Online'}</Text>
-          </View>
+            <Text
+              style={[
+                styles.headerStatus,
+                userRole === 'USER' && !isTyping && !isListenerOnline && styles.headerStatusOffline,
+              ]}
+            >
+              {isTyping
+                ? 'Typing...'
+                : (userRole === 'USER' ? (isListenerOnline ? 'Online' : 'Offline') : 'Online')}
+            </Text>
+          </Animated.View>
         </TouchableOpacity>
 
-        {/* Timed Session Capsule */}
+        {/* Timed Session Capsule — slides in as the name fades out */}
         {sessionActive && (
-          <View style={styles.sessionHeaderWrap}>
+          <Animated.View
+            style={[
+              styles.sessionHeaderWrap,
+              {
+                opacity: timerEnterAnim,
+                transform: [
+                  { translateX: timerEnterAnim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) },
+                  { scale: timerEnterAnim.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] }) },
+                ],
+              },
+            ]}
+          >
             <TouchableOpacity
               style={styles.timerBadge}
               activeOpacity={0.7}
@@ -1213,7 +1280,7 @@ export default function ChatScreen() {
             >
               <Text style={styles.endSessionText}>End</Text>
             </TouchableOpacity>
-          </View>
+          </Animated.View>
         )}
 
         {/* In-chat call buttons — only shown for the options the listener enabled while going live */}
@@ -1221,8 +1288,9 @@ export default function ChatScreen() {
           <View style={styles.headerCallBtns}>
             {otherAudioEnabled && (
               <TouchableOpacity
-                style={[styles.headerCallBtn, { borderColor: 'rgba(34,197,94,0.35)' }]}
+                style={[styles.headerCallBtn, { borderColor: 'rgba(34,197,94,0.35)' }, !isListenerOnline && styles.headerCallBtnDisabled]}
                 activeOpacity={0.7}
+                disabled={!isListenerOnline}
                 onPress={() => handleStartCall('audio')}
                 accessibilityLabel="Start audio call"
               >
@@ -1231,8 +1299,9 @@ export default function ChatScreen() {
             )}
             {otherVideoEnabled && (
               <TouchableOpacity
-                style={[styles.headerCallBtn, { borderColor: 'rgba(59,130,246,0.35)' }]}
+                style={[styles.headerCallBtn, { borderColor: 'rgba(59,130,246,0.35)' }, !isListenerOnline && styles.headerCallBtnDisabled]}
                 activeOpacity={0.7}
+                disabled={!isListenerOnline}
                 onPress={() => handleStartCall('video')}
                 accessibilityLabel="Start video call"
               >
@@ -1542,6 +1611,16 @@ export default function ChatScreen() {
         onCancel={() => setShowEndChatPopup(false)}
         loading={isEndingSession}
       />
+
+      {/* Listener Offline Popup (themed) */}
+      <StatusPopup
+        visible={showListenerOfflinePopup}
+        type="error"
+        title="Listener is offline"
+        message={`${otherName || 'The listener'} isn't online right now. Please try again when they're back online.`}
+        onClose={() => setShowListenerOfflinePopup(false)}
+        icon="cloud-offline-outline"
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -1564,6 +1643,7 @@ const styles = StyleSheet.create({
   headerInfo: { flex: 1 },
   headerName: { fontSize: wp(3.8), color: '#fff', fontWeight: '700' },
   headerStatus: { fontSize: wp(2.8), color: '#22C55E' },
+  headerStatusOffline: { color: '#6B7280' },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1597,6 +1677,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerCallBtnDisabled: { opacity: 0.3 },
 
   // Messages
   messagesScroll: { flex: 1 },

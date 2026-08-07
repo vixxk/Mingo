@@ -26,15 +26,6 @@ import InsufficientBalancePopup from '../../components/shared/InsufficientBalanc
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
-const INTERESTS = [
-  { label: 'Career', icon: 'briefcase-outline' },
-  { label: 'Emotional & Supportive Talk', icon: 'heart-outline' },
-  { label: 'Childhood and Memories', icon: 'heart-outline' },
-  { label: 'Films and Music', icon: 'musical-notes-outline' },
-  { label: 'Growth & Ideas', icon: 'bulb-outline' },
-  { label: 'Family & Relationships', icon: 'heart-outline' },
-];
-
 export default function ConnectingScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -530,31 +521,19 @@ export default function ConnectingScreen() {
       </View>
 
       <View style={styles.interestsSection}>
-        <View style={styles.chipsWrap}>
-          {listenerInterests.length > 0 ? (
-            listenerInterests.map((interest, index) => (
+        {/* Only the listener's real interests — no loading placeholders and no
+            mock chips. If they've selected nothing, this stays empty (the
+            section simply acts as vertical spacing). */}
+        {listenerInterests.length > 0 && (
+          <View style={styles.chipsWrap}>
+            {listenerInterests.map((interest, index) => (
               <View key={index} style={styles.chip}>
                 <Text style={styles.chipText}>{interest}</Text>
                 <Ionicons name="sparkles" size={14} color="#A855F7" />
               </View>
-            ))
-          ) : (
-            isRandom === 'true' ? (
-              INTERESTS.map((item, index) => (
-                <View key={index} style={styles.chip}>
-                  <Text style={styles.chipText}>{item.label}</Text>
-                  <Ionicons name={item.icon} size={14} color="#9CA3AF" />
-                </View>
-              ))
-            ) : (
-              [1, 2, 3].map((_, index) => (
-                <View key={index} style={[styles.chip, { opacity: 0.5 }]}>
-                  <Text style={styles.chipText}>Loading...</Text>
-                </View>
-              ))
-            )
-          )}
-        </View>
+            ))}
+          </View>
+        )}
       </View>
 
       <View style={[styles.bottomSection, { paddingBottom: Math.max(insets.bottom + vs(16), vs(32)) }]}>

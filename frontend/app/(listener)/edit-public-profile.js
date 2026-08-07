@@ -469,51 +469,80 @@ const styles = StyleSheet.create({
   submitBtnText: { color: '#fff', fontSize: SW * 0.036, fontWeight: '700', fontFamily: 'Inter_700Bold' },
 });
 
+// Chip skeleton heights/widths mirror the real chip styles (text size + padding)
+const CHIP_HEIGHT = SH * 0.009 * 2 + SW * 0.031 + 6;
+const CHIP_WIDTHS = [0.24, 0.3, 0.2, 0.26, 0.32, 0.22];
+
 const LoadingSkeleton = ({ insets }) => (
   <View style={[styles.container, { paddingTop: insets.top }]}>
+    {/* Header */}
     <View style={styles.header}>
-      <Skeleton width={180} height={32} borderRadius={6} />
+      <Skeleton width={SW * 0.45} height={SW * 0.07} borderRadius={6} />
     </View>
 
     <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-      {/* Banner Skeleton */}
-      <Skeleton width="100%" height={60} borderRadius={12} style={{ marginBottom: 24 }} />
+      {/* Status Banner Skeleton (icon + label + msg) */}
+      <View style={[styles.statusBanner, { borderColor: '#1F1F1F' }]}>
+        <Skeleton width={20} height={20} borderRadius={10} />
+        <View style={styles.statusInfo}>
+          <Skeleton width={110} height={14} borderRadius={4} style={{ marginBottom: 6 }} />
+          <Skeleton width="80%" height={12} borderRadius={4} />
+        </View>
+      </View>
 
       {/* Info Text Skeleton */}
-      <View style={{ marginBottom: 24 }}>
-        <Skeleton width="90%" height={12} borderRadius={4} style={{ marginBottom: 8 }} />
-        <Skeleton width="70%" height={12} borderRadius={4} />
+      <View style={{ marginBottom: '6%' }}>
+        <Skeleton width="95%" height={12} borderRadius={4} style={{ marginBottom: 8 }} />
+        <Skeleton width="60%" height={12} borderRadius={4} />
       </View>
 
-      {/* Profile Image Skeleton */}
-      <View style={{ alignItems: 'center', marginBottom: 32 }}>
-        <Skeleton width={SW * 0.28} height={SW * 0.28} borderRadius={SW * 0.14} />
-        <Skeleton width={80} height={10} borderRadius={4} style={{ marginTop: 12 }} />
+      {/* Display Name Input Group */}
+      <View style={styles.inputGroup}>
+        <Skeleton width={110} height={14} borderRadius={4} style={{ marginBottom: '2%' }} />
+        <Skeleton width="100%" height={48} borderRadius={12} />
       </View>
 
-      {/* Inputs Skeletons */}
-      {[1, 2, 3].map((i) => (
-        <View key={i} style={{ marginBottom: 24 }}>
-          <Skeleton width={100} height={14} borderRadius={4} style={{ marginBottom: 10 }} />
-          <Skeleton width="100%" height={50} borderRadius={12} />
-        </View>
-      ))}
+      {/* Hookline Input Group (with char count) */}
+      <View style={styles.inputGroup}>
+        <Skeleton width={90} height={14} borderRadius={4} style={{ marginBottom: '2%' }} />
+        <Skeleton width="100%" height={48} borderRadius={12} />
+        <Skeleton width={48} height={10} borderRadius={4} style={{ marginTop: 4, alignSelf: 'flex-end' }} />
+      </View>
 
-      {/* Tags Skeleton */}
-      <View style={{ marginBottom: 24 }}>
-        <Skeleton width={120} height={14} borderRadius={4} style={{ marginBottom: 12 }} />
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <Skeleton key={i} width={SW * 0.2} height={35} borderRadius={20} />
+      {/* About Me Input Group (tall textarea + char count) */}
+      <View style={styles.inputGroup}>
+        <Skeleton width={90} height={14} borderRadius={4} style={{ marginBottom: '2%' }} />
+        <Skeleton width="100%" height={SH * 0.13} borderRadius={12} />
+        <Skeleton width={48} height={10} borderRadius={4} style={{ marginTop: 4, alignSelf: 'flex-end' }} />
+      </View>
+
+      {/* Interest Tags Group (label + chip grid) */}
+      <View style={styles.inputGroup}>
+        <Skeleton width={150} height={14} borderRadius={4} style={{ marginBottom: '2%' }} />
+        <View style={styles.chipGrid}>
+          {CHIP_WIDTHS.map((w, i) => (
+            <Skeleton key={i} width={SW * w} height={CHIP_HEIGHT} borderRadius={20} />
           ))}
         </View>
       </View>
 
-      {/* Buttons Skeleton */}
-      <View style={{ flexDirection: 'row', gap: 12 }}>
-        <Skeleton width="48%" height={50} borderRadius={25} />
-        <Skeleton width="48%" height={50} borderRadius={25} />
+      {/* Languages Group (label + chip grid) */}
+      <View style={styles.inputGroup}>
+        <Skeleton width={100} height={14} borderRadius={4} style={{ marginBottom: '2%' }} />
+        <View style={styles.chipGrid}>
+          {CHIP_WIDTHS.slice(0, 5).map((w, i) => (
+            <Skeleton key={i} width={SW * (w + 0.04)} height={CHIP_HEIGHT} borderRadius={20} />
+          ))}
+        </View>
       </View>
+
+      {/* Action Buttons Skeleton */}
+      <View style={styles.buttonsRow}>
+        <Skeleton width="48%" height={58} borderRadius={25} />
+        <Skeleton width="48%" height={58} borderRadius={25} />
+      </View>
+
+      <View style={{ height: 40 }} />
     </ScrollView>
   </View>
 );

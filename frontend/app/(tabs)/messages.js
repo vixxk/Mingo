@@ -117,10 +117,22 @@ export default function MessagesScreen() {
         loadConversations(false);
       };
 
+      // Live online-state updates: a listener going offline/online refreshes
+      // the green dot without needing to leave and re-enter the tab.
+      const handleListenerStatusChanged = (data) => {
+        const userId = String(data?.userId || '');
+        if (!userId) return;
+        setConversations((prev) =>
+          prev.map((c) => (String(c.otherUserId) === userId ? { ...c, isOnline: !!data.isOnline } : c))
+        );
+      };
+
       socketService.on('receive_message', handleNewMessage);
+      socketService.on('listener_status_changed', handleListenerStatusChanged);
 
       return () => {
         socketService.off('receive_message', handleNewMessage);
+        socketService.off('listener_status_changed', handleListenerStatusChanged);
       };
     }, [])
   );
@@ -143,7 +155,7 @@ export default function MessagesScreen() {
 
     return (
       <TouchableOpacity 
-        style={styles.messageItem} 
+        style={[styles.messageItem, !item.isOnline && !item.isAdmin && styles.messageItemOffline]} 
         activeOpacity={0.7}
         onPress={() => router.push({
           pathname: '/chat',
@@ -181,6 +193,11 @@ export default function MessagesScreen() {
               {item.sessionStatus === 'active' && (
                 <View style={[styles.statusBadge, { backgroundColor: 'rgba(34, 197, 94, 0.15)' }]}>
                   <Text style={[styles.statusBadgeText, { color: '#22C55E' }]}>Active</Text>
+                </View>
+              )}
+              {!item.isOnline && !item.isAdmin && (
+                <View style={[styles.statusBadge, { backgroundColor: 'rgba(107, 114, 128, 0.15)' }]}>
+                  <Text style={[styles.statusBadgeText, { color: '#9CA3AF' }]}>Offline</Text>
                 </View>
               )}
             </View>
@@ -368,6 +385,9 @@ const styles = StyleSheet.create({
     paddingVertical: hp(1.5),
     borderBottomWidth: 1,
     borderBottomColor: '#1F2937',
+  },
+  messageItemOffline: {
+    opacity: 0.6,
   },
   avatarContainer: {
     position: 'relative',

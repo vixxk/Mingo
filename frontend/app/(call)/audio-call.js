@@ -12,6 +12,7 @@ import SafetyPopup from '../../components/call/SafetyPopup';
 import InCallRechargePopup from '../../components/call/InCallRechargePopup';
 import EndCallPopup from '../../components/call/EndCallPopup';
 import CallControls from '../../components/call/CallControls';
+import CallTimer from '../../components/call/CallTimer';
 import CallCancelledPopup from '../../components/shared/CallCancelledPopup';
 import GiftPopup from '../../components/shared/GiftPopup';
 import GiftAnimationOverlay from '../../components/call/GiftAnimationOverlay';
@@ -649,6 +650,12 @@ export default function AudioCallScreen() {
 
       <Animated.View style={{ opacity: controlsOpacity }} pointerEvents={controlsVisible ? 'auto' : 'none'}>
         <View style={[styles.topBar, { paddingTop: insets.top + vs(8) }]}>
+          {/* Call duration timer — only appears once the call connects */}
+          {remoteJoined && (
+            <View style={styles.topBarTimerWrap}>
+              <CallTimer active />
+            </View>
+          )}
           <View style={styles.topBarRight}>
             {currentCoins !== null && !isListener && (
               <View style={styles.coinsBadgeInline}>
@@ -834,6 +841,13 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 10,
+  },
+  topBarTimerWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   topBarRight: {
     flexDirection: 'row',

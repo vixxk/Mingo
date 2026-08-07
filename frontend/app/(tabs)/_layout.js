@@ -1,174 +1,19 @@
-import { Tabs, useRouter, useSegments } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { View, Text, StyleSheet, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as Device from 'expo-device';
-import Constants from 'expo-constants';
 import { s, vs, ms } from '../../utils/responsive';
-import { authAPI, userAPI, callAPI, walletAPI } from '../../utils/api';
+import { authAPI, userAPI, callAPI } from '../../utils/api';
 import { socketService } from '../../utils/socket';
-import IncomingCallPopup from '../../components/shared/IncomingCallPopup';
-import InsufficientBalancePopup from '../../components/shared/InsufficientBalancePopup';
-import CallCancelledPopup from '../../components/shared/CallCancelledPopup';
 import { useSSE } from '../../utils/useSSE';
 
-import { initializeOneSignal, dismissCallNotification } from '../../utils/notifications';
+import { initializeOneSignal } from '../../utils/notifications';
 
 export default function TabLayout() {
   const router = useRouter();
-  const segments = useSegments();
   const [isAuthenticated, setIsAuthenticated] = useState(null);
-  const [incomingCalls, setIncomingCalls] = useState([]);
-  // Recharge gate: user tried to answer a call without enough coins
-  const [rechargeGate, setRechargeGate] = useState(null); // { callerName, callType, minCoins, balance }
-  const [callCancelledVisible, setCallCancelledVisible] = useState(false);
   const { unreadPeopleCount } = useSSE();
-
-  const isChatOpenRef = React.useRef(false);
-
-  // Track whether user is on a chat screen
-  useEffect(() => {
-    isChatOpenRef.current = segments && (segments.includes('(chat)') || segments.includes('chat'));
-  }, [segments]);
-
-  useEffect(() => {
-    const setupSocket = async () => {
-      await socketService.connect();
-      
-      socketService.on('incoming_call', (callData) => {
-        console.log('Incoming call received:', callData);
-        setIncomingCalls((prev) => {
-          if (prev.some(c => c.callId === callData.callId)) return prev;
-          return [...prev, callData];
-        });
-      });
-
-      socketService.on('call_cancelled', (data) => {
-        console.log('Call cancelled by caller:', data);
-        setIncomingCalls((prev) => prev.filter(c => c.callId !== data.callId && c.callId !== data.sessionId));
-      });
-
-      socketService.on('account_banned', (data) => {
-        console.log('Account banned event received:', data);
-        Alert.alert('Account Suspended', data.message || 'Your account has been suspended.', [
-          {
-            text: 'OK',
-            onPress: async () => {
-              await AsyncStorage.removeItem('token');
-              await AsyncStorage.removeItem('userToken');
-              await AsyncStorage.removeItem('user');
-              router.replace('/banned');
-            }
-          }
-        ]);
-      });
-    };
-
-    setupSocket();
-
-    return () => {
-      socketService.off('incoming_call');
-      socketService.off('call_cancelled');
-      socketService.off('account_banned');
-    };
-  }, []);
-
-  const handleAcceptCall = async (acceptedCall) => {
-    if (!acceptedCall) return;
-    
-    // Ensure socket is connected before emitting events
-    await socketService.connect();
-    
-    const { callerId, callerName, callType, callId, roomId, avatarIndex, gender } = acceptedCall;
-    
-    try {
-      // Validate that the session is still active
-      const sessionRes = await callAPI.getSession(callId);
-      const session = sessionRes?.data;
-      if (!session || session.status === 'cancelled' || session.status === 'completed') {
-        setCallCancelledVisible(true);
-        setIncomingCalls(prev => prev.filter(c => c.callId !== callId));
-        return;
-      }
-    } catch (err) {
-      console.log('Error validating session before accept:', err);
-      Alert.alert('Call Unavailable', 'This call is no longer available.', [{ text: 'OK' }]);
-      setIncomingCalls(prev => prev.filter(c => c.callId !== callId));
-      return;
-    }
-
-    // ── Recharge gate: a call must not proceed without enough coins ──
-    const minCoins = callType === 'video' ? 40 : 10;
-    let balance = 0;
-    try {
-      const balRes = await walletAPI.getBalance();
-      balance = balRes?.data?.coins ?? 0;
-    } catch (e) {
-      console.log('Error fetching balance before accept:', e);
-    }
-    if (balance < minCoins) {
-      // Decline the call so the caller is not left hanging, then prompt recharge
-      socketService.emit('call_rejected', {
-        userId: callerId,
-        sessionId: callId,
-        reason: 'insufficient_balance',
-      });
-      setIncomingCalls(prev => prev.filter(c => c.callId !== callId));
-      setRechargeGate({ callerName, callType, minCoins, balance });
-      return;
-    }
-    
-    // Automatically reject all other active requests
-    const otherCalls = incomingCalls.filter(c => c.callId !== callId);
-    otherCalls.forEach(otherCall => {
-      socketService.emit('call_rejected', { 
-        userId: otherCall.callerId, 
-        sessionId: otherCall.callId,
-        reason: 'busy' 
-      });
-    });
-
-    // Notify caller we accepted
-    socketService.emit('call_accepted', { userId: callerId, sessionId: callId, roomId });
-    
-    setIncomingCalls([]);
-
-    // Remove the incoming-call push notification from the system tray
-    dismissCallNotification(acceptedCall);
-    
-    // Route to call screen
-    const targetScreen = callType === 'video' ? '/(call)/video-call' : '/(call)/audio-call';
-    router.push({
-      pathname: targetScreen,
-      params: {
-        name: callerName,
-        callId,
-        roomId,
-        listenerId: callerId, // The other participant
-        avatarIndex,
-        gender,
-        callType,
-        isIncoming: 'true',
-        // Session-scoped Zego credentials — both sides must join the same app
-        ...(session?.zegoAppId ? { zegoAppId: String(session.zegoAppId) } : {}),
-        ...(session?.zegoAppSign ? { zegoAppSign: String(session.zegoAppSign) } : {}),
-        // Session-scoped Agora credentials for video calls
-        ...(session?.agoraAppId ? { agoraAppId: String(session.agoraAppId) } : {}),
-        ...(session?.agoraToken ? { agoraToken: String(session.agoraToken) } : {}),
-      }
-    });
-  };
-
-  const handleRejectCall = (rejectedCall) => {
-    if (!rejectedCall) return;
-    socketService.emit('call_rejected', { 
-      userId: rejectedCall.callerId, 
-      sessionId: rejectedCall.callId,
-      reason: 'busy' 
-    });
-    setIncomingCalls(prev => prev.filter(c => c.callId !== rejectedCall.callId));
-  };
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -340,35 +185,6 @@ export default function TabLayout() {
         />
       </Tabs>
 
-      <IncomingCallPopup
-        calls={incomingCalls}
-        onAccept={handleAcceptCall}
-        onReject={handleRejectCall}
-      />
-
-      <CallCancelledPopup
-        visible={callCancelledVisible}
-        message="This call has been cancelled by the other participant."
-        onClose={() => setCallCancelledVisible(false)}
-      />
-
-      {/* Recharge gate — user tried to answer a call without enough coins */}
-      <InsufficientBalancePopup
-        visible={!!rechargeGate}
-        balance={rechargeGate?.balance || 0}
-        title={rechargeGate ? `${rechargeGate.callerName} is waiting` : ''}
-        subtitle={
-          rechargeGate
-            ? `You need at least ${rechargeGate.minCoins} coins to answer this ${rechargeGate.callType === 'video' ? 'video' : 'audio'} call. Please recharge to continue.`
-            : ''
-        }
-        buttonLabel="Recharge Now"
-        onBuyCoins={() => {
-          setRechargeGate(null);
-          router.push('/balance');
-        }}
-        onClose={() => setRechargeGate(null)}
-      />
     </View>
   );
 }

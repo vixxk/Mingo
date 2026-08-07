@@ -24,6 +24,9 @@ const CHAT_COINS_PER_SESSION = 10;    // 10 coins per 5-minute chat session (10 
 const CHAT_SESSION_DURATION = 5 * 60 * 1000; // 5 minutes in ms
 const CHAT_LISTENER_PAYOUT = 2.50;   // Listener gets ₹2.50 per 5-minute block (Rs. 0.50/min)
 
+// Presence heartbeat TTL — must stay in sync with PresenceService.HEARTBEAT_TTL
+const PRESENCE_HEARTBEAT_TTL = 30;
+
 // Active chat session timers: { conversationId: timerRef }
 const chatSessionTimers = {};
 const chatSessionOfflineCheckers = {};
@@ -181,6 +184,11 @@ const initSocket = (server) => {
             });
             return;
           }
+          // Keep the presence heartbeat key fresh — an actively chatting
+          // listener must never look offline just because the key's TTL lapsed.
+          await redis
+            .set(REDIS_KEYS.ONLINE(senderId.toString()), '1', 'EX', PRESENCE_HEARTBEAT_TTL)
+            .catch(() => {});
         }
 
         // Prevent user/listener from responding to messages from admin
@@ -410,13 +418,18 @@ const initSocket = (server) => {
               return;
             }
             // User has balance but no session is active.
-            // The session only starts once the LISTENER is online — otherwise
-            // the second message is blocked (a session cannot begin "live").
+            // The session only starts once the LISTENER is actually online —
+            // otherwise the second message is blocked (a session cannot begin
+            // "live"). Online-ness is checked against the heartbeat key, the
+            // maintained availability set AND the persistent DB flag, because
+            // the heartbeat key alone has a short TTL and the app never sends
+            // periodic heartbeats — a fully online listener would otherwise be
+            // reported offline mid-chat and the user's message would be blocked.
             const userListener = conversation.participants.find(
               (p) => p.toString() !== senderId.toString()
             );
             const listenerOnline = userListener
-              ? await redis.exists(REDIS_KEYS.ONLINE(userListener.toString()))
+              ? await isListenerActuallyOnline(userListener.toString())
               : false;
             if (!listenerOnline) {
               console.log(
@@ -431,13 +444,16 @@ const initSocket = (server) => {
           }
         }
 
-        // --- BLOCK LISTENER REPLY AFTER SESSION ENDS ---
-        // If the listener is replying but the session is not active, block the message
-        // unless the user has sent a new message to restart/initiate.
+        // --- BLOCK LISTENER REPLY ONLY AFTER A PAID SESSION ENDED ---
+        // The listener may reply as many times as they want during the free
+        // phase (before the user's first paid message). Only once a paid chat
+        // session has actually started (sessionId set) AND ended must the
+        // listener wait for the user to send a new message (which restarts the
+        // session) before replying again.
         const isListenerSender = sender.role === 'LISTENER';
         if (isListenerSender) {
           const sessionData = conversation.chatSession;
-          if (sessionData && !sessionData.active) {
+          if (sessionData && sessionData.sessionId && !sessionData.active) {
             // Find the last message in the conversation
             const lastMsg = conversation.lastMessage ? await Message.findById(conversation.lastMessage) : null;
             
@@ -938,6 +954,31 @@ const initSocket = (server) => {
     });
   });
 };
+
+/**
+ * Determine whether a listener is genuinely online right now.
+ *
+ * The Redis heartbeat key (online:<userId>) alone is not a reliable signal:
+ * it has a 30s TTL and is only refreshed when the listener calls
+ * /listeners/heartbeat, which the mobile app never does. A listener can
+ * therefore be fully online (socket connected, DB isOnline true) while the
+ * heartbeat key has already expired. Check, in order of freshness: the
+ * heartbeat key, the maintained availability set, then the DB flag.
+ */
+async function isListenerActuallyOnline(userIdStr) {
+  try {
+    if (await redis.exists(REDIS_KEYS.ONLINE(userIdStr))) return true;
+  } catch (e) {
+    console.error('[Socket] ONLINE key presence check failed:', e.message);
+  }
+  try {
+    if (await redis.sismember(REDIS_KEYS.LISTENERS_AVAILABLE, userIdStr)) return true;
+  } catch (e) {
+    console.error('[Socket] LISTENERS_AVAILABLE presence check failed:', e.message);
+  }
+  const listener = await Listener.findOne({ userId: userIdStr }).select('isOnline');
+  return !!(listener && listener.isOnline);
+}
 
 /**
  * Start a paid chat session (first 5-minute block) for a conversation.

@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Dimensions,
   PanResponder,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -162,9 +163,10 @@ const IncomingCallPopup = ({ calls = [], onAccept, onReject, visible }) => {
 
   const isOverflow = activeCalls.length > 3;
 
+  let content;
   if (isOverflow) {
     // Stacked deck layout: top 3 calls shown stacked
-    return (
+    content = (
       <View style={styles.stackOuterContainer}>
         {activeCalls.slice(0, 3).reverse().map((call, reverseIdx, arr) => {
           // Compute original index in slice (0 is top/front, 2 is back)
@@ -205,26 +207,41 @@ const IncomingCallPopup = ({ calls = [], onAccept, onReject, visible }) => {
         })}
       </View>
     );
+  } else {
+    // Normal column layout
+    content = (
+      <View style={styles.columnOuterContainer}>
+        {activeCalls.map((call) => (
+          <IncomingCallCard
+            key={call.callId}
+            call={call}
+            onAccept={() => onAccept(call)}
+            onReject={() => onReject(call)}
+            onDismiss={() => handleDismissCall(call.callId)}
+            isStacked={false}
+          />
+        ))}
+      </View>
+    );
   }
 
-  // Normal column layout
+  // Render inside a transparent Modal so the incoming call always sits on top
+  // of any screen AND any other popup that may be open (gift popup, recharge
+  // gate, etc.), since Modals live on the native overlay layer.
   return (
-    <View style={styles.columnOuterContainer}>
-      {activeCalls.map((call) => (
-        <IncomingCallCard
-          key={call.callId}
-          call={call}
-          onAccept={() => onAccept(call)}
-          onReject={() => onReject(call)}
-          onDismiss={() => handleDismissCall(call.callId)}
-          isStacked={false}
-        />
-      ))}
-    </View>
+    <Modal visible transparent animationType="none" statusBarTranslucent>
+      <View style={styles.modalRoot} pointerEvents="box-none">
+        {content}
+      </View>
+    </Modal>
   );
 };
 
 const styles = StyleSheet.create({
+  modalRoot: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
   columnOuterContainer: {
     position: 'absolute',
     top: hp(7.5),
