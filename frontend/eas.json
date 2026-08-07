@@ -26,6 +26,9 @@
     },
     "production": {
       "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://13.53.197.13.sslip.io/api",
         "EXPO_PUBLIC_SOCKET_URL": "https://13.53.197.13.sslip.io",

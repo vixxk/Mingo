@@ -1,4 +1,28 @@
-const { withAndroidManifest, withInfoPlist } = require('@expo/config-plugins');
+const { withAndroidManifest, withInfoPlist, withProjectBuildGradle } = require('@expo/config-plugins');
+
+// Agora's react-native-agora README recommends excluding the screen-sharing
+// extension when it isn't used. It ships as a separate AAR that would otherwise
+// be pulled in by the `full-screen-sharing` dependency in react-native-agora's
+// build.gradle, adding ~1MB of native libs per ABI.
+const AGORA_SCREEN_SHARING_EXCLUSION = `configurations.configureEach {
+    exclude group: "io.agora.rtc", module: "full-screen-sharing"
+}`;
+
+const withAgoraProjectBuildGradle = (config) => {
+  return withProjectBuildGradle(config, (config) => {
+    if (config.modResults.language === 'groovy') {
+      let buildGradle = config.modResults.contents;
+      if (!buildGradle.includes('full-screen-sharing')) {
+        buildGradle = buildGradle.replace(
+          /allprojects\s*\{/,
+          `${AGORA_SCREEN_SHARING_EXCLUSION}\n\nallprojects {`
+        );
+        config.modResults.contents = buildGradle;
+      }
+    }
+    return config;
+  });
+};
 
 // Agora Video SDK requires these Android permissions in addition to the
 // camera/mic/internet/network/bluetooth permissions already declared in
@@ -66,6 +90,7 @@ const withAgoraIosPermissions = (config) => {
 };
 
 const withAgora = (config) => {
+  config = withAgoraProjectBuildGradle(config);
   config = withAgoraAndroidPermissions(config);
   config = withAgoraIosPermissions(config);
   return config;

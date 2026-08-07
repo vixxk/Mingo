@@ -6,7 +6,6 @@ const Listener = require('../models/listenerModel');
 const Transaction = require('../models/transactionModel');
 const MatchingService = require('./matchingService');
 const PresenceService = require('./presenceService');
-const { getZegoCredentials } = require('../utils/zegoToken');
 const { getAgoraCredentials, buildAgoraRtcToken } = require('../utils/agoraToken');
 const AppError = require('../utils/appError');
 const ActivityLog = require('../models/ActivityLog');
@@ -14,12 +13,13 @@ const PushService = require('./pushService');
 
 /**
  * Builds the Agora call payload for a session, or an empty object when the
- * session is not a video call or Agora is not configured yet. Returning an
- * empty payload lets the app keep working (audio on Zego, video falls back
- * to the avatar preview UI) until AGORA_APP_ID/AGORA_APP_CERTIFICATE are set.
+ * session is a chat session or Agora is not configured yet. Both audio and
+ * video calls run on Agora now (Zego has been fully removed). Returning an
+ * empty payload lets the app keep working (call falls back to a clear
+ * 'cannot connect' message) until AGORA_APP_ID/AGORA_APP_CERTIFICATE are set.
  */
 function getAgoraCallPayload(roomId, callType) {
-  if (callType !== 'video') return {};
+  if (callType === 'chat') return {};
   try {
     const { appId } = getAgoraCredentials();
     const token = buildAgoraRtcToken(roomId);
@@ -171,7 +171,8 @@ class CallService {
     
     const roomId = `call_${uuidv4()}`;
 
-    // Agora credentials are only minted for video calls — audio stays on Zego.
+    // Agora credentials are minted per request for both audio and video calls
+    // so both participants get a fresh token for the same channel.
     const agoraPayload = getAgoraCallPayload(roomId, callType);
 
     
@@ -198,10 +199,6 @@ class CallService {
 
     await redis.srem(REDIS_KEYS.LISTENERS_AVAILABLE, matchedListenerId);
 
-    
-    const zegoCredentials = getZegoCredentials();
-
-    
     const listenerUser = await User.findById(matchedListenerId).select('name username avatarIndex gender');
 
     await ActivityLog.create({
@@ -227,10 +224,7 @@ class CallService {
           avatarIndex: (user.avatarIndex || 0).toString(),
           gender: user.gender || 'Female',
           callType: callType,
-          // Same app-scoped credentials for the accepting side (notification path)
-          zegoAppId: zegoCredentials.appId,
-          zegoAppSign: zegoCredentials.appSign,
-          // Agora credentials for video calls (accepting side / notification path)
+          // Agora credentials for audio/video calls (accepting side / notification path)
           ...agoraPayload,
         }
       }).catch(err => {
@@ -250,8 +244,6 @@ class CallService {
       listenerAvatarIndex: listenerUser?.avatarIndex || 0,
       listenerGender: listenerUser?.gender,
       listenerRating: listenerProfile?.rating || 0,
-      zegoAppId: zegoCredentials.appId,
-      zegoAppSign: zegoCredentials.appSign,
       ...agoraPayload,
       startTime: session.startTime,
     };
@@ -400,22 +392,12 @@ class CallService {
       throw new AppError('Session not found', 404);
     }
 
-    // Attach the current Zego credentials so both participants always join the
-    // same Zego app — the client must never rely on stale hardcoded values.
-    let credentials = null;
-    try {
-      credentials = getZegoCredentials();
-    } catch (e) {
-      console.log('[CallService] Zego credentials unavailable:', e.message);
-    }
-
-    // Agora credentials are minted per request for video sessions so both
-    // participants get a fresh token for the same channel.
+    // Attach fresh Agora credentials so both participants always join the
+    // same channel — the client must never rely on stale hardcoded values.
     const agoraPayload = getAgoraCallPayload(session.roomId, session.callType);
 
     return {
       ...session.toObject(),
-      ...(credentials ? { zegoAppId: credentials.appId, zegoAppSign: credentials.appSign } : {}),
       ...agoraPayload,
     };
   }
@@ -441,20 +423,11 @@ class CallService {
       .populate('listenerId', 'name username avatarIndex gender');
     if (!session) return null;
 
-    // Attach the current Zego credentials so a resumed call joins the same app.
-    let credentials = null;
-    try {
-      credentials = getZegoCredentials();
-    } catch (e) {
-      console.log('[CallService] Zego credentials unavailable:', e.message);
-    }
-
-    // Agora credentials for resumed video sessions.
+    // Attach fresh Agora credentials so a resumed call joins the same channel.
     const agoraPayload = getAgoraCallPayload(session.roomId, session.callType);
 
     return {
       ...session.toObject(),
-      ...(credentials ? { zegoAppId: credentials.appId, zegoAppSign: credentials.appSign } : {}),
       ...agoraPayload,
     };
   }

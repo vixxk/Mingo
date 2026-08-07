@@ -14,6 +14,11 @@ import { ms, s, vs, wp } from '../../utils/responsive';
  * `onEndCall` / `onSafety` render the end-call and safety buttons.
  * No high z-index / elevation is baked in here — the screen positions the
  * dock, and in-call popups (recharge/gift) are layered above it.
+ *
+ * `flat` (used by the video-call screen) renders the buttons WITHOUT the
+ * circular backgrounds and drops the dock pill. The end-call button then
+ * becomes a red icon with an "End Call" label underneath, exactly matching
+ * the Mute / Camera buttons.
  */
 const hexToRgba = (hex, alpha) => {
   const r = parseInt(hex.slice(1, 3), 16);
@@ -22,7 +27,7 @@ const hexToRgba = (hex, alpha) => {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
-const CallControls = ({ buttons = [], onEndCall, onSafety }) => (
+const CallControls = ({ buttons = [], onEndCall, onSafety, flat = false }) => (
   <View style={styles.wrap}>
     {onSafety && (
       <TouchableOpacity
@@ -36,19 +41,21 @@ const CallControls = ({ buttons = [], onEndCall, onSafety }) => (
       </TouchableOpacity>
     )}
 
-    <View style={styles.dock}>
+    <View style={[styles.dock, flat && styles.dockFlat]}>
       {buttons.map((btn) => (
         <TouchableOpacity
           key={btn.id}
           style={styles.control}
           onPress={btn.onPress}
           activeOpacity={0.7}
+          hitSlop={flat ? { top: 6, bottom: 6, left: 6, right: 6 } : undefined}
         >
           <View
             style={[
-              styles.controlCircle,
-              btn.active && styles.controlCircleActive,
-              btn.active && btn.activeColor && {
+              styles.controlIconWrap,
+              !flat && styles.controlCircle,
+              !flat && btn.active && styles.controlCircleActive,
+              !flat && btn.active && btn.activeColor && {
                 borderColor: btn.activeColor,
                 backgroundColor: hexToRgba(btn.activeColor, 0.16),
               },
@@ -63,6 +70,7 @@ const CallControls = ({ buttons = [], onEndCall, onSafety }) => (
           <Text
             style={[
               styles.controlLabel,
+              flat && styles.controlLabelFlat,
               btn.active && { color: btn.activeColor || '#EF4444' },
             ]}
           >
@@ -73,25 +81,45 @@ const CallControls = ({ buttons = [], onEndCall, onSafety }) => (
 
       {onEndCall && (
         <TouchableOpacity
-          style={styles.endBtn}
+          style={styles.control}
           onPress={onEndCall}
-          activeOpacity={0.85}
+          activeOpacity={0.7}
           accessibilityLabel="End call"
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
-          <LinearGradient
-            colors={['#EF4444', '#B91C1C']}
-            style={styles.endBtnGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <Ionicons
-              name="call"
-              size={s(24)}
-              color="#fff"
-              style={{ transform: [{ rotate: '135deg' }] }}
-            />
-          </LinearGradient>
+          {flat ? (
+            <>
+              {/* Flat mode — red hang-up icon + label, no background, matching
+                  the Mute / Camera buttons. */}
+              <View style={styles.controlIconWrap}>
+                <Ionicons
+                  name="call"
+                  size={s(22)}
+                  color="#EF4444"
+                  style={{ transform: [{ rotate: '135deg' }] }}
+                />
+              </View>
+              <Text style={[styles.controlLabel, styles.controlLabelFlat, styles.endCallLabel]}>
+                End Call
+              </Text>
+            </>
+          ) : (
+            <View style={styles.endBtn}>
+              <LinearGradient
+                colors={['#EF4444', '#B91C1C']}
+                style={styles.endBtnGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <Ionicons
+                  name="call"
+                  size={s(24)}
+                  color="#fff"
+                  style={{ transform: [{ rotate: '135deg' }] }}
+                />
+              </LinearGradient>
+            </View>
+          )}
         </TouchableOpacity>
       )}
     </View>
@@ -126,9 +154,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.12)',
   },
+  dockFlat: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    gap: s(14),
+  },
   control: {
     alignItems: 'center',
     gap: vs(4),
+  },
+  // Shared icon wrapper — in flat mode it adds a little padding so the
+  // icon's touch target stays comfortable without any visible background.
+  controlIconWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: s(6),
+    paddingVertical: vs(4),
   },
   controlCircle: {
     width: wp(12.5),
@@ -137,8 +180,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.16)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: 0,
+    paddingVertical: 0,
   },
   controlCircleActive: {
     backgroundColor: 'rgba(239, 68, 68, 0.16)',
@@ -149,6 +192,14 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     fontFamily: 'Inter_500Medium',
     textAlign: 'center',
+  },
+  controlLabelFlat: {
+    fontSize: ms(10.5, 0.3),
+    color: '#E5E7EB',
+  },
+  endCallLabel: {
+    color: '#EF4444',
+    fontFamily: 'Inter_600SemiBold',
   },
   endBtn: {
     width: wp(14.5),

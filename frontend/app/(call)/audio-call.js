@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Animated, Dimensions, BackHandler } from 'react-native';
+import React, { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Animated, BackHandler, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { Camera } from 'expo-camera';
@@ -17,77 +17,188 @@ import GiftPopup from '../../components/shared/GiftPopup';
 import GiftAnimationOverlay from '../../components/call/GiftAnimationOverlay';
 import { callAPI, walletAPI } from '../../utils/api';
 import { socketService } from '../../utils/socket';
-import { ZEGO_APP_ID, ZEGO_APP_SIGN } from '../../utils/zegoConfig';
+import { AGORA_APP_ID } from '../../utils/agoraConfig';
 import { ms, s, vs, SCREEN_WIDTH, hp, wp } from '../../utils/responsive';
 import { getAvatarUrl } from '../../utils/avatars';
 
-const { height: SH } = Dimensions.get('window');
-const isExpoGo = Constants.appOwnership === 'expo';
+// Expo Go cannot host the native Agora module, so the SDK is only loaded
+// outside it. `executionEnvironment` is 'storeClient' ONLY in Expo Go — the
+// old `appOwnership === 'expo'` check also matched development builds, which
+// silently disabled the real call everywhere except standalone builds.
+const isExpoGo = Constants.executionEnvironment === 'storeClient';
 
-let ZegoUIKitPrebuiltCall, ONE_ON_ONE_VOICE_CALL_CONFIG, ZegoMenuBarButtonName;
+// Agora RTC SDK — native module, only available on dev/native builds. Audio
+// calls run on the same Agora engine as video calls now (Zego was removed).
+let AgoraSDK = null;
 try {
   if (!isExpoGo) {
-    const zegoModule = require('@zegocloud/zego-uikit-prebuilt-call-rn');
-    ZegoUIKitPrebuiltCall = zegoModule.ZegoUIKitPrebuiltCall;
-    ZegoMenuBarButtonName = zegoModule.ZegoMenuBarButtonName;
-    ONE_ON_ONE_VOICE_CALL_CONFIG =
-      zegoModule.ONE_ON_ONE_VOICE_CALL_CONFIG || ZegoMenuBarButtonName;
+    AgoraSDK = require('react-native-agora');
   } else {
-    console.log('Skipping ZegoCloud load in Expo Go mode');
+    console.log('Skipping Agora SDK load in Expo Go mode');
   }
 } catch (e) {
-  console.log('ZegoCloud not available (Expo Go mode)');
+  console.log('Agora SDK not available (Expo Go mode):', e.message);
 }
 
-const ZegoCallWrapper = React.memo(({ appId, appSign, userId, userName, roomId, onCallEnd, myAvatarUrl, listenerAvatarUrl }) => {
-  if (!ZegoUIKitPrebuiltCall) return null;
+const {
+  createAgoraRtcEngine,
+  ChannelProfileType,
+  ClientRoleType,
+  ConnectionStateType,
+  RemoteAudioState,
+} = AgoraSDK || {};
 
-  // Remove Zego's built-in hang-up button so every end-call request goes
-  // through the end-call confirmation popup (falls back to default if the
-  // config keys are unavailable).
-  const menuBar = ONE_ON_ONE_VOICE_CALL_CONFIG?.bottomMenuBarConfig;
-  const safeButtons = Array.isArray(menuBar?.buttons)
-    ? menuBar.buttons.filter((b) => b !== ZegoMenuBarButtonName?.hangUpButton)
-    : undefined;
+/**
+ * Owns the Agora engine for the duration of the audio call. Controls are
+ * exposed imperatively via the ref so the screen can wire them to the UI
+ * buttons. The engine is audio-only: no video module is enabled and neither
+ * side publishes camera tracks.
+ *
+ * uid 0 is used when joining — the SDK assigns each participant a unique
+ * uid — which is why the same backend token works for both sides.
+ */
+const AgoraAudioEngine = forwardRef(
+  (
+    {
+      appId,
+      token,
+      channelName,
+      onRemoteJoinedChange,
+      onRemoteLeft,
+      onFailedToConnect,
+      onEngineError,
+    },
+    ref
+  ) => {
+    const engineRef = useRef(null);
 
-  return (
-    <ZegoUIKitPrebuiltCall
-      appID={appId}
-      appSign={appSign}
-      userID={userId}
-      userName={userName}
-      callID={roomId}
-      config={{
-        ...ONE_ON_ONE_VOICE_CALL_CONFIG,
-        ...(safeButtons ? { bottomMenuBarConfig: { ...menuBar, buttons: safeButtons } } : {}),
-        onCallEnd: onCallEnd,
-        onHangUp: onCallEnd,
-        onOnlySelfInRoom: onCallEnd,
-        turnOnCameraWhenJoining: false,
-        turnOnMicrophoneWhenJoining: true,
-        // Route audio through the loudspeaker by default — the SDK's default
-        // routes to the earpiece, which is easily mistaken for no audio at all.
-        useSpeakerWhenJoining: false,
-        // Replace Zego's default initials-circle avatar with the real avatar
-        // image for each participant (me vs the listener).
-        avatarBuilder: (userInfo) => {
-          const isMe = String(userInfo?.userID) === String(userId);
-          const uri = isMe ? myAvatarUrl : listenerAvatarUrl;
-          if (!uri) return null;
-          return (
-            <Image
-              source={{ uri }}
-              style={styles.zegoAvatar}
-              resizeMode="cover"
-            />
-          );
-        },
-      }}
-    />
-  );
-});
+    const onRemoteJoinedChangeRef = useRef(onRemoteJoinedChange);
+    const onRemoteLeftRef = useRef(onRemoteLeft);
+    const onFailedToConnectRef = useRef(onFailedToConnect);
+    const onEngineErrorRef = useRef(onEngineError);
 
+    useEffect(() => { onRemoteJoinedChangeRef.current = onRemoteJoinedChange; });
+    useEffect(() => { onRemoteLeftRef.current = onRemoteLeft; });
+    useEffect(() => { onFailedToConnectRef.current = onFailedToConnect; });
+    useEffect(() => { onEngineErrorRef.current = onEngineError; });
 
+    useEffect(() => {
+      if (!appId || !token || !channelName) return;
+
+      let engine = null;
+      let active = true;
+      // Tracks whether the local user successfully joined — connection failures
+      // before this point mean the channel is unreachable (bad credentials,
+      // blocked network) and the call cannot proceed.
+      let joinedSuccessfully = false;
+
+      const setup = () => {
+        try {
+          engine = createAgoraRtcEngine();
+          engineRef.current = engine;
+
+          engine.initialize({ appId });
+          engine.setChannelProfile(ChannelProfileType.ChannelProfileCommunication);
+          engine.setClientRole(ClientRoleType.ClientRoleBroadcaster);
+          engine.enableAudio();
+
+          engine.registerEventHandler({
+            onJoinChannelSuccess: () => {
+              if (!active) return;
+              joinedSuccessfully = true;
+              console.log('[Agora] Audio joined channel:', channelName);
+              // Route audio through the loudspeaker by default — the SDK's
+              // default routes to the earpiece, which is easily mistaken for
+              // no audio at all.
+              try { engine.setEnableSpeakerphone(true); } catch (e) {}
+            },
+            onUserJoined: (connection, uid) => {
+              if (!active) return;
+              console.log('[Agora] Remote user joined audio:', uid);
+              if (onRemoteJoinedChangeRef.current) onRemoteJoinedChangeRef.current(true);
+            },
+            onUserOffline: (connection, uid, reason) => {
+              if (!active) return;
+              console.log('[Agora] Remote user offline:', uid, 'reason:', reason);
+              // In a 1-on-1 call the other participant leaving ends the call.
+              if (onRemoteLeftRef.current) onRemoteLeftRef.current();
+            },
+            onRemoteAudioStateChanged: (connection, uid, state) => {
+              if (!active) return;
+              // Decoding (2) → remote audio is playing — the remote is in the
+              // call, so the UI never treats them as "never joined".
+              if (state === RemoteAudioState.RemoteAudioStateDecoding) {
+                console.log('[Agora] Remote audio playing:', uid);
+                if (onRemoteJoinedChangeRef.current) onRemoteJoinedChangeRef.current(true);
+              }
+            },
+            onTokenPrivilegeWillExpire: () => {
+              console.log('[Agora] Token privilege about to expire');
+            },
+            onError: (err, msg) => {
+              console.log('[Agora] Engine error:', err, msg);
+              if (onEngineErrorRef.current) onEngineErrorRef.current(err, msg);
+            },
+            onConnectionStateChanged: (connection, state, reason) => {
+              console.log('[Agora] Connection state:', state, 'reason:', reason);
+              // If the channel is unreachable before we ever joined, the call
+              // cannot proceed — surface it so the screen ends instead of
+              // showing "Connecting…" forever.
+              if (
+                !joinedSuccessfully &&
+                state === ConnectionStateType.ConnectionStateFailed
+              ) {
+                if (onFailedToConnectRef.current) onFailedToConnectRef.current();
+              }
+            },
+          });
+
+          const ret = engine.joinChannel(token, channelName, 0, {
+            clientRoleType: ClientRoleType.ClientRoleBroadcaster,
+            channelProfile: ChannelProfileType.ChannelProfileCommunication,
+            publishCameraTrack: false,
+            publishMicrophoneTrack: true,
+            autoSubscribeAudio: true,
+            autoSubscribeVideo: false,
+          });
+          console.log('[Agora] Audio joinChannel result:', ret);
+        } catch (e) {
+          console.log('[Agora] Engine setup failed:', e.message);
+          if (onEngineErrorRef.current) onEngineErrorRef.current(-1, e.message);
+        }
+      };
+
+      setup();
+
+      return () => {
+        active = false;
+        if (engineRef.current) {
+          try { engineRef.current.leaveChannel(); } catch (e) {}
+          try { engineRef.current.release(); } catch (e) {}
+        }
+        engineRef.current = null;
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [appId, token, channelName]);
+
+    useImperativeHandle(ref, () => ({
+      mute(muted) {
+        if (!engineRef.current) return;
+        try { engineRef.current.muteLocalAudioStream(!!muted); } catch (e) {}
+      },
+      setSpeaker(on) {
+        if (!engineRef.current) return;
+        try { engineRef.current.setEnableSpeakerphone(!!on); } catch (e) {}
+      },
+      leave() {
+        if (!engineRef.current) return;
+        try { engineRef.current.leaveChannel(); } catch (e) {}
+      },
+    }));
+
+    return null;
+  }
+);
 
 export default function AudioCallScreen() {
   const insets = useSafeAreaInsets();
@@ -99,8 +210,8 @@ export default function AudioCallScreen() {
     listenerId = '',
     avatarIndex = '0',
     gender = 'Female',
-    zegoAppId,
-    zegoAppSign,
+    agoraAppId,
+    agoraToken,
   } = useLocalSearchParams();
 
   const [showSafety, setShowSafety] = useState(false);
@@ -109,38 +220,127 @@ export default function AudioCallScreen() {
   const [showRecharge, setShowRecharge] = useState(false);
   const [showGiftPopup, setShowGiftPopup] = useState(false);
   const [receivedGift, setReceivedGift] = useState(null);
-  const [userID, setUserID] = useState('');
-  const [userName, setUserName] = useState('');
-  const [myAvatarUrl, setMyAvatarUrl] = useState('');
-  const [callDuration, setCallDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isSpeaker, setIsSpeaker] = useState(true);
   const [currentCoins, setCurrentCoins] = useState(null);
   const [lowBalanceMessage, setLowBalanceMessage] = useState('');
-  const [hasPermission, setHasPermission] = useState(null);
+  const [permission, setPermission] = useState({ mic: false });
+  // True once the permission prompts have finished (granted or denied). The
+  // real-call verdict below must wait for this — otherwise a fresh screen
+  // would be misread as "permissions denied" while the prompts are pending.
+  const [permissionsResolved, setPermissionsResolved] = useState(false);
   const [isListener, setIsListener] = useState(false);
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const [remoteJoined, setRemoteJoined] = useState(false);
+  const [callCancelledMessage, setCallCancelledMessage] = useState(
+    'The call was cancelled by the user.'
+  );
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const intervalRef = useRef(null);
+  const controlsOpacity = useRef(new Animated.Value(1)).current;
+  const agoraRef = useRef(null);
   const callEndedRef = useRef(false);
-  const exitCallScreenRef = useRef(null);
   const cancelledExitTimerRef = useRef(null);
+  const remoteJoinedRef = useRef(false);
+  // Agora credentials — the backend mints a session-scoped token for audio
+  // calls (agoraAppId + agoraToken). Falls back to the bundled App ID only
+  // when the server did not attach one.
+  const resolvedAppId = agoraAppId || AGORA_APP_ID;
 
-  const resolvedAppId = zegoAppId ? parseInt(zegoAppId) : ZEGO_APP_ID;
-  const resolvedAppSign = zegoAppSign || ZEGO_APP_SIGN;
+  const canJoinRealCall = permission.mic;
 
-  // The listener's avatar shown on the call screen (from the route params).
-  const listenerAvatarUrl = getAvatarUrl(gender, avatarIndex);
+  const hasPlaceholderAppId = !resolvedAppId || /your_agora|placeholder|change_me/i.test(resolvedAppId);
+  const canUseAgora =
+    !isExpoGo &&
+    !!AgoraSDK &&
+    !hasPlaceholderAppId &&
+    !!agoraToken &&
+    !!roomId &&
+    canJoinRealCall;
+
+  // ─── Unified end-of-call teardown (both roles) ─────────────────
+  // Every way a call ends funnels through here so the USER and LISTENER sides
+  // always end in sync with identical work:
+  //   1. Leave the Agora channel immediately — the other participant gets the
+  //      userOffline callback and can end their side right away.
+  //   2. Stop per-minute billing and notify the backend. The endCall API is
+  //      idempotent, so it is safe even when the other side (or the billing
+  //      timer / socket handler) already completed the session.
+  //   3. Navigate by role — USER → call feedback, LISTENER → listener home.
+  // The role is read fresh from storage at exit time because the isListener
+  // state loads asynchronously after mount and could be stale.
+  const finishAndExit = useCallback(async () => {
+    if (callEndedRef.current) return;
+    callEndedRef.current = true;
+
+    // Leave the Agora channel immediately so the other participant gets the
+    // userOffline callback and their side can end too.
+    if (agoraRef.current) {
+      try { agoraRef.current.leave(); } catch (e) {}
+    }
+
+    // Notify the backend via socket first (instant, same connection that
+    // drives billing), then fire-and-forget the REST endCall — never await it
+    // before navigating, or a slow network could trap the user on this screen
+    // for up to the 15s request timeout. The endCall API is idempotent, so it
+    // is safe when the socket handler (or the other side) already ended the
+    // session.
+    try {
+      if (callId && callId !== 'demo_zego_call' && callId !== 'test_call_id') {
+        socketService.emit('stop_call_billing', { sessionId: callId });
+        // Also emit call_ended via socket as belt-and-suspenders
+        socketService.emit('call_ended', { sessionId: callId, roomId });
+        callAPI.endCall(callId).catch((error) => {
+          console.log('Failed to end call on backend:', error);
+        });
+      }
+    } catch (error) {
+      console.log('Failed to end call on backend:', error);
+    }
+
+    let role = 'USER';
+    try {
+      const userData = await AsyncStorage.getItem('user');
+      if (userData) {
+        const u = JSON.parse(userData);
+        role = u.role || 'USER';
+      }
+    } catch (e) {}
+
+    setTimeout(() => {
+      if (role === 'LISTENER') {
+        try {
+          router.dismissAll();
+        } catch (e) {}
+        // Go straight to the listener dashboard — avoids re-showing the
+        // splash screen, which made the app look like it restarted.
+        router.replace('/(listener)');
+      } else {
+        router.replace({
+          pathname: '/(call)/call-feedback',
+          params: { name, sessionId: callId, listenerId, callType: 'audio' },
+        });
+      }
+    }, 800);
+  }, [callId, name, listenerId, roomId, router]);
+
+  // "Joined" (audio) is tracked so the UI never falls back to "Connecting…"
+  // for a participant who is in the call.
+  useEffect(() => {
+    remoteJoinedRef.current = remoteJoined;
+  }, [remoteJoined]);
 
   useEffect(() => {
     const requestPermissions = async () => {
       try {
         const { status: micStatus } = await Camera.requestMicrophonePermissionsAsync();
         console.log('Microphone permission status:', micStatus);
-        setHasPermission(micStatus === 'granted');
+        setPermission({ mic: micStatus === 'granted' });
       } catch (err) {
         console.log('Failed to request mic permission:', err);
-        setHasPermission(false);
+        setPermission({ mic: false });
+      } finally {
+        setPermissionsResolved(true);
       }
     };
     requestPermissions();
@@ -152,22 +352,11 @@ export default function AudioCallScreen() {
         const userData = await AsyncStorage.getItem('user');
         if (userData) {
           const user = JSON.parse(userData);
-          setUserID(user._id || user.id || `user_${Date.now()}`);
-          setUserName(user.name || user.username || 'User');
           setIsListener(user.role === 'LISTENER');
-          // Build my own avatar URL the same way the profile screen does.
-          const rawGender = user.gender || 'Male';
-          const normalizedGender = rawGender.charAt(0).toUpperCase() + rawGender.slice(1).toLowerCase();
-          const avatarIndex = user.avatarIndex !== undefined && user.avatarIndex !== null ? String(user.avatarIndex) : '0';
-          setMyAvatarUrl(getAvatarUrl(normalizedGender, avatarIndex));
         } else {
-          setUserID(`user_${Date.now()}`);
-          setUserName('User');
           setIsListener(false);
         }
       } catch {
-        setUserID(`user_${Date.now()}`);
-        setUserName('User');
         setIsListener(false);
       }
     };
@@ -176,7 +365,7 @@ export default function AudioCallScreen() {
 
   const triggerGiftAnimation = useCallback((data) => {
     setReceivedGift(data);
-    // The GiftAnimationOverlay will handle its own unmounting via onComplete
+    // GiftAnimationOverlay unmounts itself via onComplete
   }, []);
 
   // Start call billing and listen for socket events
@@ -206,61 +395,27 @@ export default function AudioCallScreen() {
       setShowRecharge(true);
     };
 
-    const exitCallScreen = async () => {
-      if (callEndedRef.current) return;
-      callEndedRef.current = true;
-      clearInterval(intervalRef.current);
-      
-      let role = 'USER';
-      try {
-        const userData = await AsyncStorage.getItem('user');
-        if (userData) {
-          const u = JSON.parse(userData);
-          role = u.role || 'USER';
-        }
-      } catch (e) {}
-
-      setTimeout(() => {
-        if (role === 'LISTENER') {
-          try {
-            router.dismissAll();
-          } catch (e) {}
-          // Go straight to the listener dashboard — avoids re-showing the
-          // splash screen, which made the app look like it restarted.
-          router.replace('/(listener)');
-        } else {
-          router.replace({
-            pathname: '/(call)/call-feedback',
-            params: { name, sessionId: callId, listenerId, callType: 'audio' },
-          });
-        }
-      }, 800);
-    };
-
-    exitCallScreenRef.current = exitCallScreen;
-
     const handleAutoEnded = async (data) => {
       if (data.sessionId === callId) {
-        await exitCallScreen();
+        await finishAndExit();
       }
     };
 
     const handleCallEnded = async (data) => {
       if (data.sessionId === callId) {
-        await exitCallScreen();
+        await finishAndExit();
       }
     };
 
     const handleCallCancelled = async (data) => {
       if (data.sessionId === callId || data.callId === callId) {
+        setCallCancelledMessage('The call was cancelled by the user.');
         setShowCallCancelled(true);
         // Fallback auto-exit: if the user doesn't dismiss the popup, leave the
         // call so billing doesn't keep running on an already-cancelled session.
         cancelledExitTimerRef.current = setTimeout(() => {
           setShowCallCancelled(false);
-          if (exitCallScreenRef.current) {
-            exitCallScreenRef.current();
-          }
+          finishAndExit();
         }, 5000);
       }
     };
@@ -296,20 +451,12 @@ export default function AudioCallScreen() {
   }, [callId]);
 
   useEffect(() => {
-    intervalRef.current = setInterval(() => {
-      setCallDuration((prev) => prev + 1);
-    }, 1000);
-
     Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.08, duration: 1200, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 1200, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1.05, duration: 1500, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1500, useNativeDriver: true }),
       ])
     ).start();
-
-    return () => {
-      clearInterval(intervalRef.current);
-    };
   }, []);
 
   // Block back button and gestures
@@ -344,39 +491,89 @@ export default function AudioCallScreen() {
     };
   }, [navigation]);
 
-  const handleEndCall = useCallback(async () => {
-    if (callEndedRef.current) return;
-    callEndedRef.current = true;
-    clearInterval(intervalRef.current);
+  // The remote participant hung up / dropped — treat it as the call ending.
+  const handleRemoteLeft = useCallback(() => {
+    console.log('[Agora] Remote participant left — ending call');
+    finishAndExit();
+  }, [finishAndExit]);
 
-    try {
-      if (callId && callId !== 'demo_zego_call' && callId !== 'test_call_id') {
-        // Stop billing timer on server
-        socketService.emit('stop_call_billing', { sessionId: callId });
-        // Also emit call_ended via socket as belt-and-suspenders
-        socketService.emit('call_ended', { sessionId: callId, roomId });
-        await callAPI.endCall(callId);
-      }
-    } catch (error) {
-      console.log('Failed to end call on backend:', error);
-    } finally {
-      setTimeout(() => {
-        if (isListener) {
-          try {
-            router.dismissAll();
-          } catch (e) {}
-          // Go straight to the listener dashboard — avoids re-showing the
-          // splash screen, which made the app look like it restarted.
-          router.replace('/(listener)');
-        } else {
-          router.replace({
-            pathname: '/(call)/call-feedback',
-            params: { name, sessionId: callId, listenerId, callType: 'audio' },
-          });
-        }
-      }, 800);
+  // Agora could not establish the channel (bad credentials / blocked
+  // network). Show a message, then end the call so billing doesn't run on a
+  // call that never connected.
+  const handleAgoraFailedToConnect = useCallback(() => {
+    if (callEndedRef.current) return;
+    console.log('[Agora] Failed to connect to the channel — ending call');
+    setCallCancelledMessage("Couldn't connect to the audio call. Please try again.");
+    setShowCallCancelled(true);
+    cancelledExitTimerRef.current = setTimeout(() => {
+      setShowCallCancelled(false);
+      finishAndExit();
+    }, 3500);
+  }, [finishAndExit]);
+
+  // If the remote never joins the channel, end the call after a generous
+  // window instead of leaving "Connecting…" (and billing) running forever.
+  useEffect(() => {
+    if (!canUseAgora) return;
+    const timer = setTimeout(() => {
+      if (remoteJoinedRef.current || callEndedRef.current) return;
+      console.log('[Agora] Remote never joined — ending call');
+      setCallCancelledMessage("The other person couldn't join the call. Please try again.");
+      setShowCallCancelled(true);
+      cancelledExitTimerRef.current = setTimeout(() => {
+        setShowCallCancelled(false);
+        finishAndExit();
+      }, 3500);
+    }, 45000);
+    return () => clearTimeout(timer);
+  }, [canUseAgora, finishAndExit]);
+
+  // When the real Agora call cannot start, the old code silently showed an
+  // avatar-only UI — the user heard nothing and was still billed. Diagnose WHY
+  // we're stuck and surface a clear message, then end the call so billing
+  // stops. (The remote-join timeout above only applies once Agora is active.)
+  const fallbackDiagnosedRef = useRef(false);
+  useEffect(() => {
+    if (canUseAgora || !permissionsResolved || fallbackDiagnosedRef.current) return;
+    if (callEndedRef.current) return;
+
+    let message = '';
+    if (isExpoGo) {
+      message =
+        "Audio calls need the development or production build — they can't run inside Expo Go. Please install the app build to make calls.";
+    } else if (!AgoraSDK) {
+      message =
+        "The call module isn't available in this build. Please update the app to the latest version.";
+    } else if (!permission.mic) {
+      message =
+        'Microphone access is required for audio calls. Please allow it and start the call again.';
+    } else if (!agoraToken || !roomId || hasPlaceholderAppId) {
+      message =
+        "Audio call couldn't connect — the server isn't configured for calls yet. Please try again later.";
+    } else {
+      // Everything looks configured but the call still can't start — leave the
+      // screen up so the user can retry manually; don't force an exit.
+      return;
     }
-  }, [callId, name, listenerId, isListener, roomId]);
+
+    console.log('[AudioCall] Real call unavailable, ending:', message);
+    fallbackDiagnosedRef.current = true;
+    setCallCancelledMessage(message);
+    setShowCallCancelled(true);
+    cancelledExitTimerRef.current = setTimeout(() => {
+      setShowCallCancelled(false);
+      finishAndExit();
+    }, 4500);
+  }, [
+    canUseAgora,
+    permissionsResolved,
+    permission.mic,
+    agoraToken,
+    roomId,
+    hasPlaceholderAppId,
+    isExpoGo,
+    finishAndExit,
+  ]);
 
   const handleCallCancelledClose = useCallback(() => {
     if (cancelledExitTimerRef.current) {
@@ -384,13 +581,13 @@ export default function AudioCallScreen() {
       cancelledExitTimerRef.current = null;
     }
     setShowCallCancelled(false);
-    if (exitCallScreenRef.current) {
-      exitCallScreenRef.current();
-    }
-  }, []);
+    // finishAndExit performs the full teardown (leave Agora + stop billing +
+    // endCall API + navigate), so closing the popup behaves exactly like
+    // tapping End Call — identically for both roles.
+    finishAndExit();
+  }, [finishAndExit]);
 
   const handleRechargeSuccess = useCallback(async () => {
-    // After successful in-call recharge, refresh balance
     try {
       const res = await walletAPI.getBalance();
       if (res.data?.coins !== undefined) {
@@ -403,186 +600,124 @@ export default function AudioCallScreen() {
     setShowRecharge(false);
   }, []);
 
-  if (!isExpoGo && ZegoUIKitPrebuiltCall && userID && roomId && hasPermission) {
-    return (
-      <View style={{ flex: 1 }}>
-        <ZegoCallWrapper
-          appId={resolvedAppId}
-          appSign={resolvedAppSign}
-          userId={userID}
-          userName={userName}
-          roomId={roomId}
-          onCallEnd={handleEndCall}
-          myAvatarUrl={myAvatarUrl}
-          listenerAvatarUrl={listenerAvatarUrl}
-        />
+  const toggleMute = useCallback(() => {
+    const next = !isMuted;
+    setIsMuted(next);
+    if (agoraRef.current) agoraRef.current.mute(next);
+  }, [isMuted]);
 
-        {/* Balance badge + Recharge + Gift — stacked on the top right */}
-        <View style={styles.floatingTopRight}>
-          {currentCoins !== null && !isListener && (
-            <View style={styles.coinsBadge}>
-              <Text style={{ fontSize: 12, marginRight: 4 }}>🪙</Text>
-              <Text style={styles.coinsBadgeText}>{currentCoins}</Text>
-            </View>
-          )}
-          {!isListener && (
+  const toggleSpeaker = useCallback(() => {
+    const next = !isSpeaker;
+    setIsSpeaker(next);
+    if (agoraRef.current) agoraRef.current.setSpeaker(next);
+  }, [isSpeaker]);
+
+  // Tap anywhere on the screen toggles all controls.
+  const toggleControls = useCallback(() => {
+    // Don't toggle while a popup is open — its backdrop may pass taps through.
+    if (showEndCallPopup || showCallCancelled || showSafety || showRecharge || showGiftPopup) return;
+    const next = !controlsVisible;
+    setControlsVisible(next);
+    Animated.timing(controlsOpacity, {
+      toValue: next ? 1 : 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  }, [controlsVisible, controlsOpacity, showEndCallPopup, showSafety, showRecharge, showGiftPopup]);
+
+  return (
+    <Pressable style={styles.container} onPress={toggleControls}>
+      <LinearGradient
+        colors={['#000000', '#0C0C0E', '#151518']}
+        locations={[0, 0.5, 1]}
+        style={StyleSheet.absoluteFill}
+      />
+
+      {/* Agora audio engine — active only when the real call can start */}
+      {canUseAgora && (
+        <AgoraAudioEngine
+          ref={agoraRef}
+          appId={resolvedAppId}
+          token={agoraToken}
+          channelName={roomId}
+          onRemoteJoinedChange={setRemoteJoined}
+          onRemoteLeft={handleRemoteLeft}
+          onFailedToConnect={handleAgoraFailedToConnect}
+          onEngineError={(err, msg) => console.log('[Agora] Engine error:', err, msg)}
+        />
+      )}
+
+      <Animated.View style={{ opacity: controlsOpacity }} pointerEvents={controlsVisible ? 'auto' : 'none'}>
+        <View style={[styles.topBar, { paddingTop: insets.top + vs(8) }]}>
+          <View style={styles.topBarRight}>
+            {currentCoins !== null && !isListener && (
+              <View style={styles.coinsBadgeInline}>
+                <Text style={{ fontSize: 12, marginRight: 4 }}>🪙</Text>
+                <Text style={styles.coinsBadgeInlineText}>{currentCoins}</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </Animated.View>
+
+      {/* Recharge + Gift — stacked on the top right (user only) */}
+      {!isListener && (
+        <Animated.View style={{ opacity: controlsOpacity }} pointerEvents={controlsVisible ? 'auto' : 'none'}>
+          <View style={styles.fallbackTopRight}>
             <TouchableOpacity
               style={styles.floatingRechargeGift}
               onPress={() => setShowRecharge(true)}
               activeOpacity={0.8}
             >
-              <Ionicons name="wallet-outline" size={22} color="#EC4899" />
+              <Ionicons name="wallet-outline" size={20} color="#EC4899" />
               <Text style={[styles.floatingRechargeText, { color: '#EC4899' }]}>Recharge</Text>
             </TouchableOpacity>
-          )}
 
-          {!isListener && (
             <TouchableOpacity
               style={styles.floatingRechargeGift}
               onPress={() => setShowGiftPopup(true)}
               activeOpacity={0.8}
             >
-              <Ionicons name="gift-outline" size={22} color="#A855F7" />
+              <Ionicons name="gift-outline" size={20} color="#A855F7" />
               <Text style={[styles.floatingRechargeText, { color: '#A855F7' }]}>Gift</Text>
             </TouchableOpacity>
-          )}
-        </View>
-
-        {/* End call — floating above the Zego native bottom bar */}
-        <View style={styles.zegEndCallWrap}>
-          <TouchableOpacity
-            style={styles.endCallPill}
-            onPress={() => setShowEndCallPopup(true)}
-            activeOpacity={0.8}
-            accessibilityLabel="End call"
-          >
-            <Ionicons name="call" size={18} color="#EF4444" style={{ transform: [{ rotate: '135deg' }] }} />
-            <Text style={styles.endCallPillText}>End Call</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Safety — left side, middle of the page */}
-        <TouchableOpacity
-          style={styles.safetyFloat}
-          onPress={() => setShowSafety(true)}
-          activeOpacity={0.8}
-          accessibilityLabel="Open safety guidance"
-        >
-          <Ionicons name="shield-checkmark" size={22} color="#4ADE80" />
-        </TouchableOpacity>
-
-        <EndCallPopup
-          visible={showEndCallPopup}
-          onEndCall={handleEndCall}
-          onDismiss={() => setShowEndCallPopup(false)}
-        />
-        <CallCancelledPopup
-          visible={showCallCancelled}
-          message="The call was cancelled by the user."
-          onClose={handleCallCancelledClose}
-        />
-        <SafetyPopup
-          visible={showSafety}
-          onDismiss={() => setShowSafety(false)}
-        />
-        <InCallRechargePopup
-          visible={showRecharge}
-          onClose={() => setShowRecharge(false)}
-          onRechargeSuccess={handleRechargeSuccess}
-          lowBalanceMessage={lowBalanceMessage}
-        />
-        <GiftPopup
-          visible={showGiftPopup}
-          onClose={() => setShowGiftPopup(false)}
-          receiverId={listenerId}
-          sessionId={callId}
-          onGiftSent={(gift) => {
-            // Update balance immediately from gift response
-            if (gift.remainingCoins !== undefined) {
-              setCurrentCoins(gift.remainingCoins);
-            } else if (gift.price) {
-              setCurrentCoins(prev => prev !== null ? Math.max(0, prev - gift.price) : prev);
-            }
-            triggerGiftAnimation({
-              isSentByMe: true,
-              gift: gift,
-            });
-          }}
-        />
-
-        {/* Received Gift Full Screen Animation */}
-        {receivedGift && (
-          <GiftAnimationOverlay
-            giftName={receivedGift.gift.name}
-            giftIcon={receivedGift.gift.icon}
-            giftPrice={receivedGift.gift.price}
-            giftCount={receivedGift.gift.count || 1}
-            senderName={receivedGift.isSentByMe ? 'You' : receivedGift.senderName || 'Someone'}
-            receiverName={receivedGift.isSentByMe ? name : 'You'}
-            isSentByMe={receivedGift.isSentByMe}
-            onComplete={() => setReceivedGift(null)}
-          />
-        )}
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.container}>
-      <LinearGradient
-        colors={['#000', '#0A0A0A', '#1A0520']}
-        locations={[0, 0.4, 1]}
-        style={StyleSheet.absoluteFill}
-      />
-
-      {/* Recharge + Gift — stacked on the top right (user only) */}
-      {!isListener && (
-        <View style={styles.fallbackTopRight}>
-          <TouchableOpacity
-            style={styles.floatingRechargeGift}
-            onPress={() => setShowRecharge(true)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="wallet-outline" size={20} color="#EC4899" />
-            <Text style={[styles.floatingRechargeText, { color: '#EC4899' }]}>Recharge</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.floatingRechargeGift}
-            onPress={() => setShowGiftPopup(true)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="gift-outline" size={20} color="#A855F7" />
-            <Text style={[styles.floatingRechargeText, { color: '#A855F7' }]}>Gift</Text>
-          </TouchableOpacity>
-        </View>
+          </View>
+        </Animated.View>
       )}
 
-      {/* Top Header section */}
-      <View style={[styles.topSection, { paddingTop: insets.top + vs(40) }]}>
-        {/* Balance indicator */}
-        {currentCoins !== null && !isListener && (
-          <View style={styles.balanceIndicator}>
-            <Text style={{ fontSize: 13, marginRight: 4 }}>🪙</Text>
-            <Text style={styles.balanceText}>{currentCoins} coins</Text>
+      <View style={styles.videoArea}>
+        {/* Remote participant — their avatar with a pulsing glow while the
+            call connects (and whenever they're in the call). */}
+        <Animated.View
+          style={{ opacity: controlsOpacity, alignItems: 'center', justifyContent: 'center' }}
+          pointerEvents={controlsVisible ? 'auto' : 'none'}
+        >
+          <Animated.View style={[styles.avatarContainer, { transform: [{ scale: pulseAnim }] }]}>
+            <Image
+              source={{ uri: getAvatarUrl(gender, avatarIndex) }}
+              style={styles.mainAvatar}
+            />
+          </Animated.View>
+          <Text style={styles.callerName}>{name}</Text>
+          <View style={styles.statusRow}>
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: remoteJoined ? '#22C55E' : '#F59E0B' },
+              ]}
+            />
+            <Text style={styles.statusText}>
+              {remoteJoined ? 'Audio Call in Progress' : 'Connecting...'}
+            </Text>
           </View>
-        )}
-
-        <Animated.View style={[styles.avatarRing, { transform: [{ scale: pulseAnim }] }]}>
-          <Image
-            source={{ uri: listenerAvatarUrl }}
-            style={styles.avatar}
-          />
         </Animated.View>
-        <Text style={styles.callerName}>{name}</Text>
-        <View style={styles.statusRow}>
-          <View style={styles.statusDot} />
-          <Text style={styles.statusText}>Audio Call in Progress</Text>
-        </View>
       </View>
 
       {/* Safety — left side, middle of the page */}
-      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+      <Animated.View
+        style={[StyleSheet.absoluteFill, { opacity: controlsOpacity }]}
+        pointerEvents={controlsVisible ? 'box-none' : 'none'}
+      >
         <TouchableOpacity
           style={styles.safetyFloat}
           onPress={() => setShowSafety(true)}
@@ -591,11 +726,14 @@ export default function AudioCallScreen() {
         >
           <Ionicons name="shield-checkmark" size={22} color="#4ADE80" />
         </TouchableOpacity>
-      </View>
+      </Animated.View>
 
-      <View style={[styles.fallbackControls, { paddingBottom: Math.max(insets.bottom, vs(28)) }]}>
-        <View style={styles.fallbackDockRow}>
+      {/* Bottom controls dock — same flat design as the video call screen */}
+      <Animated.View style={{ opacity: controlsOpacity }} pointerEvents={controlsVisible ? 'auto' : 'none'}>
+        <View style={[styles.fallbackControls, { paddingBottom: Math.max(insets.bottom, vs(24)) }]}>
           <CallControls
+            flat
+            onEndCall={() => setShowEndCallPopup(true)}
             buttons={[
               {
                 id: 'mute',
@@ -604,7 +742,7 @@ export default function AudioCallScreen() {
                 label: 'Mute',
                 labelActive: 'Unmute',
                 active: isMuted,
-                onPress: () => setIsMuted(!isMuted),
+                onPress: toggleMute,
               },
               {
                 id: 'speaker',
@@ -613,31 +751,22 @@ export default function AudioCallScreen() {
                 label: 'Speaker',
                 active: isSpeaker,
                 activeColor: '#A855F7',
-                onPress: () => setIsSpeaker(!isSpeaker),
+                onPress: toggleSpeaker,
               },
             ]}
           />
-          <TouchableOpacity
-            style={styles.endCallPill}
-            onPress={() => setShowEndCallPopup(true)}
-            activeOpacity={0.8}
-            accessibilityLabel="End call"
-          >
-            <Ionicons name="call" size={18} color="#EF4444" style={{ transform: [{ rotate: '135deg' }] }} />
-            <Text style={styles.endCallPillText}>End Call</Text>
-          </TouchableOpacity>
         </View>
-      </View>
+      </Animated.View>
 
       <EndCallPopup
         visible={showEndCallPopup}
-        onEndCall={handleEndCall}
+        onEndCall={finishAndExit}
         onDismiss={() => setShowEndCallPopup(false)}
       />
 
       <CallCancelledPopup
         visible={showCallCancelled}
-        message="The call was cancelled by the user."
+        message={callCancelledMessage}
         onClose={handleCallCancelledClose}
       />
 
@@ -685,7 +814,7 @@ export default function AudioCallScreen() {
           onComplete={() => setReceivedGift(null)}
         />
       )}
-    </View>
+    </Pressable>
   );
 }
 
@@ -694,38 +823,49 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-  // Avatar rendered inside Zego's circle for each participant.
-  zegoAvatar: {
-    width: '100%',
-    height: '100%',
-  },
 
-  topSection: {
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
+    paddingHorizontal: s(16),
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
   },
-  balanceIndicator: {
+  topBarRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    borderRadius: 20,
-    paddingHorizontal: s(14),
-    paddingVertical: vs(6),
-    gap: s(6),
-    marginBottom: vs(20),
+    gap: s(8),
+  },
+  coinsBadgeInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: s(10),
+    paddingVertical: vs(5),
+    borderRadius: 16,
+    gap: s(4),
     borderWidth: 1,
     borderColor: 'rgba(245, 158, 11, 0.3)',
   },
-  balanceText: {
-    fontSize: ms(13, 0.3),
+  coinsBadgeInlineText: {
     color: '#F59E0B',
-    fontFamily: 'Inter_600SemiBold',
+    fontSize: ms(12, 0.3),
+    fontFamily: 'Inter_700Bold',
   },
-  avatarRing: {
-    width: SCREEN_WIDTH * 0.35,
-    height: SCREEN_WIDTH * 0.35,
-    borderRadius: SCREEN_WIDTH * 0.175,
+  videoArea: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarContainer: {
+    width: SCREEN_WIDTH * 0.4,
+    height: SCREEN_WIDTH * 0.4,
+    borderRadius: SCREEN_WIDTH * 0.2,
     borderWidth: 3,
     borderColor: '#A855F7',
     alignItems: 'center',
@@ -733,21 +873,21 @@ const styles = StyleSheet.create({
     marginBottom: vs(20),
     shadowColor: '#A855F7',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.4,
-    shadowRadius: 20,
-    elevation: 10,
+    shadowOpacity: 0.5,
+    shadowRadius: 25,
+    elevation: 12,
   },
-  avatar: {
-    width: SCREEN_WIDTH * 0.31,
-    height: SCREEN_WIDTH * 0.31,
-    borderRadius: SCREEN_WIDTH * 0.155,
+  mainAvatar: {
+    width: SCREEN_WIDTH * 0.36,
+    height: SCREEN_WIDTH * 0.36,
+    borderRadius: SCREEN_WIDTH * 0.18,
   },
   callerName: {
-    fontSize: ms(24, 0.3),
+    fontSize: ms(22, 0.3),
     fontWeight: '900',
     color: '#fff',
     fontFamily: 'Inter_900Black',
-    marginBottom: vs(8),
+    marginBottom: vs(6),
   },
   statusRow: {
     flexDirection: 'row',
@@ -758,7 +898,6 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#22C55E',
   },
   statusText: {
     fontSize: ms(13, 0.3),
@@ -766,31 +905,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
   },
 
-  zegEndCallWrap: {
-    position: 'absolute',
-    bottom: hp(16),
-    alignSelf: 'center',
-    // Moderate layer — floats above the Zego native bottom bar but stays
-    // below the in-call recharge/gift popups (which layer higher).
-    zIndex: 50,
-    elevation: 50,
-  },
-  endCallPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: s(6),
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    borderRadius: 24,
-    paddingHorizontal: s(16),
-    paddingVertical: vs(9),
-    borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.55)',
-  },
-  endCallPillText: {
-    color: '#EF4444',
-    fontSize: ms(12, 0.3),
-    fontFamily: 'Inter_600SemiBold',
-  },
   safetyFloat: {
     position: 'absolute',
     left: s(12),
@@ -807,42 +921,18 @@ const styles = StyleSheet.create({
     zIndex: 999,
     elevation: 999,
   },
-  fallbackDockRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: s(10),
-  },
   fallbackControls: {
     alignItems: 'center',
-    paddingTop: vs(14),
-    paddingBottom: vs(28),
+    paddingTop: vs(10),
+    paddingBottom: vs(24),
   },
-
-  // Zego mode floating elements
-  floatingTopRight: {
+  fallbackTopRight: {
     position: 'absolute',
-    top: SH * 0.08,
+    top: hp(16),
     right: s(12),
     alignItems: 'flex-end',
     gap: vs(8),
     zIndex: 999,
-  },
-  coinsBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: s(10),
-    paddingVertical: vs(4),
-    borderRadius: 16,
-    gap: s(4),
-    borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.3)',
-  },
-  coinsBadgeText: {
-    color: '#F59E0B',
-    fontSize: ms(13, 0.3),
-    fontFamily: 'Inter_700Bold',
   },
   floatingRechargeGift: {
     backgroundColor: 'rgba(0,0,0,0.7)',
@@ -856,46 +946,9 @@ const styles = StyleSheet.create({
     gap: s(6),
     zIndex: 999,
   },
-  fallbackTopRight: {
-    position: 'absolute',
-    top: hp(16),
-    right: s(12),
-    alignItems: 'flex-end',
-    gap: vs(8),
-    zIndex: 999,
-  },
   floatingRechargeText: {
     color: '#fff',
     fontSize: ms(12, 0.3),
     fontFamily: 'Inter_600SemiBold',
-  },
-  giftNotification: {
-    position: 'absolute',
-    top: hp(15),
-    left: wp(5),
-    right: wp(5),
-    zIndex: 1000,
-  },
-  giftNotifContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 20,
-    gap: 15,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-  },
-  giftNotifIcon: {
-    fontSize: ms(40),
-  },
-  giftNotifTitle: {
-    color: '#fff',
-    fontSize: ms(16),
-    fontFamily: 'Inter_700Bold',
-  },
-  giftNotifText: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: ms(13),
-    fontFamily: 'Inter_400Regular',
   },
 });

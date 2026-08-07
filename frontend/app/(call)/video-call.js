@@ -22,7 +22,11 @@ import { ms, s, vs, SCREEN_WIDTH, hp, wp } from '../../utils/responsive';
 import { getAvatarUrl } from '../../utils/avatars';
 
 const { height: SH } = Dimensions.get('window');
-const isExpoGo = Constants.appOwnership === 'expo';
+// Expo Go cannot host the native Agora module, so the SDK is only loaded
+// outside it. `executionEnvironment` is 'storeClient' ONLY in Expo Go — the
+// old `appOwnership === 'expo'` check also matched development builds, which
+// silently disabled the real video call everywhere except standalone builds.
+const isExpoGo = Constants.executionEnvironment === 'storeClient';
 
 // Agora RTC SDK — native module, only available on dev/native builds.
 let AgoraSDK = null;
@@ -43,6 +47,7 @@ const {
   ClientRoleType,
   ConnectionStateType,
   RemoteVideoState,
+  RemoteAudioState,
   RenderModeType,
   VideoMirrorModeType,
 } = AgoraSDK || {};
@@ -167,6 +172,17 @@ const AgoraVideoView = forwardRef(
               setRemoteActive(decoded);
               setRemoteJoined(true);
             },
+            onRemoteAudioStateChanged: (connection, uid, state) => {
+              if (!active) return;
+              // Decoding (2) → remote audio is playing. Extra "remote is in the
+              // call" signal for participants whose camera is off, so the UI
+              // never treats an audio-only participant as "never joined".
+              if (state === RemoteAudioState.RemoteAudioStateDecoding) {
+                console.log('[Agora] Remote audio playing:', uid);
+                setRemoteUid(uid);
+                setRemoteJoined(true);
+              }
+            },
             onTokenPrivilegeWillExpire: () => {
               console.log('[Agora] Token privilege about to expire');
             },
@@ -279,6 +295,10 @@ export default function VideoCallScreen() {
   const [currentCoins, setCurrentCoins] = useState(null);
   const [lowBalanceMessage, setLowBalanceMessage] = useState('');
   const [permission, setPermission] = useState({ camera: false, mic: false });
+  // True once the permission prompts have finished (granted or denied). The
+  // real-call verdict below must wait for this — otherwise a fresh screen
+  // would be misread as "permissions denied" while the prompts are pending.
+  const [permissionsResolved, setPermissionsResolved] = useState(false);
   const [isListener, setIsListener] = useState(false);
   const [cameraError, setCameraError] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
@@ -293,9 +313,7 @@ export default function VideoCallScreen() {
   const remoteAvatarOpacity = useRef(new Animated.Value(1)).current;
   const agoraRef = useRef(null);
   const callEndedRef = useRef(false);
-  const exitCallScreenRef = useRef(null);
   const cancelledExitTimerRef = useRef(null);
-  const failureEndRef = useRef(false);
   const remoteJoinedRef = useRef(false);
   // Agora credentials — the backend mints a session-scoped token for video
   // calls (agoraAppId + agoraToken). Falls back to the bundled App ID only
@@ -316,6 +334,72 @@ export default function VideoCallScreen() {
     !!agoraToken &&
     !!roomId &&
     canJoinRealCall;
+
+  // ─── Unified end-of-call teardown (both roles) ─────────────────
+  // Every way a call ends funnels through here so the USER and LISTENER sides
+  // always end in sync with identical work:
+  //   1. Leave the Agora channel immediately — the other participant gets the
+  //      userOffline callback and can end their side right away.
+  //   2. Stop per-minute billing and notify the backend. The endCall API is
+  //      idempotent, so it is safe even when the other side (or the billing
+  //      timer / socket handler) already completed the session.
+  //   3. Navigate by role — USER → call feedback, LISTENER → listener home.
+  // The role is read fresh from storage at exit time because the isListener
+  // state loads asynchronously after mount and could be stale.
+  const finishAndExit = useCallback(async () => {
+    if (callEndedRef.current) return;
+    callEndedRef.current = true;
+
+    // Leave the Agora channel immediately so the other participant gets the
+    // userOffline callback and their side can end too.
+    if (agoraRef.current) {
+      try { agoraRef.current.leave(); } catch (e) {}
+    }
+
+    // Notify the backend via socket first (instant, same connection that
+    // drives billing), then fire-and-forget the REST endCall — never await it
+    // before navigating, or a slow network could trap the user on this screen
+    // for up to the 15s request timeout. The endCall API is idempotent, so it
+    // is safe when the socket handler (or the other side) already ended the
+    // session.
+    try {
+      if (callId && callId !== 'demo_zego_call' && callId !== 'test_call_id') {
+        socketService.emit('stop_call_billing', { sessionId: callId });
+        // Also emit call_ended via socket as belt-and-suspenders
+        socketService.emit('call_ended', { sessionId: callId, roomId });
+        callAPI.endCall(callId).catch((error) => {
+          console.log('Failed to end call on backend:', error);
+        });
+      }
+    } catch (error) {
+      console.log('Failed to end call on backend:', error);
+    }
+
+    let role = 'USER';
+    try {
+      const userData = await AsyncStorage.getItem('user');
+      if (userData) {
+        const u = JSON.parse(userData);
+        role = u.role || 'USER';
+      }
+    } catch (e) {}
+
+    setTimeout(() => {
+      if (role === 'LISTENER') {
+        try {
+          router.dismissAll();
+        } catch (e) {}
+        // Go straight to the listener dashboard — avoids re-showing the
+        // splash screen, which made the app look like it restarted.
+        router.replace('/(listener)');
+      } else {
+        router.replace({
+          pathname: '/(call)/call-feedback',
+          params: { name, sessionId: callId, listenerId, callType: 'video' },
+        });
+      }
+    }, 800);
+  }, [callId, name, listenerId, roomId, router]);
 
   // The remote avatar fades out once the remote camera feed actually decodes.
   // "Joined" (audio or video) is tracked separately so the UI never falls back
@@ -345,6 +429,8 @@ export default function VideoCallScreen() {
       } catch (err) {
         console.log('Failed to request video/mic permissions:', err);
         setPermission({ camera: false, mic: false });
+      } finally {
+        setPermissionsResolved(true);
       }
     };
     requestPermissions();
@@ -404,47 +490,15 @@ export default function VideoCallScreen() {
       setShowRecharge(true);
     };
 
-    const exitCallScreen = async () => {
-      if (callEndedRef.current) return;
-      callEndedRef.current = true;
-
-      let role = 'USER';
-      try {
-        const userData = await AsyncStorage.getItem('user');
-        if (userData) {
-          const u = JSON.parse(userData);
-          role = u.role || 'USER';
-        }
-      } catch (e) {}
-
-      setTimeout(() => {
-        if (role === 'LISTENER') {
-          try {
-            router.dismissAll();
-          } catch (e) {}
-          // Go straight to the listener dashboard — avoids re-showing the
-          // splash screen, which made the app look like it restarted.
-          router.replace('/(listener)');
-        } else {
-          router.replace({
-            pathname: '/(call)/call-feedback',
-            params: { name, sessionId: callId, listenerId, callType: 'video' },
-          });
-        }
-      }, 800);
-    };
-
-    exitCallScreenRef.current = exitCallScreen;
-
     const handleAutoEnded = async (data) => {
       if (data.sessionId === callId) {
-        await exitCallScreen();
+        await finishAndExit();
       }
     };
 
     const handleCallEnded = async (data) => {
       if (data.sessionId === callId) {
-        await exitCallScreen();
+        await finishAndExit();
       }
     };
 
@@ -456,9 +510,7 @@ export default function VideoCallScreen() {
         // call so billing doesn't keep running on an already-cancelled session.
         cancelledExitTimerRef.current = setTimeout(() => {
           setShowCallCancelled(false);
-          if (exitCallScreenRef.current) {
-            exitCallScreenRef.current();
-          }
+          finishAndExit();
         }, 5000);
       }
     };
@@ -534,50 +586,12 @@ export default function VideoCallScreen() {
     };
   }, [navigation]);
 
-  const handleEndCall = useCallback(async () => {
-    if (callEndedRef.current) return;
-    callEndedRef.current = true;
-
-    // Leave the Agora channel immediately so the other participant gets the
-    // userOffline callback and their side can end too.
-    if (agoraRef.current) {
-      agoraRef.current.leave();
-    }
-
-    try {
-      if (callId && callId !== 'demo_zego_call' && callId !== 'test_call_id') {
-        socketService.emit('stop_call_billing', { sessionId: callId });
-        // Also emit call_ended via socket as belt-and-suspenders
-        socketService.emit('call_ended', { sessionId: callId, roomId });
-        await callAPI.endCall(callId);
-      }
-    } catch (error) {
-      console.log('Failed to end call on backend:', error);
-    } finally {
-      setTimeout(() => {
-        if (isListener) {
-          try {
-            router.dismissAll();
-          } catch (e) {}
-          // Go straight to the listener dashboard — avoids re-showing the
-          // splash screen, which made the app look like it restarted.
-          router.replace('/(listener)');
-        } else {
-          router.replace({
-            pathname: '/(call)/call-feedback',
-            params: { name, sessionId: callId, listenerId, callType: 'video' },
-          });
-        }
-      }, 800);
-    }
-  }, [callId, name, listenerId, isListener, roomId]);
-
   // The remote participant hung up / dropped — treat it as the call ending
   // (mirrors Zego's onOnlySelfInRoom + onCallEnd behavior).
   const handleRemoteLeft = useCallback(() => {
     console.log('[Agora] Remote participant left — ending call');
-    handleEndCall();
-  }, [handleEndCall]);
+    finishAndExit();
+  }, [finishAndExit]);
 
   // Agora could not establish the channel (bad credentials / blocked
   // network). Show a message, then end the call so billing doesn't run on a
@@ -585,14 +599,13 @@ export default function VideoCallScreen() {
   const handleAgoraFailedToConnect = useCallback(() => {
     if (callEndedRef.current) return;
     console.log('[Agora] Failed to connect to the channel — ending call');
-    failureEndRef.current = true;
     setCallCancelledMessage("Couldn't connect to the video call. Please try again.");
     setShowCallCancelled(true);
     cancelledExitTimerRef.current = setTimeout(() => {
       setShowCallCancelled(false);
-      handleEndCall();
+      finishAndExit();
     }, 3500);
-  }, [handleEndCall]);
+  }, [finishAndExit]);
 
   // If the remote never joins the channel, end the call after a generous
   // window instead of leaving "Connecting…" (and billing) running forever.
@@ -603,16 +616,64 @@ export default function VideoCallScreen() {
     const timer = setTimeout(() => {
       if (remoteJoinedRef.current || callEndedRef.current) return;
       console.log('[Agora] Remote never joined — ending call');
-      failureEndRef.current = true;
       setCallCancelledMessage("The other person couldn't join the call. Please try again.");
       setShowCallCancelled(true);
       cancelledExitTimerRef.current = setTimeout(() => {
         setShowCallCancelled(false);
-        handleEndCall();
+        finishAndExit();
       }, 3500);
     }, 45000);
     return () => clearTimeout(timer);
-  }, [canUseAgora, handleEndCall]);
+  }, [canUseAgora, finishAndExit]);
+
+  // When the real Agora call cannot start, the old code silently showed the
+  // avatar-preview "fallback" UI — the user saw no video, heard no audio, and
+  // was still billed. Diagnose WHY we're stuck on the fallback and surface a
+  // clear message, then end the call so billing stops. (The remote-join
+  // timeout above only applies once the Agora path is active.)
+  const fallbackDiagnosedRef = useRef(false);
+  useEffect(() => {
+    if (canUseAgora || !permissionsResolved || fallbackDiagnosedRef.current) return;
+    if (callEndedRef.current) return;
+
+    let message = '';
+    if (isExpoGo) {
+      message =
+        "Video calls need the development or production build — they can't run inside Expo Go. Please install the app build to make video calls.";
+    } else if (!AgoraSDK) {
+      message =
+        "The video call module isn't available in this build. Please update the app to the latest version.";
+    } else if (!permission.camera && !permission.mic) {
+      message =
+        'Camera and microphone access is required for video calls. Please allow both and start the call again.';
+    } else if (!agoraToken || !roomId || hasPlaceholderAppId) {
+      message =
+        "Video call couldn't connect — the server isn't configured for video calls yet. Please try again later.";
+    } else {
+      // Everything looks configured but the call still can't start — leave the
+      // screen up so the user can retry manually; don't force an exit.
+      return;
+    }
+
+    console.log('[VideoCall] Real call unavailable, ending:', message);
+    fallbackDiagnosedRef.current = true;
+    setCallCancelledMessage(message);
+    setShowCallCancelled(true);
+    cancelledExitTimerRef.current = setTimeout(() => {
+      setShowCallCancelled(false);
+      finishAndExit();
+    }, 4500);
+  }, [
+    canUseAgora,
+    permissionsResolved,
+    permission.camera,
+    permission.mic,
+    agoraToken,
+    roomId,
+    hasPlaceholderAppId,
+    isExpoGo,
+    finishAndExit,
+  ]);
 
   const handleCallCancelledClose = useCallback(() => {
     if (cancelledExitTimerRef.current) {
@@ -620,14 +681,11 @@ export default function VideoCallScreen() {
       cancelledExitTimerRef.current = null;
     }
     setShowCallCancelled(false);
-    if (failureEndRef.current) {
-      // Connection failure — the session is still active, end it properly.
-      failureEndRef.current = false;
-      handleEndCall();
-    } else if (exitCallScreenRef.current) {
-      exitCallScreenRef.current();
-    }
-  }, [handleEndCall]);
+    // finishAndExit performs the full teardown (leave Agora + stop billing +
+    // endCall API + navigate), so closing the popup behaves exactly like
+    // tapping End Call — identically for both roles.
+    finishAndExit();
+  }, [finishAndExit]);
 
   const handleRechargeSuccess = useCallback(async () => {
     try {
@@ -785,19 +843,6 @@ export default function VideoCallScreen() {
             )}
           </View>
 
-          {/* End call — floating above the controls dock */}
-          <View style={styles.zegEndCallWrap}>
-            <TouchableOpacity
-              style={styles.endCallPill}
-              onPress={() => setShowEndCallPopup(true)}
-              activeOpacity={0.8}
-              accessibilityLabel="End call"
-            >
-              <Ionicons name="call" size={18} color="#EF4444" style={{ transform: [{ rotate: '135deg' }] }} />
-              <Text style={styles.endCallPillText}>End Call</Text>
-            </TouchableOpacity>
-          </View>
-
           {/* Safety — left side, middle of the page */}
           <TouchableOpacity
             style={styles.safetyFloat}
@@ -818,6 +863,8 @@ export default function VideoCallScreen() {
         >
           <View style={[styles.agoraControlsWrap, { paddingBottom: Math.max(insets.bottom, vs(12)) }]}>
             <CallControls
+              flat
+              onEndCall={() => setShowEndCallPopup(true)}
               buttons={[
                 {
                   id: 'mute',
@@ -850,7 +897,7 @@ export default function VideoCallScreen() {
 
         <EndCallPopup
           visible={showEndCallPopup}
-          onEndCall={handleEndCall}
+          onEndCall={finishAndExit}
           onDismiss={() => setShowEndCallPopup(false)}
         />
         <CallCancelledPopup
@@ -1002,49 +1049,40 @@ export default function VideoCallScreen() {
 
       <Animated.View style={{ opacity: controlsOpacity }} pointerEvents={controlsVisible ? 'auto' : 'none'}>
         <View style={[styles.fallbackControls, { paddingBottom: Math.max(insets.bottom, vs(24)) }]}>
-          <View style={styles.fallbackDockRow}>
-            <CallControls
-              buttons={[
-                {
-                  id: 'mute',
-                  icon: 'mic',
-                  iconActive: 'mic-off',
-                  label: 'Mute',
-                  labelActive: 'Unmute',
-                  active: isMuted,
-                  onPress: () => setIsMuted(!isMuted),
+          <CallControls
+            flat
+            onEndCall={() => setShowEndCallPopup(true)}
+            buttons={[
+              {
+                id: 'mute',
+                icon: 'mic',
+                iconActive: 'mic-off',
+                label: 'Mute',
+                labelActive: 'Unmute',
+                active: isMuted,
+                onPress: () => setIsMuted(!isMuted),
+              },
+              {
+                id: 'camera',
+                icon: 'videocam',
+                iconActive: 'videocam-off',
+                label: 'Camera',
+                active: isCameraOff,
+                onPress: () => {
+                  const next = !isCameraOff;
+                  setIsCameraOff(next);
+                  // Clear any previous mount error so the camera can retry when re-enabled.
+                  if (!next) setCameraError(false);
                 },
-                {
-                  id: 'camera',
-                  icon: 'videocam',
-                  iconActive: 'videocam-off',
-                  label: 'Camera',
-                  active: isCameraOff,
-                  onPress: () => {
-                    const next = !isCameraOff;
-                    setIsCameraOff(next);
-                    // Clear any previous mount error so the camera can retry when re-enabled.
-                    if (!next) setCameraError(false);
-                  },
-                },
-              ]}
-            />
-            <TouchableOpacity
-              style={styles.endCallPill}
-              onPress={() => setShowEndCallPopup(true)}
-              activeOpacity={0.8}
-              accessibilityLabel="End call"
-            >
-              <Ionicons name="call" size={18} color="#EF4444" style={{ transform: [{ rotate: '135deg' }] }} />
-              <Text style={styles.endCallPillText}>End Call</Text>
-            </TouchableOpacity>
-          </View>
+              },
+            ]}
+          />
         </View>
       </Animated.View>
 
       <EndCallPopup
         visible={showEndCallPopup}
-        onEndCall={handleEndCall}
+        onEndCall={finishAndExit}
         onDismiss={() => setShowEndCallPopup(false)}
       />
 
@@ -1215,31 +1253,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
 
-  zegEndCallWrap: {
-    position: 'absolute',
-    bottom: hp(16),
-    alignSelf: 'center',
-    // Moderate layer — floats above the controls dock but stays below the
-    // in-call recharge/gift popups (which layer higher).
-    zIndex: 50,
-    elevation: 50,
-  },
-  endCallPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: s(6),
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    borderRadius: 24,
-    paddingHorizontal: s(16),
-    paddingVertical: vs(9),
-    borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.55)',
-  },
-  endCallPillText: {
-    color: '#EF4444',
-    fontSize: ms(12, 0.3),
-    fontFamily: 'Inter_600SemiBold',
-  },
   safetyFloat: {
     position: 'absolute',
     left: s(12),
@@ -1255,12 +1268,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 999,
     elevation: 999,
-  },
-  fallbackDockRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: s(10),
   },
   fallbackControls: {
     alignItems: 'center',

@@ -21,14 +21,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, wp, hp, SCREEN_WIDTH } from '../../utils/responsive';
 import { getAvatarUrl } from '../../utils/avatars';
 import { walletAPI, listenersAPI, authAPI, callAPI, notificationAPI, adsAPI } from '../../utils/api';
-import { socketService } from '../../utils/socket';
 import WelcomePopup from '../../components/shared/WelcomePopup';
 import CoinsOfferPopup from '../../components/shared/CoinsOfferPopup';
 import CenteredOfferPopup from '../../components/shared/CenteredOfferPopup';
 import InsufficientBalancePopup from '../../components/shared/InsufficientBalancePopup';
 import NotificationsPopup from '../../components/shared/NotificationsPopup';
 import AdSlider from '../../components/shared/AdSlider';
-import { useStatusSSE } from '../../utils/useStatusSSE';
 import HomeSkeleton from '../../components/HomeSkeleton';
 
 
@@ -353,6 +351,7 @@ export default function HomeScreen() {
 
   const [userAvatar, setUserAvatar] = useState(require('../../images/user_avatar.png'));
   const [coinBalance, setCoinBalance] = useState(0);
+  const balanceRef = useRef(0); // latest known wallet balance — gates the offer popups
   const [diamondBalance, setDiamondBalance] = useState(0);
   const [discountTimeLeft, setDiscountTimeLeft] = useState(0);
   const [isFirstPurchaseEligible, setIsFirstPurchaseEligible] = useState(false);
@@ -399,8 +398,10 @@ export default function HomeScreen() {
     try {
       const balRes = await walletAPI.getBalance();
       if (balRes?.data) {
-        setCoinBalance(balRes.data.coins || 0);
-        setDiamondBalance(balRes.data.diamonds || Math.floor((balRes.data.coins || 0) / 10));
+        const liveCoins = balRes.data.coins || 0;
+        balanceRef.current = liveCoins;
+        setCoinBalance(liveCoins);
+        setDiamondBalance(balRes.data.diamonds || Math.floor(liveCoins / 10));
         setIsFirstPurchaseEligible(!!balRes.data.isFirstPurchaseEligible);
         if (balRes.data.isFirstPurchaseEligible && balRes.data.signupTimestamp) {
           const actualSignupTime = new Date(balRes.data.signupTimestamp).getTime();
@@ -482,97 +483,10 @@ export default function HomeScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    const handleStatusChanged = (data) => {
-      console.log('[Home] Listener status changed:', data);
-      const { userId, isOnline, isBusy, busySince } = data;
-      
-      const updateStatus = (list) => 
-        list.map(item => {
-          if (item.id === userId) {
-            return {
-              ...item,
-              isLive: isOnline,
-              isBusy: isBusy,
-              busySince: isBusy ? busySince : null
-            };
-          }
-          return item;
-        });
-
-      // Re-sort after update
-      setBestChoiceData(prev => {
-        const updated = updateStatus(prev);
-        updated.sort((a, b) => {
-          if (a.isLive && !b.isLive) return -1;
-          if (!a.isLive && b.isLive) return 1;
-          if (a.isBusy && !b.isBusy) return -1;
-          if (!a.isBusy && b.isBusy) return 1;
-          return 0;
-        });
-        return updated;
-      });
-      setPeopleData(prev => {
-        const updated = updateStatus(prev);
-        updated.sort((a, b) => {
-          if (a.isLive && !b.isLive) return -1;
-          if (!a.isLive && b.isLive) return 1;
-          if (a.isBusy && !b.isBusy) return -1;
-          if (!a.isBusy && b.isBusy) return 1;
-          return 0;
-        });
-        return updated;
-      });
-    };
-
-    socketService.on('listener_status_changed', handleStatusChanged);
-    return () => {
-      socketService.off('listener_status_changed', handleStatusChanged);
-    };
-  }, []);
-
-  useStatusSSE(
-    useCallback((data) => {
-      console.log('[Home] SSE Listener status changed:', data);
-      const { userId, isOnline, isBusy, busySince } = data;
-      const updateStatus = (list) => 
-        list.map(item => {
-          if (item.id === userId) {
-            return {
-              ...item,
-              isLive: isOnline,
-              isBusy: isBusy,
-              busySince: isBusy ? busySince : null
-            };
-          }
-          return item;
-        });
-
-      // Re-sort after update
-      setBestChoiceData(prev => {
-        const updated = updateStatus(prev);
-        updated.sort((a, b) => {
-          if (a.isLive && !b.isLive) return -1;
-          if (!a.isLive && b.isLive) return 1;
-          if (a.isBusy && !b.isBusy) return -1;
-          if (!a.isBusy && b.isBusy) return 1;
-          return 0;
-        });
-        return updated;
-      });
-      setPeopleData(prev => {
-        const updated = updateStatus(prev);
-        updated.sort((a, b) => {
-          if (a.isLive && !b.isLive) return -1;
-          if (!a.isLive && b.isLive) return 1;
-          if (a.isBusy && !b.isBusy) return -1;
-          if (!a.isBusy && b.isBusy) return 1;
-          return 0;
-        });
-        return updated;
-      });
-    }, [])
-  );
+  // Live listener-status updates (socket `listener_status_changed` + the
+  // /listeners/status/sse stream) were removed intentionally: the cards should
+  // only refresh when the user pulls to refresh, returns to the screen, or
+  // brings the app back to the foreground — never while sitting on the page.
 
   useFocusEffect(
     useCallback(() => {
@@ -623,21 +537,23 @@ export default function HomeScreen() {
         const hasSeenCoins = await AsyncStorage.getItem('hasSeenCoinsPopup');
         const showLoginOffers = await AsyncStorage.getItem('showLoginOffers');
         
-        let balance = coinBalance;
-        if (showLoginOffers === 'true' || !hasSeenWelcome || !hasSeenCoins) {
-          try {
-            const balRes = await walletAPI.getBalance();
-            if (balRes?.data?.coins !== undefined) {
-              balance = balRes.data.coins;
-            }
-          } catch (e) {}
-        }
+        // Always use the live balance from the server so the offer popup is
+        // never shown to a user who already has coins in their wallet.
+        let balance = balanceRef.current;
+        try {
+          const balRes = await walletAPI.getBalance();
+          if (balRes?.data?.coins !== undefined) {
+            balance = balRes.data.coins || 0;
+            balanceRef.current = balance;
+          }
+        } catch (e) {}
 
-        if (showLoginOffers === 'true' && balance === 0) {
-          // Show both popups on login only for users with 0 coins
-          setShowCenteredOffer(true);
-          await AsyncStorage.removeItem('showLoginOffers');
-        } else if (showLoginOffers === 'true') {
+        if (showLoginOffers === 'true') {
+          // On every login the coin offer popup appears only for users
+          // whose wallet balance is 0.
+          if (balance === 0) {
+            setShowCenteredOffer(true);
+          }
           await AsyncStorage.removeItem('showLoginOffers');
         } else if (!hasSeenWelcome) {
           // Only show welcome popup on login, not every app open
@@ -709,13 +625,28 @@ export default function HomeScreen() {
     setShowWelcome(false);
     await AsyncStorage.setItem('hasSeenWelcomePopup', 'true');
     
-    setTimeout(() => setShowCoinsOffer(true), 400);
+    // The coin offer popup is reserved for users with 0 coins in their wallet.
+    // Fetch the live balance so a stale 0 can never leak the popup to a
+    // user who already has coins.
+    let balance = balanceRef.current;
+    try {
+      const balRes = await walletAPI.getBalance();
+      if (balRes?.data?.coins !== undefined) {
+        balance = balRes.data.coins || 0;
+        balanceRef.current = balance;
+      }
+    } catch (e) {}
+    if (balance === 0) {
+      setTimeout(() => setShowCoinsOffer(true), 400);
+    }
   };
 
   const handleCenteredOfferClose = async () => {
     setShowCenteredOffer(false);
-    // Show the second popup after the first one is closed
-    setTimeout(() => setShowCoinsOffer(true), 400);
+    // Show the second popup after the first one is closed — only for 0-coin users
+    if (balanceRef.current === 0) {
+      setTimeout(() => setShowCoinsOffer(true), 400);
+    }
   };
 
   const handleCenteredOfferAddCoins = async () => {
@@ -851,7 +782,7 @@ export default function HomeScreen() {
             style={styles.logoImage}
             resizeMode="contain"
           />
-          {discountTimeLeft > 0 && (
+          {discountTimeLeft > 0 && coinBalance === 0 && (
             <TouchableOpacity
               style={styles.timerCapsule}
               activeOpacity={0.7}
