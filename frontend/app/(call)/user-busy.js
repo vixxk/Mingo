@@ -11,16 +11,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ms, s, vs, SCREEN_WIDTH } from '../../utils/responsive';
+import { wp, hp } from '../../utils/responsive';
 
 export default function UserBusyScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { name = 'Listener', reason, callType = 'audio' } = useLocalSearchParams();
 
-  const pulseAnim = useRef(new Animated.Value(0.8)).current;
+  const pulseAnim = useRef(new Animated.Value(0.85)).current;
+  const haloAnim = useRef(new Animated.Value(0.6)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
+  const slideAnim = useRef(new Animated.Value(hp(4))).current;
 
   // Determine display message based on reason
   const getMessage = () => {
@@ -43,7 +44,7 @@ export default function UserBusyScreen() {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 400,
+        duration: 450,
         useNativeDriver: true,
       }),
       Animated.spring(slideAnim, {
@@ -54,11 +55,17 @@ export default function UserBusyScreen() {
       }),
     ]).start();
 
-    // Pulse animation for icon
+    // Pulse animation for the icon ring + breathing glow
     Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.1, duration: 1200, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 0.9, duration: 1200, useNativeDriver: true }),
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.08, duration: 1100, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 0.92, duration: 1100, useNativeDriver: true }),
+        ]),
+        Animated.sequence([
+          Animated.timing(haloAnim, { toValue: 1, duration: 1100, useNativeDriver: true }),
+          Animated.timing(haloAnim, { toValue: 0.35, duration: 1100, useNativeDriver: true }),
+        ]),
       ])
     ).start();
   }, []);
@@ -69,11 +76,16 @@ export default function UserBusyScreen() {
     <View style={styles.container}>
       <StatusBar style="light" />
 
+      {/* Blackish-red ambient background */}
       <LinearGradient
-        colors={['#0A0A0A', '#1A0520', '#0A0A0A']}
-        locations={[0, 0.5, 1]}
+        colors={['#0A0000', '#1A0000', '#3D0000']}
+        locations={[0, 0.55, 1]}
         style={StyleSheet.absoluteFill}
       />
+
+      {/* Soft red glow blobs */}
+      <View style={styles.glowTop} />
+      <View style={styles.glowBottom} />
 
       <Animated.View
         style={[
@@ -86,23 +98,37 @@ export default function UserBusyScreen() {
           },
         ]}
       >
-        {/* Icon */}
-        <Animated.View style={[styles.iconRing, { transform: [{ scale: pulseAnim }] }]}>
-          <LinearGradient
-            colors={['#EF4444', '#DC2626']}
-            style={styles.iconBg}
-          >
-            <Ionicons name="call" size={36} color="#fff" style={{ transform: [{ rotate: '135deg' }] }} />
-          </LinearGradient>
-        </Animated.View>
+        {/* ── Redesigned call-end icon: breathing halo + layered rings ── */}
+        <View style={styles.iconWrap}>
+          <Animated.View style={[styles.iconHalo, { opacity: haloAnim }]} />
+          <Animated.View style={[styles.iconRingOuter, { transform: [{ scale: pulseAnim }] }]}>
+            <View style={styles.iconRingMid}>
+              <LinearGradient
+                colors={['#EF4444', '#B91C1C']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.iconBg}
+              >
+                <Ionicons
+                  name="call"
+                  size={wp(9)}
+                  color="#fff"
+                  style={{ transform: [{ rotate: '135deg' }] }}
+                />
+              </LinearGradient>
+            </View>
+          </Animated.View>
+        </View>
 
         {/* Message */}
         <Text style={styles.title}>Call Unavailable</Text>
         <Text style={styles.message}>{getMessage()}</Text>
 
-        {/* Suggestion */}
+        {/* Info banner */}
         <View style={styles.suggestionCard}>
-          <Ionicons name="information-circle-outline" size={20} color="#A855F7" />
+          <View style={styles.suggestionIconWrap}>
+            <Ionicons name="information" size={wp(4.5)} color="#FCA5A5" />
+          </View>
           <Text style={styles.suggestionText}>
             Try again later or connect with another listener
           </Text>
@@ -113,18 +139,20 @@ export default function UserBusyScreen() {
           <TouchableOpacity
             style={styles.primaryBtn}
             activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Find other listeners"
             onPress={() => router.push({
               pathname: '/(call)/finding-listener',
               params: { callType, isRandom: 'true' }
             })}
           >
             <LinearGradient
-              colors={['#A855F7', '#7C3AED']}
+              colors={['#EF4444', '#B91C1C', '#450A0A']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.primaryBtnGradient}
             >
-              <Ionicons name="search" size={20} color="#fff" />
+              <Ionicons name="search" size={wp(5)} color="#fff" />
               <Text style={styles.primaryBtnText}>Find Other Listeners</Text>
             </LinearGradient>
           </TouchableOpacity>
@@ -132,8 +160,11 @@ export default function UserBusyScreen() {
           <TouchableOpacity
             style={styles.secondaryBtn}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
             onPress={() => router.back()}
           >
+            <Ionicons name="arrow-back" size={wp(4.6)} color="#FCA5A5" />
             <Text style={styles.secondaryBtnText}>Go Back</Text>
           </TouchableOpacity>
         </View>
@@ -145,105 +176,175 @@ export default function UserBusyScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: '#0A0000',
   },
+
+  /* ── Ambient red background ─────────────────────────────── */
+  glowTop: {
+    position: 'absolute',
+    top: -wp(42),
+    left: '50%',
+    marginLeft: -wp(47.5),
+    width: wp(95),
+    height: wp(95),
+    borderRadius: wp(47.5),
+    backgroundColor: 'rgba(220, 38, 38, 0.09)',
+  },
+  glowBottom: {
+    position: 'absolute',
+    bottom: -wp(38),
+    left: '50%',
+    marginLeft: -wp(42.5),
+    width: wp(85),
+    height: wp(85),
+    borderRadius: wp(42.5),
+    backgroundColor: 'rgba(127, 29, 29, 0.16)',
+  },
+
   center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: s(32),
+    paddingHorizontal: wp(8),
   },
 
-  iconRing: {
-    width: SCREEN_WIDTH * 0.28,
-    height: SCREEN_WIDTH * 0.28,
-    borderRadius: SCREEN_WIDTH * 0.14,
-    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+  /* ── Redesigned call-end icon ───────────────────────────── */
+  iconWrap: {
+    width: wp(42),
+    height: wp(42),
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: vs(28),
-    borderWidth: 2,
-    borderColor: 'rgba(239, 68, 68, 0.2)',
+    marginBottom: hp(4.2),
+  },
+  iconHalo: {
+    position: 'absolute',
+    width: wp(42),
+    height: wp(42),
+    borderRadius: wp(21),
+    backgroundColor: 'rgba(239, 68, 68, 0.14)',
+  },
+  iconRingOuter: {
+    width: wp(33),
+    height: wp(33),
+    borderRadius: wp(16.5),
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(239, 68, 68, 0.28)',
+    backgroundColor: 'rgba(239, 68, 68, 0.05)',
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.45,
+    shadowRadius: wp(4),
+    elevation: 8,
+  },
+  iconRingMid: {
+    width: wp(23),
+    height: wp(23),
+    borderRadius: wp(11.5),
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(252, 165, 165, 0.35)',
+    backgroundColor: 'rgba(153, 27, 27, 0.25)',
   },
   iconBg: {
-    width: SCREEN_WIDTH * 0.2,
-    height: SCREEN_WIDTH * 0.2,
-    borderRadius: SCREEN_WIDTH * 0.1,
+    width: wp(16.5),
+    height: wp(16.5),
+    borderRadius: wp(8.25),
     alignItems: 'center',
     justifyContent: 'center',
   },
 
+  /* ── Text ───────────────────────────────────────────────── */
   title: {
-    fontSize: ms(24, 0.3),
+    fontSize: wp(7),
     fontWeight: '900',
     color: '#fff',
     fontFamily: 'Inter_900Black',
-    marginBottom: vs(8),
+    marginBottom: hp(1),
   },
   message: {
-    fontSize: ms(15, 0.3),
-    color: '#9CA3AF',
+    fontSize: wp(4),
+    color: '#D4D4D8',
     fontFamily: 'Inter_400Regular',
     textAlign: 'center',
-    lineHeight: ms(22),
-    marginBottom: vs(24),
+    lineHeight: wp(5.6),
+    marginBottom: hp(3.2),
   },
 
+  /* ── Info banner ────────────────────────────────────────── */
   suggestionCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(168, 85, 247, 0.08)',
-    borderRadius: 16,
-    paddingHorizontal: s(16),
-    paddingVertical: vs(12),
-    gap: s(10),
-    marginBottom: vs(32),
+    backgroundColor: 'rgba(127, 29, 29, 0.35)',
+    borderRadius: wp(4),
+    paddingHorizontal: wp(4.5),
+    paddingVertical: hp(1.6),
+    gap: wp(3),
+    marginBottom: hp(4),
     borderWidth: 1,
-    borderColor: 'rgba(168, 85, 247, 0.15)',
+    borderColor: 'rgba(239, 68, 68, 0.32)',
     maxWidth: '100%',
+  },
+  suggestionIconWrap: {
+    width: wp(8),
+    height: wp(8),
+    borderRadius: wp(4),
+    backgroundColor: 'rgba(239, 68, 68, 0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   suggestionText: {
     flex: 1,
-    fontSize: ms(13, 0.3),
-    color: '#D1D5DB',
+    fontSize: wp(3.5),
+    color: '#FECACA',
     fontFamily: 'Inter_400Regular',
-    lineHeight: ms(18),
+    lineHeight: wp(4.8),
   },
 
+  /* ── Buttons ────────────────────────────────────────────── */
   buttonsContainer: {
     width: '100%',
-    gap: vs(12),
-    marginBottom: vs(20),
+    gap: hp(1.6),
+    marginBottom: hp(2),
   },
   primaryBtn: {
-    borderRadius: 28,
+    borderRadius: wp(8),
     overflow: 'hidden',
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: hp(0.8) },
+    shadowOpacity: 0.35,
+    shadowRadius: wp(3),
+    elevation: 6,
   },
   primaryBtnGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: vs(15),
-    gap: s(8),
+    paddingVertical: hp(1.9),
+    gap: wp(2),
   },
   primaryBtnText: {
     color: '#fff',
-    fontSize: ms(16, 0.3),
+    fontSize: wp(4.2),
     fontWeight: '700',
     fontFamily: 'Inter_700Bold',
   },
   secondaryBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: vs(13),
-    borderRadius: 28,
+    paddingVertical: hp(1.7),
+    borderRadius: wp(8),
     borderWidth: 1.5,
-    borderColor: '#333',
+    borderColor: 'rgba(239, 68, 68, 0.35)',
+    backgroundColor: 'rgba(127, 29, 29, 0.14)',
+    gap: wp(2),
   },
   secondaryBtnText: {
-    color: '#9CA3AF',
-    fontSize: ms(15, 0.3),
+    color: '#FCA5A5',
+    fontSize: wp(4),
     fontFamily: 'Inter_500Medium',
   },
-
 });

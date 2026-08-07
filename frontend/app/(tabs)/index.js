@@ -21,7 +21,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, wp, hp, SCREEN_WIDTH } from '../../utils/responsive';
 import { getAvatarUrl } from '../../utils/avatars';
 import { walletAPI, listenersAPI, authAPI, callAPI, notificationAPI, adsAPI } from '../../utils/api';
-import WelcomePopup from '../../components/shared/WelcomePopup';
+import { socketService } from '../../utils/socket';
 import CoinsOfferPopup from '../../components/shared/CoinsOfferPopup';
 import CenteredOfferPopup from '../../components/shared/CenteredOfferPopup';
 import InsufficientBalancePopup from '../../components/shared/InsufficientBalancePopup';
@@ -364,7 +364,6 @@ export default function HomeScreen() {
 
   const [ads, setAds] = useState([]);
   const [sliderInterval, setSliderInterval] = useState(4);
-  const [showWelcome, setShowWelcome] = useState(false);
   const [showCenteredOffer, setShowCenteredOffer] = useState(false);
   const [showCoinsOffer, setShowCoinsOffer] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -533,7 +532,12 @@ export default function HomeScreen() {
   useEffect(() => {
     const checkFirstSignup = async () => {
       try {
-        const hasSeenWelcome = await AsyncStorage.getItem('hasSeenWelcomePopup');
+        // The Mingo "I Agree" popup is rendered by the root layout right after
+        // login — defer every offer popup until the user has agreed so the
+        // offers never stack underneath it.
+        const pendingWelcome = await AsyncStorage.getItem('pendingWelcomePopup');
+        if (pendingWelcome === 'true') return;
+
         const hasSeenCoins = await AsyncStorage.getItem('hasSeenCoinsPopup');
         const showLoginOffers = await AsyncStorage.getItem('showLoginOffers');
         
@@ -555,10 +559,6 @@ export default function HomeScreen() {
             setShowCenteredOffer(true);
           }
           await AsyncStorage.removeItem('showLoginOffers');
-        } else if (!hasSeenWelcome) {
-          // Only show welcome popup on login, not every app open
-          setShowWelcome(true);
-          await AsyncStorage.setItem('hasSeenWelcomePopup', 'true');
         } else {
           if (!hasSeenCoins && isFirstPurchaseEligible && balance === 0) {
             setShowCoinsOffer(true);
@@ -573,6 +573,43 @@ export default function HomeScreen() {
       checkFirstSignup();
     }
   }, [isFirstPurchaseEligible]);
+
+  // The coin offer pops up right after the user taps "I Agree" on the welcome
+  // popup (only for users whose wallet is at 0 coins).
+  const maybeShowCoinsAfterWelcome = useCallback(async () => {
+    await AsyncStorage.removeItem('welcomeCoinsOfferPending');
+    let balance = balanceRef.current;
+    try {
+      const balRes = await walletAPI.getBalance();
+      if (balRes?.data?.coins !== undefined) {
+        balance = balRes.data.coins || 0;
+        balanceRef.current = balance;
+      }
+    } catch (e) {}
+    if (balance === 0) {
+      setShowCoinsOffer(true);
+    }
+  }, []);
+
+  // Live trigger: the root layout fires this the moment the user agrees.
+  useEffect(() => {
+    const handleWelcomeAgreed = () => maybeShowCoinsAfterWelcome();
+    socketService.on('welcome_agreed', handleWelcomeAgreed);
+    return () => socketService.off('welcome_agreed', handleWelcomeAgreed);
+  }, [maybeShowCoinsAfterWelcome]);
+
+  // Fallback: if the user agreed while on another screen, pick up the pending
+  // coins-offer flag the next time they visit the home tab.
+  useFocusEffect(
+    useCallback(() => {
+      (async () => {
+        const pendingCoins = await AsyncStorage.getItem('welcomeCoinsOfferPending');
+        if (pendingCoins === 'true') {
+          maybeShowCoinsAfterWelcome();
+        }
+      })();
+    }, [maybeShowCoinsAfterWelcome])
+  );
 
   
   useEffect(() => {
@@ -591,26 +628,6 @@ export default function HomeScreen() {
     if (nextAppState === 'active') {
       console.log('[Home] App came to foreground, refreshing data...');
       loadRealData();
-      
-      // Check if this is the first time the app has been opened (not login)
-      const checkAppOpenCount = async () => {
-        try {
-          const countStr = await AsyncStorage.getItem('appOpenCount');
-          const count = countStr ? parseInt(countStr, 10) : 0;
-          
-          // Only run welcome check if app has been opened once (on first open after login)
-          if (count > 0) {
-            const hasSeenWelcome = await AsyncStorage.getItem('hasSeenWelcomePopup');
-            if (!hasSeenWelcome && !showWelcome && !showCenteredOffer && !showCoinsOffer) {
-              setShowWelcome(true);
-            }
-          }
-        } catch (e) {
-          console.log('Error checking app open count:', e);
-        }
-      };
-      
-      checkAppOpenCount();
     }
   };
   
@@ -620,26 +637,6 @@ export default function HomeScreen() {
       subscription.remove();
     };
   }, [loadRealData]);
-
-  const handleWelcomeAgree = async () => {
-    setShowWelcome(false);
-    await AsyncStorage.setItem('hasSeenWelcomePopup', 'true');
-    
-    // The coin offer popup is reserved for users with 0 coins in their wallet.
-    // Fetch the live balance so a stale 0 can never leak the popup to a
-    // user who already has coins.
-    let balance = balanceRef.current;
-    try {
-      const balRes = await walletAPI.getBalance();
-      if (balRes?.data?.coins !== undefined) {
-        balance = balRes.data.coins || 0;
-        balanceRef.current = balance;
-      }
-    } catch (e) {}
-    if (balance === 0) {
-      setTimeout(() => setShowCoinsOffer(true), 400);
-    }
-  };
 
   const handleCenteredOfferClose = async () => {
     setShowCenteredOffer(false);
@@ -959,9 +956,6 @@ export default function HomeScreen() {
       )}
 
       {}
-      <WelcomePopup visible={showWelcome} onAgree={handleWelcomeAgree} />
-
-
       <CenteredOfferPopup
         visible={showCenteredOffer}
         onClose={handleCenteredOfferClose}

@@ -81,27 +81,42 @@ class ChatController {
             sessionStatus: 'none',
             isAdmin: isSupport
           });
-        } else {
-          // Get the most recent session
-          const sortedSessions = [...convSessions].sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
-          const session = sortedSessions[0];
-          
-          const sessionUser = session.userId;
-          const sessionListener = session.listenerId;
-          if (sessionUser && sessionListener) {
-            if (session.status === 'active') {
-              const startTime = session.startTime;
-              const coinsDeducted = session.coinsDeducted || 10;
-              const CHAT_SESSION_DURATION = 5 * 60 * 1000;
-              const paidBlocks = Math.ceil(coinsDeducted / 10);
-              const paidDuration = paidBlocks * CHAT_SESSION_DURATION;
-              const expirationTime = new Date(startTime).getTime() + paidDuration;
+          continue;
+        }
 
-              if (Date.now() >= expirationTime) {
-                session.status = 'completed';
-                session.endTime = new Date(expirationTime);
-                await session.save();
+        // ── One card PER chat session (each session is its own page) ──
+        const sortedSessions = [...convSessions].sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
+        const latestSession = sortedSessions[0];
 
+        // A "current phase" card (sessionId: null) is added when messages were
+        // sent after the last session ended — i.e. the user's free-message
+        // phase of a brand-new session that hasn't been paid for yet.
+        const conversationLastMessage = conv.lastMessage;
+        const hasNewerPhaseMessages =
+          latestSession &&
+          latestSession.status !== 'active' &&
+          latestSession.endTime &&
+          conversationLastMessage &&
+          new Date(conversationLastMessage.createdAt) > new Date(latestSession.endTime);
+
+        for (const session of sortedSessions) {
+          const isLatest = session._id.toString() === latestSession._id.toString();
+
+          // Auto-complete an expired active session (paid blocks used up)
+          if (session.status === 'active') {
+            const startTime = session.startTime;
+            const coinsDeducted = session.coinsDeducted || 10;
+            const CHAT_SESSION_DURATION = 5 * 60 * 1000;
+            const paidBlocks = Math.ceil(coinsDeducted / 10);
+            const paidDuration = paidBlocks * CHAT_SESSION_DURATION;
+            const expirationTime = new Date(startTime).getTime() + paidDuration;
+
+            if (Date.now() >= expirationTime) {
+              session.status = 'completed';
+              session.endTime = new Date(expirationTime);
+              await session.save();
+
+              if (isLatest) {
                 conv.chatSession = {
                   active: false,
                   startedBy: null,
@@ -113,49 +128,71 @@ class ChatController {
                 await conv.save();
               }
             }
-
-            // Find last message within this session's window
-            const query = {
-              conversationId: conv._id,
-              createdAt: { $gte: session.startTime }
-            };
-            if (session.endTime) {
-              query.createdAt.$lte = session.endTime;
-            }
-
-            let lastMsg = await Message.findOne(query).sort({ createdAt: -1 });
-            if (!lastMsg) {
-              lastMsg = conv.lastMessage;
-            }
-
-            // Check if there is a newer message after the most recent session ended
-            const conversationLastMessage = conv.lastMessage;
-            const isNewerMessageAfterSession = !session.active && 
-              session.endTime && 
-              conversationLastMessage && 
-              new Date(conversationLastMessage.createdAt) > new Date(session.endTime);
-
-            cards.push({
-              id: conv._id,
-              otherUserId: otherUser?._id?.toString(),
-              sessionId: isNewerMessageAfterSession ? null : session._id,
-              name: isSupport ? 'Mingo Support' : (otherUser?.name || otherUser?.username || 'Unknown'),
-              gender: otherUser?.gender,
-              avatarIndex: otherUser?.avatarIndex,
-              image: otherUser?.profileImage,
-              lastMessage: isNewerMessageAfterSession ? (conversationLastMessage.content || 'Say hello!') : (lastMsg?.content || 'Session started'),
-              time: isNewerMessageAfterSession ? conversationLastMessage.createdAt : (lastMsg?.createdAt || session.startTime),
-              unread: isNewerMessageAfterSession ? unreadCount : (session.status === 'active' ? unreadCount : 0),
-              isOnline: !!listenerOnlineMap[otherUser?._id?.toString()],
-              sessionStatus: isNewerMessageAfterSession ? 'none' : session.status,
-              duration: session.duration,
-              startTime: session.startTime,
-              endTime: session.endTime,
-              listenerEarnings: session.listenerEarnings || 0,
-              coinsDeducted: session.coinsDeducted || 0,
-              isAdmin: isSupport
-            });
           }
+
+          // Find the last message inside this session's time window
+          const query = {
+            conversationId: conv._id,
+            createdAt: { $gte: session.startTime }
+          };
+          if (session.endTime) {
+            query.createdAt.$lte = session.endTime;
+          }
+
+          let lastMsg = await Message.findOne(query).sort({ createdAt: -1 });
+          // Only the newest card may fall back to the conversation's last
+          // message (which can belong to a newer phase); older cards get a
+          // neutral label instead of a wrong preview.
+          if (!lastMsg && !isLatest) {
+            lastMsg = null;
+          } else if (!lastMsg) {
+            lastMsg = conv.lastMessage;
+          }
+
+          cards.push({
+            id: conv._id,
+            otherUserId: otherUser?._id?.toString(),
+            sessionId: session._id,
+            name: isSupport ? 'Mingo Support' : (otherUser?.name || otherUser?.username || 'Unknown'),
+            gender: otherUser?.gender,
+            avatarIndex: otherUser?.avatarIndex,
+            image: otherUser?.profileImage,
+            lastMessage: lastMsg?.content || 'Session started',
+            time: lastMsg?.createdAt || session.startTime,
+            unread: (isLatest && !hasNewerPhaseMessages) ? unreadCount : 0,
+            isOnline: !!listenerOnlineMap[otherUser?._id?.toString()],
+            sessionStatus: session.status, // 'active' | 'completed' | 'cancelled'
+            duration: session.duration,
+            startTime: session.startTime,
+            endTime: session.endTime,
+            listenerEarnings: session.listenerEarnings || 0,
+            coinsDeducted: session.coinsDeducted || 0,
+            isAdmin: isSupport
+          });
+        }
+
+        // Current-phase card on top (the fresh, unpaid session window)
+        if (hasNewerPhaseMessages) {
+          cards.push({
+            id: conv._id,
+            otherUserId: otherUser?._id?.toString(),
+            sessionId: null,
+            name: isSupport ? 'Mingo Support' : (otherUser?.name || otherUser?.username || 'Unknown'),
+            gender: otherUser?.gender,
+            avatarIndex: otherUser?.avatarIndex,
+            image: otherUser?.profileImage,
+            lastMessage: conversationLastMessage.content || 'Say hello!',
+            time: conversationLastMessage.createdAt,
+            unread: unreadCount,
+            isOnline: !!listenerOnlineMap[otherUser?._id?.toString()],
+            sessionStatus: 'none',
+            duration: 0,
+            startTime: null,
+            endTime: null,
+            listenerEarnings: 0,
+            coinsDeducted: 0,
+            isAdmin: isSupport
+          });
         }
       }
 
@@ -166,6 +203,39 @@ class ChatController {
     } catch (err) {
       next(err);
     }
+  }
+
+  /**
+   * Load the messages that belong to a single chat session window.
+   * @param {String} conversationId - the conversation the session belongs to
+   * @param {Date} startTime - session start
+   * @param {Date|null} endTime - session end (null = still running)
+   */
+  static async _sessionMessages(conversationId, startTime, endTime) {
+    const query = {
+      conversationId,
+      createdAt: { $gte: startTime },
+    };
+    if (endTime) {
+      query.createdAt.$lte = endTime;
+    }
+    return Message.find(query).sort({ createdAt: 1 }).populate('sender', '_id name username');
+  }
+
+  /**
+   * Find the most recent chat session between the two participants that has
+   * ended (completed / cancelled). Used to scope the "current phase" — the
+   * period after the last session, during which the user gets one free message.
+   */
+  static async _lastEndedChatSession(participantIds) {
+    const Session = require('../models/sessionModel');
+    return Session.findOne({
+      userId: { $in: participantIds },
+      listenerId: { $in: participantIds },
+      callType: 'chat',
+      status: { $in: ['completed', 'cancelled'] },
+      endTime: { $ne: null }, // only sessions that actually ended
+    }).sort({ endTime: -1 });
   }
 
   static async getMessages(req, res, next) {
@@ -231,28 +301,39 @@ class ChatController {
       let messages = [];
       let returnedChatSession = conversation.chatSession;
 
+      // ── Opened a SPECIFIC session page → only that session's messages ──
+      // Validate the session actually belongs to this conversation (both
+      // participants match) so a foreign/stale id can never scope the view.
+      let scopedSession = null;
       if (sessionId) {
         const Session = require('../models/sessionModel');
         const session = await Session.findById(sessionId);
-        if (session) {
-          // Load all messages of the conversation to show complete history
-          messages = await Message.find({ conversationId: conversation._id }).sort({ createdAt: 1 }).populate('sender', '_id name username');
-          
-          returnedChatSession = {
-            active: session.status === 'active',
-            startedBy: session.userId,
-            startTime: session.startTime,
-            lastDeductionTime: session.lastDeductionTime,
-            sessionId: session._id,
-            status: session.status
-          };
+        const belongsToConversation = session &&
+          conversation.participants.some(p => p.toString() === String(session.userId?._id || session.userId)) &&
+          conversation.participants.some(p => p.toString() === String(session.listenerId?._id || session.listenerId));
+        if (session && belongsToConversation) {
+          scopedSession = session;
         }
-      } else {
-        // No sessionId passed: load ALL messages of the conversation
-        messages = await Message.find({ conversationId: conversation._id })
-          .sort({ createdAt: 1 })
-          .populate('sender', '_id name username');
+      }
 
+      if (scopedSession) {
+        messages = await ChatController._sessionMessages(
+          conversation._id,
+          scopedSession.startTime,
+          scopedSession.endTime || new Date()
+        );
+
+        returnedChatSession = {
+          active: scopedSession.status === 'active',
+          startedBy: scopedSession.userId,
+          startTime: scopedSession.startTime,
+          lastDeductionTime: scopedSession.lastDeductionTime,
+          sessionId: scopedSession._id,
+          status: scopedSession.status
+        };
+      } else {
+        // ── Fresh page (no sessionId) → resume an active session if one is
+        // running, otherwise scope to the current unpaid phase window. ──
         const Session = require('../models/sessionModel');
         const activeSession = await Session.findOne({
           userId: { $in: conversation.participants },
@@ -286,6 +367,12 @@ class ChatController {
 
             returnedChatSession = conversation.chatSession;
           } else {
+            messages = await ChatController._sessionMessages(
+              conversation._id,
+              activeSession.startTime,
+              null
+            );
+
             returnedChatSession = {
               active: true,
               startedBy: activeSession.userId,
@@ -295,13 +382,32 @@ class ChatController {
               status: 'active'
             };
           }
-        } else {
+        }
+
+        // No active session → the current phase: everything sent after the
+        // last ended session (the user's free-message window of a new session).
+        // System messages are excluded so a fresh page never opens on top of a
+        // stale "Session ended" / recharge banner from the previous session.
+        if (!returnedChatSession || !returnedChatSession.active) {
+          const lastEnded = await ChatController._lastEndedChatSession(conversation.participants);
+          const phaseStart = (lastEnded && lastEnded.endTime) || conversation.createdAt;
+
+          messages = await Message.find({
+            conversationId: conversation._id,
+            createdAt: { $gt: phaseStart },
+            senderModel: { $ne: 'System' },
+          })
+            .sort({ createdAt: 1 })
+            .populate('sender', '_id name username');
+
           returnedChatSession = {
             active: false,
-            startedBy: null,
+            startedBy: lastEnded ? lastEnded.userId : null,
             startTime: null,
             lastDeductionTime: null,
-            sessionId: null,
+            // Keep the last ended session's id so the client can tell that a
+            // paid session already happened for this pair (listener gating).
+            sessionId: lastEnded ? lastEnded._id : null,
             status: 'none'
           };
         }
@@ -319,11 +425,23 @@ class ChatController {
       }
 
       let isSupport = false;
+      let otherUser = null;
       const otherParticipantId = conversation.participants.find(p => p.toString() !== req.user.id.toString());
       if (otherParticipantId) {
-        const otherUserObj = await User.findById(otherParticipantId);
-        if (otherUserObj && (otherUserObj.role === 'ADMIN' || otherUserObj.role.endsWith('_ADMIN'))) {
-          isSupport = true;
+        const otherUserObj = await User.findById(otherParticipantId).select('name username avatarIndex gender profileImage role');
+        if (otherUserObj) {
+          if (otherUserObj.role === 'ADMIN' || otherUserObj.role.endsWith('_ADMIN')) {
+            isSupport = true;
+          }
+          otherUser = {
+            id: otherUserObj._id,
+            name: otherUserObj.name,
+            username: otherUserObj.username,
+            avatarIndex: otherUserObj.avatarIndex,
+            gender: otherUserObj.gender,
+            profileImage: otherUserObj.profileImage,
+            role: otherUserObj.role,
+          };
         }
       }
 
@@ -332,6 +450,7 @@ class ChatController {
         participants: conversation.participants,
         chatSession: returnedChatSession,
         messages,
+        otherUser,
         isAdmin: isSupport
       }, 'Conversation initiated successfully');
     } catch (err) {

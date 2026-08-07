@@ -293,15 +293,36 @@ const initSocket = (server) => {
         // Determine if the sender is the USER (not the listener)
         const isUserRole = sender.role === 'USER';
 
-        // --- FREE MESSAGE LOGIC (the user's FIRST message is free) ---
-        // Count the user's earlier messages in this conversation to decide
-        // whether this message is still inside the free window.
+        // --- FREE MESSAGE LOGIC (the user's FIRST message of each session
+        // phase is free) ---
+        // A "phase" is the conversation period between two paid chat sessions
+        // (or the very first period of the conversation). Every new phase
+        // grants the user ONE free message; the user's SECOND message of the
+        // same phase starts the paid session (and its timer).
         let userMessageCount = 0;
         if (isUserRole) {
+          const listenerParticipantId = conversation.participants.find(
+            (p) => p.toString() !== senderId.toString()
+          );
+          let lastEndedSession = null;
+          try {
+            lastEndedSession = await Session.findOne({
+              userId: senderId,
+              listenerId: listenerParticipantId,
+              callType: 'chat',
+              status: { $in: ['completed', 'cancelled'] },
+              endTime: { $ne: null }, // only sessions that actually ended
+            }).sort({ endTime: -1 });
+          } catch (sessErr) {
+            console.error('[Socket] Last ended chat session lookup error:', sessErr.message);
+          }
+          const phaseStart = (lastEndedSession && lastEndedSession.endTime) || conversation.createdAt;
+
           userMessageCount = await Message.countDocuments({
             conversationId,
             sender: senderId,
             senderModel: 'User',
+            createdAt: { $gt: phaseStart },
           });
         }
 

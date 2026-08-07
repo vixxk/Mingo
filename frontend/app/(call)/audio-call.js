@@ -649,7 +649,10 @@ export default function AudioCallScreen() {
       )}
 
       <Animated.View style={{ opacity: controlsOpacity }} pointerEvents={controlsVisible ? 'auto' : 'none'}>
-        <View style={[styles.topBar, { paddingTop: insets.top + vs(8) }]}>
+        {/* Timer sits clearly below the notification bar — insets.top clears
+            the status bar/notch, and hp(2.5) adds a consistent %-based gap
+            so it stays visible on every screen size. */}
+        <View style={[styles.topBar, { paddingTop: insets.top + hp(2.5) }]}>
           {/* Call duration timer — only appears once the call connects */}
           {remoteJoined && (
             <View style={styles.topBarTimerWrap}>

@@ -166,6 +166,10 @@ export default function MessagesScreen() {
             gender: item.gender || 'Female',
             sessionId: item.sessionId || '',
             sessionStatus: item.sessionStatus || 'none',
+            duration: item.duration ? String(item.duration) : '',
+            coinsDeducted: item.coinsDeducted ? String(item.coinsDeducted) : '',
+            startTime: item.startTime || '',
+            endTime: item.endTime || '',
             isAdmin: item.isAdmin ? 'true' : 'false'
           }
         })}
@@ -193,6 +197,11 @@ export default function MessagesScreen() {
               {item.sessionStatus === 'active' && (
                 <View style={[styles.statusBadge, { backgroundColor: 'rgba(34, 197, 94, 0.15)' }]}>
                   <Text style={[styles.statusBadgeText, { color: '#22C55E' }]}>Active</Text>
+                </View>
+              )}
+              {(item.sessionStatus === 'completed' || item.sessionStatus === 'cancelled') && (
+                <View style={[styles.statusBadge, { backgroundColor: 'rgba(107, 114, 128, 0.15)' }]}>
+                  <Text style={[styles.statusBadgeText, { color: '#9CA3AF' }]}>Ended</Text>
                 </View>
               )}
               {!item.isOnline && !item.isAdmin && (
@@ -291,7 +300,7 @@ export default function MessagesScreen() {
         ) : (
           <FlatList
             data={filteredMessages}
-            keyExtractor={(item, index) => item.sessionId ? `${item.id}-${item.sessionId}` : `${item.id}-${index}`}
+            keyExtractor={(item, index) => `${item.id}-${item.sessionId || item.startTime || index}`}
             renderItem={renderMessageItem}
             contentContainerStyle={styles.listContainer}
             showsVerticalScrollIndicator={false}

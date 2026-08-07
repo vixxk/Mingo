@@ -293,6 +293,12 @@ export default function LoginScreen() {
                     hasDismissedRejection = dismissed === 'true' || userDismissed === 'true';
                   } catch (e) {}
 
+                  // Show the Mingo "I Agree" popup on every user login
+                  // (never for listeners/admins) — rendered at the root layout.
+                  if (String(role).toUpperCase() === 'USER') {
+                    await AsyncStorage.setItem('pendingWelcomePopup', 'true');
+                  }
+
                   if (role === 'ADMIN') {
                     router.replace('/(admin)');
                   } else if (role === 'LISTENER') {

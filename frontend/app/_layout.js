@@ -1,4 +1,4 @@
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, usePathname } from 'expo-router';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { ThemeProvider, DarkTheme } from '@react-navigation/native';
 import { 
@@ -21,6 +21,7 @@ import { callAPI, walletAPI } from '../utils/api';
 import IncomingCallPopup from '../components/shared/IncomingCallPopup';
 import CallCancelledPopup from '../components/shared/CallCancelledPopup';
 import InsufficientBalancePopup from '../components/shared/InsufficientBalancePopup';
+import WelcomePopup from '../components/shared/WelcomePopup';
 
 
 
@@ -43,6 +44,60 @@ function RootLayout() {
   const [callCancelledVisible, setCallCancelledVisible] = useState(false);
   // Recharge gate: user tried to answer a call without enough coins
   const [rechargeGate, setRechargeGate] = useState(null); // { callerName, callType, minCoins, balance }
+
+  // ── Welcome / "I Agree" popup ─────────────────────────────────────────────
+  // Shows on EVERY login for regular users (never for listeners/admins). The
+  // auth screens set `pendingWelcomePopup` right after a successful login; we
+  // render it here at the root so it appears on whatever screen the user lands
+  // on first — home, chat (active-session redirect), etc.
+  const [showWelcomePopup, setShowWelcomePopup] = useState(false);
+  const pathname = usePathname();
+
+  useEffect(() => {
+    const checkWelcome = async () => {
+      try {
+        const pending = await AsyncStorage.getItem('pendingWelcomePopup');
+        if (pending !== 'true') return;
+
+        // Only regular users see it — never listeners or admins
+        const userData = await AsyncStorage.getItem('user');
+        if (!userData) return;
+        const user = JSON.parse(userData);
+        const role = String(user.role || 'USER').toUpperCase();
+        if (role.includes('LISTENER') || role.includes('ADMIN')) return;
+
+        // Don't interrupt the auth / onboarding screens themselves. (Listeners
+        // are already excluded by the role check above.)
+        const p = pathname || '';
+        if (/welcome|login|signup|role-selection|gender|language|onboarding|voice-id|verification|banned/i.test(p)) return;
+
+        // Claim the flag so it shows once per login, then display it
+        await AsyncStorage.removeItem('pendingWelcomePopup');
+        setShowWelcomePopup(true);
+      } catch (e) {
+        console.log('[RootLayout] Welcome popup check error:', e);
+      }
+    };
+    checkWelcome();
+  }, [pathname]);
+
+  const handleWelcomeAgree = useCallback(async () => {
+    setShowWelcomePopup(false);
+    // Preserve the existing flow: after agreeing, users with an empty wallet
+    // get the coins offer on the home screen.
+    let balance = 0;
+    try {
+      const balRes = await walletAPI.getBalance();
+      balance = balRes?.data?.coins ?? 0;
+    } catch (e) {
+      console.log('[RootLayout] Balance check after welcome agree:', e);
+    }
+    if (balance === 0) {
+      await AsyncStorage.setItem('welcomeCoinsOfferPending', 'true');
+    }
+    // Live signal for the home screen (if it's currently mounted underneath).
+    socketService.triggerLocalEvent('welcome_agreed');
+  }, []);
 
   const incomingCallsRef = useRef([]);
   useEffect(() => {
@@ -365,6 +420,9 @@ function RootLayout() {
           }}
           onClose={() => setRechargeGate(null)}
         />
+
+        {/* Welcome / "I Agree" popup — shown on every login for users */}
+        <WelcomePopup visible={showWelcomePopup} onAgree={handleWelcomeAgree} />
       </View>
     </ThemeProvider>
   );

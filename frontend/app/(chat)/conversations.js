@@ -59,7 +59,9 @@ const ConversationItem = ({ item, onPress }) => (
     <View style={styles.convInfo}>
       <Text style={[styles.convName, item.isAdmin && { color: '#D4AF37' }]}>{item.name}</Text>
       <Text style={styles.convPreview} numberOfLines={1}>
-        {item.lastMessage || 'Started a conversation'}
+        {(item.sessionStatus === 'completed' || item.sessionStatus === 'cancelled')
+          ? `Session ended · ${item.duration || 0} min · 🪙 ${item.coinsDeducted || 0}`
+          : (item.lastMessage || 'Started a conversation')}
       </Text>
     </View>
     <View style={styles.convRight}>
@@ -120,6 +122,12 @@ export default function ConversationsScreen() {
         id: item.id,
         avatarIndex: item.avatarIndex?.toString() || '0',
         gender: item.gender || 'Female',
+        sessionId: item.sessionId || '',
+        sessionStatus: item.sessionStatus || 'none',
+        duration: item.duration ? String(item.duration) : '',
+        coinsDeducted: item.coinsDeducted ? String(item.coinsDeducted) : '',
+        startTime: item.startTime || '',
+        endTime: item.endTime || '',
         isAdmin: item.isAdmin ? 'true' : 'false'
       },
     });
@@ -183,7 +191,7 @@ export default function ConversationsScreen() {
           </View>
         ) : (
           filtered.map((item) => (
-            <ConversationItem key={item.id} item={item} onPress={handleOpenChat} />
+            <ConversationItem key={`${item.id}-${item.sessionId || item.startTime || 'none'}`} item={item} onPress={handleOpenChat} />
           ))
         )}
         <View style={{ height: vs(20) }} />

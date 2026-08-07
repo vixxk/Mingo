@@ -13,6 +13,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, hp, wp } from '../../utils/responsive';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -44,10 +45,15 @@ export default function RoleSelectionScreen() {
     ]).start();
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (selectedRole === 'listener') {
       router.push('/(profile)/listener');
     } else {
+      // Regular users see the Mingo "I Agree" popup right after signing in
+      // (rendered globally by the root layout). Listeners never see it.
+      try {
+        await AsyncStorage.setItem('pendingWelcomePopup', 'true');
+      } catch (e) {}
       router.replace('/(tabs)');
     }
   };

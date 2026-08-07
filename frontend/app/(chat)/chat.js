@@ -272,7 +272,11 @@ export default function ChatScreen() {
     listenerId: paramListenerId,
     sessionId,
     sessionStatus,
-    isAdmin: paramIsAdmin
+    isAdmin: paramIsAdmin,
+    duration: paramDuration,
+    coinsDeducted: paramCoinsDeducted,
+    startTime: paramStartTime,
+    endTime: paramEndTime,
   } = useLocalSearchParams();
 
   // Other user display info (will be resolved after loading)
@@ -290,6 +294,38 @@ export default function ChatScreen() {
     const m = Math.floor(secs / 60);
     const s = secs % 60;
     return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  const formatSessionTime = (dateStr) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
+    return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true })}`;
+  };
+
+  const formatSessionDuration = (dur, start, end) => {
+    if (dur && Number(dur) > 0) return `${dur} min`;
+    if (start && end) {
+      const mins = Math.max(1, Math.round((new Date(end) - new Date(start)) / 60000));
+      return `${mins} min`;
+    }
+    return '—';
+  };
+
+  // Replace a read-only history page with a fresh session page. Passing the
+  // other user's id (instead of the conversation id) forces the chat screen
+  // to re-initialize as a brand-new session.
+  const startNewSession = () => {
+    if (!otherUserId) return;
+    router.replace({
+      pathname: '/(chat)/chat',
+      params: {
+        name: otherName,
+        id: otherUserId,
+        avatarIndex: otherAvatarIndex || '0',
+        gender: otherGender || 'Female',
+      },
+    });
   };
 
   const handleEndSession = () => {
@@ -341,6 +377,9 @@ export default function ChatScreen() {
   const [showCostPopup, setShowCostPopup] = useState(false);
   const [showEndChatPopup, setShowEndChatPopup] = useState(false);
   const [isEndingSession, setIsEndingSession] = useState(false);
+  // Read-only history mode: an ended/cancelled session opened via its own
+  // sessionId — messages are frozen and the input bar becomes a session panel.
+  const [historyMode, setHistoryMode] = useState(false);
 
   // ── Contact-sharing safety ─────────────────────────────────
   const [showSafetyNotice, setShowSafetyNotice] = useState(true);
@@ -356,8 +395,10 @@ export default function ChatScreen() {
   // re-register on every state change) always read the current values.
   const userRoleRef = useRef(userRole);
   const chatRestrictedRef = useRef(chatRestricted);
+  const historyModeRef = useRef(historyMode);
   useEffect(() => { userRoleRef.current = userRole; }, [userRole]);
   useEffect(() => { chatRestrictedRef.current = chatRestricted; }, [chatRestricted]);
+  useEffect(() => { historyModeRef.current = historyMode; }, [historyMode]);
 
   const handleBack = useCallback(() => {
     if (router.canGoBack()) {
@@ -434,14 +475,17 @@ export default function ChatScreen() {
     realConversationIdRef.current = realConversationId;
   }, [realConversationId]);
 
-  // Animate the header swap between the name/online label and the timer capsule
+  // Animate the header swap between the name/online label and the timer capsule.
+  // Only the USER's header swaps (name fades out while the timer slides in) —
+  // the listener always keeps the user's name + avatar visible next to it.
   useEffect(() => {
+    const shouldSwap = sessionActive && userRole === 'USER';
     Animated.timing(headerSwapAnim, {
-      toValue: sessionActive ? 1 : 0,
+      toValue: shouldSwap ? 1 : 0,
       duration: 250,
       useNativeDriver: true,
     }).start();
-    if (sessionActive) {
+    if (shouldSwap) {
       timerEnterAnim.setValue(0);
       Animated.timing(timerEnterAnim, {
         toValue: 1,
@@ -449,14 +493,14 @@ export default function ChatScreen() {
         useNativeDriver: true,
       }).start();
     }
-  }, [sessionActive, headerSwapAnim, timerEnterAnim]);
+  }, [sessionActive, userRole, headerSwapAnim, timerEnterAnim]);
 
   useEffect(() => {
     const handleAppStateChange = (nextAppState) => {
       if (realConversationIdRef.current) {
         if (nextAppState === 'active') {
           console.log('[Chat] App returned to foreground, rejoining room:', realConversationIdRef.current);
-          socketService.joinRoom(realConversationIdRef.current);
+          if (!historyModeRef.current) socketService.joinRoom(realConversationIdRef.current);
         } else if (nextAppState.match(/inactive|background/)) {
           console.log('[Chat] App went to background, leaving room:', realConversationIdRef.current);
           socketService.leaveRoom(realConversationIdRef.current);
@@ -478,6 +522,16 @@ export default function ChatScreen() {
   useEffect(() => {
     const init = async () => {
       try {
+        // Reset per navigation — the same screen instance is reused when
+        // moving between a history page and a fresh session page.
+        setLoading(true);
+        setMessages([]);
+        setHistoryMode(false);
+        setSessionActive(false);
+        setEverHadSession(false);
+        setWaitingForReply(false);
+        setChatBlocked(false);
+
         let myId = null;
         let myRole = 'USER';
         const userData = await AsyncStorage.getItem('user');
@@ -513,6 +567,15 @@ export default function ChatScreen() {
             if (other) {
               setOtherUserId(other.toString());
               otherUserIdRef.current = other.toString();
+
+              // The backend always returns the other participant's public
+              // profile — so the LISTENER reliably sees the user's name and
+              // avatar in the header (and the user sees the listener's too).
+              if (response.data.otherUser) {
+                setOtherName(response.data.otherUser.name || paramName);
+                setOtherAvatarIndex(String(response.data.otherUser.avatarIndex ?? paramAvatarIndex));
+                setOtherGender(response.data.otherUser.gender || paramGender);
+              }
               
               // Fetch the other user's profile for display (name, avatar, gender)
               try {
@@ -529,13 +592,6 @@ export default function ChatScreen() {
                     // Show the listener's real online state in the header.
                     setIsListenerOnline(profileRes.data.isOnline !== false);
                   }
-                } else {
-                  // I'm listener, other is user → use response data or params
-                  if (response.data.otherUser) {
-                    setOtherName(response.data.otherUser.name || paramName);
-                    setOtherAvatarIndex(String(response.data.otherUser.avatarIndex ?? paramAvatarIndex));
-                    setOtherGender(response.data.otherUser.gender || paramGender);
-                  }
                 }
               } catch (profileErr) {
                 console.log('Could not fetch other user profile:', profileErr);
@@ -544,8 +600,19 @@ export default function ChatScreen() {
               setOtherUserId(conversationId);
             }
 
-            console.log('[Chat] Joining room:', actualConvId);
-            socketService.joinRoom(actualConvId);
+            // Read-only history page: an ended/cancelled session opened via its
+            // own sessionId (from the messages list). Its messages are frozen
+            // and the input bar becomes a session-info panel.
+            const openedSid = String(sessionId || '');
+            const session = response.data.chatSession;
+            const isEndedSessionPage = !!openedSid && !!session &&
+              (session.status === 'completed' || session.status === 'cancelled');
+            setHistoryMode(isEndedSessionPage);
+
+            console.log('[Chat] Joining room:', actualConvId, isEndedSessionPage ? '(skipped: history page)' : '');
+            if (!isEndedSessionPage) {
+              socketService.joinRoom(actualConvId);
+            }
 
             // Handle chat session from response
             let isOnline = true;
@@ -561,7 +628,6 @@ export default function ChatScreen() {
               }
             }
 
-            const session = response.data.chatSession;
             let blockedBySession = false;
             if (session && session.active) {
               setSessionActive(true);
@@ -587,22 +653,21 @@ export default function ChatScreen() {
                 }
               } else {
                 blockedBySession = false;
-                // No active session — if the user already sent their free
-                // message and a session has never been created, they must
-                // wait for the listener's reply before they can type again.
-                if (!session || !session.sessionId) {
-                  const apiMessages = response.data.messages || [];
-                  const nonSystemMessages = apiMessages.filter(m => m.senderModel !== 'System' && m.type !== 'system');
-                  const lastMessage = nonSystemMessages[nonSystemMessages.length - 1];
-                  const lastSenderId = lastMessage ? String(lastMessage.sender?._id || lastMessage.sender || '') : '';
-                  if (lastMessage && lastSenderId && lastSenderId === String(myId)) {
-                    setWaitingForReply(true);
-                  }
+                // No active session — the page shows the current phase window.
+                // If the last message in it is ours (our free message), we wait
+                // for the listener's reply before our next message starts the
+                // paid session.
+                const apiMessages = response.data.messages || [];
+                const nonSystemMessages = apiMessages.filter(m => m.senderModel !== 'System' && m.type !== 'system');
+                const lastMessage = nonSystemMessages[nonSystemMessages.length - 1];
+                const lastSenderId = lastMessage ? String(lastMessage.sender?._id || lastMessage.sender || '') : '';
+                if (lastMessage && lastSenderId && lastSenderId === String(myId)) {
+                  setWaitingForReply(true);
                 }
               }
             }
 
-            setChatBlocked(blockedBySession || (myRole === 'LISTENER' && !isOnline));
+            setChatBlocked(blockedBySession || (myRole === 'LISTENER' && !isOnline) || isEndedSessionPage);
 
             const apiMessages = response.data.messages || [];
             const formatted = insertDateLabels(
@@ -652,7 +717,7 @@ export default function ChatScreen() {
       if (realConversationIdRef.current) socketService.leaveRoom(realConversationIdRef.current); 
       if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
     };
-  }, [conversationId]);
+  }, [conversationId, sessionId]);
 
   useEffect(() => {
     if (!currentUserId) return;
@@ -667,6 +732,8 @@ export default function ChatScreen() {
   useEffect(() => {
     const handleNewMessage = (msg) => {
       console.log('[Chat] Received message via socket:', msg);
+      // History pages are frozen — never append live messages to an ended session.
+      if (historyModeRef.current) return;
       
       // Only process messages for the current conversation
       const msgConvId = (msg.conversationId?._id || msg.conversationId || '').toString();
@@ -785,6 +852,7 @@ export default function ChatScreen() {
     };
 
     const handleSessionStarted = (data) => {
+      if (historyModeRef.current) return;
       console.log('[Chat] Session started:', data);
       setSessionActive(true);
       setEverHadSession(true);
@@ -797,6 +865,7 @@ export default function ChatScreen() {
     };
 
     const handleSessionRenewed = (data) => {
+      if (historyModeRef.current) return;
       console.log('[Chat] Session renewed:', data);
       setSessionActive(true);
       setEverHadSession(true);
@@ -809,6 +878,7 @@ export default function ChatScreen() {
     };
 
     const handleSessionEnded = () => {
+      if (historyModeRef.current) return;
       console.log('[Chat] Session ended');
       setSessionActive(false);
       setWaitingForReply(false);
@@ -957,6 +1027,9 @@ export default function ChatScreen() {
     const handleListenerOffline = (data) => {
       console.log('[Chat] Listener offline, send blocked:', data);
       setIsListenerOnline(false);
+      // Unlock the input: the blocked send was a paid (2nd+) message, not the
+      // free one, so the user isn't waiting for a reply anymore.
+      setWaitingForReply(false);
       // Remove the optimistic (unsent) message that this blocked send left behind.
       setMessages((prev) =>
         prev.filter((m) => !(typeof m.id === 'string' && m.id.startsWith('temp_')))
@@ -1055,9 +1128,10 @@ export default function ChatScreen() {
     setShowEmojis(false);
     setPhoneDetected(false);
 
-    // Only one free message: once the user sends their first message with no
-    // session, lock the input until the listener replies and the session starts.
-    if (userRole === 'USER' && !sessionActive && !everHadSession) {
+    // One free message per session phase: after the user sends the phase's
+    // first (free) message, lock the input until the listener replies and the
+    // paid session starts on the user's next message.
+    if (userRole === 'USER' && !sessionActive) {
       setWaitingForReply(true);
     }
   };
@@ -1364,7 +1438,11 @@ export default function ChatScreen() {
         ) : displayedMessages.length === 0 ? (
           <View style={styles.emptyChat}>
             <Ionicons name="chatbubbles-outline" size={wp(12)} color="#333" />
-            <Text style={styles.emptyChatText}>Say hello! Your first message is free.</Text>
+            <Text style={styles.emptyChatText}>
+              {userRole === 'LISTENER'
+                ? 'Waiting for the user to start the conversation...'
+                : 'Say hello! Your first message is free.'}
+            </Text>
           </View>
         ) : (
           displayedMessages.map((item) => <MessageBubble key={item.id} item={item} />)
@@ -1385,8 +1463,9 @@ export default function ChatScreen() {
         </View>
       )}
 
-      {/* Chat blocked banner (balance OR abuse restriction) */}
-      {chatBlocked && userRole === 'USER' && (
+      {/* Chat blocked banner (balance OR abuse restriction) — never on a
+          read-only history page (it shows its own ended-session panel) */}
+      {chatBlocked && userRole === 'USER' && !historyMode && (
         <TouchableOpacity
           style={[styles.blockedBanner, chatRestricted && styles.blockedBannerDanger]}
           activeOpacity={0.85}
@@ -1421,11 +1500,44 @@ export default function ChatScreen() {
             Replying to admin messages is disabled.
           </Text>
         </View>
-      ) : sessionStatus === 'completed' ? (
-        <View style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, hp(1.2)), justifyContent: 'center', alignItems: 'center' }]}>
-          <Text style={{ color: '#9CA3AF', fontSize: wp(3.5), fontFamily: 'Inter_500Medium', fontStyle: 'italic' }}>
-            This chat session has ended.
-          </Text>
+      ) : historyMode ? (
+        <View style={[styles.endedPanel, { paddingBottom: Math.max(insets.bottom, hp(1.2)) }]}>
+          <View style={styles.endedPanelHeader}>
+            <Ionicons name="checkmark-circle-outline" size={wp(4.5)} color="#22C55E" />
+            <Text style={styles.endedPanelTitle}>Session ended</Text>
+          </View>
+          <View style={styles.endedPanelMetaRow}>
+            <View style={styles.endedMetaItem}>
+              <Ionicons name="time-outline" size={wp(3.8)} color="#9CA3AF" />
+              <Text style={styles.endedMetaText}>
+                {formatSessionDuration(paramDuration, paramStartTime, paramEndTime)}
+              </Text>
+            </View>
+            {!!paramCoinsDeducted && Number(paramCoinsDeducted) > 0 && (
+              <View style={styles.endedMetaItem}>
+                <Text style={styles.endedMetaText}>🪙 {paramCoinsDeducted} coins</Text>
+              </View>
+            )}
+            {(!!paramStartTime || !!paramEndTime) && (
+              <View style={styles.endedMetaItem}>
+                <Ionicons name="calendar-outline" size={wp(3.8)} color="#9CA3AF" />
+                <Text style={styles.endedMetaText}>{formatSessionTime(paramStartTime || paramEndTime)}</Text>
+              </View>
+            )}
+          </View>
+          {userRole === 'USER' && (
+            <TouchableOpacity style={styles.newSessionBtnWrap} activeOpacity={0.85} onPress={startNewSession}>
+              <LinearGradient
+                colors={['#3B82F6', '#EC4899']}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={styles.newSessionBtn}
+              >
+                <Ionicons name="chatbubble-ellipses-outline" size={wp(4.2)} color="#fff" />
+                <Text style={styles.newSessionBtnText}>Start New Session</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
         <View style={[styles.inputBar, phoneDetected && styles.inputBarDanger, { paddingBottom: Math.max(insets.bottom, hp(1.2)) }]}>
@@ -1812,6 +1924,39 @@ const styles = StyleSheet.create({
   inputBar: {
     flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: wp(3),
     paddingTop: hp(1), borderTopWidth: 1, borderTopColor: '#1A1A1A', backgroundColor: '#000',
+  },
+  // Ended-session (read-only history) panel
+  endedPanel: {
+    borderTopWidth: 1, borderTopColor: '#1A1A1A', backgroundColor: '#000',
+    paddingHorizontal: wp(4), paddingTop: hp(1.5),
+  },
+  endedPanelHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: wp(2),
+    marginBottom: hp(1.2),
+  },
+  endedPanelTitle: {
+    color: '#22C55E', fontSize: wp(3.8), fontWeight: '700', fontFamily: 'Inter_700Bold',
+  },
+  endedPanelMetaRow: {
+    flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: wp(3),
+    marginBottom: hp(1.4),
+  },
+  endedMetaItem: {
+    flexDirection: 'row', alignItems: 'center', gap: wp(1),
+    backgroundColor: '#0B0B0F', borderRadius: wp(4), borderWidth: 1, borderColor: '#1F2937',
+    paddingHorizontal: wp(2.5), paddingVertical: hp(0.6),
+  },
+  endedMetaText: {
+    color: '#9CA3AF', fontSize: wp(3), fontFamily: 'Inter_500Medium',
+  },
+  newSessionBtnWrap: {
+    borderRadius: wp(8), overflow: 'hidden', height: hp(5.5), marginBottom: hp(0.8),
+  },
+  newSessionBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: wp(2),
+  },
+  newSessionBtnText: {
+    color: '#fff', fontSize: wp(3.8), fontWeight: '700', fontFamily: 'Inter_700Bold',
   },
   textInput: {
     flex: 1, fontSize: wp(3.6), color: '#fff', paddingVertical: hp(1), maxHeight: hp(12),
