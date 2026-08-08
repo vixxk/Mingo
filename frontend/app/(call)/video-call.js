@@ -827,7 +827,7 @@ export default function VideoCallScreen() {
         {/* Call duration timer — centered near the top with enough clearance
             below the status bar / notch. Always visible while the call is
             connected (not tied to the controls toggle). */}
-        <View style={[styles.topBar, { paddingTop: insets.top + hp(6) }]} pointerEvents="none">
+        <View style={[styles.topBar, { paddingTop: insets.top + hp(12) }]} pointerEvents="none">
           {remoteJoined && (
             <View style={styles.topBarTimerWrap}>
               <CallTimer active />
@@ -1013,9 +1013,9 @@ export default function VideoCallScreen() {
 
       <Animated.View style={{ opacity: controlsOpacity }} pointerEvents={controlsVisible ? 'auto' : 'none'}>
       {/* Timer sits clearly below the notification bar — insets.top clears
-          the status bar/notch, and hp(6) adds a consistent %-based gap
+          the status bar/notch, and hp(12) adds a consistent %-based gap
           so it stays visible on every screen size. */}
-      <View style={[styles.topBar, { paddingTop: insets.top + hp(6) }]}>
+      <View style={[styles.topBar, { paddingTop: insets.top + hp(12) }]}>
         {/* Call duration timer — only appears once the call connects */}
         {remoteJoined && (
           <View style={styles.topBarTimerWrap}>

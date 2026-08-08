@@ -98,7 +98,7 @@ class ChatController {
         // the user had sent a message (and the card previewed one).
         const ascSessions = [...sortedSessions].sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
         const phaseStartBySession = new Map();
-        let runningPhaseStart = conversation.createdAt;
+        let runningPhaseStart = conv.createdAt;
         for (const s of ascSessions) {
           phaseStartBySession.set(s._id.toString(), runningPhaseStart);
           // Only actually-ended sessions advance the boundary — mirrors the
@@ -162,7 +162,7 @@ class ChatController {
           // card preview is always something the page will actually show.
           const query = {
             conversationId: conv._id,
-            createdAt: { $gt: phaseStartBySession.get(session._id.toString()) || conversation.createdAt },
+            createdAt: { $gt: phaseStartBySession.get(session._id.toString()) || conv.createdAt },
             senderModel: { $ne: 'System' }
           };
           if (session.endTime) {

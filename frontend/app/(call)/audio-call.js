@@ -650,7 +650,7 @@ export default function AudioCallScreen() {
 
       {/* Call duration timer — always visible, with a generous gap below the
           status bar / notch so it never overlaps them. */}
-      <View style={[styles.topBar, { paddingTop: insets.top + hp(6) }]} pointerEvents="none">
+      <View style={[styles.topBar, { paddingTop: insets.top + hp(12) }]} pointerEvents="none">
         {/* Call duration timer — only appears once the call connects */}
         {remoteJoined && (
           <View style={styles.topBarTimerWrap}>
@@ -658,40 +658,6 @@ export default function AudioCallScreen() {
           </View>
         )}
       </View>
-
-      {/* Coin + Recharge + Gift — stacked on the top right (user only). All
-          three share the controls fade, so they hide together when the user
-          taps the screen to hide the buttons. */}
-      {!isListener && (
-        <Animated.View style={{ opacity: controlsOpacity }} pointerEvents={controlsVisible ? 'auto' : 'none'}>
-          <View style={styles.fallbackTopRight}>
-            {currentCoins !== null && (
-              <View style={styles.coinsBadgeInline}>
-                <Text style={{ fontSize: 12, marginRight: 4 }}>🪙</Text>
-                <Text style={styles.coinsBadgeInlineText}>{currentCoins}</Text>
-              </View>
-            )}
-
-            <TouchableOpacity
-              style={styles.floatingRechargeGift}
-              onPress={(e) => { e.stopPropagation?.(); setShowRecharge(true); }}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="wallet-outline" size={20} color="#EF4444" />
-              <Text style={[styles.floatingRechargeText, { color: '#EF4444' }]}>Recharge</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.floatingRechargeGift}
-              onPress={(e) => { e.stopPropagation?.(); setShowGiftPopup(true); }}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="gift-outline" size={20} color="#EF4444" />
-              <Text style={[styles.floatingRechargeText, { color: '#EF4444' }]}>Gift</Text>
-            </TouchableOpacity>
-          </View>
-        </Animated.View>
-      )}
 
       <View style={styles.videoArea}>
         {/* Remote participant — their avatar with a pulsing glow while the
@@ -718,11 +684,47 @@ export default function AudioCallScreen() {
         </View>
       </View>
 
-      {/* Safety — left side, middle of the page */}
+      {/* Floating overlay — coins badge + Recharge + Gift (top right, user
+          only) and the Safety button (left middle). Rendered as a full-screen
+          layer so the buttons sit INSIDE the overlay's touch bounds and stay
+          tappable — a zero-height wrapper would let taps fall through to the
+          background Pressable, which toggled the controls instead of opening
+          the popups. Everything shares the controls fade. Mirrors the video
+          call's overlay structure. */}
       <Animated.View
         style={[StyleSheet.absoluteFill, { opacity: controlsOpacity }]}
         pointerEvents={controlsVisible ? 'box-none' : 'none'}
       >
+        {!isListener && (
+          <View style={styles.floatingTopRight}>
+            {currentCoins !== null && (
+              <View style={styles.coinsBadge}>
+                <Text style={{ fontSize: 12, marginRight: 4 }}>🪙</Text>
+                <Text style={styles.coinsBadgeText}>{currentCoins}</Text>
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={styles.floatingRechargeGift}
+              onPress={(e) => { e.stopPropagation?.(); setShowRecharge(true); }}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="wallet-outline" size={22} color="#EF4444" />
+              <Text style={[styles.floatingRechargeText, { color: '#EF4444' }]}>Recharge</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.floatingRechargeGift}
+              onPress={(e) => { e.stopPropagation?.(); setShowGiftPopup(true); }}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="gift-outline" size={22} color="#EF4444" />
+              <Text style={[styles.floatingRechargeText, { color: '#EF4444' }]}>Gift</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Safety — left side, middle of the page */}
         <TouchableOpacity
           style={styles.safetyFloat}
           onPress={(e) => { e.stopPropagation?.(); setShowSafety(true); }}
@@ -847,20 +849,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  coinsBadgeInline: {
+  coinsBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
     paddingHorizontal: s(10),
-    paddingVertical: vs(5),
+    paddingVertical: vs(4),
     borderRadius: 16,
     gap: s(4),
     borderWidth: 1,
     borderColor: 'rgba(245, 158, 11, 0.3)',
   },
-  coinsBadgeInlineText: {
+  coinsBadgeText: {
     color: '#F59E0B',
-    fontSize: ms(12, 0.3),
+    fontSize: ms(13, 0.3),
     fontFamily: 'Inter_700Bold',
   },
   videoArea: {
@@ -933,9 +935,12 @@ const styles = StyleSheet.create({
     paddingTop: vs(10),
     paddingBottom: vs(24),
   },
-  fallbackTopRight: {
+  // Positioned identically to the video call's floatingTopRight (top: 8% of
+  // screen height) so the coins badge, Recharge and Gift buttons land in the
+  // exact same spot on both call screens. hp(8) === SH * 0.08.
+  floatingTopRight: {
     position: 'absolute',
-    top: hp(16),
+    top: hp(8),
     right: s(12),
     alignItems: 'flex-end',
     gap: vs(8),
