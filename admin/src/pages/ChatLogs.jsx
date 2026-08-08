@@ -223,12 +223,20 @@ function RoleTag({ role, support }) {
   )
 }
 
+const sessionStatusMeta = {
+  active: { label: 'Active', color: '#22C55E', bg: 'rgba(34, 197, 94, 0.12)' },
+  completed: { label: 'Completed', color: '#38BDF8', bg: 'rgba(56, 189, 248, 0.12)' },
+  cancelled: { label: 'Cancelled', color: '#F87171', bg: 'rgba(248, 113, 113, 0.12)' },
+  free: { label: 'Free Chat', color: '#A78BFA', bg: 'rgba(167, 139, 250, 0.12)' },
+}
+
 function SessionCard({ session, onClick }) {
   const participants = session.participants || []
   const isAdmin = session.isAdminConversation
   const msgCount = session.messageCount
   const lastMsg = session.lastMessage
-  const hasSession = session.session?.active
+  const sInfo = session.session || null
+  const hasSession = sInfo && sInfo.active
 
   const userPart = participants.find(p => p && p.role === 'USER') || participants[0] || null
   const listenerPart = participants.find(p => p && p.role === 'LISTENER') || null
@@ -237,17 +245,27 @@ function SessionCard({ session, onClick }) {
     ? [userPart, { name: 'Mingo Support', role: 'ADMIN', support: true }].filter(Boolean)
     : [userPart, listenerPart].filter(Boolean)
 
+  // One card = ONE session → show that session's own status & stats.
+  const statusKey = sInfo ? sInfo.status : 'free'
+  const status = sessionStatusMeta[statusKey] || { label: statusKey || 'Free Chat', color: '#9CA3AF', bg: 'var(--bg-tertiary)' }
+
+  const startLabel = sInfo && sInfo.startTime ? formatDate(sInfo.startTime) : ''
+  const endLabel = sInfo && sInfo.endTime ? formatDate(sInfo.endTime) : ''
+  const durationLabel = sInfo ? `${sInfo.duration || 0} min` : ''
+  const coinsLabel = sInfo && sInfo.totalCoinsDeducted > 0 ? sInfo.totalCoinsDeducted : null
+
   return (
     <div
       onClick={onClick}
       style={{
         backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)',
+        borderLeft: `3px solid ${status.color}`,
         borderRadius: 'var(--radius-xl)', padding: 16, marginBottom: 12,
         cursor: 'pointer', transition: 'all 0.2s',
       }}
       onMouseEnter={e => {
-        e.currentTarget.style.borderColor = 'var(--accent)'
-        e.currentTarget.style.boxShadow = '0 4px 16px rgba(139,92,246,0.15)'
+        e.currentTarget.style.borderColor = status.color
+        e.currentTarget.style.boxShadow = `0 4px 16px ${status.color}30`
       }}
       onMouseLeave={e => {
         e.currentTarget.style.borderColor = 'var(--border)'
@@ -298,27 +316,62 @@ function SessionCard({ session, onClick }) {
           ))}
         </div>
 
-        {/* Meta */}
-        <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-            {lastMsg ? formatDate(lastMsg.createdAt || lastMsg) : ''}
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-            {msgCount} messages
-          </div>
-          {session.session?.totalCoinsDeducted > 0 && (
-            <div style={{ fontSize: 10, color: '#FBBF24', fontWeight: 700 }}>
-              🪙 {session.session.totalCoinsDeducted}
-            </div>
+        {/* Status pill + start time */}
+        <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+          <span style={{
+            fontSize: 10, fontWeight: 800, letterSpacing: '0.5px', textTransform: 'uppercase',
+            color: status.color, backgroundColor: status.bg, borderRadius: 6,
+            padding: '3px 8px', whiteSpace: 'nowrap',
+          }}>
+            {status.label}
+          </span>
+          {startLabel && (
+            <span style={{ fontSize: 10.5, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+              {startLabel}
+            </span>
           )}
         </div>
       </div>
+
+      {/* Session info strip — unique to this session */}
+      {(sInfo || msgCount > 0) && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          padding: '7px 12px', borderRadius: 10, marginBottom: 10,
+          backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+        }}>
+          {sInfo && (
+            <span style={{ fontSize: 11.5, fontWeight: 700, color: '#fff' }}>
+              ⏱ {durationLabel}
+            </span>
+          )}
+          {coinsLabel != null && (
+            <span style={{ fontSize: 11.5, fontWeight: 700, color: '#FBBF24' }}>
+              🪙 {coinsLabel.toLocaleString()}
+            </span>
+          )}
+          <span style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>
+            💬 {msgCount} {msgCount === 1 ? 'message' : 'messages'}
+          </span>
+          {endLabel && (
+            <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+              → Ended {endLabel}
+            </span>
+          )}
+          {!sInfo && (
+            <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+              Conversation opened — no paid session
+            </span>
+          )}
+        </div>
+      )}
+
       {lastMsg && (
         <div style={{
-          padding: '8px 12px', backgroundColor: 'var(--bg-tertiary)',
+          padding: '8px 12px', backgroundColor: 'var(--bg-secondary)',
           borderRadius: 10, fontSize: 12, color: 'var(--text-secondary)',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          borderLeft: `3px solid ${hasSession ? '#22C55E' : 'var(--border)'}`,
+          border: '1px solid var(--border)', borderLeft: `3px solid ${status.color}`,
         }}>
           {lastMsg.content || lastMsg}
         </div>

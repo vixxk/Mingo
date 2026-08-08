@@ -284,8 +284,8 @@ export const adminAPI = {
     return apiRequest(`/admin/chat-logs?${query}`)
   },
 
-  getChatLogDetail: async (conversationId) => {
-    return apiRequest(`/admin/chat-logs?conversationId=${conversationId}&limit=1`)
+  getChatLogDetail: async (sessionId) => {
+    return apiRequest(`/admin/chat-logs?sessionId=${sessionId}&limit=1`)
   },
 
   getRatings: async (params = {}) => {

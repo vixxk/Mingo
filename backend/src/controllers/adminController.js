@@ -1792,12 +1792,18 @@ static async resetCoinPackages(req, res, next) {
 
   /**
    * GET /admin/chat-logs
-   * Returns all chat conversations with their messages for admin review.
-   * Admin views from listener's POV - can scroll through all messages.
+   * Returns chat logs with ONE CARD PER CHAT SESSION — each paid chat session
+   * gets its own card and its own scoped message thread, mirroring how the
+   * mobile app presents conversations. Conversations that never had a session
+   * (free-chat phase / Mingo Support threads) get a single "sessionless" card.
+   *
+   * Pass `sessionId` (the card's `id`) to get a single card with its full
+   * message thread for the detail page. Cards are paginated AFTER expansion,
+   * so `total` / "load more" reflect actual cards, not conversations.
    */
   static async getChatLogs(req, res, next) {
     try {
-      const { conversationId, search, userId, listenerId, startDate, endDate, page = 1, limit = 50 } = req.query;
+      const { conversationId, sessionId, search, userId, listenerId, startDate, endDate, page = 1, limit = 50 } = req.query;
       const filter = {};
       const and = [];
 
@@ -1841,31 +1847,28 @@ static async resetCoinPackages(req, res, next) {
         filter.$and = and;
       }
 
-      if (startDate || endDate) {
-        filter.createdAt = {};
-        if (startDate) filter.createdAt.$gte = new Date(startDate);
-        if (endDate) filter.createdAt.$lte = new Date(endDate);
-      }
-
+      // Conversations are expanded into per-session cards, so pagination is
+      // applied to the CARDS at the end (chat-log volume is small enough that
+      // expanding in memory is fine). The date filter is applied per card.
       const conversations = await Conversation.find(filter)
         .populate('participants', 'name username avatarIndex gender role')
-        .sort({ updatedAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(parseInt(limit));
+        .sort({ updatedAt: -1 });
 
-      const total = await Conversation.countDocuments(filter);
+      // Date filter — startDate/endDate are day-precision; endDate covers the
+      // whole day. Applied to each session's startTime (and to the fallback
+      // card's conversation creation time).
+      const startMs = startDate ? new Date(startDate).getTime() : null;
+      const endMs = endDate ? new Date(endDate).getTime() + 24 * 60 * 60 * 1000 - 1 : null;
 
-      const result = await Promise.all(conversations.map(async (conv) => {
-        const messages = await Message.find({ conversationId: conv._id })
-          .sort({ createdAt: 1 })
-          .populate('sender', 'name username')
-          .select('sender senderModel content type mediaUrl giftCount isAdminMessage createdAt');
+      const cards = [];
+
+      for (const conv of conversations) {
+        const populatedParticipants = (conv.participants || []).filter(Boolean);
+        const participantIds = populatedParticipants.map(p => p._id);
 
         // A conversation is a "Mingo Support" thread when any participant is an admin.
-        const adminParticipant = conv.participants.find(p => p && (p.role === 'ADMIN' || String(p.role || '').endsWith('_ADMIN')));
+        const adminParticipant = populatedParticipants.find(p => p && (p.role === 'ADMIN' || String(p.role || '').endsWith('_ADMIN')));
         const isAdminConv = !!adminParticipant;
-
-        const populatedParticipants = (conv.participants || []).filter(Boolean);
 
         // From the listener's point of view the "other" participant is the caller
         // (the USER). For support threads it's whoever sits opposite the admin.
@@ -1873,35 +1876,143 @@ static async resetCoinPackages(req, res, next) {
           ? populatedParticipants.find(p => p._id.toString() !== adminParticipant._id.toString()) || null
           : populatedParticipants.find(p => p.role === 'USER') || populatedParticipants[0] || null;
 
-        const sessionInfo = conv.chatSession ? {
-          active: conv.chatSession.active,
-          startTime: conv.chatSession.startTime,
-          totalCoinsDeducted: conv.chatSession.totalCoinsDeducted,
-          sessionId: conv.chatSession.sessionId,
+        const participantsOut = populatedParticipants.map(p => ({
+          id: p._id,
+          name: p.name || p.username || 'Unknown',
+          avatarIndex: p.avatarIndex || 0,
+          gender: p.gender,
+          role: p.role,
+        }));
+        const otherParticipantOut = otherParticipant ? {
+          id: otherParticipant._id,
+          name: otherParticipant.name || otherParticipant.username || 'Unknown',
+          avatarIndex: otherParticipant.avatarIndex || 0,
+          gender: otherParticipant.gender,
+          role: otherParticipant.role,
         } : null;
 
-        // Last-message preview — messages are sorted oldest-first so the newest
-        // one is the final entry. Fall back to the raw reference only if empty.
-        const lastMessage = messages.length > 0 ? messages[messages.length - 1] : conv.lastMessage;
+        const allMessages = await Message.find({ conversationId: conv._id })
+          .sort({ createdAt: 1 })
+          .populate('sender', 'name username')
+          .select('sender senderModel content type mediaUrl giftCount isAdminMessage createdAt');
 
-        return {
-          id: conv._id,
-          participants: populatedParticipants.map(p => ({
-            id: p._id,
-            name: p.name || p.username || 'Unknown',
-            avatarIndex: p.avatarIndex || 0,
-            gender: p.gender,
-            role: p.role,
-          })),
-          otherParticipant: otherParticipant ? {
-            id: otherParticipant._id,
-            name: otherParticipant.name || otherParticipant.username || 'Unknown',
-            avatarIndex: otherParticipant.avatarIndex || 0,
-            gender: otherParticipant.gender,
-            role: otherParticipant.role,
-          } : null,
-          isAdminConversation: isAdminConv,
-          messages: messages.map(msg => ({
+        // ── One card PER chat session ──
+        const chatSessions = await Session.find({
+          userId: { $in: participantIds },
+          listenerId: { $in: participantIds },
+          callType: 'chat',
+        }).sort({ startTime: 1 });
+
+        // Phase windows: a session's thread starts where the previous ENDED
+        // session left off (or at conversation creation). The message that
+        // begins a session is saved a moment BEFORE session.startTime is
+        // recorded, so a startTime-bounded window would silently drop it — this
+        // mirrors the mobile chatController logic exactly.
+        const phaseStartBySession = new Map();
+        let runningPhaseStart = conv.createdAt;
+        for (const s of chatSessions) {
+          phaseStartBySession.set(s._id.toString(), runningPhaseStart);
+          if (s.endTime && (s.status === 'completed' || s.status === 'cancelled')) {
+            runningPhaseStart = s.endTime;
+          }
+        }
+
+        const inPhase = (msg, phaseStart, phaseEnd) => {
+          const t = new Date(msg.createdAt).getTime();
+          return t > new Date(phaseStart).getTime() && (!phaseEnd || t <= new Date(phaseEnd).getTime());
+        };
+
+        for (const s of chatSessions) {
+          const sStart = new Date(s.startTime).getTime();
+          if (startMs && sStart < startMs) continue;
+          if (endMs && sStart > endMs) continue;
+
+          const phaseStart = phaseStartBySession.get(s._id.toString()) || conv.createdAt;
+          const phaseEnd = s.endTime || null;
+          const phaseMessages = allMessages.filter(m => inPhase(m, phaseStart, phaseEnd));
+          const lastMsg = phaseMessages[phaseMessages.length - 1] || null;
+
+          cards.push({
+            id: s._id,
+            conversationId: conv._id,
+            sessionId: s._id,
+            participants: participantsOut,
+            otherParticipant: otherParticipantOut,
+            isAdminConversation: isAdminConv,
+            session: {
+              active: s.status === 'active',
+              status: s.status,
+              startTime: s.startTime,
+              endTime: s.endTime,
+              duration: s.duration || 0,
+              totalCoinsDeducted: s.coinsDeducted || 0,
+              listenerEarnings: s.listenerEarnings || 0,
+            },
+            messageCount: phaseMessages.length,
+            lastMessage: lastMsg ? {
+              content: lastMsg.content,
+              createdAt: lastMsg.createdAt,
+              senderModel: lastMsg.senderModel,
+            } : null,
+            createdAt: s.startTime,
+            updatedAt: (lastMsg && lastMsg.createdAt) || s.endTime || s.startTime,
+            _phaseMessages: phaseMessages,
+          });
+        }
+
+        // ── Current-phase / sessionless card ──
+        // Messages sent after the last ENDED session (the free-message phase of
+        // a brand-new session) — or the whole thread for conversations that
+        // never had a session (support threads, plain hellos). Only shown when
+        // there is a real (non-system) message so stale empty threads don't
+        // clutter the list. Never shown while the latest session is still
+        // active (those messages belong to the active session's card).
+        const latestSession = chatSessions.length ? chatSessions[chatSessions.length - 1] : null;
+        const lastEnded = [...chatSessions].reverse().find(s => s.endTime && (s.status === 'completed' || s.status === 'cancelled'));
+        const currentPhaseStart = (lastEnded && lastEnded.endTime) || conv.createdAt;
+        const currentPhaseMessages = allMessages.filter(m => inPhase(m, currentPhaseStart, null));
+        const hasRealMessage = currentPhaseMessages.some(m => m.senderModel !== 'System');
+        const hasNewerPhase = !!latestSession &&
+          latestSession.status !== 'active' &&
+          !!latestSession.endTime &&
+          hasRealMessage;
+        const showSessionlessCard = chatSessions.length === 0 ? hasRealMessage : hasNewerPhase;
+
+        if (showSessionlessCard) {
+          const convCreated = new Date(conv.createdAt).getTime();
+          const inDateRange = (!startMs || convCreated >= startMs) && (!endMs || convCreated <= endMs);
+          if (inDateRange) {
+            const lastMsg = currentPhaseMessages[currentPhaseMessages.length - 1] || null;
+            cards.push({
+              id: conv._id,
+              conversationId: conv._id,
+              sessionId: null,
+              participants: participantsOut,
+              otherParticipant: otherParticipantOut,
+              isAdminConversation: isAdminConv,
+              session: null,
+              messageCount: currentPhaseMessages.length,
+              lastMessage: lastMsg ? {
+                content: lastMsg.content,
+                createdAt: lastMsg.createdAt,
+                senderModel: lastMsg.senderModel,
+              } : null,
+              createdAt: conv.createdAt,
+              updatedAt: conv.updatedAt,
+              _phaseMessages: currentPhaseMessages,
+            });
+          }
+        }
+      }
+
+      // Detail view — scope to a single card (matched by its `id`) and attach
+      // the full message thread (with sender info) so the detail page renders
+      // exactly that session's messages.
+      let result = cards;
+      if (sessionId) {
+        result = cards.filter(c => String(c.id) === String(sessionId));
+        result.forEach(c => {
+          c.messages = (c._phaseMessages || []).map(msg => ({
             id: msg._id,
             sender: msg.sender ? {
               id: msg.sender._id || msg.sender,
@@ -1914,20 +2025,24 @@ static async resetCoinPackages(req, res, next) {
             giftCount: msg.giftCount || 1,
             isAdminMessage: msg.isAdminMessage || false,
             createdAt: msg.createdAt,
-          })),
-          messageCount: messages.length,
-          session: sessionInfo,
-          lastMessage,
-          createdAt: conv.createdAt,
-          updatedAt: conv.updatedAt,
-        };
-      }));
+          }));
+        });
+      }
+      cards.forEach(c => delete c._phaseMessages);
+
+      // Sort cards newest-first, then paginate the CARDS.
+      result.sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0));
+
+      const total = result.length;
+      const pageNum = Math.max(parseInt(page) || 1, 1);
+      const limitNum = Math.max(parseInt(limit) || 50, 1);
+      const paginated = result.slice((pageNum - 1) * limitNum, pageNum * limitNum);
 
       return ApiResponse.success(res, {
-        conversations: result,
+        conversations: paginated,
         total,
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: pageNum,
+        limit: limitNum,
       }, 'Chat logs retrieved');
     } catch (err) {
       next(err);

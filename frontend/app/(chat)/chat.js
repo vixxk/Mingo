@@ -324,6 +324,23 @@ export default function ChatScreen() {
     }
   };
 
+  // Start a brand-new session with the same partner straight from the ended
+  // panel. Passing the other user's id (instead of the conversation id) makes
+  // initiateConversation reuse the existing conversation and land on a fresh
+  // live page (no closing and reopening the chat needed).
+  const startNewSession = () => {
+    if (!otherUserId) return;
+    router.replace({
+      pathname: '/chat',
+      params: {
+        name: otherName,
+        id: otherUserId,
+        avatarIndex: otherAvatarIndex || '0',
+        gender: otherGender || 'Female',
+      },
+    });
+  };
+
   // Session elapsed timer - counts UP from 0 starting when listener first replies
   const startElapsedTimer = (startedAtTime) => {
     if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
@@ -364,6 +381,13 @@ export default function ChatScreen() {
   // Read-only history mode: an ended/cancelled session opened via its own
   // sessionId — messages are frozen and the input bar becomes a session panel.
   const [historyMode, setHistoryMode] = useState(false);
+  // Live "Session ended" panel — shown on BOTH roles the moment the socket
+  // reports the paid session ended. Unlike historyMode (a frozen read-only
+  // page opened via an ended session's own id), the page stays live so a
+  // restarted session wakes it back up. Renders the REAL server data.
+  const [endedPanelVisible, setEndedPanelVisible] = useState(false);
+  // Real session summary (duration / coins / time) sent with the ended event.
+  const [endedSessionData, setEndedSessionData] = useState(null);
 
   // ── Contact-sharing safety ─────────────────────────────────
   const [showSafetyNotice, setShowSafetyNotice] = useState(true);
@@ -380,9 +404,11 @@ export default function ChatScreen() {
   const userRoleRef = useRef(userRole);
   const chatRestrictedRef = useRef(chatRestricted);
   const historyModeRef = useRef(historyMode);
+  const endedPanelVisibleRef = useRef(endedPanelVisible);
   useEffect(() => { userRoleRef.current = userRole; }, [userRole]);
   useEffect(() => { chatRestrictedRef.current = chatRestricted; }, [chatRestricted]);
   useEffect(() => { historyModeRef.current = historyMode; }, [historyMode]);
+  useEffect(() => { endedPanelVisibleRef.current = endedPanelVisible; }, [endedPanelVisible]);
 
   const handleBack = useCallback(() => {
     if (router.canGoBack()) {
@@ -416,6 +442,11 @@ export default function ChatScreen() {
     ) {
       setChatBlocked(false);
       setShowRechargeGate(false);
+      // After a recharge the user can resume right from this page — clear the
+      // "Session ended" panel so the input bar comes back (the next paid
+      // message restarts the session; the backend re-validates anyway).
+      setEndedPanelVisible(false);
+      setEndedSessionData(null);
       // Also clear the "waiting for listener's reply" gate: after a recharge
       // the user's next paid message can start/resume the session right away
       // (the backend re-validates balance and listener availability anyway).
@@ -517,6 +548,8 @@ export default function ChatScreen() {
         setLoading(true);
         setMessages([]);
         setHistoryMode(false);
+        setEndedPanelVisible(false);
+        setEndedSessionData(null);
         setSessionActive(false);
         setEverHadSession(false);
         setWaitingForReply(false);
@@ -777,6 +810,11 @@ export default function ChatScreen() {
       if (userRole === 'USER' && !isSent && !isSystem && msg.senderModel === 'Listener') {
         setWaitingForReply(false);
       }
+      // A real message after the session ended means the chat is resuming —
+      // swap the "Session ended" panel back to the live input.
+      if (!isSystem && !isSent) {
+        setEndedPanelVisible(false);
+      }
 
       setMessages((prev) => {
         const messageId = (msg._id || Math.random()).toString();
@@ -852,6 +890,9 @@ export default function ChatScreen() {
     const handleSessionStarted = (data) => {
       if (historyModeRef.current) return;
       console.log('[Chat] Session started:', data);
+      // Session restarted — swap the ended panel back to the live input.
+      setEndedPanelVisible(false);
+      setEndedSessionData(null);
       setSessionActive(true);
       setEverHadSession(true);
       setWaitingForReply(false);
@@ -865,6 +906,8 @@ export default function ChatScreen() {
     const handleSessionRenewed = (data) => {
       if (historyModeRef.current) return;
       console.log('[Chat] Session renewed:', data);
+      setEndedPanelVisible(false);
+      setEndedSessionData(null);
       setSessionActive(true);
       setEverHadSession(true);
       setWaitingForReply(false);
@@ -875,22 +918,23 @@ export default function ChatScreen() {
       setShowRechargeGate(false);
     };
 
-    const handleSessionEnded = () => {
+    const handleSessionEnded = (data) => {
       if (historyModeRef.current) return;
-      console.log('[Chat] Session ended');
+      console.log('[Chat] Session ended:', data);
       setSessionActive(false);
       setWaitingForReply(false);
       setSessionRemaining(0);
       setActiveSessionId(null);
       if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
-      // The USER's page becomes a read-only history log once the session ends
-      // (manual End or balance depleted) — the input bar is replaced by the
-      // "Session ended" summary panel and live messages are frozen, so they
-      // can't keep replying from here. The listener keeps a live page (input
-      // locked) so the user can still restart the session with a new message.
+      // BOTH roles now see the "Session ended" panel immediately (the input
+      // bar is replaced by the summary so nobody can keep sending). The page
+      // stays live — the panel clears again when the user's next message
+      // restarts the session. Real duration / coins / time come from the
+      // server payload (no need to close and reopen the chat).
       setChatBlocked(true);
-      if (userRole === 'USER') {
-        setHistoryMode(true);
+      setEndedPanelVisible(true);
+      if (data?.session) {
+        setEndedSessionData(data.session);
       }
       setShowEndChatPopup(false);
       setIsEndingSession(false);
@@ -922,8 +966,10 @@ export default function ChatScreen() {
 
     const handleMessageError = (data) => {
       if (data.type === 'session_ended') {
-        // Session ended — disable input for listener
+        // Session ended — disable input for listener (and show the ended panel
+        // as a fallback in case the chat_session_ended event was missed).
         setChatBlocked(true);
+        setEndedPanelVisible(true);
         const errorMsg = {
           id: `error_${Date.now()}`,
           text: data.error || 'Session has ended.',
@@ -1097,8 +1143,9 @@ export default function ChatScreen() {
   // Actually deliver a text message (after safety checks have passed)
   const performSend = (msgContent) => {
     if (!msgContent || !realConversationId || !currentUserId) return;
-    // Ended sessions are read-only — never send from a history page.
-    if (historyModeRef.current) return;
+    // Ended sessions are read-only — never send from a history page or while
+    // the live "Session ended" panel is shown.
+    if (historyModeRef.current || endedPanelVisibleRef.current) return;
     if (chatBlocked) {
       // Same gate as handleSend — never silently redirect
       if (userRole === 'USER') setShowRechargeGate(true);
@@ -1145,8 +1192,9 @@ export default function ChatScreen() {
   const handleSend = () => {
     const msgContent = message.trim();
     if (!msgContent || !realConversationId || !currentUserId) return;
-    // Ended sessions are read-only — never send from a history page.
-    if (historyModeRef.current) return;
+    // Ended sessions are read-only — never send from a history page or while
+    // the live "Session ended" panel is shown.
+    if (historyModeRef.current || endedPanelVisibleRef.current) return;
     if (waitingForReply) {
       // Free message already sent — waiting for the listener's reply to start the session
       return;
@@ -1235,6 +1283,13 @@ export default function ChatScreen() {
   const displayedMessages = isBalanceBlocked
     ? messages
     : messages.filter((m) => !(m.type === 'system' && m.text === RECHARGE_PROMPT_TEXT));
+
+  // Real ended-session values — prefer the live socket payload over the
+  // navigation params (which are stale/empty for a session that ends live).
+  const endedDuration = endedSessionData?.duration || paramDuration;
+  const endedCoins = Number(endedSessionData?.coinsDeducted ?? paramCoinsDeducted);
+  const endedStart = endedSessionData?.startTime || paramStartTime;
+  const endedEnd = endedSessionData?.endTime || paramEndTime;
 
   if (loading) {
     return (
@@ -1490,7 +1545,7 @@ export default function ChatScreen() {
 
       {/* Chat blocked banner (balance OR abuse restriction) — never on a
           read-only history page (it shows its own ended-session panel) */}
-      {chatBlocked && userRole === 'USER' && !historyMode && (
+      {chatBlocked && userRole === 'USER' && !historyMode && !endedPanelVisible && (
         <TouchableOpacity
           style={[styles.blockedBanner, chatRestricted && styles.blockedBannerDanger]}
           activeOpacity={0.85}
@@ -1525,7 +1580,7 @@ export default function ChatScreen() {
             Replying to admin messages is disabled.
           </Text>
         </View>
-      ) : historyMode ? (
+      ) : (historyMode || endedPanelVisible) ? (
         <View style={[styles.endedPanel, { paddingBottom: Math.max(insets.bottom, hp(1.2)) }]}>
           <View style={styles.endedPanelHeader}>
             <Ionicons name="checkmark-circle-outline" size={wp(4.5)} color="#22C55E" />
@@ -1535,24 +1590,37 @@ export default function ChatScreen() {
             <View style={styles.endedMetaItem}>
               <Ionicons name="time-outline" size={wp(3.8)} color="#9CA3AF" />
               <Text style={styles.endedMetaText}>
-                {formatSessionDuration(paramDuration, paramStartTime, paramEndTime)}
+                {formatSessionDuration(endedDuration, endedStart, endedEnd)}
               </Text>
             </View>
-            {!!paramCoinsDeducted && Number(paramCoinsDeducted) > 0 && (
+            {!!endedCoins && endedCoins > 0 && (
               <View style={styles.endedMetaItem}>
                 <Text style={{ color: '#38BDF8', fontSize: wp(3.4) }}>💎</Text>
                 <Text style={styles.endedMetaText}>
-                  {Math.floor(Number(paramCoinsDeducted) / 10)} diamonds
+                  {Math.floor(endedCoins / 10)} diamonds
                 </Text>
               </View>
             )}
-            {(!!paramStartTime || !!paramEndTime) && (
+            {(!!endedStart || !!endedEnd) && (
               <View style={styles.endedMetaItem}>
                 <Ionicons name="calendar-outline" size={wp(3.8)} color="#9CA3AF" />
-                <Text style={styles.endedMetaText}>{formatSessionTime(paramStartTime || paramEndTime)}</Text>
+                <Text style={styles.endedMetaText}>{formatSessionTime(endedStart || endedEnd)}</Text>
               </View>
             )}
           </View>
+          {userRole === 'USER' && (
+            <TouchableOpacity style={styles.newSessionBtnWrap} activeOpacity={0.85} onPress={startNewSession}>
+              <LinearGradient
+                colors={['#3B82F6', '#EC4899']}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={styles.newSessionBtn}
+              >
+                <Ionicons name="chatbubble-ellipses-outline" size={wp(4.2)} color="#fff" />
+                <Text style={styles.newSessionBtnText}>Start New Session</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
         <View style={[styles.inputBar, phoneDetected && styles.inputBarDanger, { paddingBottom: Math.max(insets.bottom, hp(1.2)) }]}>
@@ -1991,6 +2059,15 @@ const styles = StyleSheet.create({
   },
   endedMetaText: {
     color: '#D1D5DB', fontSize: wp(3), fontFamily: 'Inter_500Medium',
+  },
+  newSessionBtnWrap: {
+    borderRadius: wp(8), overflow: 'hidden', height: hp(5.5), marginBottom: hp(0.8),
+  },
+  newSessionBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: wp(2),
+  },
+  newSessionBtnText: {
+    color: '#fff', fontSize: wp(3.8), fontWeight: '700', fontFamily: 'Inter_700Bold',
   },
   textInput: {
     flex: 1, fontSize: wp(3.6), color: '#fff', paddingVertical: hp(1), maxHeight: hp(12),

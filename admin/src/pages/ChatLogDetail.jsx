@@ -42,6 +42,13 @@ export default function ChatLogDetail() {
     }
   }, [conversation])
 
+  const sessionStatusMeta = {
+    active: { label: 'Active', color: '#22C55E', bg: 'rgba(34,197,94,0.12)' },
+    completed: { label: 'Completed', color: '#38BDF8', bg: 'rgba(56,189,248,0.12)' },
+    cancelled: { label: 'Cancelled', color: '#F87171', bg: 'rgba(248,113,113,0.12)' },
+    free: { label: 'Free Chat', color: '#A78BFA', bg: 'rgba(167,139,250,0.12)' },
+  }
+
   const getSenderInfo = (item) => {
     if (item.isAdminMessage) return { name: 'Mingo Support', support: true }
     const senderId = item.sender?.id
@@ -56,6 +63,16 @@ export default function ChatLogDetail() {
     }
     return { name: item.sender?.name || 'Unknown' }
   }
+
+  // This card is ONE session — show its own status, duration and coin stats.
+  const sInfo = conversation?.session || null
+  const statusKey = sInfo ? sInfo.status : 'free'
+  const status = sessionStatusMeta[statusKey] || { label: statusKey || 'Free Chat', color: '#9CA3AF', bg: 'var(--bg-tertiary)' }
+  const rangeLabel = sInfo && sInfo.startTime
+    ? (sInfo.endTime
+        ? `${formatDate(sInfo.startTime)} → ${formatDate(sInfo.endTime)}`
+        : `Started ${formatDate(sInfo.startTime)}`)
+    : (conversation?.createdAt ? `Created ${formatDate(conversation.createdAt)}` : '')
 
   return (
     <div className="page-wrap" style={{ padding: 'var(--page-padding)' }}>
@@ -144,14 +161,24 @@ export default function ChatLogDetail() {
                 {conversation.isAdminConversation ? 'Mingo Support' : (conversation.otherParticipant?.name || 'Unknown')}
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                {conversation.messageCount} messages · {conversation.participants?.length || 0} participants
-                {conversation.session?.active && ' · Active'}
+                {conversation.messageCount} messages · {status.label}
+                {sInfo && sInfo.duration > 0 && ` · ${sInfo.duration} min`}
+                {sInfo && sInfo.totalCoinsDeducted > 0 && ` · 🪙 ${sInfo.totalCoinsDeducted}`}
               </div>
+              {rangeLabel && (
+                <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 2 }}>
+                  {rangeLabel}
+                </div>
+              )}
             </div>
-            <div style={{
-              fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap',
-            }}>
-              {conversation.createdAt ? formatDate(conversation.createdAt) : ''}
+            <div style={{ flexShrink: 0 }}>
+              <span style={{
+                fontSize: 10, fontWeight: 800, letterSpacing: '0.5px', textTransform: 'uppercase',
+                color: status.color, backgroundColor: status.bg, borderRadius: 6,
+                padding: '3px 8px', whiteSpace: 'nowrap',
+              }}>
+                {status.label}
+              </span>
             </div>
           </div>
 

@@ -1170,7 +1170,8 @@ function startChatSessionTimer(conversationId, userId) {
               }).catch(err => console.error('[Chat] Insufficient-balance push to listener failed:', err.message));
             }
           }
-          io.to(`user_${userId}`).emit('chat_session_ended', { conversationId });
+          // endChatSession (called above) already emits chat_session_ended with
+          // the full session summary to the room and both participants.
         }
         return;
       }
@@ -1245,6 +1246,7 @@ async function endChatSession(conversationId) {
     }
 
     const conversationBefore = await Conversation.findById(conversationId);
+    let endedSessionSummary = null;
     if (conversationBefore && conversationBefore.chatSession && conversationBefore.chatSession.sessionId) {
       try {
         const Session = require('./models/sessionModel');
@@ -1275,14 +1277,28 @@ async function endChatSession(conversationId) {
         const revenue = coinsDeductedObj * 0.5; // 1 coin = Rs 0.50
         const platformProfit = revenue - payoutAmountBilled;
 
-        await Session.findByIdAndUpdate(conversationBefore.chatSession.sessionId, {
-          status: 'completed',
-          endTime,
-          duration: durationMinutesBilled,
-          coinsDeducted: coinsDeductedObj,
-          listenerEarnings: payoutAmountBilled,
-          platformProfit: platformProfit
-        });
+        const updatedSession = await Session.findByIdAndUpdate(
+          conversationBefore.chatSession.sessionId,
+          {
+            status: 'completed',
+            endTime,
+            duration: durationMinutesBilled,
+            coinsDeducted: coinsDeductedObj,
+            listenerEarnings: payoutAmountBilled,
+            platformProfit: platformProfit
+          },
+          { new: true }
+        );
+        if (updatedSession) {
+          endedSessionSummary = {
+            sessionId: updatedSession._id,
+            status: updatedSession.status,
+            duration: updatedSession.duration,
+            coinsDeducted: updatedSession.coinsDeducted,
+            startTime: updatedSession.startTime,
+            endTime: updatedSession.endTime,
+          };
+        }
 
         // Find which participant is the listener
         let listenerId = conversationBefore.participants.find(p => p.toString() !== conversationBefore.chatSession.startedBy?.toString());
@@ -1327,9 +1343,13 @@ async function endChatSession(conversationId) {
     );
 
     if (conversation && io) {
-      io.to(conversationId).emit('chat_session_ended', { conversationId });
+      // Attach the freshly-computed session summary (duration / coins / time)
+      // so BOTH chat pages can render the "Session ended" panel with the real
+      // data immediately — no need to close and reopen the chat.
+      const endedPayload = { conversationId, session: endedSessionSummary };
+      io.to(conversationId).emit('chat_session_ended', endedPayload);
       conversation.participants.forEach(p => {
-        io.to(`user_${p}`).emit('chat_session_ended', { conversationId });
+        io.to(`user_${p}`).emit('chat_session_ended', endedPayload);
       });
     }
   } catch (error) {
