@@ -629,8 +629,8 @@ export default function AudioCallScreen() {
   return (
     <Pressable style={styles.container} onPress={toggleControls}>
       <LinearGradient
-        colors={['#000000', '#0C0C0E', '#151518']}
-        locations={[0, 0.5, 1]}
+        colors={['transparent', '#1A0000', '#4A0000']}
+        locations={[0, 0.6, 1]}
         style={StyleSheet.absoluteFill}
       />
 
@@ -648,48 +648,46 @@ export default function AudioCallScreen() {
         />
       )}
 
-      <Animated.View style={{ opacity: controlsOpacity }} pointerEvents={controlsVisible ? 'auto' : 'none'}>
-        {/* Timer sits clearly below the notification bar — insets.top clears
-            the status bar/notch, and hp(2.5) adds a consistent %-based gap
-            so it stays visible on every screen size. */}
-        <View style={[styles.topBar, { paddingTop: insets.top + hp(2.5) }]}>
-          {/* Call duration timer — only appears once the call connects */}
-          {remoteJoined && (
-            <View style={styles.topBarTimerWrap}>
-              <CallTimer active />
-            </View>
-          )}
-          <View style={styles.topBarRight}>
-            {currentCoins !== null && !isListener && (
+      {/* Call duration timer — always visible, with a generous gap below the
+          status bar / notch so it never overlaps them. */}
+      <View style={[styles.topBar, { paddingTop: insets.top + hp(6) }]} pointerEvents="none">
+        {/* Call duration timer — only appears once the call connects */}
+        {remoteJoined && (
+          <View style={styles.topBarTimerWrap}>
+            <CallTimer active />
+          </View>
+        )}
+      </View>
+
+      {/* Coin + Recharge + Gift — stacked on the top right (user only). All
+          three share the controls fade, so they hide together when the user
+          taps the screen to hide the buttons. */}
+      {!isListener && (
+        <Animated.View style={{ opacity: controlsOpacity }} pointerEvents={controlsVisible ? 'auto' : 'none'}>
+          <View style={styles.fallbackTopRight}>
+            {currentCoins !== null && (
               <View style={styles.coinsBadgeInline}>
                 <Text style={{ fontSize: 12, marginRight: 4 }}>🪙</Text>
                 <Text style={styles.coinsBadgeInlineText}>{currentCoins}</Text>
               </View>
             )}
-          </View>
-        </View>
-      </Animated.View>
 
-      {/* Recharge + Gift — stacked on the top right (user only) */}
-      {!isListener && (
-        <Animated.View style={{ opacity: controlsOpacity }} pointerEvents={controlsVisible ? 'auto' : 'none'}>
-          <View style={styles.fallbackTopRight}>
             <TouchableOpacity
               style={styles.floatingRechargeGift}
-              onPress={() => setShowRecharge(true)}
+              onPress={(e) => { e.stopPropagation?.(); setShowRecharge(true); }}
               activeOpacity={0.8}
             >
-              <Ionicons name="wallet-outline" size={20} color="#EC4899" />
-              <Text style={[styles.floatingRechargeText, { color: '#EC4899' }]}>Recharge</Text>
+              <Ionicons name="wallet-outline" size={20} color="#EF4444" />
+              <Text style={[styles.floatingRechargeText, { color: '#EF4444' }]}>Recharge</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.floatingRechargeGift}
-              onPress={() => setShowGiftPopup(true)}
+              onPress={(e) => { e.stopPropagation?.(); setShowGiftPopup(true); }}
               activeOpacity={0.8}
             >
-              <Ionicons name="gift-outline" size={20} color="#A855F7" />
-              <Text style={[styles.floatingRechargeText, { color: '#A855F7' }]}>Gift</Text>
+              <Ionicons name="gift-outline" size={20} color="#EF4444" />
+              <Text style={[styles.floatingRechargeText, { color: '#EF4444' }]}>Gift</Text>
             </TouchableOpacity>
           </View>
         </Animated.View>
@@ -697,11 +695,8 @@ export default function AudioCallScreen() {
 
       <View style={styles.videoArea}>
         {/* Remote participant — their avatar with a pulsing glow while the
-            call connects (and whenever they're in the call). */}
-        <Animated.View
-          style={{ opacity: controlsOpacity, alignItems: 'center', justifyContent: 'center' }}
-          pointerEvents={controlsVisible ? 'auto' : 'none'}
-        >
+            call connects. Stays on screen even when the controls are hidden. */}
+        <View style={{ alignItems: 'center', justifyContent: 'center' }} pointerEvents="none">
           <Animated.View style={[styles.avatarContainer, { transform: [{ scale: pulseAnim }] }]}>
             <Image
               source={{ uri: getAvatarUrl(gender, avatarIndex) }}
@@ -720,7 +715,7 @@ export default function AudioCallScreen() {
               {remoteJoined ? 'Audio Call in Progress' : 'Connecting...'}
             </Text>
           </View>
-        </Animated.View>
+        </View>
       </View>
 
       {/* Safety — left side, middle of the page */}
@@ -730,7 +725,7 @@ export default function AudioCallScreen() {
       >
         <TouchableOpacity
           style={styles.safetyFloat}
-          onPress={() => setShowSafety(true)}
+          onPress={(e) => { e.stopPropagation?.(); setShowSafety(true); }}
           activeOpacity={0.8}
           accessibilityLabel="Open safety guidance"
         >
@@ -760,7 +755,7 @@ export default function AudioCallScreen() {
                 iconActive: 'volume-mute',
                 label: 'Speaker',
                 active: isSpeaker,
-                activeColor: '#A855F7',
+                activeColor: '#EF4444',
                 onPress: toggleSpeaker,
               },
             ]}
@@ -852,11 +847,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  topBarRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: s(8),
-  },
   coinsBadgeInline: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -884,11 +874,11 @@ const styles = StyleSheet.create({
     height: SCREEN_WIDTH * 0.4,
     borderRadius: SCREEN_WIDTH * 0.2,
     borderWidth: 3,
-    borderColor: '#A855F7',
+    borderColor: '#EF4444',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: vs(20),
-    shadowColor: '#A855F7',
+    shadowColor: '#EF4444',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.5,
     shadowRadius: 25,

@@ -90,7 +90,7 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
 
       <Animated.View style={[styles.popupContainer, { transform: [{ translateY: slideAnim }] }]}>
         <LinearGradient
-          colors={['#1A0520', '#0A0A0A', '#111']}
+          colors={['#1A0505', '#0A0A0A', '#111']}
           locations={[0, 0.5, 1]}
           style={styles.popup}
         >
@@ -136,7 +136,7 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
             >
               {loading ? (
                 <View style={styles.loadingWrap}>
-                  <ActivityIndicator size="small" color="#A855F7" />
+                  <ActivityIndicator size="small" color="#EF4444" />
                   <Text style={styles.loadingText}>Loading packages...</Text>
                 </View>
               ) : (
@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
     paddingTop: vs(8),
     paddingBottom: vs(28),
     borderWidth: 1,
-    borderColor: '#2A1540',
+    borderColor: '#3A1212',
     borderBottomWidth: 0,
   },
 
@@ -317,8 +317,8 @@ const styles = StyleSheet.create({
     borderColor: '#2A2A2A',
   },
   packageCardActive: {
-    borderColor: '#A855F7',
-    backgroundColor: 'rgba(168, 85, 247, 0.1)',
+    borderColor: '#EF4444',
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
   },
 
   packageLeft: {
@@ -343,14 +343,14 @@ const styles = StyleSheet.create({
   },
   tagBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(168, 85, 247, 0.15)',
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
     paddingHorizontal: s(8),
     paddingVertical: vs(2),
     borderRadius: 8,
   },
   tagText: {
     fontSize: ms(10, 0.3),
-    color: '#A855F7',
+    color: '#EF4444',
     fontFamily: 'Inter_600SemiBold',
   },
 
@@ -365,7 +365,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
   },
   priceBtn: {
-    backgroundColor: '#A855F7',
+    backgroundColor: '#EF4444',
     paddingHorizontal: s(16),
     paddingVertical: vs(8),
     borderRadius: 14,

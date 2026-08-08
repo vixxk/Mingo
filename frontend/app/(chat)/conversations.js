@@ -60,7 +60,15 @@ const ConversationItem = ({ item, onPress }) => (
       <Text style={[styles.convName, item.isAdmin && { color: '#D4AF37' }]}>{item.name}</Text>
       <Text style={styles.convPreview} numberOfLines={1}>
         {(item.sessionStatus === 'completed' || item.sessionStatus === 'cancelled')
-          ? `Session ended · ${item.duration || 0} min · 🪙 ${item.coinsDeducted || 0}`
+          ? `Session ended · ${item.duration || 0} min · `
+          : null}
+        {(item.sessionStatus === 'completed' || item.sessionStatus === 'cancelled')
+          ? (
+              <>
+                <Text style={{ color: '#38BDF8' }}>💎</Text>
+                {` ${Math.floor((item.coinsDeducted || 0) / 10)}`}
+              </>
+            )
           : (item.lastMessage || 'Started a conversation')}
       </Text>
     </View>

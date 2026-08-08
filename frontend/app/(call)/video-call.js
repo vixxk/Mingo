@@ -81,6 +81,10 @@ const AgoraVideoView = forwardRef(
     const engineRef = useRef(null);
     const [remoteUid, setRemoteUid] = useState(null);
     const [remoteVideoActive, setRemoteVideoActive] = useState(false);
+    // Live value of the camera toggle so async engine callbacks (join success)
+    // can re-assert the preview without clobbering a user who turned it off.
+    const cameraEnabledRef = useRef(cameraEnabled);
+    useEffect(() => { cameraEnabledRef.current = cameraEnabled; }, [cameraEnabled]);
 
     const onRemoteVideoActiveChangeRef = useRef(onRemoteVideoActiveChange);
     const onRemoteJoinedChangeRef = useRef(onRemoteJoinedChange);
@@ -130,6 +134,26 @@ const AgoraVideoView = forwardRef(
           engine.setChannelProfile(ChannelProfileType.ChannelProfileCommunication);
           engine.setClientRole(ClientRoleType.ClientRoleBroadcaster);
           engine.enableVideo();
+          // Bind the local canvas (uid 0) explicitly BEFORE starting the
+          // preview. The self-view's RtcSurfaceView also registers itself when
+          // its native view mounts, but that can race the preview start — if
+          // the camera begins capturing before a local surface is registered
+          // the frames have nowhere to render and the self-view stays black
+          // until the camera is toggled off and on again.
+          try {
+            const setupRet = engine.setupLocalVideo({
+              uid: 0,
+              renderMode: RenderModeType.RenderModeHidden,
+              mirrorMode: VideoMirrorModeType.VideoMirrorModeEnabled,
+            });
+            if (setupRet !== 0) console.log('[Agora] setupLocalVideo result:', setupRet);
+          } catch (e) {}
+          // Start the local camera preview immediately so the self-view (bottom
+          // right) renders from the moment the call opens.
+          try {
+            const previewRet = engine.startPreview();
+            if (previewRet !== 0) console.log('[Agora] startPreview result:', previewRet);
+          } catch (e) {}
 
           engine.registerEventHandler({
             onJoinChannelSuccess: () => {
@@ -139,6 +163,21 @@ const AgoraVideoView = forwardRef(
               // Route audio through the loudspeaker by default — mirrors the
               // old Zego config so "no audio" is never mistaken for a failure.
               try { engine.setEnableSpeakerphone(true); } catch (e) {}
+              // Known SDK quirk: on some devices the preview started during
+              // setup races the native local-surface binding, leaving the
+              // self-view black until the camera is toggled. Re-asserting
+              // capture after the channel is joined (when the surface is
+              // guaranteed to be registered) clears that up.
+              if (cameraEnabledRef.current) {
+                try {
+                  const reEnableRet = engine.enableLocalVideo(true);
+                  if (reEnableRet !== 0) console.log('[Agora] enableLocalVideo re-assert result:', reEnableRet);
+                } catch (e) {}
+                try {
+                  const rePreviewRet = engine.startPreview();
+                  if (rePreviewRet !== 0) console.log('[Agora] startPreview re-assert result:', rePreviewRet);
+                } catch (e) {}
+              }
             },
             onUserJoined: (connection, uid) => {
               if (!active) return;
@@ -260,7 +299,7 @@ const AgoraVideoView = forwardRef(
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         {remoteUid != null && remoteVideoActive && (
           <RtcSurfaceView
-            canvas={{ uid: remoteUid, renderMode: RenderModeType.RenderModeFit }}
+            canvas={{ uid: remoteUid, renderMode: RenderModeType.RenderModeHidden }}
             zOrderMediaOverlay={Platform.OS === 'android'}
             style={StyleSheet.absoluteFill}
           />
@@ -736,7 +775,7 @@ export default function VideoCallScreen() {
     return (
       <Pressable style={styles.container} onPress={toggleControls}>
         <LinearGradient
-          colors={['#000000', '#0C0C0E', '#151518']}
+          colors={['#2E0A0A', '#140505', '#050101']}
           locations={[0, 0.5, 1]}
           style={StyleSheet.absoluteFill}
         />
@@ -785,6 +824,17 @@ export default function VideoCallScreen() {
           onEngineError={(err, msg) => console.log('[Agora] Engine error:', err, msg)}
         />
 
+        {/* Call duration timer — centered near the top with enough clearance
+            below the status bar / notch. Always visible while the call is
+            connected (not tied to the controls toggle). */}
+        <View style={[styles.topBar, { paddingTop: insets.top + hp(6) }]} pointerEvents="none">
+          {remoteJoined && (
+            <View style={styles.topBarTimerWrap}>
+              <CallTimer active />
+            </View>
+          )}
+        </View>
+
         {/* Self-view preview — my own live camera in the bottom-right corner.
             Like the main video feeds, this is NOT toggled by the tap gesture. */}
         <View style={styles.selfPreview} pointerEvents="none">
@@ -794,7 +844,9 @@ export default function VideoCallScreen() {
                 key="agora-local"
                 canvas={{
                   uid: 0,
-                  renderMode: RenderModeType.RenderModeFit,
+                  // Fill (crop) so the camera covers the whole self-view with
+                  // no black bars on the left/right, matching the container.
+                  renderMode: RenderModeType.RenderModeHidden,
                   mirrorMode: VideoMirrorModeType.VideoMirrorModeEnabled,
                 }}
                 zOrderMediaOverlay={Platform.OS === 'android'}
@@ -824,22 +876,22 @@ export default function VideoCallScreen() {
             {!isListener && (
               <TouchableOpacity
                 style={styles.floatingRechargeGift}
-                onPress={() => setShowRecharge(true)}
+                onPress={(e) => { e.stopPropagation?.(); setShowRecharge(true); }}
                 activeOpacity={0.8}
               >
-                <Ionicons name="wallet-outline" size={22} color="#EC4899" />
-                <Text style={[styles.floatingRechargeText, { color: '#EC4899' }]}>Recharge</Text>
+                <Ionicons name="wallet-outline" size={22} color="#EF4444" />
+                <Text style={[styles.floatingRechargeText, { color: '#EF4444' }]}>Recharge</Text>
               </TouchableOpacity>
             )}
 
             {!isListener && (
               <TouchableOpacity
                 style={styles.floatingRechargeGift}
-                onPress={() => setShowGiftPopup(true)}
+                onPress={(e) => { e.stopPropagation?.(); setShowGiftPopup(true); }}
                 activeOpacity={0.8}
               >
-                <Ionicons name="gift-outline" size={22} color="#A855F7" />
-                <Text style={[styles.floatingRechargeText, { color: '#A855F7' }]}>Gift</Text>
+                <Ionicons name="gift-outline" size={22} color="#EF4444" />
+                <Text style={[styles.floatingRechargeText, { color: '#EF4444' }]}>Gift</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -847,7 +899,7 @@ export default function VideoCallScreen() {
           {/* Safety — left side, middle of the page */}
           <TouchableOpacity
             style={styles.safetyFloat}
-            onPress={() => setShowSafety(true)}
+            onPress={(e) => { e.stopPropagation?.(); setShowSafety(true); }}
             activeOpacity={0.8}
             accessibilityLabel="Open safety guidance"
           >
@@ -954,16 +1006,16 @@ export default function VideoCallScreen() {
   return (
     <Pressable style={styles.container} onPress={toggleControls}>
       <LinearGradient
-        colors={['#000000', '#0C0C0E', '#151518']}
+        colors={['#2E0A0A', '#140505', '#050101']}
         locations={[0, 0.5, 1]}
         style={StyleSheet.absoluteFill}
       />
 
       <Animated.View style={{ opacity: controlsOpacity }} pointerEvents={controlsVisible ? 'auto' : 'none'}>
       {/* Timer sits clearly below the notification bar — insets.top clears
-          the status bar/notch, and hp(2.5) adds a consistent %-based gap
+          the status bar/notch, and hp(6) adds a consistent %-based gap
           so it stays visible on every screen size. */}
-      <View style={[styles.topBar, { paddingTop: insets.top + hp(2.5) }]}>
+      <View style={[styles.topBar, { paddingTop: insets.top + hp(6) }]}>
         {/* Call duration timer — only appears once the call connects */}
         {remoteJoined && (
           <View style={styles.topBarTimerWrap}>
@@ -987,20 +1039,20 @@ export default function VideoCallScreen() {
         <View style={styles.fallbackTopRight}>
           <TouchableOpacity
             style={styles.floatingRechargeGift}
-            onPress={() => setShowRecharge(true)}
+            onPress={(e) => { e.stopPropagation?.(); setShowRecharge(true); }}
             activeOpacity={0.8}
           >
-            <Ionicons name="wallet-outline" size={20} color="#EC4899" />
-            <Text style={[styles.floatingRechargeText, { color: '#EC4899' }]}>Recharge</Text>
+            <Ionicons name="wallet-outline" size={20} color="#EF4444" />
+            <Text style={[styles.floatingRechargeText, { color: '#EF4444' }]}>Recharge</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.floatingRechargeGift}
-            onPress={() => setShowGiftPopup(true)}
+            onPress={(e) => { e.stopPropagation?.(); setShowGiftPopup(true); }}
             activeOpacity={0.8}
           >
-            <Ionicons name="gift-outline" size={20} color="#A855F7" />
-            <Text style={[styles.floatingRechargeText, { color: '#A855F7' }]}>Gift</Text>
+            <Ionicons name="gift-outline" size={20} color="#EF4444" />
+            <Text style={[styles.floatingRechargeText, { color: '#EF4444' }]}>Gift</Text>
           </TouchableOpacity>
         </View>
         </Animated.View>
@@ -1049,7 +1101,7 @@ export default function VideoCallScreen() {
       >
         <TouchableOpacity
           style={styles.safetyFloat}
-          onPress={() => setShowSafety(true)}
+          onPress={(e) => { e.stopPropagation?.(); setShowSafety(true); }}
           activeOpacity={0.8}
           accessibilityLabel="Open safety guidance"
         >
@@ -1215,11 +1267,11 @@ const styles = StyleSheet.create({
     height: SCREEN_WIDTH * 0.4,
     borderRadius: SCREEN_WIDTH * 0.2,
     borderWidth: 3,
-    borderColor: '#3B82F6',
+    borderColor: '#EF4444',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: vs(20),
-    shadowColor: '#3B82F6',
+    shadowColor: '#EF4444',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.5,
     shadowRadius: 25,

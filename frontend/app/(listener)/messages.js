@@ -384,7 +384,7 @@ const styles = StyleSheet.create({
   },
   messageText: {
     fontSize: wp(3.5),
-    color: '#9CA3AF',
+    color: '#D1D5DB',
     fontFamily: 'Inter_400Regular',
     flex: 1,
     marginRight: wp(2.5),

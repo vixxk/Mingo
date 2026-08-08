@@ -155,7 +155,14 @@ export default function MessagesScreen() {
 
     return (
       <TouchableOpacity 
-        style={[styles.messageItem, !item.isOnline && !item.isAdmin && styles.messageItemOffline]} 
+        style={[
+          styles.messageItem,
+          // Only dim LIVE conversations when the listener is offline right now.
+          // Old/ended session cards must stay fully visible — their "Ended"
+          // badge already communicates the state, and dimming made the
+          // archived chat previews hard to read.
+          !item.isOnline && !item.isAdmin && !item.sessionStatus && styles.messageItemOffline,
+        ]} 
         activeOpacity={0.7}
         onPress={() => router.push({
           pathname: '/chat',
@@ -453,7 +460,7 @@ const styles = StyleSheet.create({
   },
   messageText: {
     fontSize: wp(3.5),
-    color: '#9CA3AF',
+    color: '#D1D5DB',
     fontFamily: 'Inter_400Regular',
     flex: 1,
     marginRight: wp(2.5),

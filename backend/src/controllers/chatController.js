@@ -74,7 +74,9 @@ class ChatController {
             gender: otherUser?.gender,
             avatarIndex: otherUser?.avatarIndex,
             image: otherUser?.profileImage,
-            lastMessage: conv.lastMessage?.content || 'Say hello!',
+            // Only real messages belong on the card — a system prompt (e.g.
+            // "Please recharge") would preview a page that can't render it.
+            lastMessage: (conv.lastMessage && conv.lastMessage.senderModel !== 'System' ? conv.lastMessage.content : null) || 'Say hello!',
             time: conv.lastMessage?.createdAt || conv.updatedAt,
             unread: unreadCount,
             isOnline: !!listenerOnlineMap[otherUser?._id?.toString()],
@@ -88,16 +90,40 @@ class ChatController {
         const sortedSessions = [...convSessions].sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
         const latestSession = sortedSessions[0];
 
-        // A "current phase" card (sessionId: null) is added when messages were
-        // sent after the last session ended — i.e. the user's free-message
-        // phase of a brand-new session that hasn't been paid for yet.
+        // A session page shows the WHOLE phase the session belongs to: from
+        // where the previous session left off (or the conversation start) up
+        // to this session's end. The message that STARTED the session is saved
+        // a moment BEFORE session.startTime is recorded, so a window bounded
+        // by startTime silently drops it — sessions looked empty even when
+        // the user had sent a message (and the card previewed one).
+        const ascSessions = [...sortedSessions].sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+        const phaseStartBySession = new Map();
+        let runningPhaseStart = conversation.createdAt;
+        for (const s of ascSessions) {
+          phaseStartBySession.set(s._id.toString(), runningPhaseStart);
+          // Only actually-ended sessions advance the boundary — mirrors the
+          // _lastEndedChatSession query used by the session page exactly.
+          if (s.endTime && (s.status === 'completed' || s.status === 'cancelled')) {
+            runningPhaseStart = s.endTime;
+          }
+        }
+
+        // A "current phase" card (sessionId: null) is added when a REAL
+        // message was sent after the last session ended — i.e. the user's
+        // free-message phase of a brand-new session that hasn't been paid for
+        // yet. System prompts are ephemeral and never count (they would show
+        // a preview the page can't render).
         const conversationLastMessage = conv.lastMessage;
+        const lastRealMessage =
+          conversationLastMessage && conversationLastMessage.senderModel !== 'System'
+            ? conversationLastMessage
+            : null;
         const hasNewerPhaseMessages =
           latestSession &&
           latestSession.status !== 'active' &&
           latestSession.endTime &&
-          conversationLastMessage &&
-          new Date(conversationLastMessage.createdAt) > new Date(latestSession.endTime);
+          lastRealMessage &&
+          new Date(lastRealMessage.createdAt) > new Date(latestSession.endTime);
 
         for (const session of sortedSessions) {
           const isLatest = session._id.toString() === latestSession._id.toString();
@@ -130,24 +156,20 @@ class ChatController {
             }
           }
 
-          // Find the last message inside this session's time window
+          // Find the last real message inside this session's phase window.
+          // This MUST mirror the session page (initiateConversation) exactly:
+          // same lower bound, same upper bound, same System exclusion — so a
+          // card preview is always something the page will actually show.
           const query = {
             conversationId: conv._id,
-            createdAt: { $gte: session.startTime }
+            createdAt: { $gt: phaseStartBySession.get(session._id.toString()) || conversation.createdAt },
+            senderModel: { $ne: 'System' }
           };
           if (session.endTime) {
             query.createdAt.$lte = session.endTime;
           }
 
-          let lastMsg = await Message.findOne(query).sort({ createdAt: -1 });
-          // Only the newest card may fall back to the conversation's last
-          // message (which can belong to a newer phase); older cards get a
-          // neutral label instead of a wrong preview.
-          if (!lastMsg && !isLatest) {
-            lastMsg = null;
-          } else if (!lastMsg) {
-            lastMsg = conv.lastMessage;
-          }
+          const lastMsg = await Message.findOne(query).sort({ createdAt: -1 });
 
           cards.push({
             id: conv._id,
@@ -181,8 +203,8 @@ class ChatController {
             gender: otherUser?.gender,
             avatarIndex: otherUser?.avatarIndex,
             image: otherUser?.profileImage,
-            lastMessage: conversationLastMessage.content || 'Say hello!',
-            time: conversationLastMessage.createdAt,
+            lastMessage: lastRealMessage.content || 'Say hello!',
+            time: lastRealMessage.createdAt,
             unread: unreadCount,
             isOnline: !!listenerOnlineMap[otherUser?._id?.toString()],
             sessionStatus: 'none',
@@ -206,15 +228,21 @@ class ChatController {
   }
 
   /**
-   * Load the messages that belong to a single chat session window.
+   * Load the real (non-system) messages that belong to a session's PHASE
+   * window: from where the previous session left off (or the conversation
+   * start) up to the session's end. The lower bound is deliberately NOT the
+   * session's startTime — the message that starts a session is saved a moment
+   * BEFORE startTime is recorded, so a startTime-bound window silently drops
+   * it and the page renders empty.
    * @param {String} conversationId - the conversation the session belongs to
-   * @param {Date} startTime - session start
+   * @param {Date} startTime - phase start (previous session end / conversation created)
    * @param {Date|null} endTime - session end (null = still running)
    */
   static async _sessionMessages(conversationId, startTime, endTime) {
     const query = {
       conversationId,
-      createdAt: { $gte: startTime },
+      createdAt: { $gt: startTime },
+      senderModel: { $ne: 'System' },
     };
     if (endTime) {
       query.createdAt.$lte = endTime;
@@ -226,16 +254,22 @@ class ChatController {
    * Find the most recent chat session between the two participants that has
    * ended (completed / cancelled). Used to scope the "current phase" — the
    * period after the last session, during which the user gets one free message.
+   * Pass `before` (a Date) to only consider sessions that ended before that
+   * time — used to find the phase boundary for an earlier session.
    */
-  static async _lastEndedChatSession(participantIds) {
+  static async _lastEndedChatSession(participantIds, before) {
     const Session = require('../models/sessionModel');
-    return Session.findOne({
+    const query = {
       userId: { $in: participantIds },
       listenerId: { $in: participantIds },
       callType: 'chat',
       status: { $in: ['completed', 'cancelled'] },
       endTime: { $ne: null }, // only sessions that actually ended
-    }).sort({ endTime: -1 });
+    };
+    if (before) {
+      query.endTime.$lt = before;
+    }
+    return Session.findOne(query).sort({ endTime: -1 });
   }
 
   static async getMessages(req, res, next) {
@@ -301,7 +335,7 @@ class ChatController {
       let messages = [];
       let returnedChatSession = conversation.chatSession;
 
-      // ── Opened a SPECIFIC session page → only that session's messages ──
+      // ── Opened a SPECIFIC session page → that session's phase window ──
       // Validate the session actually belongs to this conversation (both
       // participants match) so a foreign/stale id can never scope the view.
       let scopedSession = null;
@@ -317,9 +351,11 @@ class ChatController {
       }
 
       if (scopedSession) {
+        const prevEnded = await ChatController._lastEndedChatSession(conversation.participants, scopedSession.startTime);
+        const phaseStart = (prevEnded && prevEnded.endTime) || conversation.createdAt;
         messages = await ChatController._sessionMessages(
           conversation._id,
-          scopedSession.startTime,
+          phaseStart,
           scopedSession.endTime || new Date()
         );
 
@@ -367,9 +403,11 @@ class ChatController {
 
             returnedChatSession = conversation.chatSession;
           } else {
+            const prevEnded = await ChatController._lastEndedChatSession(conversation.participants, activeSession.startTime);
+            const phaseStart = (prevEnded && prevEnded.endTime) || conversation.createdAt;
             messages = await ChatController._sessionMessages(
               conversation._id,
-              activeSession.startTime,
+              phaseStart,
               null
             );
 

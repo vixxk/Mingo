@@ -312,22 +312,6 @@ export default function ChatScreen() {
     return '—';
   };
 
-  // Replace a read-only history page with a fresh session page. Passing the
-  // other user's id (instead of the conversation id) forces the chat screen
-  // to re-initialize as a brand-new session.
-  const startNewSession = () => {
-    if (!otherUserId) return;
-    router.replace({
-      pathname: '/(chat)/chat',
-      params: {
-        name: otherName,
-        id: otherUserId,
-        avatarIndex: otherAvatarIndex || '0',
-        gender: otherGender || 'Female',
-      },
-    });
-  };
-
   const handleEndSession = () => {
     if (realConversationIdRef.current) {
       setIsEndingSession(true);
@@ -465,6 +449,9 @@ export default function ChatScreen() {
   // capsule fades in (and back when the session ends).
   const headerSwapAnim = useRef(new Animated.Value(0)).current;
   const timerEnterAnim = useRef(new Animated.Value(0)).current;
+  // Shared fade for the avatar + name/status blocks while the user's session
+  // timer owns the header.
+  const headerFade = headerSwapAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
   const sessionTimerRef = useRef(null);
   const scrollRef = useRef(null);
   const typingTimeout = useRef(null);
@@ -485,7 +472,10 @@ export default function ChatScreen() {
       duration: 250,
       useNativeDriver: true,
     }).start();
-    if (shouldSwap) {
+    // The timer capsule is shown to BOTH roles whenever a session is live
+    // (the listener keeps name + avatar and gets the capsule pinned beside
+    // them); only the USER's header swaps the avatar/name away for it.
+    if (sessionActive) {
       timerEnterAnim.setValue(0);
       Animated.timing(timerEnterAnim, {
         toValue: 1,
@@ -849,6 +839,14 @@ export default function ChatScreen() {
       }
       // Contextual recharge gate: "<name> is waiting. Please recharge to continue."
       setShowRechargeGate(true);
+      // Unlock the input: the blocked send was a paid (2nd+) message, not the
+      // free one, so the user isn't waiting for a reply anymore.
+      setWaitingForReply(false);
+      // Remove the optimistic (unsent) message that this blocked send left
+      // behind, so it doesn't linger as a ghost bubble after recharge.
+      setMessages((prev) =>
+        prev.filter((m) => !(typeof m.id === 'string' && m.id.startsWith('temp_')))
+      );
     };
 
     const handleSessionStarted = (data) => {
@@ -885,8 +883,14 @@ export default function ChatScreen() {
       setSessionRemaining(0);
       setActiveSessionId(null);
       if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
-      if (userRole === 'LISTENER') {
-        setChatBlocked(true);
+      // The USER's page becomes a read-only history log once the session ends
+      // (manual End or balance depleted) — the input bar is replaced by the
+      // "Session ended" summary panel and live messages are frozen, so they
+      // can't keep replying from here. The listener keeps a live page (input
+      // locked) so the user can still restart the session with a new message.
+      setChatBlocked(true);
+      if (userRole === 'USER') {
+        setHistoryMode(true);
       }
       setShowEndChatPopup(false);
       setIsEndingSession(false);
@@ -1093,6 +1097,8 @@ export default function ChatScreen() {
   // Actually deliver a text message (after safety checks have passed)
   const performSend = (msgContent) => {
     if (!msgContent || !realConversationId || !currentUserId) return;
+    // Ended sessions are read-only — never send from a history page.
+    if (historyModeRef.current) return;
     if (chatBlocked) {
       // Same gate as handleSend — never silently redirect
       if (userRole === 'USER') setShowRechargeGate(true);
@@ -1139,6 +1145,8 @@ export default function ChatScreen() {
   const handleSend = () => {
     const msgContent = message.trim();
     if (!msgContent || !realConversationId || !currentUserId) return;
+    // Ended sessions are read-only — never send from a history page.
+    if (historyModeRef.current) return;
     if (waitingForReply) {
       // Free message already sent — waiting for the listener's reply to start the session
       return;
@@ -1238,8 +1246,8 @@ export default function ChatScreen() {
           <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: wp(2) }}>
             <View style={{ width: wp(10), height: wp(10), borderRadius: wp(5), backgroundColor: 'rgba(255,255,255,0.08)' }} />
             <View style={{ flex: 1 }}>
-              <View style={{ width: wp(25), height: hp(1.8), borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.1)', marginBottom: hp(0.5) }} />
-              <View style={{ width: wp(15), height: hp(1.2), borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.06)' }} />
+              <View style={{ width: wp(25), height: hp(1.8), borderRadius: wp(1), backgroundColor: 'rgba(255,255,255,0.1)', marginBottom: hp(0.5) }} />
+              <View style={{ width: wp(15), height: hp(1.2), borderRadius: wp(1), backgroundColor: 'rgba(255,255,255,0.06)' }} />
             </View>
           </View>
           <View style={{ width: wp(18), height: hp(3.5), borderRadius: wp(5), backgroundColor: 'rgba(255,255,255,0.06)' }} />
@@ -1280,82 +1288,99 @@ export default function ChatScreen() {
           <Ionicons name="chevron-back" size={wp(5.5)} color="#fff" />
         </TouchableOpacity>
         
-        <TouchableOpacity
-          activeOpacity={0.7}
-          disabled={userRole !== 'USER' || !isListenerOnline}
-          onPress={() => {
-            if (userRole === 'USER' && otherUserId) {
-              router.push({
-                pathname: '/listener-profile/[id]',
-                params: { id: otherUserId }
-              });
-            }
-          }}
-          style={{
-            flexDirection: 'row', alignItems: 'center', flex: 1, gap: wp(2),
-            opacity: userRole === 'USER' && !isListenerOnline ? 0.5 : 1,
-          }}
-        >
-          <Image source={avatarSource} style={styles.headerAvatar} />
-          {/* Once the paid session timer starts, the name + online label fade
-              out (sliding up) while the timer capsule fades in below. */}
+        {/* Middle: avatar + (name/status or the session timer capsule). Once the
+            paid session timer starts, the capsule takes over the name's flex
+            slot so the header stays balanced instead of cramming every control
+            into the right edge. */}
+        <View style={[styles.headerMiddle, sessionActive && userRole === 'USER' && styles.headerMiddleSession]}>
+          {/* Avatar — always stays mounted (and is the tallest header element),
+              so the header keeps its EXACT size when the session timer starts.
+              Only the name/status block below collapses, handing its flex slot
+              to the centered timer capsule. The listener keeps the name too. */}
+          <TouchableOpacity
+            activeOpacity={0.7}
+            disabled={userRole !== 'USER' || !isListenerOnline}
+            onPress={() => {
+              if (userRole === 'USER' && otherUserId) {
+                router.push({
+                  pathname: '/listener-profile/[id]',
+                  params: { id: otherUserId }
+                });
+              }
+            }}
+            style={{ opacity: userRole === 'USER' && !isListenerOnline ? 0.5 : 1 }}
+          >
+            <Image source={avatarSource} style={styles.headerAvatar} />
+          </TouchableOpacity>
+
+          {/* Name + online label — once the user's paid session timer starts,
+              its flex slot collapses (width 0) and is handed to the timer
+              capsule below, so the header never has a gap or overflow. The
+              inner dim keeps the whole block at 50% when the listener is
+              offline, matching the avatar's dim. */}
           <Animated.View
             style={[
               styles.headerInfo,
               {
-                opacity: headerSwapAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
+                opacity: headerFade,
                 transform: [
                   { translateY: headerSwapAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }) },
                 ],
               },
+              sessionActive && userRole === 'USER' && styles.headerInfoCollapsed,
             ]}
             pointerEvents={sessionActive ? 'none' : 'auto'}
           >
-            <Text style={styles.headerName} numberOfLines={1}>{otherName}</Text>
-            <Text
+            <View style={{ opacity: userRole === 'USER' && !isListenerOnline ? 0.5 : 1 }}>
+              <Text style={styles.headerName} numberOfLines={1}>{otherName}</Text>
+              <Text
+                style={[
+                  styles.headerStatus,
+                  userRole === 'USER' && !isTyping && !isListenerOnline && styles.headerStatusOffline,
+                ]}
+              >
+                {isTyping
+                  ? 'Typing...'
+                  : (userRole === 'USER' ? (isListenerOnline ? 'Online' : 'Offline') : 'Online')}
+              </Text>
+            </View>
+          </Animated.View>
+
+          {/* Timed Session Capsule — slides in as the name fades out. For the
+              user it fills the freed middle slot (flex 1); for the listener it
+              stays pinned next to the name on the right. */}
+          {sessionActive && (
+            <Animated.View
               style={[
-                styles.headerStatus,
-                userRole === 'USER' && !isTyping && !isListenerOnline && styles.headerStatusOffline,
+                styles.sessionHeaderWrap,
+                userRole === 'USER' && styles.sessionHeaderCenter,
+                {
+                  opacity: timerEnterAnim,
+                  transform: [
+                    { translateX: timerEnterAnim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) },
+                    { scale: timerEnterAnim.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] }) },
+                  ],
+                },
               ]}
             >
-              {isTyping
-                ? 'Typing...'
-                : (userRole === 'USER' ? (isListenerOnline ? 'Online' : 'Offline') : 'Online')}
-            </Text>
-          </Animated.View>
-        </TouchableOpacity>
-
-        {/* Timed Session Capsule — slides in as the name fades out */}
-        {sessionActive && (
-          <Animated.View
-            style={[
-              styles.sessionHeaderWrap,
-              {
-                opacity: timerEnterAnim,
-                transform: [
-                  { translateX: timerEnterAnim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) },
-                  { scale: timerEnterAnim.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] }) },
-                ],
-              },
-            ]}
-          >
-            <TouchableOpacity
-              style={styles.timerBadge}
-              activeOpacity={0.7}
-              onPress={() => { if (userRole === 'USER') setShowCostPopup(true); }}
-            >
-              <Ionicons name="time" size={wp(3.5)} color="#22C55E" style={{ marginRight: wp(1) }} />
-              <Text style={[styles.timerText, { color: '#22C55E' }]}>{formatDuration(sessionRemaining)}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.endSessionBtn}
-              activeOpacity={0.7}
-              onPress={() => setShowEndChatPopup(true)}
-            >
-              <Text style={styles.endSessionText}>End</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        )}
+              <TouchableOpacity
+                style={styles.timerBadge}
+                activeOpacity={0.7}
+                onPress={() => { if (userRole === 'USER') setShowCostPopup(true); }}
+              >
+                <Ionicons name="time" size={wp(3.5)} color="#F87171" style={{ marginRight: wp(1) }} />
+                <Text style={styles.timerText}>{formatDuration(sessionRemaining)}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.endSessionBtn}
+                activeOpacity={0.7}
+                onPress={() => setShowEndChatPopup(true)}
+              >
+                <Text style={styles.endSessionText}>End</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          )}
+        </View>
 
         {/* In-chat call buttons — only shown for the options the listener enabled while going live */}
         {userRole === 'USER' && !isAdminChat && otherUserId && (
@@ -1413,7 +1438,7 @@ export default function ChatScreen() {
             </Text>
             <TouchableOpacity
               onPress={() => setShowSafetyNotice(false)}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              hitSlop={{ top: wp(2.5), bottom: wp(2.5), left: wp(2.5), right: wp(2.5) }}
               style={styles.safetyNoticeClose}
             >
               <Ionicons name="close" size={wp(4.2)} color="rgba(255,255,255,0.5)" />
@@ -1515,7 +1540,10 @@ export default function ChatScreen() {
             </View>
             {!!paramCoinsDeducted && Number(paramCoinsDeducted) > 0 && (
               <View style={styles.endedMetaItem}>
-                <Text style={styles.endedMetaText}>🪙 {paramCoinsDeducted} coins</Text>
+                <Text style={{ color: '#38BDF8', fontSize: wp(3.4) }}>💎</Text>
+                <Text style={styles.endedMetaText}>
+                  {Math.floor(Number(paramCoinsDeducted) / 10)} diamonds
+                </Text>
               </View>
             )}
             {(!!paramStartTime || !!paramEndTime) && (
@@ -1525,19 +1553,6 @@ export default function ChatScreen() {
               </View>
             )}
           </View>
-          {userRole === 'USER' && (
-            <TouchableOpacity style={styles.newSessionBtnWrap} activeOpacity={0.85} onPress={startNewSession}>
-              <LinearGradient
-                colors={['#3B82F6', '#EC4899']}
-                start={{ x: 0, y: 0.5 }}
-                end={{ x: 1, y: 0.5 }}
-                style={styles.newSessionBtn}
-              >
-                <Ionicons name="chatbubble-ellipses-outline" size={wp(4.2)} color="#fff" />
-                <Text style={styles.newSessionBtnText}>Start New Session</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          )}
         </View>
       ) : (
         <View style={[styles.inputBar, phoneDetected && styles.inputBarDanger, { paddingBottom: Math.max(insets.bottom, hp(1.2)) }]}>
@@ -1746,13 +1761,41 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: wp(3), paddingVertical: hp(1.2),
-    borderBottomWidth: 1, borderBottomColor: '#1A1A1A', gap: wp(2),
+    borderBottomWidth: wp(0.25), borderBottomColor: '#1A1A1A', gap: wp(2),
+    // The header height is FIXED (avatar + its vertical padding — the avatar
+    // is the tallest element in every state), and overflow is hidden so the
+    // session timer capsule can never push the row taller. The header stays
+    // the exact same size whether the name is showing or the timer is live.
+    height: wp(10) + hp(2.4),
+    overflow: 'hidden',
   },
   headerAvatar: {
     width: wp(10), height: wp(10), borderRadius: wp(5),
-    borderWidth: 2, borderColor: '#EC4899',
+    borderWidth: wp(0.5), borderColor: '#EC4899',
+  },
+  // Flex slot that holds the avatar + name (+ the session timer capsule once
+  // the user's paid session starts). Keeps the header balanced in one row.
+  headerMiddle: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: wp(2),
   },
   headerInfo: { flex: 1 },
+  // Collapsed while the user's session timer is live — frees the middle slot
+  // for the timer capsule instead of leaving an invisible flex:1 gap that
+  // squashes the header's right-side controls.
+  headerInfoCollapsed: {
+    flex: 0,
+    width: 0,
+    overflow: 'hidden',
+  },
+  // Session mode on the middle slot: the name/status block collapses away so
+  // the timer capsule can sit centered with no leftover gap offsets. The
+  // avatar stays mounted, keeping the header the same size as before.
+  headerMiddleSession: {
+    gap: 0,
+  },
   headerName: { fontSize: wp(3.8), color: '#fff', fontWeight: '700' },
   headerStatus: { fontSize: wp(2.8), color: '#22C55E' },
   headerStatusOffline: { color: '#6B7280' },
@@ -1773,7 +1816,7 @@ const styles = StyleSheet.create({
   coinBadge: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A1A',
     borderRadius: wp(5), paddingHorizontal: wp(3), paddingVertical: hp(0.5),
-    gap: wp(1), borderWidth: 1, borderColor: '#333',
+    gap: wp(1), borderWidth: wp(0.25), borderColor: '#333',
   },
   coinEmoji: { fontSize: wp(3.5) },
   coinCount: { fontSize: wp(3.5), color: '#fff', fontWeight: '700' },
@@ -1784,7 +1827,7 @@ const styles = StyleSheet.create({
     width: wp(9),
     height: wp(9),
     borderRadius: wp(4.5),
-    borderWidth: 1,
+    borderWidth: wp(0.25),
     backgroundColor: 'rgba(255,255,255,0.04)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1796,7 +1839,7 @@ const styles = StyleSheet.create({
   messagesContent: { paddingHorizontal: wp(3.5), paddingTop: hp(2), flexGrow: 1 },
   emptyChat: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: hp(25) },
   emptyChatText: { color: '#4B5563', fontSize: wp(3.6), marginTop: hp(1.5) },
-  dateLabel: { fontSize: wp(2.8), color: '#6B7280', textAlign: 'center', marginVertical: hp(1.5) },
+  dateLabel: { fontSize: wp(2.8), color: '#9CA3AF', textAlign: 'center', marginVertical: hp(1.5) },
 
   // Bubbles
   bubbleRow: { marginBottom: hp(0.7) },
@@ -1807,7 +1850,7 @@ const styles = StyleSheet.create({
   bubbleReceived: { backgroundColor: '#1F2937', borderBottomLeftRadius: wp(1) },
   mediaBubble: { backgroundColor: 'transparent', paddingHorizontal: 0, paddingVertical: 0 },
   bubbleText: { fontSize: wp(3.6), color: '#fff', lineHeight: wp(5.2) },
-  timeStamp: { fontSize: wp(2.3), color: 'rgba(255,255,255,0.45)', textAlign: 'right', marginTop: hp(0.5) },
+  timeStamp: { fontSize: wp(2.3), color: 'rgba(255,255,255,0.65)', textAlign: 'right', marginTop: hp(0.5) },
 
   // System message
   systemBubbleRow: { alignItems: 'center', marginVertical: hp(1) },
@@ -1874,7 +1917,7 @@ const styles = StyleSheet.create({
   safetyNoticeBanner: {
     flexDirection: 'row', alignItems: 'center', gap: wp(2),
     backgroundColor: 'rgba(127, 29, 29, 0.25)',
-    borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.35)',
+    borderWidth: wp(0.25), borderColor: 'rgba(239, 68, 68, 0.35)',
     borderRadius: wp(3.5), paddingHorizontal: wp(3), paddingVertical: hp(1),
     marginBottom: hp(1.5),
   },
@@ -1947,16 +1990,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: wp(2.5), paddingVertical: hp(0.6),
   },
   endedMetaText: {
-    color: '#9CA3AF', fontSize: wp(3), fontFamily: 'Inter_500Medium',
-  },
-  newSessionBtnWrap: {
-    borderRadius: wp(8), overflow: 'hidden', height: hp(5.5), marginBottom: hp(0.8),
-  },
-  newSessionBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: wp(2),
-  },
-  newSessionBtnText: {
-    color: '#fff', fontSize: wp(3.8), fontWeight: '700', fontFamily: 'Inter_700Bold',
+    color: '#D1D5DB', fontSize: wp(3), fontFamily: 'Inter_500Medium',
   },
   textInput: {
     flex: 1, fontSize: wp(3.6), color: '#fff', paddingVertical: hp(1), maxHeight: hp(12),
@@ -1972,6 +2006,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: wp(1.5),
     marginRight: wp(1),
+    // Insurance: the timer pill + End button can never exceed the avatar's
+    // height, so the fixed header height holds even with large font scaling.
+    maxHeight: wp(10),
+    overflow: 'hidden',
+  },
+  // For the USER the capsule takes the whole freed middle slot and centers its
+  // content, so the header reads: [<]  ⏱ 0:04  End  [📞][🎥][130]
+  sessionHeaderCenter: {
+    flex: 1,
+    justifyContent: 'center',
+    marginRight: 0,
   },
   timerBadge: {
     flexDirection: 'row',
@@ -1980,12 +2025,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: wp(2.5),
     paddingVertical: hp(0.5),
     borderRadius: wp(4),
-    borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderWidth: wp(0.25),
+    borderColor: 'rgba(239, 68, 68, 0.35)',
   },
   timerText: {
     fontSize: wp(3),
-    color: '#EF4444',
+    color: '#fff',
     fontWeight: '700',
   },
   endSessionBtn: {

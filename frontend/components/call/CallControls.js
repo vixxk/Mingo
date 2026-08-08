@@ -32,7 +32,7 @@ const CallControls = ({ buttons = [], onEndCall, onSafety, flat = false }) => (
     {onSafety && (
       <TouchableOpacity
         style={styles.safetyBtn}
-        onPress={onSafety}
+        onPress={(e) => { e.stopPropagation?.(); onSafety(); }}
         activeOpacity={0.8}
         accessibilityLabel="Open safety guidance"
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -46,7 +46,7 @@ const CallControls = ({ buttons = [], onEndCall, onSafety, flat = false }) => (
         <TouchableOpacity
           key={btn.id}
           style={styles.control}
-          onPress={btn.onPress}
+          onPress={(e) => { e.stopPropagation?.(); btn.onPress(); }}
           activeOpacity={0.7}
           hitSlop={flat ? { top: 6, bottom: 6, left: 6, right: 6 } : undefined}
         >
@@ -82,7 +82,7 @@ const CallControls = ({ buttons = [], onEndCall, onSafety, flat = false }) => (
       {onEndCall && (
         <TouchableOpacity
           style={styles.control}
-          onPress={onEndCall}
+          onPress={(e) => { e.stopPropagation?.(); onEndCall(); }}
           activeOpacity={0.7}
           accessibilityLabel="End call"
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}

@@ -117,8 +117,11 @@ export default function ListenerPendingScreen() {
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
   const [submittedDate, setSubmittedDate] = useState(null);
   const [statusPopup, setStatusPopup] = useState({ visible: false, type: null });
+  // Manual refresh — spins the top-right icon while a status check is running.
+  const [refreshing, setRefreshing] = useState(false);
 
   const dotRotate = useRef(new Animated.Value(0)).current;
+  const refreshSpin = useRef(new Animated.Value(0)).current;
   const dotRingRotation = dotRotate.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
@@ -137,6 +140,27 @@ export default function ListenerPendingScreen() {
     return () => animation.stop();
   }, [dotRotate]);
 
+  // Spins the refresh icon while a manual status check is in flight.
+  const refreshSpinRotation = refreshSpin.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+  useEffect(() => {
+    if (refreshing) {
+      const anim = Animated.loop(
+        Animated.timing(refreshSpin, {
+          toValue: 1,
+          duration: 900,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      );
+      anim.start();
+      return () => anim.stop();
+    }
+    refreshSpin.setValue(0);
+  }, [refreshing, refreshSpin]);
+
   const showToast = (message, type = 'success') => setToast({ visible: true, message, type });
 
   // Poll for status changes via API (backend SSE only broadcasts online/offline, not application status)
@@ -146,9 +170,16 @@ export default function ListenerPendingScreen() {
       if (res?.data) {
         const user = res.data;
         const newStatus = user.listener?.status;
+        // Persist the latest profile so the header name/avatar stay fresh too.
+        await AsyncStorage.setItem('user', JSON.stringify(user));
+        // Refresh the displayed "Submitted On" date from the server's data.
+        if (user.listener?.createdAt) {
+          setSubmittedDate(new Date(user.listener.createdAt));
+        } else if (user.createdAt) {
+          setSubmittedDate(new Date(user.createdAt));
+        }
         if (newStatus === 'approved' || newStatus === 'rejected') {
           await AsyncStorage.setItem('listenerStatus', newStatus);
-          await AsyncStorage.setItem('user', JSON.stringify(user));
           setStatusPopup({ visible: true, type: newStatus });
         }
       }
@@ -156,6 +187,17 @@ export default function ListenerPendingScreen() {
       console.log('[ListenerPending] Poll error:', err.message);
     }
   }, []);
+
+  // Manual refresh (top-right button) — re-checks the application status now.
+  const handleRefresh = useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await pollStatus();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshing, pollStatus]);
 
   // Poll on app foreground and every 30 seconds
   useEffect(() => {
@@ -269,6 +311,21 @@ export default function ListenerPendingScreen() {
         locations={[0, 0.6, 1]}
         style={styles.bgGradient}
       />
+
+      {/* Refresh button — top right. Re-checks the application status now
+          instead of waiting for the 30s auto-poll. Spins while in flight. */}
+      <TouchableOpacity
+        style={[styles.refreshButton, { top: insets.top + vs(8) }]}
+        onPress={handleRefresh}
+        activeOpacity={0.7}
+        disabled={refreshing}
+        accessibilityLabel="Refresh application status"
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
+        <Animated.View style={{ transform: [{ rotate: refreshSpinRotation }] }}>
+          <Ionicons name="refresh" size={wp(5.5)} color={refreshing ? '#F87171' : '#FCA5A5'} />
+        </Animated.View>
+      </TouchableOpacity>
 
       <View
         style={[styles.scrollView, styles.scrollContent, { paddingTop: insets.top }]}
@@ -535,6 +592,19 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     color: '#9CA3AF',
     lineHeight: ms(16),
+  },
+  refreshButton: {
+    position: 'absolute',
+    right: wp(4),
+    width: wp(10),
+    height: wp(10),
+    borderRadius: wp(5),
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
   },
   bottomContainer: {
     position: 'absolute',
