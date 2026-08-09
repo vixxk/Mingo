@@ -766,12 +766,14 @@ export default function VideoCallScreen() {
   }, [isMuted]);
 
   const toggleCamera = useCallback(() => {
-    const next = !isCameraOff;
-    setIsCameraOff(next);
-    // Clear any previous mount error so the camera can retry when re-enabled.
-    if (!next) setCameraError(false);
-    if (agoraRef.current) agoraRef.current.setCameraEnabled(!next);
-  }, [isCameraOff]);
+    setIsCameraOff(prev => {
+      const next = !prev;
+      // Clear any previous mount error so the camera can retry when re-enabled.
+      if (!next) setCameraError(false);
+      if (agoraRef.current) agoraRef.current.setCameraEnabled(!next);
+      return next;
+    });
+  }, []);
 
   const handleSwitchCamera = useCallback(() => {
     if (agoraRef.current) agoraRef.current.switchCamera();
