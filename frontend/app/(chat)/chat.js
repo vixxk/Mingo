@@ -324,23 +324,6 @@ export default function ChatScreen() {
     }
   };
 
-  // Start a brand-new session with the same partner straight from the ended
-  // panel. Passing the other user's id (instead of the conversation id) makes
-  // initiateConversation reuse the existing conversation and land on a fresh
-  // live page (no closing and reopening the chat needed).
-  const startNewSession = () => {
-    if (!otherUserId) return;
-    router.replace({
-      pathname: '/chat',
-      params: {
-        name: otherName,
-        id: otherUserId,
-        avatarIndex: otherAvatarIndex || '0',
-        gender: otherGender || 'Female',
-      },
-    });
-  };
-
   // Session elapsed timer - counts UP from 0 starting when listener first replies
   const startElapsedTimer = (startedAtTime) => {
     if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
@@ -918,19 +901,17 @@ export default function ChatScreen() {
       setSessionRemaining(0);
       setActiveSessionId(null);
       if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
-      // Only the USER sees the "Session ended" panel (the input bar is
-      // replaced by the summary) until their next message restarts the
-      // session. The LISTENER keeps the live input — they can send as many
-      // messages as they want even before the next session starts. The page
-      // stays live — the user's panel clears again when a new message
-      // restarts the session. Real duration / coins / time come from the
-      // server payload (no need to close and reopen the chat).
-      if (userRoleRef.current === 'USER') {
-        setChatBlocked(true);
-        setEndedPanelVisible(true);
-        if (data?.session) {
-          setEndedSessionData(data.session);
-        }
+      // The "Session ended" panel is shown to BOTH roles the moment the socket
+      // reports the session ended, keeping the ending in sync for the pair.
+      // The input bar is replaced by the summary panel so neither side can
+      // keep replying until a new message restarts the session (the panels
+      // clear again, per-side, when the other side's message or a fresh
+      // session comes back through the socket). Real duration / coins / time
+      // come from the server payload.
+      setChatBlocked(true);
+      setEndedPanelVisible(true);
+      if (data?.session) {
+        setEndedSessionData(data.session);
       }
       setShowEndChatPopup(false);
       setIsEndingSession(false);
@@ -1583,19 +1564,6 @@ export default function ChatScreen() {
               </View>
             )}
           </View>
-          {userRole === 'USER' && (
-            <TouchableOpacity style={styles.newSessionBtnWrap} activeOpacity={0.85} onPress={startNewSession}>
-              <LinearGradient
-                colors={['#3B82F6', '#EC4899']}
-                start={{ x: 0, y: 0.5 }}
-                end={{ x: 1, y: 0.5 }}
-                style={styles.newSessionBtn}
-              >
-                <Ionicons name="chatbubble-ellipses-outline" size={wp(4.2)} color="#fff" />
-                <Text style={styles.newSessionBtnText}>Start New Session</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          )}
         </View>
       ) : (
         <View style={[styles.inputBar, phoneDetected && styles.inputBarDanger, { paddingBottom: Math.max(insets.bottom, hp(1.2)) }]}>
@@ -2034,15 +2002,6 @@ const styles = StyleSheet.create({
   },
   endedMetaText: {
     color: '#D1D5DB', fontSize: wp(3), fontFamily: 'Inter_500Medium',
-  },
-  newSessionBtnWrap: {
-    borderRadius: wp(8), overflow: 'hidden', height: hp(5.5), marginBottom: hp(0.8),
-  },
-  newSessionBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: wp(2),
-  },
-  newSessionBtnText: {
-    color: '#fff', fontSize: wp(3.8), fontWeight: '700', fontFamily: 'Inter_700Bold',
   },
   textInput: {
     flex: 1, fontSize: wp(3.6), color: '#fff', paddingVertical: hp(1), maxHeight: hp(12),
