@@ -44,6 +44,7 @@ try {
 const {
   createAgoraRtcEngine,
   RtcSurfaceView,
+  RtcTextureView,
   ChannelProfileType,
   ClientRoleType,
   ConnectionStateType,
@@ -52,6 +53,10 @@ const {
   RenderModeType,
   VideoMirrorModeType,
 } = AgoraSDK || {};
+
+// On Android, TextureView (RtcTextureView) is preferred for small floating subviews / overlays
+// so it renders inside the view hierarchy without SurfaceFlinger occlusion or black rectangle issues.
+const LocalVideoView = (Platform.OS === 'android' && RtcTextureView) ? RtcTextureView : RtcSurfaceView;
 
 /**
  * Owns the Agora engine for the duration of the video call and renders the
@@ -75,6 +80,7 @@ const AgoraVideoView = forwardRef(
       onRemoteLeft,
       onFailedToConnect,
       onEngineError,
+      onJoinSuccess,
     },
     ref
   ) => {
@@ -85,68 +91,14 @@ const AgoraVideoView = forwardRef(
     // can re-assert the preview without clobbering a user who turned it off.
     const cameraEnabledRef = useRef(cameraEnabled);
 
-    // Local preview re-bind. The self-view's native RtcSurfaceView registers
-    // itself with the engine only once its native view has mounted — which
-    // happens asynchronously AFTER the preview is started during setup. Until
-    // that happens the frames have nowhere local to render and the bottom-right
-    // self-view stays black. Running a stop → start cycle of local video once
-    // the surface has mounted (exactly what the Camera button does) re-binds
-    // the frames to the now-registered surface and makes the self-view appear.
-    const localPreviewBusyRef = useRef(false);
-    const localPreviewRetryRef = useRef({ timer: null, count: 0 });
-    const pendingRestartRef = useRef(false);
-
-    const restartLocalPreview = useCallback(() => {
+    const ensureLocalPreview = useCallback(() => {
       const engine = engineRef.current;
-      if (!engine) {
-        if (localPreviewRetryRef.current.count < 15) {
-          localPreviewRetryRef.current.count += 1;
-          if (localPreviewRetryRef.current.timer) clearTimeout(localPreviewRetryRef.current.timer);
-          localPreviewRetryRef.current.timer = setTimeout(restartLocalPreview, 200);
-        }
-        return;
-      }
-      localPreviewRetryRef.current.count = 0;
-      if (!cameraEnabledRef.current) return;
+      if (!engine || !cameraEnabledRef.current) return;
 
-      // Immediate canvas bind & preview start to eliminate black frame latency
-      try {
-        engine.setupLocalVideo({
-          uid: 0,
-          renderMode: RenderModeType.RenderModeHidden,
-          mirrorMode: VideoMirrorModeType.VideoMirrorModeEnabled,
-        });
-      } catch (e) {}
+      try { engine.enableVideo(); } catch (e) {}
       try { engine.enableLocalVideo(true); } catch (e) {}
       try { engine.startPreview(); } catch (e) {}
-
-      if (localPreviewBusyRef.current) {
-        pendingRestartRef.current = true;
-        return;
-      }
-      localPreviewBusyRef.current = true;
-
-      // Brief refresh cycle to ensure native SurfaceView binding on Android/iOS
-      try { engine.enableLocalVideo(false); } catch (e) {}
-      setTimeout(() => {
-        localPreviewBusyRef.current = false;
-        if (!engineRef.current) return;
-        if (!cameraEnabledRef.current) return;
-        try {
-          engineRef.current.setupLocalVideo({
-            uid: 0,
-            renderMode: RenderModeType.RenderModeHidden,
-            mirrorMode: VideoMirrorModeType.VideoMirrorModeEnabled,
-          });
-        } catch (e) {}
-        try { engineRef.current.enableLocalVideo(true); } catch (e) {}
-        try { engineRef.current.startPreview(); } catch (e) {}
-
-        if (pendingRestartRef.current) {
-          pendingRestartRef.current = false;
-          restartLocalPreview();
-        }
-      }, 150);
+      try { engine.muteLocalVideoStream(false); } catch (e) {}
     }, []);
 
     useEffect(() => {
@@ -154,29 +106,31 @@ const AgoraVideoView = forwardRef(
       const engine = engineRef.current;
       if (!engine) return;
       if (cameraEnabled) {
-        try { engine.muteLocalVideoStream(false); } catch (e) {}
         try { engine.enableLocalVideo(true); } catch (e) {}
+        try { engine.startPreview(); } catch (e) {}
+        try { engine.muteLocalVideoStream(false); } catch (e) {}
         try { engine.updateChannelMediaOptions({ publishCameraTrack: true }); } catch (e) {}
-        restartLocalPreview();
       } else {
         try { engine.muteLocalVideoStream(true); } catch (e) {}
         try { engine.enableLocalVideo(false); } catch (e) {}
         try { engine.stopPreview(); } catch (e) {}
         try { engine.updateChannelMediaOptions({ publishCameraTrack: false }); } catch (e) {}
       }
-    }, [cameraEnabled, restartLocalPreview]);
+    }, [cameraEnabled]);
 
     const onRemoteVideoActiveChangeRef = useRef(onRemoteVideoActiveChange);
     const onRemoteJoinedChangeRef = useRef(onRemoteJoinedChange);
     const onRemoteLeftRef = useRef(onRemoteLeft);
     const onFailedToConnectRef = useRef(onFailedToConnect);
     const onEngineErrorRef = useRef(onEngineError);
+    const onJoinSuccessRef = useRef(onJoinSuccess);
 
     useEffect(() => { onRemoteVideoActiveChangeRef.current = onRemoteVideoActiveChange; });
     useEffect(() => { onRemoteJoinedChangeRef.current = onRemoteJoinedChange; });
     useEffect(() => { onRemoteLeftRef.current = onRemoteLeft; });
     useEffect(() => { onFailedToConnectRef.current = onFailedToConnect; });
     useEffect(() => { onEngineErrorRef.current = onEngineError; });
+    useEffect(() => { onJoinSuccessRef.current = onJoinSuccess; });
 
     const setRemoteActive = useCallback((active) => {
       setRemoteVideoActive(active);
@@ -207,14 +161,6 @@ const AgoraVideoView = forwardRef(
 
       const setup = () => {
         try {
-          // Fresh engine — clear any stale preview-bind state from a previous
-          // engine so the off → on cycle can run again for this channel. A
-          // pending retry timer (from a pre-engine onLayout) is left intact:
-          // it re-checks engineRef.current when it fires and will run the cycle
-          // on this new engine.
-          localPreviewBusyRef.current = false;
-          localPreviewRetryRef.current.count = 0;
-
           engine = createAgoraRtcEngine();
           engineRef.current = engine;
 
@@ -222,22 +168,8 @@ const AgoraVideoView = forwardRef(
           engine.setChannelProfile(ChannelProfileType.ChannelProfileCommunication);
           engine.setClientRole(ClientRoleType.ClientRoleBroadcaster);
           engine.enableVideo();
-          // Bind the local canvas (uid 0) explicitly BEFORE starting the
-          // preview. The self-view's RtcSurfaceView also registers itself when
-          // its native view mounts, but that can race the preview start — if
-          // the camera begins capturing before a local surface is registered
-          // the frames have nowhere to render and the self-view stays black
-          // until the camera is toggled off and on again.
-          try {
-            const setupRet = engine.setupLocalVideo({
-              uid: 0,
-              renderMode: RenderModeType.RenderModeHidden,
-              mirrorMode: VideoMirrorModeType.VideoMirrorModeEnabled,
-            });
-            if (setupRet !== 0) console.log('[Agora] setupLocalVideo result:', setupRet);
-          } catch (e) {}
-          // Start the local camera preview immediately so the self-view (bottom
-          // right) renders from the moment the call opens.
+
+          // Start local camera capture preview
           try {
             const previewRet = engine.startPreview();
             if (previewRet !== 0) console.log('[Agora] startPreview result:', previewRet);
@@ -251,16 +183,8 @@ const AgoraVideoView = forwardRef(
               // Route audio through the loudspeaker by default — mirrors the
               // old Zego config so "no audio" is never mistaken for a failure.
               try { engine.setEnableSpeakerphone(true); } catch (e) {}
-              // Known SDK quirk: the preview started during setup can race
-              // the native self-view surface binding, leaving the self-view
-              // black until the camera is toggled. Restart local capture once
-              // the channel is joined — the same stop → start cycle the Camera
-              // button performs, which reliably shows the self-view. Runs for
-              // BOTH the user and the listener so both get a self-view as soon
-              // as the call starts. The self-view's onLayout re-runs this too
-              // in case the surface was still mounting when the join callback
-              // fired.
-              restartLocalPreview();
+              ensureLocalPreview();
+              if (onJoinSuccessRef.current) onJoinSuccessRef.current();
             },
             onUserJoined: (connection, uid) => {
               if (!active) return;
@@ -346,10 +270,6 @@ const AgoraVideoView = forwardRef(
 
       return () => {
         active = false;
-        if (localPreviewRetryRef.current.timer) {
-          clearTimeout(localPreviewRetryRef.current.timer);
-          localPreviewRetryRef.current.timer = null;
-        }
         if (engineRef.current) {
           try { engineRef.current.leaveChannel(); } catch (e) {}
           try { engineRef.current.release(); } catch (e) {}
@@ -368,10 +288,10 @@ const AgoraVideoView = forwardRef(
         const engine = engineRef.current;
         if (!engine) return;
         if (enabled) {
-          try { engine.muteLocalVideoStream(false); } catch (e) {}
           try { engine.enableLocalVideo(true); } catch (e) {}
+          try { engine.startPreview(); } catch (e) {}
+          try { engine.muteLocalVideoStream(false); } catch (e) {}
           try { engine.updateChannelMediaOptions({ publishCameraTrack: true }); } catch (e) {}
-          restartLocalPreview();
         } else {
           try { engine.muteLocalVideoStream(true); } catch (e) {}
           try { engine.enableLocalVideo(false); } catch (e) {}
@@ -379,7 +299,7 @@ const AgoraVideoView = forwardRef(
           try { engine.updateChannelMediaOptions({ publishCameraTrack: false }); } catch (e) {}
         }
       },
-      restartLocalPreview,
+      restartLocalPreview: ensureLocalPreview,
       switchCamera() {
         if (!engineRef.current) return;
         try { engineRef.current.switchCamera(); } catch (e) {}
@@ -921,6 +841,15 @@ export default function VideoCallScreen() {
           onRemoteLeft={handleRemoteLeft}
           onFailedToConnect={handleAgoraFailedToConnect}
           onEngineError={(err, msg) => console.log('[Agora] Engine error:', err, msg)}
+          onJoinSuccess={() => {
+            // Toggle camera off then on immediately when call connects for both users and listeners
+            setTimeout(() => {
+              toggleCamera();
+              setTimeout(() => {
+                toggleCamera();
+              }, 300);
+            }, 100);
+          }}
         />
 
         {/* Call duration timer — centered near the top with enough clearance
@@ -939,7 +868,7 @@ export default function VideoCallScreen() {
         <View style={styles.selfPreview} pointerEvents="none">
           <View style={styles.selfCamera}>
             {showCamera && !!AgoraSDK ? (
-              <RtcSurfaceView
+              <LocalVideoView
                 key="agora-local"
                 canvas={{
                   uid: 0,
@@ -948,12 +877,9 @@ export default function VideoCallScreen() {
                   renderMode: RenderModeType.RenderModeHidden,
                   mirrorMode: VideoMirrorModeType.VideoMirrorModeEnabled,
                 }}
+                zOrderMediaOverlay={Platform.OS === 'android'}
                 zOrderOnTop={Platform.OS === 'android'}
                 style={StyleSheet.absoluteFill}
-                // Fires once the native surface has actually mounted and
-                // registered with the engine — force a capture restart so the
-                // frames finally render in the self-view box.
-                onLayout={() => { agoraRef.current?.restartLocalPreview(); }}
               />
             ) : myAvatarUrl ? (
               <Image source={{ uri: myAvatarUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />

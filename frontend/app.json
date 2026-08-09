@@ -30,7 +30,10 @@
           "android": {
             "minSdkVersion": 24,
             "usesCleartextTraffic": true,
-            "buildArchs": ["arm64-v8a", "x86_64"],
+            "buildArchs": [
+              "arm64-v8a",
+              "x86_64"
+            ],
             "enableMinifyInReleaseBuilds": true,
             "enableShrinkResourcesInReleaseBuilds": true,
             "packagingOptions": {
@@ -125,14 +128,50 @@
                       "group.com.vixxk.mingo.onesignal"
                     ]
                   }
+                },
+                {
+                  "targetName": "OneSignalNotificationServiceExtension",
+                  "bundleIdentifier": "com.vixxk.mingo.OneSignalNotificationServiceExtension",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.vixxk.mingo.onesignal"
+                    ]
+                  }
+                },
+                {
+                  "targetName": "OneSignalNotificationServiceExtension",
+                  "bundleIdentifier": "com.vixxk.mingo.OneSignalNotificationServiceExtension",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.vixxk.mingo.onesignal"
+                    ]
+                  }
+                },
+                {
+                  "targetName": "OneSignalNotificationServiceExtension",
+                  "bundleIdentifier": "com.vixxk.mingo.OneSignalNotificationServiceExtension",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.vixxk.mingo.onesignal"
+                    ]
+                  }
+                },
+                {
+                  "targetName": "OneSignalNotificationServiceExtension",
+                  "bundleIdentifier": "com.vixxk.mingo.OneSignalNotificationServiceExtension",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.vixxk.mingo.onesignal"
+                    ]
+                  }
                 }
               ]
             }
           }
         },
-        "projectId": "29226353-1b41-4785-8ac5-74ded0cd7328"
+        "projectId": "7b1c82be-73cc-4927-abce-4b034867a82a"
       }
     },
-    "owner": "vixxk"
+    "owner": "vixxk67"
   }
 }
