@@ -6,6 +6,7 @@ import {
 } from 'react-icons/io5'
 import { adminAPI } from '../utils/api'
 import { Skeleton } from '../components/admin/Skeleton'
+import { DateRangeFilterBar } from '../components/admin/DateRangeFilter'
 
 const CALL_TYPES = ['All', 'Audio', 'Video', 'Chat']
 const STATUSES = ['Completed', 'Active', 'Cancelled']
@@ -114,12 +115,15 @@ function ParticipantAvatar({ name, avatar, isDeleted }) {
 export default function Sessions() {
   const [sessions, setSessions] = useState([])
   const [totalCount, setTotalCount] = useState(0)
+  const [counts, setCounts] = useState({})
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [callType, setCallType] = useState('All')
   const [status, setStatus] = useState('All')
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
   const [offset, setOffset] = useState(0)
   const [hasMore, setHasMore] = useState(true)
   const debounceRef = useRef(null)
@@ -136,6 +140,8 @@ export default function Sessions() {
       if (callType !== 'All') params.callType = callType.toLowerCase()
       if (status !== 'All') params.status = status.toLowerCase()
       if (debouncedSearch) params.search = debouncedSearch
+      if (startDate) params.startDate = startDate
+      if (endDate) params.endDate = endDate
 
       const res = await adminAPI.getSessions(params)
       const data = res.data || res
@@ -149,6 +155,7 @@ export default function Sessions() {
 
       const total = data.total || data.totalCount || data.count || (Array.isArray(data) ? data.length : list.length)
       setTotalCount(total)
+      if (data.counts) setCounts(data.counts)
       setHasMore((isLoadMore ? offset + LIMIT : LIMIT) < total)
     } catch (e) {
       console.error('Failed to fetch sessions:', e)
@@ -156,7 +163,7 @@ export default function Sessions() {
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [callType, status, debouncedSearch, offset])
+  }, [callType, status, debouncedSearch, startDate, endDate, offset])
 
   fetchRef.current = doFetch
 
@@ -176,7 +183,7 @@ export default function Sessions() {
     setHasMore(true)
     setLoading(true)
     fetchRef.current(false)
-  }, [callType, status, debouncedSearch])
+  }, [callType, status, debouncedSearch, startDate, endDate])
 
   useEffect(() => {
     if (offset > 0) {
@@ -195,6 +202,20 @@ export default function Sessions() {
 
   const handleStatusChange = (s) => {
     setStatus(prev => prev === s ? 'All' : s)
+  }
+
+  const handlePresetPeriod = (days) => {
+    const end = new Date()
+    const start = new Date()
+    start.setDate(start.getDate() - days)
+    setStartDate(start.toISOString().split('T')[0])
+    setEndDate(end.toISOString().split('T')[0])
+  }
+
+  const handleClearFilters = () => {
+    setSearch('')
+    setStartDate('')
+    setEndDate('')
   }
 
   const navigate = useNavigate()
@@ -231,6 +252,17 @@ export default function Sessions() {
           </div>
         </div>
       </div>
+
+      {/* Date Period Filter */}
+      <DateRangeFilterBar
+        startDate={startDate}
+        endDate={endDate}
+        onStartChange={setStartDate}
+        onEndChange={setEndDate}
+        onPreset={handlePresetPeriod}
+        onClear={handleClearFilters}
+        showClear={!!(startDate || endDate || search)}
+      />
 
       {/* Search */}
       <div className="search-bar" style={{
@@ -295,11 +327,13 @@ export default function Sessions() {
         <div className="filter-tabs tabs-scroll" style={{ display: 'flex', gap: 8, overflowX: 'auto' }}>
           {STATUSES.filter(s => !(callType === 'Chat' && s === 'Cancelled')).map(s => {
             const isActive = status === s
+            const count = counts[s.toLowerCase()] || 0
             return (
               <button
                 key={s}
                 onClick={() => handleStatusChange(s)}
                 style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
                   padding: '8px 16px', borderRadius: 20, border: '1px solid',
                   borderColor: isActive ? 'var(--accent)' : 'var(--border)',
                   fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
@@ -309,6 +343,17 @@ export default function Sessions() {
                 }}
               >
                 {s}
+                {count > 0 && (
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    minWidth: 18, height: 18, borderRadius: 9,
+                    backgroundColor: isActive ? 'rgba(255,255,255,0.2)' : 'var(--accent-light)',
+                    color: isActive ? '#fff' : 'var(--accent)',
+                    fontSize: 10, fontWeight: 800, padding: '0 4px',
+                  }}>
+                    {count}
+                  </span>
+                )}
               </button>
             )
           })}

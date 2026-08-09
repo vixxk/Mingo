@@ -661,19 +661,11 @@ export default function ChatScreen() {
             } else {
               setSessionActive(false);
               if (myRole === 'LISTENER') {
-                // The listener is never limited to one free message — only the
-                // user is. The listener's input is locked only when a paid
-                // session was started and has ended, and the user hasn't sent a
-                // new message to restart it yet.
-                const hadSession = !!(session && session.sessionId);
-                const apiMessages = response.data.messages || [];
-                const nonSystemMessages = apiMessages.filter(m => m.senderModel !== 'System' && m.type !== 'system');
-                const lastMessage = nonSystemMessages[nonSystemMessages.length - 1];
-                if (hadSession && (!lastMessage || lastMessage.senderModel !== 'User')) {
-                  blockedBySession = true;
-                } else {
-                  blockedBySession = false;
-                }
+                // The listener is never limited — they can send as many
+                // messages as they want even before the paid chat session
+                // starts. Only the USER is gated (one free message per phase,
+                // then paid messages start the session).
+                blockedBySession = false;
               } else {
                 blockedBySession = false;
                 // No active session — the page shows the current phase window.
@@ -926,15 +918,19 @@ export default function ChatScreen() {
       setSessionRemaining(0);
       setActiveSessionId(null);
       if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
-      // BOTH roles now see the "Session ended" panel immediately (the input
-      // bar is replaced by the summary so nobody can keep sending). The page
-      // stays live — the panel clears again when the user's next message
+      // Only the USER sees the "Session ended" panel (the input bar is
+      // replaced by the summary) until their next message restarts the
+      // session. The LISTENER keeps the live input — they can send as many
+      // messages as they want even before the next session starts. The page
+      // stays live — the user's panel clears again when a new message
       // restarts the session. Real duration / coins / time come from the
       // server payload (no need to close and reopen the chat).
-      setChatBlocked(true);
-      setEndedPanelVisible(true);
-      if (data?.session) {
-        setEndedSessionData(data.session);
+      if (userRoleRef.current === 'USER') {
+        setChatBlocked(true);
+        setEndedPanelVisible(true);
+        if (data?.session) {
+          setEndedSessionData(data.session);
+        }
       }
       setShowEndChatPopup(false);
       setIsEndingSession(false);
@@ -965,21 +961,7 @@ export default function ChatScreen() {
     };
 
     const handleMessageError = (data) => {
-      if (data.type === 'session_ended') {
-        // Session ended — disable input for listener (and show the ended panel
-        // as a fallback in case the chat_session_ended event was missed).
-        setChatBlocked(true);
-        setEndedPanelVisible(true);
-        const errorMsg = {
-          id: `error_${Date.now()}`,
-          text: data.error || 'Session has ended.',
-          sent: false,
-          type: 'system',
-          createdAt: new Date().toISOString(),
-        };
-        setMessages(prev => [...prev, errorMsg]);
-        setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-      } else if (data.type === 'listener_offline') {
+      if (data.type === 'listener_offline') {
         setChatBlocked(true);
         const errorMsg = {
           id: `error_${Date.now()}`,
@@ -1060,16 +1042,9 @@ export default function ChatScreen() {
         if (!isOnline) {
           setChatBlocked(true);
         } else {
-          setMessages(prev => {
-            const nonSystemMessages = prev.filter(m => m.type !== 'system' && m.type !== 'date');
-            const lastMessage = nonSystemMessages[nonSystemMessages.length - 1];
-            // Never gate the listener during the free-message phase — only
-            // after a paid session has ended, when the listener must wait for
-            // the user to send a new message that restarts it.
-            const isBlockedBySession = everHadSession && !sessionActive && (!lastMessage || lastMessage.sent);
-            setChatBlocked(isBlockedBySession);
-            return prev;
-          });
+          // The listener is never gated by session state — they can send as
+          // many messages as they want even before the chat session starts.
+          setChatBlocked(false);
         }
       }
     };
@@ -1124,7 +1099,7 @@ export default function ChatScreen() {
       socketService.off('abusive_message_blocked', handleAbusiveMessageBlocked);
       socketService.off('chat_restricted', handleChatRestricted);
     };
-  }, [currentUserId, sessionActive, everHadSession]);
+  }, [currentUserId, sessionActive]);
 
   const insertDateLabels = (msgs) => {
     const result = [];

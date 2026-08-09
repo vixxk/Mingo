@@ -339,8 +339,15 @@ class AdminController {
 
   static async getUsers(req, res, next) {
     try {
-      const { search, status, page = 1, limit = 50 } = req.query;
+      const { search, status, startDate, endDate, page = 1, limit = 50 } = req.query;
       const filter = { role: 'USER' };
+
+      // Period filter — day-precision; endDate covers the whole day.
+      if (startDate || endDate) {
+        filter.createdAt = {};
+        if (startDate) filter.createdAt.$gte = new Date(startDate);
+        if (endDate) filter.createdAt.$lte = new Date(endDate + 'T23:59:59.999');
+      }
 
       if (search) {
         filter.$or = [
@@ -381,6 +388,24 @@ class AdminController {
 
       const total = await User.countDocuments(filter);
 
+      // Status tab counts are scoped to the same period + search filters as the
+      // list — not global totals — so the badges stay meaningful.
+      const countsFilter = { role: 'USER' };
+      if (search) countsFilter.$or = filter.$or;
+      if (startDate || endDate) countsFilter.createdAt = filter.createdAt;
+      const countsUsers = await User.find(countsFilter).select('_id isDeleted isBanned');
+      const onlineSet = new Set(onlineUserIds);
+      const counts = { all: countsUsers.length, online: 0, offline: 0, deleted: 0 };
+      for (const u of countsUsers) {
+        if (u.isDeleted) {
+          counts.deleted += 1;
+        } else if (onlineSet.has(u._id.toString())) {
+          counts.online += 1;
+        } else if (!u.isBanned) {
+          counts.offline += 1;
+        }
+      }
+
       const enrichedUsers = await Promise.all(users.map(async (user) => {
         const callCount = await Session.countDocuments({ userId: user._id, status: 'completed' });
         const userRoom = io ? io.sockets.adapter.rooms.get(`user_${user._id.toString()}`) : null;
@@ -401,7 +426,7 @@ class AdminController {
         };
       }));
 
-      return ApiResponse.success(res, { users: enrichedUsers, total, page: parseInt(page), limit: parseInt(limit) }, 'Users retrieved');
+      return ApiResponse.success(res, { users: enrichedUsers, total, counts, page: parseInt(page), limit: parseInt(limit) }, 'Users retrieved');
     } catch (err) {
       next(err);
     }
@@ -409,11 +434,18 @@ class AdminController {
 
   static async getListeners(req, res, next) {
     try {
-      const { status, search, page = 1, limit = 50 } = req.query;
+      const { status, search, startDate, endDate, page = 1, limit = 50 } = req.query;
       const filter = {};
 
       if (status && status !== 'all') filter.status = status;
-      
+
+      // Period filter — day-precision; endDate covers the whole day.
+      if (startDate || endDate) {
+        filter.createdAt = {};
+        if (startDate) filter.createdAt.$gte = new Date(startDate);
+        if (endDate) filter.createdAt.$lte = new Date(endDate + 'T23:59:59.999');
+      }
+
       let listeners = await Listener.find(filter)
         .populate('userId', 'name username phone gender avatarIndex isBanned isDeleted deletionReason')
         .sort({ createdAt: -1 })
@@ -428,6 +460,41 @@ class AdminController {
       }
 
       const total = await Listener.countDocuments(filter);
+
+      // Status tab counts are scoped to the same period + search filters as the
+      // list — not global totals — so the badges stay meaningful. Mirrors the
+      // frontend's tab logic (online/pending/approved/verified/bestChoice
+      // exclude banned+deleted; rejected and deleted don't).
+      const countsFilter = {};
+      if (startDate || endDate) countsFilter.createdAt = filter.createdAt;
+      const countsQuery = Listener.find(countsFilter)
+        .populate('userId', 'isBanned isDeleted');
+      if (search) {
+        const matchingUsers = await User.find({
+          $or: [
+            { name: { $regex: search, $options: 'i' } },
+            { username: { $regex: search, $options: 'i' } },
+            { phone: { $regex: search, $options: 'i' } },
+          ],
+        }).select('_id');
+        const matchingIds = matchingUsers.map(u => u._id);
+        countsQuery.where('userId').in(matchingIds);
+      }
+      const countsListeners = await countsQuery;
+      const counts = { all: 0, online: 0, pending: 0, approved: 0, verified: 0, bestChoice: 0, rejected: 0, deleted: 0 };
+      for (const l of countsListeners) {
+        const isBanned = l.userId?.isBanned || false;
+        const isDeleted = l.userId?.isDeleted || false;
+        counts.all += 1;
+        if (isDeleted) counts.deleted += 1;
+        if (isDeleted || isBanned) continue;
+        if (l.isOnline) counts.online += 1;
+        if (l.status === 'pending') counts.pending += 1;
+        if (l.status === 'approved') counts.approved += 1;
+        if (l.verified) counts.verified += 1;
+        if (l.bestChoice) counts.bestChoice += 1;
+        if (l.status === 'rejected') counts.rejected += 1;
+      }
 
       const result = listeners.map(l => ({
         id: l._id,
@@ -452,7 +519,7 @@ class AdminController {
         createdAt: l.createdAt,
       }));
 
-      return ApiResponse.success(res, { listeners: result, total, page: parseInt(page), limit: parseInt(limit) }, 'Listeners retrieved');
+      return ApiResponse.success(res, { listeners: result, total, counts, page: parseInt(page), limit: parseInt(limit) }, 'Listeners retrieved');
     } catch (err) {
       next(err);
     }
@@ -822,10 +889,18 @@ class AdminController {
 
   static async getReports(req, res, next) {
     try {
-      const { status = 'all', reportType, page = 1, limit = 20 } = req.query;
+      const { status = 'all', reportType, startDate, endDate, page = 1, limit = 20 } = req.query;
       const filter = {};
       if (status !== 'all') filter.status = status;
       if (reportType && reportType !== 'all') filter.reportType = reportType;
+
+      // Period filter — day-precision; endDate covers the whole day. Reports
+      // are matched on their createdAt, mirroring the other admin filters.
+      if (startDate || endDate) {
+        filter.createdAt = {};
+        if (startDate) filter.createdAt.$gte = new Date(startDate);
+        if (endDate) filter.createdAt.$lte = new Date(endDate + 'T23:59:59.999');
+      }
 
       let reports = await MemberReport.find(filter)
         .populate('reporter', 'name username phone')
@@ -849,11 +924,15 @@ class AdminController {
 
       const total = await MemberReport.countDocuments(filter);
 
+      // Status tab counts are scoped to the same period (and reportType) as
+      // the list — not global totals — so the badges stay meaningful.
+      const countsFilter = { ...filter };
+      delete countsFilter.status;
       const [pendingCount, resolvedCount, dismissedCount, totalAll] = await Promise.all([
-        MemberReport.countDocuments({ status: 'pending' }),
-        MemberReport.countDocuments({ status: 'resolved' }),
-        MemberReport.countDocuments({ status: 'dismissed' }),
-        MemberReport.countDocuments({}),
+        MemberReport.countDocuments({ ...countsFilter, status: 'pending' }),
+        MemberReport.countDocuments({ ...countsFilter, status: 'resolved' }),
+        MemberReport.countDocuments({ ...countsFilter, status: 'dismissed' }),
+        MemberReport.countDocuments(countsFilter),
       ]);
 
       return ApiResponse.success(res, {
@@ -885,7 +964,19 @@ class AdminController {
 
   static async getBannedMembers(req, res, next) {
     try {
-      const bannedUsers = await User.find({ isBanned: true })
+      const { startDate, endDate } = req.query;
+      const filter = { isBanned: true };
+
+      // Period filter — day-precision; endDate covers the whole day. Matched on
+      // updatedAt, which is updated when the ban is applied (the list already
+      // sorts by updatedAt as the closest thing to a "banned at" timestamp).
+      if (startDate || endDate) {
+        filter.updatedAt = {};
+        if (startDate) filter.updatedAt.$gte = new Date(startDate);
+        if (endDate) filter.updatedAt.$lte = new Date(endDate + 'T23:59:59.999');
+      }
+
+      const bannedUsers = await User.find(filter)
         .select('name username phone role gender avatarIndex isBanned createdAt')
         .sort({ updatedAt: -1 });
 
@@ -1006,9 +1097,32 @@ static async resetCoinPackages(req, res, next) {
   static async getPayouts(req, res, next) {
     try {
       const PayoutRequest = require('../models/PayoutRequest');
-      const { status, page = 1, limit = 20 } = req.query;
+      const { status, search, startDate, endDate, page = 1, limit = 20 } = req.query;
       const filter = {};
       if (status && status !== 'all') filter.status = status;
+
+      // Period filter — day-precision; endDate covers the whole day.
+      if (startDate || endDate) {
+        filter.createdAt = {};
+        if (startDate) filter.createdAt.$gte = new Date(startDate);
+        if (endDate) filter.createdAt.$lte = new Date(endDate + 'T23:59:59.999');
+      }
+
+      // Search — scope to the listener's name / phone (matches what the
+      // frontend previously did in memory, now done server-side so the counts
+      // below stay consistent with the list).
+      let listenerMatch = null;
+      if (search) {
+        const matchingUsers = await User.find({
+          $or: [
+            { name: { $regex: search, $options: 'i' } },
+            { username: { $regex: search, $options: 'i' } },
+            { phone: { $regex: search, $options: 'i' } },
+          ],
+        }).select('_id');
+        listenerMatch = { listenerId: { $in: matchingUsers.map(u => u._id) } };
+        filter.listenerId = listenerMatch.listenerId;
+      }
 
       const payouts = await PayoutRequest.find(filter)
         .populate('listenerId', 'name username phone')
@@ -1018,7 +1132,23 @@ static async resetCoinPackages(req, res, next) {
 
       const total = await PayoutRequest.countDocuments(filter);
 
-      return ApiResponse.success(res, { payouts, total, page: parseInt(page), limit: parseInt(limit) }, 'Payouts retrieved');
+      // Status tab counts are scoped to the same period + search filters as the
+      // list — not global totals — so the badges stay meaningful.
+      const countsFilter = { ...filter };
+      delete countsFilter.status;
+      const [pendingCount, paidCount, rejectedCount] = await Promise.all([
+        PayoutRequest.countDocuments({ ...countsFilter, status: 'pending' }),
+        PayoutRequest.countDocuments({ ...countsFilter, status: 'paid' }),
+        PayoutRequest.countDocuments({ ...countsFilter, status: 'rejected' }),
+      ]);
+
+      return ApiResponse.success(res, {
+        payouts,
+        total,
+        counts: { pending: pendingCount, paid: paidCount, rejected: rejectedCount },
+        page: parseInt(page),
+        limit: parseInt(limit),
+      }, 'Payouts retrieved');
     } catch (err) {
       next(err);
     }
@@ -1420,11 +1550,19 @@ static async resetCoinPackages(req, res, next) {
    */
   static async getSessions(req, res, next) {
     try {
-      const { status, callType, search, page = 1, limit = 30 } = req.query;
+      const { status, callType, search, startDate, endDate, page = 1, limit = 30 } = req.query;
       const filter = {};
 
       if (status && status !== 'all') filter.status = status;
       if (callType && callType !== 'all') filter.callType = callType;
+
+      // Period filter — day-precision; endDate covers the whole day. Sessions
+      // are matched on their startTime, mirroring the chat log date filter.
+      if (startDate || endDate) {
+        filter.startTime = {};
+        if (startDate) filter.startTime.$gte = new Date(startDate);
+        if (endDate) filter.startTime.$lte = new Date(endDate + 'T23:59:59.999');
+      }
 
       if (search) {
         const matchingUsers = await User.find({
@@ -1450,6 +1588,16 @@ static async resetCoinPackages(req, res, next) {
         .limit(parseInt(limit));
 
       const total = await Session.countDocuments(filter);
+
+      // Status tab counts are scoped to the same callType + period (and search)
+      // filters as the list — not global totals — so the badges stay meaningful.
+      const countsFilter = { ...filter };
+      delete countsFilter.status;
+      const [activeCount, completedCount, cancelledCount] = await Promise.all([
+        Session.countDocuments({ ...countsFilter, status: 'active' }),
+        Session.countDocuments({ ...countsFilter, status: 'completed' }),
+        Session.countDocuments({ ...countsFilter, status: 'cancelled' }),
+      ]);
 
       const result = await Promise.all(sessions.map(async (s) => {
         const startTime = s.startTime;
@@ -1539,6 +1687,7 @@ static async resetCoinPackages(req, res, next) {
       return ApiResponse.success(res, {
         sessions: result,
         total,
+        counts: { active: activeCount, completed: completedCount, cancelled: cancelledCount },
         page: parseInt(page),
         limit: parseInt(limit),
       }, 'Sessions retrieved');
@@ -1803,7 +1952,7 @@ static async resetCoinPackages(req, res, next) {
    */
   static async getChatLogs(req, res, next) {
     try {
-      const { conversationId, sessionId, search, userId, listenerId, startDate, endDate, page = 1, limit = 50 } = req.query;
+      const { conversationId, sessionId, search, userId, listenerId, startDate, endDate, status, page = 1, limit = 50 } = req.query;
       const filter = {};
       const and = [];
 
@@ -2005,10 +2154,33 @@ static async resetCoinPackages(req, res, next) {
         }
       }
 
+      // Status pill counts are scoped to the same period + search + participant
+      // filters as the list — computed from the expanded cards so the badges
+      // stay meaningful (a sessionless card counts as 'free').
+      const statusCounts = { active: 0, completed: 0, cancelled: 0, free: 0 };
+      for (const c of cards) {
+        const sKey = c.session && c.session.status ? c.session.status : 'free';
+        if (Object.prototype.hasOwnProperty.call(statusCounts, sKey)) {
+          statusCounts[sKey] += 1;
+        } else {
+          statusCounts.free += 1;
+        }
+      }
+
+      // Status tab filter — 'free' matches sessionless cards (and any card
+      // whose session has no status), everything else matches the session status.
+      let result = cards;
+      if (status && status !== 'all') {
+        const wanted = status.toLowerCase();
+        result = cards.filter(c => {
+          const sKey = c.session && c.session.status ? c.session.status : 'free';
+          return wanted === 'free' ? sKey === 'free' : sKey === wanted;
+        });
+      }
+
       // Detail view — scope to a single card (matched by its `id`) and attach
       // the full message thread (with sender info) so the detail page renders
       // exactly that session's messages.
-      let result = cards;
       if (sessionId) {
         result = cards.filter(c => String(c.id) === String(sessionId));
         result.forEach(c => {
@@ -2041,6 +2213,7 @@ static async resetCoinPackages(req, res, next) {
       return ApiResponse.success(res, {
         conversations: paginated,
         total,
+        counts: statusCounts,
         page: pageNum,
         limit: limitNum,
       }, 'Chat logs retrieved');

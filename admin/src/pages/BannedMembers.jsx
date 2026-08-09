@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  IoChevronBack, IoShieldCheckmark, IoBan, IoClose, IoSearch,
+  IoChevronBack, IoShieldCheckmark, IoBan, IoSearch,
 } from 'react-icons/io5'
 import { adminAPI } from '../utils/api'
 import ToastNotification from '../components/shared/ToastNotification'
 import { Skeleton } from '../components/admin/Skeleton'
+import { DateRangeFilterBar } from '../components/admin/DateRangeFilter'
 
 const avatarColors = [
   'var(--accent)',
@@ -33,12 +34,17 @@ export default function BannedMembers() {
   const [unbanning, setUnbanning] = useState(null)
   const [confirmTarget, setConfirmTarget] = useState(null)
   const [search, setSearch] = useState('')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' })
 
-  const fetchMembers = async () => {
+  const fetchMembers = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await adminAPI.getBannedMembers()
+      const params = {}
+      if (startDate) params.startDate = startDate
+      if (endDate) params.endDate = endDate
+      const res = await adminAPI.getBannedMembers(params)
       const data = res.data || res || []
       setMembers(Array.isArray(data) ? data : [])
     } catch (e) {
@@ -46,7 +52,7 @@ export default function BannedMembers() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [startDate, endDate])
 
   const filteredMembers = search
     ? members.filter(m => {
@@ -59,7 +65,20 @@ export default function BannedMembers() {
 
   useEffect(() => {
     fetchMembers()
-  }, [])
+  }, [fetchMembers])
+
+  const handlePresetPeriod = (days) => {
+    const end = new Date()
+    const start = new Date()
+    start.setDate(start.getDate() - days)
+    setStartDate(start.toISOString().split('T')[0])
+    setEndDate(end.toISOString().split('T')[0])
+  }
+
+  const handleClearFilters = () => {
+    setStartDate('')
+    setEndDate('')
+  }
 
   const handleUnban = async () => {
     if (!confirmTarget) return
@@ -113,6 +132,17 @@ export default function BannedMembers() {
           </div>
         </div>
       </div>
+
+      {/* Date Period Filter */}
+      <DateRangeFilterBar
+        startDate={startDate}
+        endDate={endDate}
+        onStartChange={setStartDate}
+        onEndChange={setEndDate}
+        onPreset={handlePresetPeriod}
+        onClear={handleClearFilters}
+        showClear={!!(startDate || endDate)}
+      />
 
       {/* Search */}
       <div className="search-bar" style={{

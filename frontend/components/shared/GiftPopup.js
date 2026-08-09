@@ -149,6 +149,11 @@ const GiftPopup = ({ visible, onClose, receiverId, sessionId, onGiftSent }) => {
             { transform: [{ translateY: slideAnim }] }
           ]}
         >
+          <LinearGradient
+            colors={['#1C0505', '#0F0A0A', '#080202']}
+            locations={[0, 0.5, 1]}
+            style={StyleSheet.absoluteFill}
+          />
           <View style={styles.header}>
             <Text style={styles.title}>Send Gifts</Text>
             <View style={styles.balanceContainer}>
@@ -159,7 +164,7 @@ const GiftPopup = ({ visible, onClose, receiverId, sessionId, onGiftSent }) => {
 
           {loading ? (
             <View style={styles.loaderContainer}>
-              <ActivityIndicator color="#A855F7" size="large" />
+              <ActivityIndicator color="#DC2626" size="large" />
             </View>
           ) : (
             <>
@@ -191,7 +196,7 @@ const GiftPopup = ({ visible, onClose, receiverId, sessionId, onGiftSent }) => {
                   style={styles.sendBtnContainer}
                 >
                   <LinearGradient
-                    colors={['#3B82F6', '#EC4899', '#F59E0B']}
+                    colors={['#DC2626', '#991B1B', '#7F1D1D']}
                     start={{ x: 0, y: 0.5 }}
                     end={{ x: 1, y: 0.5 }}
                     style={styles.sendBtn}
@@ -235,14 +240,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
   sheet: {
-    backgroundColor: '#0D0815',
+    backgroundColor: '#1C0505',
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     paddingTop: vs(20),
     paddingHorizontal: wp(6),
     height: hp(65),
     borderWidth: 1,
-    borderColor: '#2A1540',
+    borderColor: '#3B0000',
+    overflow: 'hidden',
   },
   header: {
     flexDirection: 'row',
@@ -258,7 +264,7 @@ const styles = StyleSheet.create({
   balanceContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(220, 38, 38, 0.15)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
@@ -276,7 +282,7 @@ const styles = StyleSheet.create({
     flex: 1,
     aspectRatio: 0.9,
     margin: 5,
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    backgroundColor: 'rgba(220, 38, 38, 0.05)',
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
@@ -284,8 +290,8 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   selectedGiftCard: {
-    borderColor: '#A855F7',
-    backgroundColor: 'rgba(168, 85, 247, 0.05)',
+    borderColor: '#DC2626',
+    backgroundColor: 'rgba(220, 38, 38, 0.08)',
   },
   giftIcon: {
     fontSize: ms(40),
@@ -321,12 +327,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: vs(15),
     borderTopWidth: 1,
-    borderTopColor: '#1F1F1F',
+    borderTopColor: '#3B0000',
   },
   multiplierPicker: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(220, 38, 38, 0.15)',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 15,

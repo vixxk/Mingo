@@ -209,8 +209,9 @@ export const adminAPI = {
     })
   },
 
-  getBannedMembers: async () => {
-    return apiRequest('/admin/banned')
+  getBannedMembers: async (params = {}) => {
+    const query = new URLSearchParams(params).toString()
+    return apiRequest(`/admin/banned?${query}`)
   },
 
   getCoinPackages: async () => {

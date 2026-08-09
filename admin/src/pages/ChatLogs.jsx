@@ -1,186 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  IoChatbubble, IoChevronBack, IoChevronForward,
+  IoChatbubble, IoChevronBack,
   IoSearch,
 } from 'react-icons/io5'
 import { adminAPI } from '../utils/api'
 import { Skeleton } from '../components/admin/Skeleton'
-import { formatDate } from '../components/admin/ChatMessage'
+import { formatSessionTime, sameMinute } from '../components/admin/ChatMessage'
+import { DateRangeFilterBar } from '../components/admin/DateRangeFilter'
 
-const presetBtnStyle = (isActive) => ({
-  padding: '6px 12px', borderRadius: 'var(--radius-sm)',
-  border: '1px solid',
-  borderColor: isActive ? 'var(--accent)' : 'var(--border)',
-  backgroundColor: isActive ? 'var(--accent-mid)' : 'var(--bg-tertiary)',
-  color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
-  fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
-  transition: 'all 0.2s',
-})
-
-function CalendarDatePicker({ value, onChange, placeholder }) {
-  const [isOpen, setIsOpen] = useState(false)
-  const [viewDate, setViewDate] = useState(new Date(value || new Date()))
-  const [selectedDate, setSelectedDate] = useState(value ? new Date(value) : null)
-  const containerRef = useRef(null)
-
-  useEffect(() => {
-    if (value) {
-      setViewDate(new Date(value))
-      setSelectedDate(new Date(value))
-    }
-  }, [value])
-
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
-        setIsOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
-
-  const daysInMonth = (year, month) => new Date(year, month + 1, 0).getDate()
-  const firstDayOfMonth = (year, month) => new Date(year, month, 1).getDay()
-
-  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December']
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-
-  const handlePrevMonth = () => {
-    setViewDate(prev => {
-      const d = new Date(prev)
-      d.setMonth(d.getMonth() - 1)
-      return d
-    })
-  }
-
-  const handleNextMonth = () => {
-    setViewDate(prev => {
-      const d = new Date(prev)
-      d.setMonth(d.getMonth() + 1)
-      return d
-    })
-  }
-
-  const handleDayClick = (day) => {
-    const d = new Date(viewDate.getFullYear(), viewDate.getMonth(), day)
-    setSelectedDate(d)
-    onChange(d.toISOString().split('T')[0])
-    setIsOpen(false)
-  }
-
-  const year = viewDate.getFullYear()
-  const month = viewDate.getMonth()
-  const totalDays = daysInMonth(year, month)
-  const startDay = firstDayOfMonth(year, month)
-
-  const isSameDay = (d1, d2) => {
-    if (!d1 || !d2) return false
-    return d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate()
-  }
-
-  const isToday = (d) => {
-    const t = new Date()
-    return d.getFullYear() === t.getFullYear() && d.getMonth() === t.getMonth() && d.getDate() === t.getDate()
-  }
-
-  const weeks = []
-  let week = []
-  for (let i = 0; i < startDay; i++) {
-    week.push(null)
-  }
-  for (let day = 1; day <= totalDays; day++) {
-    week.push(day)
-    if (week.length === 7) {
-      weeks.push(week)
-      week = []
-    }
-  }
-  if (week.length > 0) {
-    while (week.length < 7) week.push(null)
-    weeks.push(week)
-  }
-
-  return (
-    <div ref={containerRef} style={{ position: 'relative', display: 'inline-block' }}>
-      <input
-        type="text"
-        value={value || ''}
-        readOnly
-        placeholder={placeholder || 'Select date'}
-        onClick={() => setIsOpen(!isOpen)}
-        style={{
-          backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-sm)', padding: '6px 10px', color: '#fff',
-          fontSize: 12, outline: 'none', fontFamily: 'var(--font-body)',
-          cursor: 'pointer', width: 140,
-        }}
-      />
-      {isOpen && (
-        <div style={{
-          position: 'absolute', top: '100%', left: 0, zIndex: 100,
-          backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-md)', padding: 12, marginTop: 4,
-          boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-          minWidth: 220,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <button onClick={handlePrevMonth} style={{
-              background: 'none', border: 'none', color: 'var(--text-secondary)',
-              cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center',
-            }}>
-              <IoChevronBack size={16} />
-            </button>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-              {monthNames[month]} {year}
-            </span>
-            <button onClick={handleNextMonth} style={{
-              background: 'none', border: 'none', color: 'var(--text-secondary)',
-              cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center',
-            }}>
-              <IoChevronForward size={16} />
-            </button>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, textAlign: 'center' }}>
-            {dayNames.map(d => (
-              <div key={d} style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, padding: '4px 0' }}>
-                {d}
-              </div>
-            ))}
-            {weeks.map((week, wi) => (
-              <div key={wi} style={{ display: 'contents' }}>
-                {week.map((day, di) => {
-                  const dateObj = day ? new Date(year, month, day) : null
-                  const isSelected = selectedDate && dateObj && isSameDay(selectedDate, dateObj)
-                  const isTodayDate = dateObj && isToday(dateObj)
-                  return (
-                    <button
-                      key={`${wi}-${di}`}
-                      onClick={() => day && handleDayClick(day)}
-                      disabled={!day}
-                      style={{
-                        width: 30, height: 30, borderRadius: '50%', border: 'none',
-                        backgroundColor: isSelected ? 'var(--accent)' : isTodayDate ? 'var(--accent-mid)' : 'transparent',
-                        color: isSelected ? '#fff' : day ? 'var(--text-primary)' : 'transparent',
-                        fontSize: 12, fontWeight: isSelected ? 700 : 400,
-                        cursor: day ? 'pointer' : 'default',
-                        transition: 'all 0.15s',
-                      }}
-                    >
-                      {day}
-                    </button>
-                  )
-                })}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
 
 function ParticipantAvatar({ participant, size = 40, support = false }) {
   if (support) {
@@ -249,8 +77,11 @@ function SessionCard({ session, onClick }) {
   const statusKey = sInfo ? sInfo.status : 'free'
   const status = sessionStatusMeta[statusKey] || { label: statusKey || 'Free Chat', color: '#9CA3AF', bg: 'var(--bg-tertiary)' }
 
-  const startLabel = sInfo && sInfo.startTime ? formatDate(sInfo.startTime) : ''
-  const endLabel = sInfo && sInfo.endTime ? formatDate(sInfo.endTime) : ''
+  // Show seconds when the session started and ended within the same minute,
+  // otherwise a very short session renders identical start/end times.
+  const showSeconds = !!(sInfo && sInfo.startTime && sInfo.endTime && sameMinute(sInfo.startTime, sInfo.endTime))
+  const startLabel = sInfo && sInfo.startTime ? formatSessionTime(sInfo.startTime, showSeconds) : ''
+  const endLabel = sInfo && sInfo.endTime ? formatSessionTime(sInfo.endTime, showSeconds) : ''
   const durationLabel = sInfo ? `${sInfo.duration || 0} min` : ''
   const coinsLabel = sInfo && sInfo.totalCoinsDeducted > 0 ? sInfo.totalCoinsDeducted : null
 
@@ -258,17 +89,28 @@ function SessionCard({ session, onClick }) {
     <div
       onClick={onClick}
       style={{
-        backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)',
+        backgroundColor: 'var(--bg-secondary)',
+        borderTop: '1px solid var(--border)',
+        borderRight: '1px solid var(--border)',
+        borderBottom: '1px solid var(--border)',
         borderLeft: `3px solid ${status.color}`,
         borderRadius: 'var(--radius-xl)', padding: 16, marginBottom: 12,
         cursor: 'pointer', transition: 'all 0.2s',
       }}
       onMouseEnter={e => {
-        e.currentTarget.style.borderColor = status.color
+        // Hover highlight — color the outer borders (left accent stays colored
+        // via its own style) and add a soft glow.
+        e.currentTarget.style.borderTopColor = status.color
+        e.currentTarget.style.borderRightColor = status.color
+        e.currentTarget.style.borderBottomColor = status.color
         e.currentTarget.style.boxShadow = `0 4px 16px ${status.color}30`
       }}
       onMouseLeave={e => {
-        e.currentTarget.style.borderColor = 'var(--border)'
+        // Drop the hover highlight — only the thin gray border + left accent
+        // bar remain (no blue outline after unhovering).
+        e.currentTarget.style.borderTopColor = 'var(--border)'
+        e.currentTarget.style.borderRightColor = 'var(--border)'
+        e.currentTarget.style.borderBottomColor = 'var(--border)'
         e.currentTarget.style.boxShadow = 'none'
       }}
     >
@@ -390,6 +232,8 @@ export default function ChatLogs() {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+  const [status, setStatus] = useState('all')
+  const [counts, setCounts] = useState({})
   const [offset, setOffset] = useState(0)
   const [hasMore, setHasMore] = useState(true)
   const debounceRef = useRef(null)
@@ -406,6 +250,7 @@ export default function ChatLogs() {
       if (debouncedSearch) params.search = debouncedSearch
       if (startDate) params.startDate = startDate
       if (endDate) params.endDate = endDate
+      if (status && status !== 'all') params.status = status
 
       const res = await adminAPI.getChatLogs(params)
       const data = res.data || res
@@ -425,6 +270,7 @@ export default function ChatLogs() {
 
       const total = data.total || data.totalCount || data.count || (Array.isArray(data) ? data.length : list.length)
       setTotalCount(total)
+      if (data.counts) setCounts(data.counts)
       setHasMore((isLoadMore ? offset + LIMIT : LIMIT) < total)
     } catch (e) {
       console.error('Failed to fetch chat logs:', e)
@@ -432,7 +278,7 @@ export default function ChatLogs() {
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [offset, debouncedSearch, startDate, endDate])
+  }, [offset, debouncedSearch, startDate, endDate, status])
 
   fetchRef.current = doFetch
 
@@ -452,7 +298,7 @@ export default function ChatLogs() {
     setHasMore(true)
     setLoading(true)
     fetchRef.current(false)
-  }, [debouncedSearch, startDate, endDate])
+  }, [debouncedSearch, startDate, endDate, status])
 
   useEffect(() => {
     if (offset > 0) {
@@ -480,6 +326,10 @@ export default function ChatLogs() {
     setSearch('')
     setStartDate('')
     setEndDate('')
+  }
+
+  const handleStatusChange = (s) => {
+    setStatus(s)
   }
 
   return (
@@ -520,49 +370,16 @@ export default function ChatLogs() {
         </div>
       </div>
 
-      {/* Date Filter */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16,
-        flexWrap: 'wrap',
-      }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-        }}>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>
-            Period:
-          </span>
-          <button onClick={() => handlePresetPeriod(1)} style={presetBtnStyle(startDate === new Date().toISOString().split('T')[0] && endDate === new Date().toISOString().split('T')[0])}>Today</button>
-          <button onClick={() => handlePresetPeriod(7)} style={presetBtnStyle(false)}>Last 7d</button>
-          <button onClick={() => handlePresetPeriod(30)} style={presetBtnStyle(false)}>Last 30d</button>
-          <button onClick={() => handlePresetPeriod(90)} style={presetBtnStyle(false)}>Last 90d</button>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <CalendarDatePicker
-            value={startDate}
-            onChange={setStartDate}
-            placeholder="Start date"
-          />
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>to</span>
-          <CalendarDatePicker
-            value={endDate}
-            onChange={setEndDate}
-            placeholder="End date"
-          />
-        </div>
-        {(startDate || endDate || search) && (
-          <button
-            onClick={handleClearFilters}
-            style={{
-              padding: '6px 12px', borderRadius: 'var(--radius-sm)',
-              border: '1px solid var(--border)', backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-muted)', fontSize: 12, fontWeight: 600,
-              cursor: 'pointer', whiteSpace: 'nowrap',
-            }}
-          >
-            Clear Filters
-          </button>
-        )}
-      </div>
+      {/* Date Period Filter */}
+      <DateRangeFilterBar
+        startDate={startDate}
+        endDate={endDate}
+        onStartChange={setStartDate}
+        onEndChange={setEndDate}
+        onPreset={handlePresetPeriod}
+        onClear={handleClearFilters}
+        showClear={!!(startDate || endDate || search)}
+      />
 
       {/* Search */}
       <div className="search-bar" style={{
@@ -596,6 +413,42 @@ export default function ChatLogs() {
             </button>
           )}
         </div>
+      </div>
+
+      {/* Session Status Tabs */}
+      <div className="filter-tabs tabs-scroll" style={{ display: 'flex', gap: 8, overflowX: 'auto', marginBottom: 16 }}>
+        {Object.keys(sessionStatusMeta).map(s => {
+          const isActive = status === s
+          const count = counts[s] || 0
+          return (
+            <button
+              key={s}
+              onClick={() => handleStatusChange(isActive ? 'all' : s)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '8px 16px', borderRadius: 20, border: '1px solid',
+                borderColor: isActive ? 'var(--accent)' : 'var(--border)',
+                fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+                backgroundColor: isActive ? 'var(--accent-mid)' : 'var(--bg-tertiary)',
+                color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
+                transition: 'all 0.2s',
+              }}
+            >
+              {sessionStatusMeta[s].label}
+              {count > 0 && (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  minWidth: 18, height: 18, borderRadius: 9,
+                  backgroundColor: isActive ? 'rgba(255,255,255,0.2)' : 'var(--accent-light)',
+                  color: isActive ? '#fff' : 'var(--accent)',
+                  fontSize: 10, fontWeight: 800, padding: '0 4px',
+                }}>
+                  {count}
+                </span>
+              )}
+            </button>
+          )
+        })}
       </div>
 
       {loading ? (

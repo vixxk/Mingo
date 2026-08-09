@@ -7,6 +7,7 @@ import {
 import { adminAPI } from '../utils/api'
 import ToastNotification from '../components/shared/ToastNotification'
 import { Skeleton } from '../components/admin/Skeleton'
+import { DateRangeFilterBar } from '../components/admin/DateRangeFilter'
 
 const FILTERS = [
   { key: 'all', label: 'All', color: 'var(--accent)' },
@@ -54,6 +55,8 @@ export default function MemberReports() {
   const [loading, setLoading] = useState(true)
   const [activeFilter, setActiveFilter] = useState('all')
   const [search, setSearch] = useState('')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' })
   const [selectedReport, setSelectedReport] = useState(null)
   const [actionLoading, setActionLoading] = useState(false)
@@ -74,13 +77,15 @@ export default function MemberReports() {
 
   useEffect(() => {
     loadReports()
-  }, [activeFilter, page])
+  }, [activeFilter, page, startDate, endDate])
 
   const loadReports = async () => {
     setLoading(true)
     try {
       const params = { page, limit: 20 }
       if (activeFilter !== 'all') params.status = activeFilter
+      if (startDate) params.startDate = startDate
+      if (endDate) params.endDate = endDate
 
       const res = await adminAPI.getMemberReports(params)
       const data = res.data || res
@@ -103,6 +108,22 @@ export default function MemberReports() {
 
   const handleFilterChange = (filter) => {
     setActiveFilter(filter)
+    setPage(1)
+  }
+
+  const handlePresetPeriod = (days) => {
+    const end = new Date()
+    const start = new Date()
+    start.setDate(start.getDate() - days)
+    setStartDate(start.toISOString().split('T')[0])
+    setEndDate(end.toISOString().split('T')[0])
+    setPage(1)
+  }
+
+  const handleClearFilters = () => {
+    setSearch('')
+    setStartDate('')
+    setEndDate('')
     setPage(1)
   }
 
@@ -378,6 +399,17 @@ export default function MemberReports() {
             </div>
           </div>
         </div>
+
+        {/* Date Period Filter */}
+        <DateRangeFilterBar
+          startDate={startDate}
+          endDate={endDate}
+          onStartChange={(v) => { setStartDate(v); setPage(1) }}
+          onEndChange={(v) => { setEndDate(v); setPage(1) }}
+          onPreset={handlePresetPeriod}
+          onClear={handleClearFilters}
+          showClear={!!(startDate || endDate || search)}
+        />
 
         {/* Search */}
         <div style={{

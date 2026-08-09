@@ -465,29 +465,12 @@ const initSocket = (server) => {
           }
         }
 
-        // --- BLOCK LISTENER REPLY ONLY AFTER A PAID SESSION ENDED ---
-        // The listener may reply as many times as they want during the free
-        // phase (before the user's first paid message). Only once a paid chat
-        // session has actually started (sessionId set) AND ended must the
-        // listener wait for the user to send a new message (which restarts the
-        // session) before replying again.
-        const isListenerSender = sender.role === 'LISTENER';
-        if (isListenerSender) {
-          const sessionData = conversation.chatSession;
-          if (sessionData && sessionData.sessionId && !sessionData.active) {
-            // Find the last message in the conversation
-            const lastMsg = conversation.lastMessage ? await Message.findById(conversation.lastMessage) : null;
-            
-            // If the last message is not from the User, block the listener from sending messages
-            if (!lastMsg || lastMsg.senderModel !== 'User') {
-              socket.emit('message_error', {
-                error: 'Session has ended. Waiting for user to send a new message.',
-                type: 'session_ended',
-              });
-              return;
-            }
-          }
-        }
+        // --- LISTENER REPLIES ARE NEVER RESTRICTED -------------------------
+        // The listener may send as many messages as they want at any time:
+        // during the free phase (before any paid chat session starts), while a
+        // session is active, and after a session has ended. Chat sessions are
+        // started and billed only by the USER's messages, so an unlimited
+        // listener reply stream can never trigger charges or start a session.
 
         // Save and send the message
         console.log(`[Socket] Saving message in conv ${conversationId} from ${senderId} (${senderModel})`);

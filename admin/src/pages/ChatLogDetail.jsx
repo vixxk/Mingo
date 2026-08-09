@@ -6,7 +6,7 @@ import {
 import { adminAPI } from '../utils/api'
 import { Skeleton } from '../components/admin/Skeleton'
 import {
-  MessageBubble, insertDateLabels, formatDate, ConversationSessionFooter, EmptyMessages,
+  MessageBubble, insertDateLabels, formatDate, formatSessionTime, formatSessionRange, ConversationSessionFooter, EmptyMessages,
 } from '../components/admin/ChatMessage'
 
 export default function ChatLogDetail() {
@@ -70,8 +70,8 @@ export default function ChatLogDetail() {
   const status = sessionStatusMeta[statusKey] || { label: statusKey || 'Free Chat', color: '#9CA3AF', bg: 'var(--bg-tertiary)' }
   const rangeLabel = sInfo && sInfo.startTime
     ? (sInfo.endTime
-        ? `${formatDate(sInfo.startTime)} → ${formatDate(sInfo.endTime)}`
-        : `Started ${formatDate(sInfo.startTime)}`)
+        ? formatSessionRange(sInfo.startTime, sInfo.endTime)
+        : `Started ${formatSessionTime(sInfo.startTime)}`)
     : (conversation?.createdAt ? `Created ${formatDate(conversation.createdAt)}` : '')
 
   return (

@@ -7,6 +7,7 @@ import {
 import { adminAPI } from '../utils/api'
 import ToastNotification from '../components/shared/ToastNotification'
 import { Skeleton } from '../components/admin/Skeleton'
+import { DateRangeFilterBar } from '../components/admin/DateRangeFilter'
 
 const FILTERS = [
   { key: 'all', label: 'All', color: 'var(--text-muted)' },
@@ -66,25 +67,22 @@ export default function Payouts() {
   const [totalPages, setTotalPages] = useState(1)
   const [totalPayouts, setTotalPayouts] = useState(0)
   const [counts, setCounts] = useState({})
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
-
-  const filteredPayouts = search
-    ? payouts.filter(p => {
-        const q = search.toLowerCase()
-        return (p.listenerName?.toLowerCase() || '').includes(q)
-          || (p.listenerPhone?.toLowerCase() || '').includes(q)
-      })
-    : payouts
 
   useEffect(() => {
     loadPayouts()
-  }, [activeFilter, page, refreshKey])
+  }, [activeFilter, page, refreshKey, startDate, endDate, search])
 
   const loadPayouts = async () => {
     setLoading(true)
     try {
       const params = { page, limit: 20 }
       if (activeFilter !== 'all') params.status = activeFilter
+      if (startDate) params.startDate = startDate
+      if (endDate) params.endDate = endDate
+      if (search) params.search = search
 
       const res = await adminAPI.getPayouts(params)
       const data = res.data || res
@@ -101,6 +99,22 @@ export default function Payouts() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handlePresetPeriod = (days) => {
+    const end = new Date()
+    const start = new Date()
+    start.setDate(start.getDate() - days)
+    setStartDate(start.toISOString().split('T')[0])
+    setEndDate(end.toISOString().split('T')[0])
+    setPage(1)
+  }
+
+  const handleClearFilters = () => {
+    setStartDate('')
+    setEndDate('')
+    setSearch('')
+    setPage(1)
   }
 
   const showToast = (message, type = 'success') => {
@@ -427,6 +441,17 @@ export default function Payouts() {
           </div>
         </div>
 
+        {/* Date Period Filter */}
+        <DateRangeFilterBar
+          startDate={startDate}
+          endDate={endDate}
+          onStartChange={v => { setStartDate(v); setPage(1) }}
+          onEndChange={v => { setEndDate(v); setPage(1) }}
+          onPreset={handlePresetPeriod}
+          onClear={handleClearFilters}
+          showClear={!!(startDate || endDate || search)}
+        />
+
         {/* Search */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16,
@@ -501,7 +526,7 @@ export default function Payouts() {
           [1, 2, 3, 4].map(i => (
             <Skeleton key={i} width="100%" height={96} borderRadius={16} style={{ marginBottom: 12 }} />
           ))
-        ) : filteredPayouts.length === 0 ? (
+        ) : payouts.length === 0 ? (
           <div style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center',
             justifyContent: 'center', padding: '60px 20px',
@@ -512,7 +537,7 @@ export default function Payouts() {
             </p>
           </div>
         ) : (
-          filteredPayouts.map(payout => (
+          payouts.map(payout => (
             <div className="payout-card list-item"
               key={payout._id}
               onClick={() => handleSelectPayout(payout)}

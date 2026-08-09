@@ -8,6 +8,7 @@ import { adminAPI } from '../utils/api'
 import UserDetailModal from '../components/admin/UserDetailModal'
 import { AdminPageSkeleton } from '../components/admin/Skeleton'
 import ToastNotification from '../components/shared/ToastNotification'
+import { DateRangeFilterBar } from '../components/admin/DateRangeFilter'
 
 const avatarColors = [
   'var(--accent)',
@@ -39,6 +40,9 @@ export default function Users() {
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalUsers, setTotalUsers] = useState(0)
+  const [counts, setCounts] = useState({})
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' })
   const [refreshKey, setRefreshKey] = useState(0)
 
@@ -50,6 +54,8 @@ export default function Users() {
         setLoading(true)
         const params = { page, limit: 20 }
         if (searchTerm) params.search = searchTerm
+        if (startDate) params.startDate = startDate
+        if (endDate) params.endDate = endDate
         if (activeFilter === 'Online') params.status = 'online'
         else if (activeFilter === 'Offline') params.status = 'offline'
         else if (activeFilter === 'Deleted') params.status = 'deleted'
@@ -59,6 +65,7 @@ export default function Users() {
         setUsers(data.users || data || [])
         setTotalPages(data.totalPages || 1)
         setTotalUsers(data.total || (data.users ? data.users.length : 0))
+        if (data.counts) setCounts(data.counts)
       } catch (e) {
         setToast({ visible: true, message: e.message || 'Failed to load users', type: 'error' })
       } finally {
@@ -66,7 +73,7 @@ export default function Users() {
       }
     }
     load()
-  }, [activeFilter, page, searchTerm, refreshKey])
+  }, [activeFilter, page, searchTerm, startDate, endDate, refreshKey])
 
   const triggerSearch = () => {
     setPage(1)
@@ -85,6 +92,21 @@ export default function Users() {
     setActiveFilter(filter)
     setPage(1)
     setRefreshKey(k => k + 1)
+  }
+
+  const handlePresetPeriod = (days) => {
+    const end = new Date()
+    const start = new Date()
+    start.setDate(start.getDate() - days)
+    setStartDate(start.toISOString().split('T')[0])
+    setEndDate(end.toISOString().split('T')[0])
+    setPage(1)
+  }
+
+  const handleClearFilters = () => {
+    setStartDate('')
+    setEndDate('')
+    setPage(1)
   }
 
   const handleBan = async (userId, currentlyBanned) => {
@@ -159,6 +181,17 @@ export default function Users() {
         </div>
       </div>
 
+      {/* Date Period Filter */}
+      <DateRangeFilterBar
+        startDate={startDate}
+        endDate={endDate}
+        onStartChange={v => { setStartDate(v); setPage(1) }}
+        onEndChange={v => { setEndDate(v); setPage(1) }}
+        onPreset={handlePresetPeriod}
+        onClear={handleClearFilters}
+        showClear={!!(startDate || endDate || searchTerm)}
+      />
+
       {/* Search */}
       <div className="search-bar" style={{
         display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16,
@@ -197,11 +230,13 @@ export default function Users() {
       <div className="filter-tabs tabs-scroll" style={{ display: 'flex', gap: 8, marginBottom: 20, overflowX: 'auto' }}>
         {filters.map(filter => {
           const isActive = activeFilter === filter
+          const count = counts[filter.toLowerCase()] || 0
           return (
             <button
               key={filter}
               onClick={() => handleFilterChange(filter)}
               style={{
+                display: 'flex', alignItems: 'center', gap: 6,
                 padding: '8px 16px', borderRadius: 20, border: '1px solid',
                 borderColor: isActive ? 'var(--accent)' : 'var(--border)',
                 fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
@@ -211,6 +246,17 @@ export default function Users() {
               }}
             >
               {filter}
+              {count > 0 && (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  minWidth: 18, height: 18, borderRadius: 9,
+                  backgroundColor: isActive ? 'rgba(255,255,255,0.2)' : 'var(--accent-light)',
+                  color: isActive ? '#fff' : 'var(--accent)',
+                  fontSize: 10, fontWeight: 800, padding: '0 4px',
+                }}>
+                  {count}
+                </span>
+              )}
             </button>
           )
         })}

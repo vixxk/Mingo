@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   IoChevronBack, IoSearch, IoMic,
@@ -7,6 +7,7 @@ import { adminAPI } from '../utils/api'
 import ListenerDetailModal from '../components/admin/ListenerDetailModal'
 import ToastNotification from '../components/shared/ToastNotification'
 import { Skeleton } from '../components/admin/Skeleton'
+import { DateRangeFilterBar } from '../components/admin/DateRangeFilter'
 
 const avatarGradients = [
   'var(--accent-gradient)',
@@ -74,7 +75,12 @@ export default function Listeners() {
   const [listeners, setListeners] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [activeTab, setActiveTab] = useState('All')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+  const [counts, setCounts] = useState({})
+  const searchDebounceRef = useRef(null)
   const [selectedListener, setSelectedListener] = useState(null)
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' })
 
@@ -85,6 +91,7 @@ export default function Listeners() {
       const responseData = res.data || res || {}
       const listenersList = responseData.listeners || responseData || []
       setListeners(Array.isArray(listenersList) ? listenersList : [])
+      if (responseData.counts) setCounts(responseData.counts)
     } catch (e) {
       setToast({ visible: true, message: e.message || 'Failed to load listeners', type: 'error' })
       setListeners([])
@@ -93,18 +100,47 @@ export default function Listeners() {
     }
   }, [])
 
-  // Re-fetch when refreshKey changes (after ban/delete actions)
+  // Re-fetch when refreshKey changes (after ban/delete actions) — keep the
+  // active period/search filters so the refreshed list and counts stay scoped.
   useEffect(() => {
-    if (refreshKey > 0) fetchListeners()
-  }, [refreshKey, fetchListeners])
+    if (refreshKey > 0) fetchListeners({ startDate, endDate, search: debouncedSearch })
+  }, [refreshKey, fetchListeners, startDate, endDate, debouncedSearch])
+
+  // Debounce the search before refetching — the list itself filters on every
+  // keystroke, but the backend (counts) only needs the settled search term.
+  useEffect(() => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
+    searchDebounceRef.current = setTimeout(() => {
+      setDebouncedSearch(search)
+    }, 400)
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
+    }
+  }, [search])
 
   useEffect(() => {
-    fetchListeners()
-  }, [fetchListeners])
+    fetchListeners({ startDate, endDate, search: debouncedSearch })
+  }, [fetchListeners, startDate, endDate, debouncedSearch])
 
+  // Tab changes only filter the already-loaded list client-side; the debounced
+  // search effect above handles search-driven refetches. Bumping refreshKey on
+  // every keystroke would race an unfiltered fetch against the debounced one.
   useEffect(() => {
     setRefreshKey(k => k + 1)
-  }, [activeTab, search])
+  }, [activeTab])
+
+  const handlePresetPeriod = (days) => {
+    const end = new Date()
+    const start = new Date()
+    start.setDate(start.getDate() - days)
+    setStartDate(start.toISOString().split('T')[0])
+    setEndDate(end.toISOString().split('T')[0])
+  }
+
+  const handleClearFilters = () => {
+    setStartDate('')
+    setEndDate('')
+  }
 
   const filteredListeners = listeners.filter(l => {
     const name = (l.name || '').toLowerCase()
@@ -192,6 +228,17 @@ export default function Listeners() {
         </div>
       </div>
 
+      {/* Date Period Filter */}
+      <DateRangeFilterBar
+        startDate={startDate}
+        endDate={endDate}
+        onStartChange={setStartDate}
+        onEndChange={setEndDate}
+        onPreset={handlePresetPeriod}
+        onClear={handleClearFilters}
+        showClear={!!(startDate || endDate || search)}
+      />
+
       {/* Search */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16,
@@ -229,19 +276,35 @@ export default function Listeners() {
       <div className="filter-tabs tabs-scroll" style={{
         display: 'flex', gap: 8, marginBottom: 20, overflowX: 'auto',
       }}>
-        {TABS.map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)}
-            style={{
-              padding: '8px 16px', borderRadius: 20, border: '1px solid',
-              borderColor: activeTab === tab ? 'var(--accent)' : 'var(--border)',
-              backgroundColor: activeTab === tab ? 'var(--accent-mid)' : 'var(--bg-tertiary)',
-              color: activeTab === tab ? 'var(--accent)' : 'var(--text-secondary)',
-              fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
-              flexShrink: 0,
-            }}>
-            {tab}
-          </button>
-        ))}
+        {TABS.map(tab => {
+          const countKey = tab === 'Best Choice' ? 'bestChoice' : tab.toLowerCase()
+          const count = counts[countKey] || 0
+          return (
+            <button key={tab} onClick={() => setActiveTab(tab)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '8px 16px', borderRadius: 20, border: '1px solid',
+                borderColor: activeTab === tab ? 'var(--accent)' : 'var(--border)',
+                backgroundColor: activeTab === tab ? 'var(--accent-mid)' : 'var(--bg-tertiary)',
+                color: activeTab === tab ? 'var(--accent)' : 'var(--text-secondary)',
+                fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+                flexShrink: 0,
+              }}>
+              {tab}
+              {count > 0 && (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  minWidth: 18, height: 18, borderRadius: 9,
+                  backgroundColor: activeTab === tab ? 'rgba(255,255,255,0.2)' : 'var(--accent-light)',
+                  color: activeTab === tab ? '#fff' : 'var(--accent)',
+                  fontSize: 10, fontWeight: 800, padding: '0 4px',
+                }}>
+                  {count}
+                </span>
+              )}
+            </button>
+          )
+        })}
       </div>
 
       {loading ? (

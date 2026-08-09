@@ -14,6 +14,48 @@ export function formatDate(dateStr) {
   return `${month} ${day}, ${year} at ${h12}:${minutes} ${ampm}`
 }
 
+// Do two timestamps fall within the same clock minute?
+export function sameMinute(a, b) {
+  const da = new Date(a)
+  const db = new Date(b)
+  return (
+    da.getFullYear() === db.getFullYear() &&
+    da.getMonth() === db.getMonth() &&
+    da.getDate() === db.getDate() &&
+    da.getHours() === db.getHours() &&
+    da.getMinutes() === db.getMinutes()
+  )
+}
+
+// Session boundary timestamp. Seconds are included when `includeSeconds` is
+// set — used so a session that started and ended within the same minute never
+// displays identical start/end times.
+export function formatSessionTime(dateStr, includeSeconds = false) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const day = d.getDate()
+  const month = months[d.getMonth()]
+  const year = d.getFullYear()
+  const hours = d.getHours()
+  const minutes = d.getMinutes().toString().padStart(2, '0')
+  const seconds = d.getSeconds().toString().padStart(2, '0')
+  const ampm = hours >= 12 ? 'PM' : 'AM'
+  const h12 = hours % 12 || 12
+  const time = includeSeconds ? `${h12}:${minutes}:${seconds}` : `${h12}:${minutes}`
+  return `${month} ${day}, ${year} at ${time} ${ampm}`
+}
+
+// Format a session start → end range. If both boundaries fall within the same
+// minute (a very short session), seconds are included so the two times don't
+// look identical.
+export function formatSessionRange(startTime, endTime) {
+  if (!startTime) return ''
+  if (!endTime) return `Started ${formatSessionTime(startTime)}`
+  const includeSeconds = sameMinute(startTime, endTime)
+  return `${formatSessionTime(startTime, includeSeconds)} → ${formatSessionTime(endTime, includeSeconds)}`
+}
+
 export function getGiftPriceByName(name) {
   if (!name) return 10
   const n = name.toLowerCase()
@@ -325,7 +367,10 @@ export function ConversationSessionFooter({ session }) {
               Started At
             </div>
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-              {formatDate(session.startTime)}
+              {formatSessionTime(
+                session.startTime,
+                !!(session.endTime && sameMinute(session.startTime, session.endTime))
+              )}
             </div>
           </div>
         </div>
