@@ -86,6 +86,33 @@ const AgoraVideoView = forwardRef(
     const cameraEnabledRef = useRef(cameraEnabled);
     useEffect(() => { cameraEnabledRef.current = cameraEnabled; }, [cameraEnabled]);
 
+    // Local preview restart, run once per call. The camera's frames are
+    // published to the remote fine, but the self-view's native RtcSurfaceView
+    // registers itself with the engine only when its native view mounts —
+    // asynchronously AFTER the preview starts during setup. So the frames have
+    // nowhere local to render and the bottom-right self-view stays black until
+    // the camera is toggled. A stop → start cycle of local video (exactly what
+    // the Camera button does) re-binds the frames to the now-registered
+    // surface and makes the self-view appear.
+    const localPreviewRestartedRef = useRef(false);
+    const restartLocalPreview = useCallback(() => {
+      const engine = engineRef.current;
+      if (!engine) return;
+      if (localPreviewRestartedRef.current) return;
+      localPreviewRestartedRef.current = true;
+      // If the user already turned the camera off, don't force it back on.
+      if (!cameraEnabledRef.current) return;
+      try { engine.enableLocalVideo(false); } catch (e) {}
+      setTimeout(() => {
+        if (!engineRef.current) return;
+        // Re-check the live camera state — the user may have toggled the
+        // camera off during the short stop window; never force it back on.
+        if (!cameraEnabledRef.current) return;
+        try { engineRef.current.enableLocalVideo(true); } catch (e) {}
+        try { engineRef.current.startPreview(); } catch (e) {}
+      }, 150);
+    }, []);
+
     const onRemoteVideoActiveChangeRef = useRef(onRemoteVideoActiveChange);
     const onRemoteJoinedChangeRef = useRef(onRemoteJoinedChange);
     const onRemoteLeftRef = useRef(onRemoteLeft);
@@ -163,21 +190,14 @@ const AgoraVideoView = forwardRef(
               // Route audio through the loudspeaker by default — mirrors the
               // old Zego config so "no audio" is never mistaken for a failure.
               try { engine.setEnableSpeakerphone(true); } catch (e) {}
-              // Known SDK quirk: on some devices the preview started during
-              // setup races the native local-surface binding, leaving the
-              // self-view black until the camera is toggled. Re-asserting
-              // capture after the channel is joined (when the surface is
-              // guaranteed to be registered) clears that up.
-              if (cameraEnabledRef.current) {
-                try {
-                  const reEnableRet = engine.enableLocalVideo(true);
-                  if (reEnableRet !== 0) console.log('[Agora] enableLocalVideo re-assert result:', reEnableRet);
-                } catch (e) {}
-                try {
-                  const rePreviewRet = engine.startPreview();
-                  if (rePreviewRet !== 0) console.log('[Agora] startPreview re-assert result:', rePreviewRet);
-                } catch (e) {}
-              }
+              // Known SDK quirk: the preview started during setup can race
+              // the native self-view surface binding, leaving the self-view
+              // black until the camera is toggled. Restart local capture once
+              // the channel is joined (when the surface is guaranteed to be
+              // registered) — the same stop → start cycle the Camera button
+              // performs, which reliably shows the self-view. No-op if the
+              // onLayout restart already ran.
+              restartLocalPreview();
             },
             onUserJoined: (connection, uid) => {
               if (!active) return;
@@ -281,6 +301,7 @@ const AgoraVideoView = forwardRef(
         if (!engineRef.current) return;
         try { engineRef.current.enableLocalVideo(!!enabled); } catch (e) {}
       },
+      restartLocalPreview,
       switchCamera() {
         if (!engineRef.current) return;
         try { engineRef.current.switchCamera(); } catch (e) {}
@@ -851,6 +872,10 @@ export default function VideoCallScreen() {
                 }}
                 zOrderMediaOverlay={Platform.OS === 'android'}
                 style={StyleSheet.absoluteFill}
+                // Fires once the native surface has actually mounted and
+                // registered with the engine — force a capture restart so the
+                // frames finally render in the self-view box.
+                onLayout={() => { agoraRef.current?.restartLocalPreview(); }}
               />
             ) : myAvatarUrl ? (
               <Image source={{ uri: myAvatarUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
@@ -1315,8 +1340,6 @@ const styles = StyleSheet.create({
     height: SCREEN_WIDTH * 0.3,
     borderRadius: 16,
     backgroundColor: '#1A1A1A',
-    borderWidth: 2,
-    borderColor: '#333',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',

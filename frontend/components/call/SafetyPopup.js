@@ -88,7 +88,7 @@ export default function SafetyPopup({ visible, onDismiss }) {
           </View>
           <Text style={styles.title}>Your Safety Come First</Text>
           <Text style={styles.subtitle}>
-            Don't share personal information during calls,{'\n'}report anyone who asks. please follow the{'\n'}community guidelines.
+            Don't share personal information during calls,{'\n'}report anyone who asks. Please follow the{'\n'}community guidelines.
           </Text>
         </LinearGradient>
       </Animated.View>
