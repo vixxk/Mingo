@@ -86,28 +86,59 @@ const AgoraVideoView = forwardRef(
     const cameraEnabledRef = useRef(cameraEnabled);
     useEffect(() => { cameraEnabledRef.current = cameraEnabled; }, [cameraEnabled]);
 
-    // Local preview restart, run once per call. The camera's frames are
-    // published to the remote fine, but the self-view's native RtcSurfaceView
-    // registers itself with the engine only when its native view mounts —
-    // asynchronously AFTER the preview starts during setup. So the frames have
-    // nowhere local to render and the bottom-right self-view stays black until
-    // the camera is toggled. A stop → start cycle of local video (exactly what
-    // the Camera button does) re-binds the frames to the now-registered
-    // surface and makes the self-view appear.
-    const localPreviewRestartedRef = useRef(false);
+    // Local preview re-bind. The self-view's native RtcSurfaceView registers
+    // itself with the engine only once its native view has mounted — which
+    // happens asynchronously AFTER the preview is started during setup. Until
+    // that happens the frames have nowhere local to render and the bottom-right
+    // self-view stays black. Running a stop → start cycle of local video once
+    // the surface has mounted (exactly what the Camera button does) re-binds
+    // the frames to the now-registered surface and makes the self-view appear.
+    //
+    // This is deliberately NOT a one-shot: it re-runs every time the surface
+    // (re)mounts, the channel (re)joins, or the camera is toggled, so BOTH the
+    // user and the listener reliably get a working self-view from the moment
+    // the call starts. `onLayout` on the self-view can also fire before the
+    // engine effect has created the engine, so the cycle retries until the
+    // engine is ready (or gives up after a short window).
+    const localPreviewBusyRef = useRef(false);
+    const localPreviewRetryRef = useRef({ timer: null, count: 0 });
     const restartLocalPreview = useCallback(() => {
       const engine = engineRef.current;
-      if (!engine) return;
-      if (localPreviewRestartedRef.current) return;
-      localPreviewRestartedRef.current = true;
+      if (!engine) {
+        // Self-view surface laid out before the engine was created (or the
+        // engine is still being torn down/re-created). Retry briefly so the
+        // off → on cycle still runs after the engine is ready.
+        if (localPreviewRetryRef.current.count < 15) {
+          localPreviewRetryRef.current.count += 1;
+          if (localPreviewRetryRef.current.timer) clearTimeout(localPreviewRetryRef.current.timer);
+          localPreviewRetryRef.current.timer = setTimeout(restartLocalPreview, 200);
+        }
+        return;
+      }
+      localPreviewRetryRef.current.count = 0;
       // If the user already turned the camera off, don't force it back on.
       if (!cameraEnabledRef.current) return;
+      // Coalesce rapid triggers (join success + surface mount + camera toggle)
+      // into a single off → on cycle. The onLayout handler re-fires this if the
+      // surface was still mounting when a previous cycle already ran.
+      if (localPreviewBusyRef.current) return;
+      localPreviewBusyRef.current = true;
       try { engine.enableLocalVideo(false); } catch (e) {}
       setTimeout(() => {
+        localPreviewBusyRef.current = false;
         if (!engineRef.current) return;
         // Re-check the live camera state — the user may have toggled the
         // camera off during the short stop window; never force it back on.
         if (!cameraEnabledRef.current) return;
+        // Re-assert the local canvas binding too, so the restarted frames are
+        // guaranteed to target the mounted self-view surface.
+        try {
+          engineRef.current.setupLocalVideo({
+            uid: 0,
+            renderMode: RenderModeType.RenderModeHidden,
+            mirrorMode: VideoMirrorModeType.VideoMirrorModeEnabled,
+          });
+        } catch (e) {}
         try { engineRef.current.enableLocalVideo(true); } catch (e) {}
         try { engineRef.current.startPreview(); } catch (e) {}
       }, 150);
@@ -154,6 +185,14 @@ const AgoraVideoView = forwardRef(
 
       const setup = () => {
         try {
+          // Fresh engine — clear any stale preview-bind state from a previous
+          // engine so the off → on cycle can run again for this channel. A
+          // pending retry timer (from a pre-engine onLayout) is left intact:
+          // it re-checks engineRef.current when it fires and will run the cycle
+          // on this new engine.
+          localPreviewBusyRef.current = false;
+          localPreviewRetryRef.current.count = 0;
+
           engine = createAgoraRtcEngine();
           engineRef.current = engine;
 
@@ -193,10 +232,12 @@ const AgoraVideoView = forwardRef(
               // Known SDK quirk: the preview started during setup can race
               // the native self-view surface binding, leaving the self-view
               // black until the camera is toggled. Restart local capture once
-              // the channel is joined (when the surface is guaranteed to be
-              // registered) — the same stop → start cycle the Camera button
-              // performs, which reliably shows the self-view. No-op if the
-              // onLayout restart already ran.
+              // the channel is joined — the same stop → start cycle the Camera
+              // button performs, which reliably shows the self-view. Runs for
+              // BOTH the user and the listener so both get a self-view as soon
+              // as the call starts. The self-view's onLayout re-runs this too
+              // in case the surface was still mounting when the join callback
+              // fired.
               restartLocalPreview();
             },
             onUserJoined: (connection, uid) => {
@@ -283,6 +324,10 @@ const AgoraVideoView = forwardRef(
 
       return () => {
         active = false;
+        if (localPreviewRetryRef.current.timer) {
+          clearTimeout(localPreviewRetryRef.current.timer);
+          localPreviewRetryRef.current.timer = null;
+        }
         if (engineRef.current) {
           try { engineRef.current.leaveChannel(); } catch (e) {}
           try { engineRef.current.release(); } catch (e) {}
