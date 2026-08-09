@@ -84,7 +84,6 @@ const AgoraVideoView = forwardRef(
     // Live value of the camera toggle so async engine callbacks (join success)
     // can re-assert the preview without clobbering a user who turned it off.
     const cameraEnabledRef = useRef(cameraEnabled);
-    useEffect(() => { cameraEnabledRef.current = cameraEnabled; }, [cameraEnabled]);
 
     // Local preview re-bind. The self-view's native RtcSurfaceView registers
     // itself with the engine only once its native view has mounted — which
@@ -93,21 +92,13 @@ const AgoraVideoView = forwardRef(
     // self-view stays black. Running a stop → start cycle of local video once
     // the surface has mounted (exactly what the Camera button does) re-binds
     // the frames to the now-registered surface and makes the self-view appear.
-    //
-    // This is deliberately NOT a one-shot: it re-runs every time the surface
-    // (re)mounts, the channel (re)joins, or the camera is toggled, so BOTH the
-    // user and the listener reliably get a working self-view from the moment
-    // the call starts. `onLayout` on the self-view can also fire before the
-    // engine effect has created the engine, so the cycle retries until the
-    // engine is ready (or gives up after a short window).
     const localPreviewBusyRef = useRef(false);
     const localPreviewRetryRef = useRef({ timer: null, count: 0 });
+    const pendingRestartRef = useRef(false);
+
     const restartLocalPreview = useCallback(() => {
       const engine = engineRef.current;
       if (!engine) {
-        // Self-view surface laid out before the engine was created (or the
-        // engine is still being torn down/re-created). Retry briefly so the
-        // off → on cycle still runs after the engine is ready.
         if (localPreviewRetryRef.current.count < 15) {
           localPreviewRetryRef.current.count += 1;
           if (localPreviewRetryRef.current.timer) clearTimeout(localPreviewRetryRef.current.timer);
@@ -116,22 +107,31 @@ const AgoraVideoView = forwardRef(
         return;
       }
       localPreviewRetryRef.current.count = 0;
-      // If the user already turned the camera off, don't force it back on.
       if (!cameraEnabledRef.current) return;
-      // Coalesce rapid triggers (join success + surface mount + camera toggle)
-      // into a single off → on cycle. The onLayout handler re-fires this if the
-      // surface was still mounting when a previous cycle already ran.
-      if (localPreviewBusyRef.current) return;
+
+      // Immediate canvas bind & preview start to eliminate black frame latency
+      try {
+        engine.setupLocalVideo({
+          uid: 0,
+          renderMode: RenderModeType.RenderModeHidden,
+          mirrorMode: VideoMirrorModeType.VideoMirrorModeEnabled,
+        });
+      } catch (e) {}
+      try { engine.enableLocalVideo(true); } catch (e) {}
+      try { engine.startPreview(); } catch (e) {}
+
+      if (localPreviewBusyRef.current) {
+        pendingRestartRef.current = true;
+        return;
+      }
       localPreviewBusyRef.current = true;
+
+      // Brief refresh cycle to ensure native SurfaceView binding on Android/iOS
       try { engine.enableLocalVideo(false); } catch (e) {}
       setTimeout(() => {
         localPreviewBusyRef.current = false;
         if (!engineRef.current) return;
-        // Re-check the live camera state — the user may have toggled the
-        // camera off during the short stop window; never force it back on.
         if (!cameraEnabledRef.current) return;
-        // Re-assert the local canvas binding too, so the restarted frames are
-        // guaranteed to target the mounted self-view surface.
         try {
           engineRef.current.setupLocalVideo({
             uid: 0,
@@ -141,8 +141,30 @@ const AgoraVideoView = forwardRef(
         } catch (e) {}
         try { engineRef.current.enableLocalVideo(true); } catch (e) {}
         try { engineRef.current.startPreview(); } catch (e) {}
+
+        if (pendingRestartRef.current) {
+          pendingRestartRef.current = false;
+          restartLocalPreview();
+        }
       }, 150);
     }, []);
+
+    useEffect(() => {
+      cameraEnabledRef.current = cameraEnabled;
+      const engine = engineRef.current;
+      if (!engine) return;
+      if (cameraEnabled) {
+        try { engine.muteLocalVideoStream(false); } catch (e) {}
+        try { engine.enableLocalVideo(true); } catch (e) {}
+        try { engine.updateChannelMediaOptions({ publishCameraTrack: true }); } catch (e) {}
+        restartLocalPreview();
+      } else {
+        try { engine.muteLocalVideoStream(true); } catch (e) {}
+        try { engine.enableLocalVideo(false); } catch (e) {}
+        try { engine.stopPreview(); } catch (e) {}
+        try { engine.updateChannelMediaOptions({ publishCameraTrack: false }); } catch (e) {}
+      }
+    }, [cameraEnabled, restartLocalPreview]);
 
     const onRemoteVideoActiveChangeRef = useRef(onRemoteVideoActiveChange);
     const onRemoteJoinedChangeRef = useRef(onRemoteJoinedChange);
@@ -343,8 +365,19 @@ const AgoraVideoView = forwardRef(
         try { engineRef.current.muteLocalAudioStream(!!muted); } catch (e) {}
       },
       setCameraEnabled(enabled) {
-        if (!engineRef.current) return;
-        try { engineRef.current.enableLocalVideo(!!enabled); } catch (e) {}
+        const engine = engineRef.current;
+        if (!engine) return;
+        if (enabled) {
+          try { engine.muteLocalVideoStream(false); } catch (e) {}
+          try { engine.enableLocalVideo(true); } catch (e) {}
+          try { engine.updateChannelMediaOptions({ publishCameraTrack: true }); } catch (e) {}
+          restartLocalPreview();
+        } else {
+          try { engine.muteLocalVideoStream(true); } catch (e) {}
+          try { engine.enableLocalVideo(false); } catch (e) {}
+          try { engine.stopPreview(); } catch (e) {}
+          try { engine.updateChannelMediaOptions({ publishCameraTrack: false }); } catch (e) {}
+        }
       },
       restartLocalPreview,
       switchCamera() {
@@ -915,7 +948,7 @@ export default function VideoCallScreen() {
                   renderMode: RenderModeType.RenderModeHidden,
                   mirrorMode: VideoMirrorModeType.VideoMirrorModeEnabled,
                 }}
-                zOrderMediaOverlay={Platform.OS === 'android'}
+                zOrderOnTop={Platform.OS === 'android'}
                 style={StyleSheet.absoluteFill}
                 // Fires once the native surface has actually mounted and
                 // registered with the engine — force a capture restart so the
@@ -1158,6 +1191,8 @@ export default function VideoCallScreen() {
               active
               onMountError={() => setCameraError(true)}
             />
+          ) : myAvatarUrl ? (
+            <Image source={{ uri: myAvatarUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
           ) : (
             <Ionicons name="videocam-off" size={32} color="#6B7280" />
           )}
@@ -1378,7 +1413,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: vs(120),
     right: s(16),
-    zIndex: 10,
+    zIndex: 100,
+    elevation: 10,
   },
   selfCamera: {
     width: SCREEN_WIDTH * 0.22,
@@ -1388,6 +1424,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 8,
   },
 
   safetyFloat: {
