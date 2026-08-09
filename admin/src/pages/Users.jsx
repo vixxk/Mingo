@@ -95,6 +95,12 @@ export default function Users() {
   }
 
   const handlePresetPeriod = (days) => {
+    if (days === 'all') {
+      setStartDate('')
+      setEndDate('')
+      setPage(1)
+      return
+    }
     const end = new Date()
     const start = new Date()
     start.setDate(start.getDate() - days)

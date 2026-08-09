@@ -193,6 +193,7 @@ export function DateRangeFilterBar({ startDate, endDate, onStartChange, onEndCha
         <button onClick={() => onPreset(7)} style={presetBtnStyle(false)}>Last 7d</button>
         <button onClick={() => onPreset(30)} style={presetBtnStyle(false)}>Last 30d</button>
         <button onClick={() => onPreset(90)} style={presetBtnStyle(false)}>Last 90d</button>
+        <button onClick={() => onPreset('all')} style={presetBtnStyle(!startDate && !endDate)}>All Time</button>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <CalendarDatePicker

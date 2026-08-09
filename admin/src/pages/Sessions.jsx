@@ -205,6 +205,11 @@ export default function Sessions() {
   }
 
   const handlePresetPeriod = (days) => {
+    if (days === 'all') {
+      setStartDate('')
+      setEndDate('')
+      return
+    }
     const end = new Date()
     const start = new Date()
     start.setDate(start.getDate() - days)
