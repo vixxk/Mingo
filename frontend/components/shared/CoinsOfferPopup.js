@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Animated, Image } from 'react
 import { useRef, useEffect, useState } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ms, s, vs, wp, hp, SCREEN_WIDTH, SCREEN_HEIGHT } from '../../utils/responsive';
+import AnimatedSparkles from './AnimatedSparkles';
 
 const formatTime = (totalSeconds) => {
   const h = Math.floor(totalSeconds / 3600);
@@ -47,8 +48,8 @@ export default function CoinsOfferPopup({ visible, onClose, onAddCoins, timeLeft
       </Animated.View>
       <Animated.View style={[styles.popupContainer, { transform: [{ translateY: slideAnim }] }]}>
         <LinearGradient
-          colors={['#7F1D1D', '#B91C1C', '#0A0A0A']}
-          locations={[0, 0.5, 1]}
+          colors={['#000', '#1A0000', '#4A0000']}
+          locations={[0, 0.55, 1]}
           style={styles.popup}
         >
           <View style={styles.handleBar} />
@@ -113,7 +114,7 @@ const styles = StyleSheet.create({
     paddingBottom: hp(4),
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#7F1D1D',
+    borderColor: 'rgba(239, 68, 68, 0.4)',
     borderBottomWidth: 0,
     overflow: 'hidden',
   },

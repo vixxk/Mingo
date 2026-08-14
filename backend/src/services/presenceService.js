@@ -37,7 +37,39 @@ class PresenceService {
     return { status: 'online', userId: userIdStr };
   }
 
-    static async goOffline(userId) {
+    static async setBusy(userId, isBusy) {
+    const userIdStr = userId.toString();
+    const listener = await Listener.findOneAndUpdate(
+      { userId },
+      { isBusy, busySince: isBusy ? new Date() : null },
+      { new: true }
+    );
+    if (!listener) return null;
+
+    if (isBusy) {
+      await redis.srem(REDIS_KEYS.LISTENERS_AVAILABLE, userIdStr);
+    } else if (listener.isOnline) {
+      await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, userIdStr);
+    }
+
+    try {
+      const { getIo } = require('../socket');
+      getIo().emit('listener_status_changed', {
+        userId: userIdStr,
+        isOnline: listener.isOnline,
+        isBusy: listener.isBusy,
+        busySince: listener.busySince,
+      });
+      const sseService = require('./sseService');
+      sseService.broadcastListenerStatus(userIdStr, listener.isOnline, listener.isBusy, listener.busySince);
+    } catch (e) {
+      console.log('Socket or SSE error', e.message);
+    }
+
+    return { status: isBusy ? 'busy' : 'available', isOnline: listener.isOnline, isBusy: listener.isBusy, userId: userIdStr };
+  }
+
+  static async goOffline(userId) {
     const userIdStr = userId.toString();
 
     const pipeline = redis.pipeline();
@@ -50,9 +82,9 @@ class PresenceService {
 
     try {
       const { getIo } = require('../socket');
-      getIo().emit('listener_status_changed', { userId: userIdStr, isOnline: false, isBusy: false });
+      getIo().emit('listener_status_changed', { userId: userIdStr, isOnline: false, isBusy: false, busySince: null });
       const sseService = require('./sseService');
-      sseService.broadcastListenerStatus(userIdStr, false, false);
+      sseService.broadcastListenerStatus(userIdStr, false, false, null);
     } catch (e) {
       console.log('Socket or SSE error', e.message);
     }

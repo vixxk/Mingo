@@ -6,6 +6,7 @@ const { redis } = require('../config/redis');
 const User = require('../models/userModel');
 const Listener = require('../models/listenerModel');
 const AppError = require('../utils/appError');
+const { calculateAge } = require('../utils/ageHelper');
 
 const getTenDigitPhone = (phone) => {
   const digits = phone.replace(/\D/g, '');
@@ -105,7 +106,7 @@ class AuthService {
     return await AuthService.sendOtp(phone, false);
   }
 
-    static async signup({ name, username, phone, otp, gender, language, avatarIndex }) {
+    static async signup({ name, username, phone, otp, gender, dob, language, avatarIndex }) {
     if (!phone || !otp) {
       throw new AppError('Phone number and OTP are required', 400);
     }
@@ -114,6 +115,14 @@ class AuthService {
     const isTestListener = phone === config.test.listenerPhone && otp === config.test.listenerOtp;
 
     if (!isTestAdmin && !isTestListener) {
+      if (!dob) {
+        throw new AppError('Date of Birth is required to verify 18+ eligibility', 400);
+      }
+      const age = calculateAge(dob);
+      if (age === null || age < 18) {
+        throw new AppError('You must be at least 18 years old to join Mingo', 400);
+      }
+
       try {
         const redisKey = `otp:${phone}`;
         const storedOtp = await redis.get(redisKey);
@@ -141,12 +150,14 @@ class AuthService {
       throw new AppError('Username or phone already exists', 409);
     }
 
+    const dobDate = dob ? new Date(dob) : null;
     
     const user = await User.create({
       name,
       username,
       phone,
       gender,
+      dob: dobDate,
       language,
       avatarIndex,
       role: isTestAdmin ? 'ADMIN' : (isTestListener ? 'LISTENER' : 'USER'),
@@ -168,6 +179,7 @@ class AuthService {
 
     
     const token = AuthService._generateToken(user);
+    const age = calculateAge(user.dob);
 
     return {
       user: {
@@ -179,6 +191,8 @@ class AuthService {
         isVerified: user.isVerified,
         coins: user.coins,
         gender: user.gender,
+        dob: user.dob,
+        age: age,
         language: user.language,
         avatarIndex: user.avatarIndex,
         isFirstSignup: user.isFirstSignup,
@@ -249,7 +263,6 @@ class AuthService {
     }
 
     const token = AuthService._generateToken(user);
-
     const listenerData = await Listener.findOne({ userId: user._id });
 
     return {
@@ -261,6 +274,8 @@ class AuthService {
         role: user.role,
         coins: user.coins,
         gender: user.gender,
+        dob: user.dob,
+        age: calculateAge(user.dob),
         language: user.language,
         avatarIndex: user.avatarIndex,
         isFirstSignup: user.isFirstSignup,
@@ -294,6 +309,8 @@ class AuthService {
       phone: user.phone,
       role: user.role,
       gender: user.gender,
+      dob: user.dob,
+      age: calculateAge(user.dob),
       language: user.language,
       avatarIndex: user.avatarIndex,
       coins: user.coins,

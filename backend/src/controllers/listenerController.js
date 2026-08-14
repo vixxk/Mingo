@@ -24,6 +24,16 @@ class ListenerController {
     }
   }
 
+    static async setBusy(req, res, next) {
+    try {
+      const { isBusy } = req.body;
+      const result = await PresenceService.setBusy(req.user.id, isBusy !== false);
+      return ApiResponse.success(res, result, isBusy ? 'Status set to busy' : 'Status set to available');
+    } catch (err) {
+      next(err);
+    }
+  }
+
     static async heartbeat(req, res, next) {
     try {
       const result = await PresenceService.heartbeat(req.user.id);

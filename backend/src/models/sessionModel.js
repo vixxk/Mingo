@@ -22,6 +22,43 @@ const sessionSchema = new mongoose.Schema(
       enum: ['audio', 'video', 'chat'],
       default: 'audio',
     },
+    initialCallType: {
+      type: String,
+      enum: ['audio', 'video', 'chat'],
+      default: 'audio',
+    },
+    isConverted: {
+      type: Boolean,
+      default: false,
+    },
+    convertedAt: {
+      type: Date,
+      default: null,
+    },
+    audioDuration: {
+      type: Number,
+      default: 0,
+    },
+    videoDuration: {
+      type: Number,
+      default: 0,
+    },
+    audioCoinsDeducted: {
+      type: Number,
+      default: 0,
+    },
+    videoCoinsDeducted: {
+      type: Number,
+      default: 0,
+    },
+    audioListenerEarnings: {
+      type: Number,
+      default: 0,
+    },
+    videoListenerEarnings: {
+      type: Number,
+      default: 0,
+    },
     startTime: {
       type: Date,
       default: Date.now,

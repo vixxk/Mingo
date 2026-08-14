@@ -77,7 +77,7 @@ const BusyBadge = ({ busySince }) => {
 const InactiveBadge = () => (
   <View style={[styles.liveBadge, { backgroundColor: 'rgba(107, 114, 128, 0.9)' }]}>
     <View style={[styles.liveDot, { backgroundColor: '#9CA3AF' }]} />
-    <Text style={styles.liveText}>Inactive</Text>
+    <Text style={styles.liveText}>Offline</Text>
   </View>
 );
 
@@ -283,6 +283,167 @@ const PeopleCard = ({ item, onCallPress, onChatPress, onProfilePress }) => {
   );
 };
 
+const PeopleListItem = ({ item, onCallPress, onChatPress, onProfilePress }) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.98,
+      friction: 8,
+      tension: 100,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      friction: 5,
+      tension: 80,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const isInactive = !item.isLive || item.isBusy;
+  const isAudioAvailable = !isInactive && item.audioEnabled !== false;
+  const isVideoAvailable = !isInactive && item.videoEnabled === true;
+  const isChatAvailable = !isInactive && item.chatEnabled !== false;
+
+  return (
+    <TouchableOpacity
+      activeOpacity={0.9}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      onPress={onProfilePress}
+      style={styles.peopleListItemWrapper}
+    >
+      <Animated.View style={[styles.peopleListItemCard, { transform: [{ scale: scaleAnim }] }]}>
+        {/* Top Info Row: Avatar + Name + Status */}
+        <View style={styles.peopleListTopRow}>
+          <Image
+            source={{ uri: item.image || getAvatarUrl(item.gender, item.avatarIndex) }}
+            style={[styles.peopleListAvatar, !item.isLive && { opacity: 0.6 }]}
+            resizeMode="cover"
+          />
+          <View style={styles.peopleListMeta}>
+            <View style={styles.peopleListNameRow}>
+              <Text style={styles.peopleListName} numberOfLines={1}>{item.name}</Text>
+              {item.isVerified && <VerifiedBadge />}
+            </View>
+            <View style={styles.peopleListStatusRow}>
+              <View
+                style={[
+                  styles.peopleListStatusDot,
+                  {
+                    backgroundColor: item.isBusy
+                      ? '#EF4444'
+                      : item.isLive
+                      ? '#22C55E'
+                      : '#9CA3AF',
+                  },
+                ]}
+              />
+              <Text style={styles.peopleListStatusText}>
+                {item.isBusy ? 'Busy' : item.isLive ? 'Online' : 'Offline'}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Action Buttons Row: Chat | Video | Audio */}
+        <View style={styles.peopleListActionsRow}>
+          {/* Chat Button */}
+          <TouchableOpacity
+            style={[
+              styles.peopleListActionBtn,
+              isChatAvailable
+                ? styles.peopleListActionBtnActive
+                : styles.peopleListActionBtnDisabled,
+            ]}
+            activeOpacity={0.7}
+            disabled={!isChatAvailable}
+            onPress={onChatPress}
+          >
+            <Ionicons
+              name="chatbubble-ellipses"
+              size={wp(4.2)}
+              color={isChatAvailable ? '#fff' : '#6B7280'}
+            />
+            <Text
+              style={[
+                styles.peopleListActionText,
+                isChatAvailable
+                  ? styles.peopleListActionTextActive
+                  : styles.peopleListActionTextDisabled,
+              ]}
+            >
+              Chat
+            </Text>
+          </TouchableOpacity>
+
+          {/* Video Button */}
+          <TouchableOpacity
+            style={[
+              styles.peopleListActionBtn,
+              isVideoAvailable
+                ? styles.peopleListActionBtnActive
+                : styles.peopleListActionBtnDisabled,
+            ]}
+            activeOpacity={0.7}
+            disabled={!isVideoAvailable}
+            onPress={() => onCallPress('video')}
+          >
+            <Ionicons
+              name="videocam"
+              size={wp(4.2)}
+              color={isVideoAvailable ? '#fff' : '#6B7280'}
+            />
+            <Text
+              style={[
+                styles.peopleListActionText,
+                isVideoAvailable
+                  ? styles.peopleListActionTextActive
+                  : styles.peopleListActionTextDisabled,
+              ]}
+            >
+              Video
+            </Text>
+          </TouchableOpacity>
+
+          {/* Audio Button */}
+          <TouchableOpacity
+            style={[
+              styles.peopleListActionBtn,
+              isAudioAvailable
+                ? styles.peopleListActionBtnActive
+                : styles.peopleListActionBtnDisabled,
+            ]}
+            activeOpacity={0.7}
+            disabled={!isAudioAvailable}
+            onPress={() => onCallPress('audio')}
+          >
+            <Ionicons
+              name="call"
+              size={wp(4.2)}
+              color={isAudioAvailable ? '#fff' : '#6B7280'}
+            />
+            <Text
+              style={[
+                styles.peopleListActionText,
+                isAudioAvailable
+                  ? styles.peopleListActionTextActive
+                  : styles.peopleListActionTextDisabled,
+              ]}
+            >
+              Audio
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
+    </TouchableOpacity>
+  );
+};
+
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -455,10 +616,8 @@ export default function HomeScreen() {
         });
 
         const bestChoice = mappedListeners.filter(l => l.bestChoice);
-        const people = mappedListeners;
-
-        setBestChoiceData(bestChoice);
-        setPeopleData(people);
+        setBestChoiceData(bestChoice.length > 0 ? bestChoice : mappedListeners.slice(0, 8));
+        setPeopleData(mappedListeners);
       } else {
         setBestChoiceData([]);
         setPeopleData([]);
@@ -482,10 +641,38 @@ export default function HomeScreen() {
     }
   }, []);
 
-  // Live listener-status updates (socket `listener_status_changed` + the
-  // /listeners/status/sse stream) were removed intentionally: the cards should
-  // only refresh when the user pulls to refresh, returns to the screen, or
-  // brings the app back to the foreground — never while sitting on the page.
+  // Live listener-status updates via socket `listener_status_changed`
+  useEffect(() => {
+    const unsub = socketService.on('listener_status_changed', (data) => {
+      if (!data || !data.userId) return;
+      const targetId = String(data.userId);
+      const isOnline = !!data.isOnline;
+      const isBusy = !!data.isBusy;
+      const busySince = data.busySince || null;
+
+      setPeopleData((prev) =>
+        prev.map((item) => {
+          if (String(item.id) === targetId) {
+            return { ...item, isLive: isOnline, isBusy, busySince };
+          }
+          return item;
+        })
+      );
+
+      setBestChoiceData((prev) =>
+        prev.map((item) => {
+          if (String(item.id) === targetId) {
+            return { ...item, isLive: isOnline, isBusy, busySince };
+          }
+          return item;
+        })
+      );
+    });
+
+    return () => {
+      unsub();
+    };
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -743,24 +930,26 @@ export default function HomeScreen() {
     router.push({ pathname: '/listener-profile/[id]', params: { id } });
   };
 
-  const renderBestChoiceItem = useCallback(({ item }) => (
-    <BestChoiceCard 
-      item={item} 
-      onCallPress={(type) => handleCallPress(item, type)} 
-      onChatPress={() => {
-        router.push({
-          pathname: '/(chat)/chat',
-          params: {
-            name: item.name,
-            id: item.id,
-            avatarIndex: item.avatarIndex || '0',
-            gender: item.gender || 'Female',
-          },
-        });
-      }}
-      onProfilePress={() => handleProfilePress(item.id)} 
-    />
-  ), [router]);
+  const renderMingoMatesItem = useCallback(({ item }) => (
+    <View style={{ marginRight: wp(3) }}>
+      <PeopleCard 
+        item={item} 
+        onCallPress={(type) => handleCallPress(item, type)} 
+        onChatPress={() => {
+          router.push({
+            pathname: '/(chat)/chat',
+            params: {
+              name: item.name,
+              id: item.id,
+              avatarIndex: item.avatarIndex || '0',
+              gender: item.gender || 'Female',
+            },
+          });
+        }}
+        onProfilePress={() => handleProfilePress(item.id)} 
+      />
+    </View>
+  ), [router, handleCallPress, handleProfilePress]);
 
   // Skeleton loading UI
   if (loading && bestChoiceData.length === 0 && peopleData.length === 0) {
@@ -835,9 +1024,12 @@ export default function HomeScreen() {
       >
         <AdSlider ads={ads} intervalSec={sliderInterval} />
         {}
-        <Text style={styles.sectionTitle}>Best Choice</Text>
+        {/* Mingo Mates Header */}
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Mingo Mates</Text>
+        </View>
 
-        {}
+        {/* Mingo Mates Horizontal Cards (Same size as People cards) */}
         {bestChoiceData.length === 0 ? (
           <View style={styles.emptyCardContainer}>
             <Text style={styles.emptyCardText}>No listeners available at the moment.</Text>
@@ -846,40 +1038,22 @@ export default function HomeScreen() {
           <FlatList
             ref={flatListRef}
             data={bestChoiceData}
-            renderItem={renderBestChoiceItem}
+            renderItem={renderMingoMatesItem}
             keyExtractor={(item) => item.id}
             horizontal
             showsHorizontalScrollIndicator={false}
-            snapToInterval={CARD_WIDTH + CARD_GAP}
+            contentContainerStyle={styles.mingoMatesCarouselContainer}
             decelerationRate="fast"
-            contentContainerStyle={styles.carouselContainer}
-            onScroll={onCarouselScroll}
-            onViewableItemsChanged={onViewableItemsChanged}
-            viewabilityConfig={viewabilityConfig}
             scrollEventThrottle={16}
           />
         )}
 
         {}
-        <View style={styles.pagination}>
-          {Array.from({ length: Math.max(1, totalPages) }).map((_, index) => (
-            <View
-              key={index}
-              style={[
-                styles.paginationDot,
-                activeSlide === index && styles.paginationDotActive,
-                totalPages === 0 && { opacity: 0.2 }
-              ]}
-            />
-          ))}
-        </View>
-
-        {}
         <Text style={styles.sectionTitle}>People</Text>
 
-        {}
+        {/* People 1-Column Vertical List Container */}
         <View style={styles.peopleGridContainer}>
-          <View style={styles.peopleGrid}>
+          <View style={styles.peopleListContainer}>
             {peopleData.length === 0 ? (
               <View style={styles.emptyPeopleContainer}>
                 <Ionicons name="people-outline" size={40} color="#374151" />
@@ -887,7 +1061,7 @@ export default function HomeScreen() {
               </View>
             ) : (
               peopleData.map((item) => (
-                <PeopleCard 
+                <PeopleListItem 
                   key={item.id} 
                   item={item} 
                   onCallPress={(type) => handleCallPress(item, type)} 
@@ -924,14 +1098,14 @@ export default function HomeScreen() {
           pointerEvents="box-none"
         >
           <LinearGradient
-            colors={['#DC2626', '#991B1B', '#000000']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
+            colors={['#2563EB', '#1D4ED8', '#0F172A']}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
             style={styles.findMeButton}
           >
             <View style={styles.findMeContent}>
               <View style={styles.findMeLeft}>
-                <Ionicons name="sparkles" size={wp(4.5)} color="#fff" />
+                <Ionicons name="sparkles" size={wp(4.2)} color="#93C5FD" />
                 <Text style={styles.findMeText}>Find me the right one</Text>
               </View>
               <View style={styles.findMeActions}>
@@ -939,15 +1113,17 @@ export default function HomeScreen() {
                   style={styles.findMeCallBtn}
                   activeOpacity={0.8}
                   onPress={() => handleCallPress(null, 'audio')}
+                  accessibilityLabel="Audio Call match"
                 >
-                  <Ionicons name="call" size={wp(5)} color="#fff" />
+                  <Ionicons name="call" size={wp(4.5)} color="#fff" />
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.findMeCallBtn}
                   activeOpacity={0.8}
                   onPress={() => handleCallPress(null, 'video')}
+                  accessibilityLabel="Video Call match"
                 >
-                  <Ionicons name="videocam" size={wp(5)} color="#fff" />
+                  <Ionicons name="videocam" size={wp(4.5)} color="#fff" />
                 </TouchableOpacity>
               </View>
             </View>
@@ -1160,19 +1336,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: wp(3),
-    paddingHorizontal: wp(2),
-    paddingVertical: hp(0.4),
+    borderRadius: wp(2),
+    paddingHorizontal: wp(1.5),
+    paddingVertical: hp(0.2),
     gap: wp(1),
   },
   liveDot: {
-    width: wp(1.5),
-    height: wp(1.5),
-    borderRadius: wp(0.75),
+    width: wp(1.2),
+    height: wp(1.2),
+    borderRadius: wp(0.6),
     backgroundColor: '#22C55E',
   },
   liveText: {
-    fontSize: wp(2.5),
+    fontSize: wp(2.2),
     color: '#fff',
     fontFamily: 'Inter_700Bold',
   },
@@ -1213,11 +1389,95 @@ const styles = StyleSheet.create({
   peopleGridContainer: {
     position: 'relative',
   },
-  peopleGrid: {
+  peopleListContainer: {
+    paddingHorizontal: wp(4),
+    gap: hp(1.5),
+  },
+  peopleListItemWrapper: {
+    width: '100%',
+  },
+  peopleListItemCard: {
+    backgroundColor: '#111116',
+    borderRadius: wp(4.5),
+    padding: wp(3.5),
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  peopleListTopRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: wp(3),
+    alignItems: 'center',
+    marginBottom: hp(1.5),
+    gap: wp(3),
+  },
+  peopleListAvatar: {
+    width: wp(14),
+    height: wp(14),
+    borderRadius: wp(7),
+    borderWidth: 1.5,
+    borderColor: 'rgba(99, 102, 241, 0.5)',
+  },
+  peopleListMeta: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  peopleListNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: wp(1.5),
+    marginBottom: hp(0.3),
+  },
+  peopleListName: {
+    fontSize: wp(4),
+    color: '#fff',
+    fontFamily: 'Inter_700Bold',
+  },
+  peopleListStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: wp(1.5),
+  },
+  peopleListStatusDot: {
+    width: wp(2.2),
+    height: wp(2.2),
+    borderRadius: wp(1.1),
+  },
+  peopleListStatusText: {
+    fontSize: wp(3.2),
+    color: '#9CA3AF',
+    fontFamily: 'Inter_500Medium',
+  },
+  peopleListActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: wp(2),
+  },
+  peopleListActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: hp(1),
+    borderRadius: wp(3.5),
+    gap: wp(1.5),
+    borderWidth: 1,
+  },
+  peopleListActionBtnActive: {
+    backgroundColor: 'rgba(99, 102, 241, 0.22)',
+    borderColor: 'rgba(99, 102, 241, 0.45)',
+  },
+  peopleListActionBtnDisabled: {
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderColor: 'rgba(255, 255, 255, 0.07)',
+  },
+  peopleListActionText: {
+    fontSize: wp(3.3),
+    fontFamily: 'Inter_600SemiBold',
+  },
+  peopleListActionTextActive: {
+    color: '#ffffff',
+  },
+  peopleListActionTextDisabled: {
+    color: '#6B7280',
   },
   emptyCardContainer: {
     height: hp(30),
@@ -1261,26 +1521,34 @@ const styles = StyleSheet.create({
     zIndex: 50,
   },
   findMeButton: {
-    borderRadius: wp(8),
+    borderRadius: wp(7),
+    borderWidth: 1,
+    borderColor: 'rgba(96, 165, 250, 0.35)',
     overflow: 'hidden',
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   findMeContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: hp(1.8),
+    paddingVertical: hp(1.1),
     paddingHorizontal: wp(4),
   },
   findMeLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: wp(2.5),
+    gap: wp(2),
     flex: 1,
   },
   findMeText: {
-    fontSize: wp(4),
+    fontSize: wp(3.7),
     color: '#fff',
-    fontFamily: 'Inter_700Bold',
+    fontFamily: 'Inter_600SemiBold',
+    letterSpacing: 0.2,
   },
   findMeActions: {
     flexDirection: 'row',
@@ -1288,28 +1556,40 @@ const styles = StyleSheet.create({
     gap: wp(2),
   },
   findMeCallBtn: {
-    width: wp(11),
-    height: wp(11),
-    borderRadius: wp(5.5),
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    width: wp(9.5),
+    height: wp(9.5),
+    borderRadius: wp(4.75),
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: 'rgba(255, 255, 255, 0.25)',
   },
   peopleCardWrapper: {
-    width: wp(45),
+    width: wp(42),
   },
   peopleCard: {
-    borderRadius: wp(5),
+    borderRadius: wp(4.5),
     overflow: 'hidden',
     backgroundColor: '#111',
-    borderWidth: 1,
-    borderColor: '#1C1C1C',
+    borderWidth: 1.5,
+    borderColor: 'rgba(99, 102, 241, 0.4)',
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: wp(4),
+    marginTop: hp(0.8),
+    marginBottom: hp(0.8),
+  },
+  mingoMatesCarouselContainer: {
+    paddingHorizontal: wp(4),
+    paddingBottom: hp(0.8),
   },
   peopleImageContainer: {
     width: '100%',
-    height: hp(22),
+    height: hp(20),
     position: 'relative',
     overflow: 'hidden',
   },

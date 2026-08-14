@@ -1,35 +1,52 @@
 import { Audio } from 'expo-av';
 
-/**
- * Non-copyright call sounds (synthesized from sine waves — see
- * scripts/generate-call-sounds.js). Plays the caller ringback while the
- * caller waits for the listener, and an incoming-call chime on the
- * listener side when an incoming call arrives.
- */
-
 let ringtoneSound = null;
 let incomingSound = null;
 let ringtoneLoading = false;
 let incomingLoading = false;
 
+async function configureAudioMode() {
+  try {
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      staysActiveInBackground: true,
+      playsInSilentModeIOS: true,
+      shouldDuckAndroid: true,
+      playThroughEarpieceAndroid: false,
+    });
+  } catch (e) {
+    console.log('callSounds: Audio mode config error', e);
+  }
+}
+
 async function loadAndPlay(key, asset, isLooping = true) {
   const existing = key === 'ringtone' ? ringtoneSound : incomingSound;
   const loading = key === 'ringtone' ? ringtoneLoading : incomingLoading;
-  if (existing || loading) return; // already playing / loading
+  if (existing || loading) return true; // already playing / loading
 
   if (key === 'ringtone') ringtoneLoading = true;
   else incomingLoading = true;
 
   try {
-    const { sound } = await Audio.Sound.createAsync(asset, {
-      shouldPlay: true,
-      isLooping,
-      volume: 1,
-    });
+    await configureAudioMode();
+    const { sound } = await Audio.Sound.createAsync(
+      asset,
+      {
+        shouldPlay: true,
+        isLooping,
+        volume: 1.0,
+      }
+    );
+    await sound.setVolumeAsync(1.0);
+    await sound.setIsLoopingAsync(isLooping);
+    await sound.playAsync();
+
     if (key === 'ringtone') ringtoneSound = sound;
     else incomingSound = sound;
+    return true;
   } catch (e) {
     console.log('callSounds: failed to play', key, e);
+    throw e;
   } finally {
     if (key === 'ringtone') ringtoneLoading = false;
     else incomingLoading = false;
@@ -51,15 +68,36 @@ async function stopAndUnload(key) {
 }
 
 export async function playRingtone() {
-  await loadAndPlay('ringtone', require('../assets/sounds/ringtone.wav'));
+  try {
+    await loadAndPlay('ringtone', require('../assets/sounds/ringtone.wav'));
+  } catch (e) {
+    console.log('callSounds: playRingtone error', e);
+  }
 }
 
 export async function stopRingtone() {
   await stopAndUnload('ringtone');
 }
 
-export async function playIncomingCallSound() {
-  await loadAndPlay('incoming', require('../assets/sounds/incoming-call.wav'));
+export async function playIncomingCallSound(customUrl) {
+  // If already playing, don't restart
+  if (incomingSound) return;
+
+  if (customUrl && typeof customUrl === 'string' && (customUrl.startsWith('http://') || customUrl.startsWith('https://'))) {
+    try {
+      await loadAndPlay('incoming', { uri: customUrl });
+      return;
+    } catch (e) {
+      console.log('callSounds: custom ringtone URL failed, falling back to default sound:', e.message);
+      await stopAndUnload('incoming');
+    }
+  }
+  
+  try {
+    await loadAndPlay('incoming', require('../assets/sounds/incoming-call.wav'));
+  } catch (e) {
+    console.log('callSounds: fallback incoming call sound error', e);
+  }
 }
 
 export async function stopIncomingCallSound() {

@@ -39,6 +39,9 @@ export default function EditProfileScreen() {
   const [username, setUsername] = useState('Userid1234');
   const [selectedInterests, setSelectedInterests] = useState([]);
   const [gender, setGender] = useState('Male');
+  const [dobDay, setDobDay] = useState('');
+  const [dobMonth, setDobMonth] = useState('');
+  const [dobYear, setDobYear] = useState('');
 
   const [isLoading, setIsLoading] = useState(true);
   const [popup, setPopup] = useState({
@@ -48,6 +51,16 @@ export default function EditProfileScreen() {
     message: '',
     onClose: null,
   });
+
+  const getFormattedDob = () => {
+    if (!dobDay && !dobMonth && !dobYear) return null;
+    const d = parseInt(dobDay.trim(), 10);
+    const m = parseInt(dobMonth.trim(), 10);
+    const y = parseInt(dobYear.trim(), 10);
+    if (isNaN(d) || isNaN(m) || isNaN(y)) return null;
+    if (d < 1 || d > 31 || m < 1 || m > 12 || y < 1900 || y > new Date().getFullYear()) return null;
+    return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  };
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -66,6 +79,14 @@ export default function EditProfileScreen() {
           }
           if (userObj.name) setUsername(userObj.name);
           if (userObj.interests) setSelectedInterests(userObj.interests);
+          if (userObj.dob) {
+            const d = new Date(userObj.dob);
+            if (!isNaN(d.getTime())) {
+              setDobDay(String(d.getDate()).padStart(2, '0'));
+              setDobMonth(String(d.getMonth() + 1).padStart(2, '0'));
+              setDobYear(String(d.getFullYear()));
+            }
+          }
         }
 
         // 2. Fetch real data from API
@@ -100,6 +121,14 @@ export default function EditProfileScreen() {
           }
           
           if (userObj.interests) setSelectedInterests(userObj.interests);
+          if (userObj.dob) {
+            const d = new Date(userObj.dob);
+            if (!isNaN(d.getTime())) {
+              setDobDay(String(d.getDate()).padStart(2, '0'));
+              setDobMonth(String(d.getMonth() + 1).padStart(2, '0'));
+              setDobYear(String(d.getFullYear()));
+            }
+          }
           
           // Sync with local storage
           await AsyncStorage.setItem('user', JSON.stringify({ ...userObj, gender: rawGender || gender, avatarIndex: parseInt(avatarIndex || selectedAvatar, 10), name: nameToSet || username }));
@@ -127,6 +156,27 @@ export default function EditProfileScreen() {
       return;
     }
 
+    const dobStr = getFormattedDob();
+    if (dobStr) {
+      const birthDate = new Date(dobStr);
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      if (age < 18) {
+        setPopup({
+          visible: true,
+          type: 'error',
+          title: 'Error',
+          message: 'You must be at least 18 years old to use Mingo.',
+          onClose: () => setPopup((prev) => ({ ...prev, visible: false })),
+        });
+        return;
+      }
+    }
+
     try {
       setIsSaving(true);
       // 1. Save to Database FIRST
@@ -134,6 +184,7 @@ export default function EditProfileScreen() {
         name: username,
         username: username.toLowerCase().replace(/\s/g, ''), // Ensure unique-ish username
         gender,
+        dob: dobStr,
         avatarIndex: parseInt(selectedAvatar, 10),
         interests: selectedInterests,
       });
@@ -261,7 +312,7 @@ export default function EditProfileScreen() {
           )}
         />
 
-        {}
+        {/* Username */}
         <Text style={styles.fieldLabel}>Username</Text>
         <View style={styles.inputWrapper}>
           <TextInput
@@ -273,6 +324,48 @@ export default function EditProfileScreen() {
           />
         </View>
         <Text style={styles.fieldHint}>Username must be 4-10 charaters.</Text>
+
+        {/* Date of Birth */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: vs(16) }}>
+          <Text style={styles.fieldLabel}>Date of Birth</Text>
+          <Text style={{ color: '#EF4444', fontSize: ms(11), fontWeight: '700' }}>🔞 18+ Required</Text>
+        </View>
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: vs(8) }}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#374151' }}>
+            <TextInput
+              style={{ color: '#fff', fontSize: ms(14), textAlign: 'center' }}
+              placeholder="DD"
+              placeholderTextColor="#6B7280"
+              keyboardType="number-pad"
+              maxLength={2}
+              value={dobDay}
+              onChangeText={setDobDay}
+            />
+          </View>
+          <View style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#374151' }}>
+            <TextInput
+              style={{ color: '#fff', fontSize: ms(14), textAlign: 'center' }}
+              placeholder="MM"
+              placeholderTextColor="#6B7280"
+              keyboardType="number-pad"
+              maxLength={2}
+              value={dobMonth}
+              onChangeText={setDobMonth}
+            />
+          </View>
+          <View style={{ flex: 1.4, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#374151' }}>
+            <TextInput
+              style={{ color: '#fff', fontSize: ms(14), textAlign: 'center' }}
+              placeholder="YYYY"
+              placeholderTextColor="#6B7280"
+              keyboardType="number-pad"
+              maxLength={4}
+              value={dobYear}
+              onChangeText={setDobYear}
+            />
+          </View>
+        </View>
+        <Text style={styles.fieldHint}>Must be 18 years or older to update profile.</Text>
 
         {}
         <Text style={styles.fieldLabel}>Select Your Interests</Text>

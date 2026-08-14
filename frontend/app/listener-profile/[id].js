@@ -11,6 +11,7 @@ import SkeletonProfile from '../../components/SkeletonProfile';
 import ReportUserPopup from '../../components/shared/ReportUserPopup';
 import BlockUserPopup from '../../components/shared/BlockUserPopup';
 import { getAvatarUrl } from '../../utils/avatars';
+import { socketService } from '../../utils/socket';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
@@ -43,6 +44,28 @@ export default function ListenerProfileScreen() {
 
   useEffect(() => {
     fetchProfile();
+  }, [id]);
+
+  useEffect(() => {
+    const unsub = socketService.on('listener_status_changed', (data) => {
+      if (!data || !data.userId) return;
+      if (String(data.userId) === String(id)) {
+        setProfile((prev) =>
+          prev
+            ? {
+                ...prev,
+                isOnline: !!data.isOnline,
+                isBusy: !!data.isBusy,
+                busySince: data.busySince || null,
+              }
+            : prev
+        );
+      }
+    });
+
+    return () => {
+      unsub();
+    };
   }, [id]);
 
   const fetchProfile = async (isRefreshing = false) => {

@@ -68,69 +68,26 @@ export default function HomeSkeleton() {
           <ShimmerBlock style={styles.adSlider} opacity={opacity} />
         </View>
 
-        {/* ── Best Choice title ── */}
-        <ShimmerBlock style={styles.sectionTitle} opacity={opacity} />
+        {/* ── Mingo Mates title ── */}
+        <View style={styles.sectionHeaderRow}>
+          <ShimmerBlock style={styles.sectionTitle} opacity={opacity} />
+        </View>
 
-        {/* ── Best Choice carousel ── */}
+        {/* ── Mingo Mates carousel (Horizontal Cards) ── */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.carouselContainer}
         >
-          {[1, 2].map((i) => (
-            <View key={i} style={styles.bestChoiceCardOuter}>
-              <View style={styles.bestChoiceGradientBorder}>
-                <View style={styles.bestChoiceCardInner}>
-                  <ShimmerBlock style={styles.fullSize} opacity={opacity} />
-
-                  {/* Live / Busy badge */}
-                  <View style={styles.badgeWrapper}>
-                    <View style={styles.liveBadgeShape}>
-                      <ShimmerBlock style={styles.liveBadgeDot} opacity={pulseOpacity} />
-                      <ShimmerBlock style={styles.liveBadgeText} opacity={pulseOpacity} />
-                    </View>
-                  </View>
-
-                  {/* Action stack (3 buttons) */}
-                  <View style={styles.actionStack}>
-                    <ShimmerBlock style={styles.actionCircle} opacity={opacity} />
-                    <ShimmerBlock style={styles.actionCircle} opacity={opacity} />
-                    <ShimmerBlock style={styles.actionCircle} opacity={opacity} />
-                  </View>
-
-                  {/* Name row */}
-                  <View style={styles.nameRow}>
-                    <ShimmerBlock style={styles.nameText} opacity={opacity} />
-                    <ShimmerBlock style={styles.verifiedBadge} opacity={opacity} />
-                  </View>
-                </View>
-              </View>
-            </View>
-          ))}
-        </ScrollView>
-
-        {/* ── Pagination dots ── */}
-        <View style={styles.pagination}>
-          <ShimmerBlock style={styles.paginationDotActive} opacity={opacity} />
-          <ShimmerBlock style={styles.paginationDot} opacity={opacity} />
-          <ShimmerBlock style={styles.paginationDot} opacity={opacity} />
-        </View>
-
-        {/* ── People title ── */}
-        <ShimmerBlock style={[styles.sectionTitle, { width: wp(30) }]} opacity={opacity} />
-
-        {/* ── People grid (2×2) ── */}
-        <View style={styles.peopleGrid}>
-          {[1, 2, 3, 4].map((i) => (
+          {[1, 2, 3].map((i) => (
             <View key={i} style={styles.peopleCardWrapper}>
               <View style={styles.peopleCard}>
                 <View style={styles.peopleImageContainer}>
                   <ShimmerBlock style={styles.fullSize} opacity={opacity} />
-                  <View style={styles.peopleGradientOverlay} />
 
                   {/* Badge */}
                   <View style={styles.badgeWrapper}>
-                    <View style={[styles.liveBadgeShape, { backgroundColor: 'rgba(0,0,0,0.4)' }]}>
+                    <View style={styles.liveBadgeShape}>
                       <ShimmerBlock style={styles.liveBadgeDot} opacity={pulseOpacity} />
                       <ShimmerBlock style={styles.liveBadgeText} opacity={pulseOpacity} />
                     </View>
@@ -139,7 +96,6 @@ export default function HomeSkeleton() {
                   {/* Name */}
                   <View style={styles.peopleNameRow}>
                     <ShimmerBlock style={styles.peopleNameText} opacity={opacity} />
-                    <ShimmerBlock style={styles.verifiedBadge} opacity={opacity} />
                   </View>
                 </View>
 
@@ -152,12 +108,39 @@ export default function HomeSkeleton() {
               </View>
             </View>
           ))}
+        </ScrollView>
+
+        {/* ── People Section (1-Column Vertical List) ── */}
+        <View style={styles.sectionHeaderRow}>
+          <ShimmerBlock style={[styles.sectionTitle, { width: wp(28) }]} opacity={opacity} />
         </View>
 
-        <View style={{ height: hp(15) }} />
+        <View style={styles.peopleListContainer}>
+          {[1, 2, 3].map((i) => (
+            <View key={i} style={styles.peopleListItemCard}>
+              {/* Top Row: Avatar + Name + Status */}
+              <View style={styles.peopleListTopRow}>
+                <ShimmerBlock style={styles.peopleListAvatar} opacity={opacity} />
+                <View style={styles.peopleListMeta}>
+                  <ShimmerBlock style={styles.peopleListNameText} opacity={opacity} />
+                  <ShimmerBlock style={styles.peopleListStatusText} opacity={pulseOpacity} />
+                </View>
+              </View>
+
+              {/* Actions Row: 3 Pill Buttons */}
+              <View style={styles.peopleListActionsRow}>
+                <ShimmerBlock style={styles.peopleListActionBtn} opacity={opacity} />
+                <ShimmerBlock style={styles.peopleListActionBtn} opacity={opacity} />
+                <ShimmerBlock style={styles.peopleListActionBtn} opacity={opacity} />
+              </View>
+            </View>
+          ))}
+        </View>
+
+        <View style={{ height: hp(12) }} />
       </ScrollView>
 
-      {/* ── Find Me bar ── */}
+      {/* ── Floating Find Me bar ── */}
       <View style={styles.findMeWrapper}>
         <ShimmerBlock style={styles.findMeBar} opacity={opacity} />
       </View>
@@ -177,7 +160,6 @@ const styles = StyleSheet.create({
   fullSize: {
     width: '100%',
     height: '100%',
-    borderRadius: 0,
   },
 
   /* ═══ Header ═══ */
@@ -231,46 +213,50 @@ const styles = StyleSheet.create({
   /* ═══ Ad Slider ═══ */
   adSliderWrap: {
     paddingHorizontal: wp(5),
-    paddingTop: hp(1),
+    paddingTop: hp(0.5),
+    marginBottom: hp(1),
   },
   adSlider: {
     width: '100%',
-    height: hp(15),
-    borderRadius: wp(4),
+    height: hp(11),
+    borderRadius: wp(3.5),
   },
 
   /* ═══ Section title ═══ */
+  sectionHeaderRow: {
+    paddingHorizontal: wp(4),
+    marginTop: hp(0.8),
+    marginBottom: hp(0.8),
+  },
   sectionTitle: {
-    width: wp(40),
-    height: hp(3.2),
+    width: wp(35),
+    height: hp(2.6),
     borderRadius: 6,
-    marginHorizontal: wp(4),
-    marginTop: hp(2.5),
-    marginBottom: hp(1.5),
   },
 
-  /* ═══ Best Choice carousel ═══ */
+  /* ═══ Mingo Mates carousel ═══ */
   carouselContainer: {
     paddingHorizontal: wp(4),
-    gap: wp(4),
+    gap: wp(3),
+    paddingBottom: hp(0.8),
   },
-  bestChoiceCardOuter: {
-    width: CARD_WIDTH,
+  peopleCardWrapper: {
+    width: wp(42),
   },
-  bestChoiceGradientBorder: {
-    borderRadius: wp(5),
-    padding: 2.5,
-    backgroundColor: '#1C1C1C',
-  },
-  bestChoiceCardInner: {
+  peopleCard: {
     borderRadius: wp(4.5),
     overflow: 'hidden',
     backgroundColor: '#111',
-    height: hp(25),
+    borderWidth: 1.5,
+    borderColor: '#1A1A1A',
+  },
+  peopleImageContainer: {
+    width: '100%',
+    height: hp(20),
     position: 'relative',
   },
 
-  /* badge — top-left capsule with dot + text */
+  /* badge */
   badgeWrapper: {
     position: 'absolute',
     top: hp(1.2),
@@ -280,141 +266,95 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.55)',
-    borderRadius: wp(3),
-    paddingHorizontal: wp(2),
-    paddingVertical: hp(0.35),
+    borderRadius: wp(2),
+    paddingHorizontal: wp(1.5),
+    paddingVertical: hp(0.2),
     gap: wp(1),
   },
   liveBadgeDot: {
-    width: wp(1.5),
-    height: wp(1.5),
-    borderRadius: wp(0.75),
+    width: wp(1.2),
+    height: wp(1.2),
+    borderRadius: wp(0.6),
   },
   liveBadgeText: {
     width: wp(8),
-    height: hp(1.6),
+    height: hp(1.4),
     borderRadius: 3,
   },
 
-  /* action stack — right side vertical buttons */
-  actionStack: {
-    position: 'absolute',
-    top: '30%',
-    right: wp(1.5),
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderRadius: wp(5),
-    paddingVertical: hp(1.2),
-    paddingHorizontal: wp(1),
-    gap: hp(1.5),
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-  },
-  actionCircle: {
-    width: wp(7),
-    height: wp(7),
-    borderRadius: wp(3.5),
-  },
-
-  /* name row — bottom-left */
-  nameRow: {
-    position: 'absolute',
-    bottom: hp(1.2),
-    left: wp(2.5),
-    right: wp(2.5),
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: wp(1),
-  },
-  nameText: {
-    width: wp(30),
-    height: hp(2),
-    borderRadius: 4,
-  },
-  verifiedBadge: {
-    width: wp(4),
-    height: wp(4),
-    borderRadius: wp(2),
-  },
-
-  /* ═══ Pagination dots ═══ */
-  pagination: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: hp(1.8),
-    marginBottom: hp(1),
-    gap: wp(1.5),
-  },
-  paginationDot: {
-    width: wp(2),
-    height: wp(2),
-    borderRadius: wp(1),
-  },
-  paginationDotActive: {
-    width: wp(2.5),
-    height: wp(2.5),
-    borderRadius: wp(1.25),
-  },
-
-  /* ═══ People grid ═══ */
-  peopleGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: wp(3),
-    gap: wp(2),
-  },
-  peopleCardWrapper: {
-    width: wp(45),
-  },
-  peopleCard: {
-    borderRadius: wp(5),
-    overflow: 'hidden',
-    backgroundColor: '#111',
-    borderWidth: 1,
-    borderColor: '#1C1C1C',
-  },
-  peopleImageContainer: {
-    width: '100%',
-    height: hp(22),
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  peopleGradientOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: hp(8),
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
+  /* name row */
   peopleNameRow: {
     position: 'absolute',
     bottom: hp(1),
     left: wp(2.5),
     right: wp(2.5),
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: wp(1),
   },
   peopleNameText: {
-    width: wp(25),
-    height: vss(1.8),
+    width: wp(22),
+    height: hp(1.8),
     borderRadius: 4,
   },
   peopleActions: {
     flexDirection: 'row',
-    justifyContent: 'space-evenly',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: vss(1.2),
-    paddingHorizontal: ss(1),
+    paddingVertical: hp(1.2),
+    paddingHorizontal: wp(3),
     backgroundColor: '#111',
   },
   peopleActionBtn: {
-    width: ss(9),
-    height: ss(9),
-    borderRadius: ss(4.5),
+    width: wp(9),
+    height: wp(9),
+    borderRadius: wp(4.5),
+  },
+
+  /* ═══ People Vertical List ═══ */
+  peopleListContainer: {
+    paddingHorizontal: wp(4),
+    gap: hp(1.5),
+  },
+  peopleListItemCard: {
+    backgroundColor: '#111116',
+    borderRadius: wp(4.5),
+    padding: wp(3.5),
     borderWidth: 1,
-    borderColor: '#1C1C1C',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  peopleListTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: hp(1.5),
+    gap: wp(3),
+  },
+  peopleListAvatar: {
+    width: wp(14),
+    height: wp(14),
+    borderRadius: wp(7),
+  },
+  peopleListMeta: {
+    flex: 1,
+    justifyContent: 'center',
+    gap: hp(0.5),
+  },
+  peopleListNameText: {
+    width: wp(30),
+    height: hp(2),
+    borderRadius: 4,
+  },
+  peopleListStatusText: {
+    width: wp(16),
+    height: hp(1.4),
+    borderRadius: 3,
+  },
+  peopleListActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: wp(2),
+  },
+  peopleListActionBtn: {
+    flex: 1,
+    height: hp(4),
+    borderRadius: wp(3.5),
   },
 
   /* ═══ Find Me bar ═══ */
@@ -427,7 +367,7 @@ const styles = StyleSheet.create({
   },
   findMeBar: {
     width: '100%',
-    height: hp(6.5),
-    borderRadius: wp(8),
+    height: hp(5.2),
+    borderRadius: wp(7),
   },
 });

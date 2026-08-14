@@ -9,6 +9,7 @@ const NotificationCampaign = require('../models/NotificationCampaign');
 const PayoutRequest = require('../models/PayoutRequest');
 const ApiResponse = require('../utils/apiResponse');
 const AppError = require('../utils/appError');
+const { calculateAge } = require('../utils/ageHelper');
 const Notification = require('../models/Notification');
 const Conversation = require('../models/conversationModel');
 const Message = require('../models/messageModel');
@@ -422,7 +423,9 @@ class AdminController {
           totalCalls: callCount,
           isOnline,
           appOpens: user.appOpens || 0,
-          totalTimeSpent: formattedTimeSpent
+          totalTimeSpent: formattedTimeSpent,
+          dob: user.dob,
+          age: calculateAge(user.dob)
         };
       }));
 
@@ -447,7 +450,7 @@ class AdminController {
       }
 
       let listeners = await Listener.find(filter)
-        .populate('userId', 'name username phone gender avatarIndex isBanned isDeleted deletionReason')
+        .populate('userId', 'name username phone gender dob avatarIndex isBanned isDeleted deletionReason')
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(parseInt(limit));
@@ -510,6 +513,8 @@ class AdminController {
         isBanned: l.userId?.isBanned || false,
         avatarIndex: l.userId?.avatarIndex || 0,
         gender: l.userId?.gender,
+        dob: l.userId?.dob,
+        age: calculateAge(l.userId?.dob),
         isOnline: l.isOnline,
         introAudioUrl: l.introAudioUrl,
         audioCalls: l.audioCalls || 0,
@@ -1023,6 +1028,7 @@ class AdminController {
         originalPrice: req.body.originalPrice,
         discount: req.body.discount,
         tag: req.body.tag,
+        subTag: req.body.subTag,
         isPopular: req.body.isPopular || false,
       };
       Object.keys(newPkg).forEach(k => newPkg[k] === undefined && delete newPkg[k]);
@@ -1043,7 +1049,7 @@ class AdminController {
       if (index === -1) {
         throw new AppError('Coin package not found', 404);
       }
-      const allowed = ['coins', 'price', 'originalPrice', 'discount', 'tag', 'isPopular'];
+      const allowed = ['coins', 'price', 'originalPrice', 'discount', 'tag', 'subTag', 'isPopular'];
       allowed.forEach(field => {
         if (req.body[field] !== undefined) {
           settings.coinPricing[index][field] = req.body[field];
@@ -1072,20 +1078,26 @@ class AdminController {
     }
   }
 
-static async resetCoinPackages(req, res, next) {
+  static async resetCoinPackages(req, res, next) {
     try {
       const SystemSettings = require('../models/SystemSettings');
       const defaults = [
-        { id: '1', coins: 40,   originalPrice: 38, price: 19,  discount: 50, tag: 'Starter Offer' },
-        { id: '2', coins: 100,  originalPrice: 98, price: 49,  discount: 50, tag: 'Flat 50% Off' },
-        { id: '3', coins: 220,  originalPrice: 198, price: 99,  discount: 50, tag: 'Most Popular' },
-        { id: '4', coins: 350,  originalPrice: 373, price: 149, discount: 60, tag: 'Flat 60% Off' },
-        { id: '5', coins: 850,  originalPrice: 873, price: 349, discount: 60, tag: 'Best Value' },
-        { id: '6', coins: 1500, originalPrice: 1198, price: 599, discount: 50, tag: 'Super Saver' },
-        { id: '7', coins: 3000, originalPrice: 2497, price: 999, discount: 60, tag: 'Limited Offer' },
+        { id: '1',  coins: 80,    originalPrice: 62,    price: 62,    discount: 0,  tag: 'Starter Offer', subTag: '',               isPopular: false },
+        { id: '2',  coins: 300,   originalPrice: 149,   price: 149,   discount: 0,  tag: '',              subTag: '',               isPopular: false },
+        { id: '3',  coins: 450,   originalPrice: 251,   price: 251,   discount: 0,  tag: 'Most Popular',  subTag: '',               isPopular: true  },
+        { id: '4',  coins: 1100,  originalPrice: 550,   price: 550,   discount: 0,  tag: 'Hot',           subTag: '',               isPopular: false },
+        { id: '5',  coins: 1800,  originalPrice: 1055,  price: 1055,  discount: 0,  tag: 'Hot',           subTag: '',               isPopular: false },
+        { id: '6',  coins: 3500,  originalPrice: 1549,  price: 1049,  discount: 32, tag: 'Best Value',   subTag: 'Flat ₹500 off',  isPopular: false },
+        { id: '7',  coins: 5000,  originalPrice: 1999,  price: 1999,  discount: 0,  tag: 'Super Saver',  subTag: '',               isPopular: false },
+        { id: '8',  coins: 9000,  originalPrice: 3251,  price: 2651,  discount: 18, tag: 'Limited Offer', subTag: 'Flat ₹600 off',  isPopular: false },
+        { id: '9',  coins: 15000, originalPrice: 6000,  price: 3600,  discount: 40, tag: 'Value Pack',    subTag: 'Flat ₹2400 off', isPopular: false },
+        { id: '10', coins: 20000, originalPrice: 8000,  price: 5000,  discount: 38, tag: 'Premium Pack',  subTag: 'Flat ₹3000 off', isPopular: false },
+        { id: '11', coins: 30000, originalPrice: 12000, price: 7500,  discount: 38, tag: 'Mega Pack',     subTag: 'Flat ₹4500 off', isPopular: false },
+        { id: '12', coins: 50000, originalPrice: 18000, price: 11000, discount: 39, tag: 'Ultimate Pack', subTag: 'Flat ₹7000 off', isPopular: false },
       ];
       const settings = await SystemSettings.getSettings();
       settings.coinPricing = defaults;
+      settings.activePackagesCount = 12;
       await settings.save();
       return ApiResponse.success(res, defaults, 'Coin packages reset to defaults');
     } catch (err) {
@@ -1243,10 +1255,27 @@ static async resetCoinPackages(req, res, next) {
         hasChanges = true;
       }
 
+      if (req.body.customRingtoneUrl !== undefined) {
+        settings.customRingtoneUrl = String(req.body.customRingtoneUrl || '').trim();
+        hasChanges = true;
+      }
+
       if (hasChanges) {
         await settings.save();
       }
       return ApiResponse.success(res, settings, 'System settings updated');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async getRingtoneUploadUrl(req, res, next) {
+    try {
+      const { fileName, fileType } = req.body;
+      const { generateUploadUrl } = require('../utils/s3');
+      const ext = fileName ? fileName.split('.').pop() : 'mp3';
+      const { uploadUrl, fileUrl } = await generateUploadUrl(fileType || 'audio/mpeg', ext, 'ringtones');
+      return ApiResponse.success(res, { uploadUrl, fileUrl }, 'Ringtone upload URL generated');
     } catch (err) {
       next(err);
     }
@@ -1668,6 +1697,13 @@ static async resetCoinPackages(req, res, next) {
           isListenerDeleted,
           type: s.callType,
           callType: s.callType,
+          initialCallType: s.initialCallType || s.callType,
+          isConverted: !!s.isConverted,
+          convertedAt: s.convertedAt,
+          audioDuration: s.audioDuration || 0,
+          videoDuration: s.videoDuration || 0,
+          audioCoinsDeducted: s.audioCoinsDeducted || 0,
+          videoCoinsDeducted: s.videoCoinsDeducted || 0,
           status: s.status,
           roomId: s.roomId,
           startTime: s.startTime,

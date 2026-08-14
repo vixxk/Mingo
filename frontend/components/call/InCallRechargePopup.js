@@ -12,15 +12,21 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ms, s, vs } from '../../utils/responsive';
 import { walletAPI } from '../../utils/api';
+import AnimatedSparkles from '../shared/AnimatedSparkles';
 
 const DEFAULT_PACKAGES = [
-  { id: '1', name: 'Starter Offer', coins: 40,   originalPrice: 38,  price: 19,  discount: 50, tag: 'Starter Offer' },
-  { id: '2', name: 'Flat 50% Off', coins: 100,  originalPrice: 98,  price: 49,  discount: 50, tag: 'Flat 50% Off' },
-  { id: '3', name: 'Most Popular', coins: 220,  originalPrice: 198, price: 99,  discount: 50, tag: 'Most Popular' },
-  { id: '4', name: 'Flat 60% Off', coins: 350,  originalPrice: 373, price: 149, discount: 60, tag: 'Flat 60% Off' },
-  { id: '5', name: 'Best Value', coins: 850,  originalPrice: 873, price: 349, discount: 60, tag: 'Best Value' },
-  { id: '6', name: 'Super Saver', coins: 1500, originalPrice: 1198, price: 599, discount: 50, tag: 'Super Saver' },
-  { id: '7', name: 'Limited Offer', coins: 3000, originalPrice: 2497, price: 999, discount: 60, tag: 'Limited Offer' },
+  { id: '1',  coins: 80,    originalPrice: 62,    price: 62,    discount: 0,  tag: 'Starter Offer', subTag: '' },
+  { id: '2',  coins: 300,   originalPrice: 149,   price: 149,   discount: 0,  tag: '',              subTag: '' },
+  { id: '3',  coins: 450,   originalPrice: 251,   price: 251,   discount: 0,  tag: 'Most Popular',  subTag: '' },
+  { id: '4',  coins: 1100,  originalPrice: 550,   price: 550,   discount: 0,  tag: 'Hot',           subTag: '' },
+  { id: '5',  coins: 1800,  originalPrice: 1055,  price: 1055,  discount: 0,  tag: 'Hot',           subTag: '' },
+  { id: '6',  coins: 3500,  originalPrice: 1549,  price: 1049,  discount: 32, tag: 'Best Value',   subTag: 'Flat ₹500 off' },
+  { id: '7',  coins: 5000,  originalPrice: 1999,  price: 1999,  discount: 0,  tag: 'Super Saver',  subTag: '' },
+  { id: '8',  coins: 9000,  originalPrice: 3251,  price: 2651,  discount: 18, tag: 'Limited Offer', subTag: 'Flat ₹600 off' },
+  { id: '9',  coins: 15000, originalPrice: 6000,  price: 3600,  discount: 40, tag: 'Value Pack',    subTag: 'Flat ₹2400 off' },
+  { id: '10', coins: 20000, originalPrice: 8000,  price: 5000,  discount: 38, tag: 'Premium Pack',  subTag: 'Flat ₹3000 off' },
+  { id: '11', coins: 30000, originalPrice: 12000, price: 7500,  discount: 38, tag: 'Mega Pack',     subTag: 'Flat ₹4500 off' },
+  { id: '12', coins: 50000, originalPrice: 18000, price: 11000, discount: 39, tag: 'Ultimate Pack', subTag: 'Flat ₹7000 off' },
 ];
 
 const SUCCESS_DISPLAY_MS = 5000;
@@ -32,6 +38,7 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
   const [loading, setLoading] = useState(false);
   const [purchasing, setPurchasing] = useState(null); // packageId being purchased
   const [purchaseSuccess, setPurchaseSuccess] = useState(false);
+  const purchasingRef = useRef(false);
 
   const loadPackages = useCallback(async () => {
     try {
@@ -51,6 +58,7 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
     if (visible) {
       setPurchaseSuccess(false);
       setPurchasing(null);
+      purchasingRef.current = false;
       loadPackages();
       Animated.parallel([
         Animated.timing(overlayAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
@@ -65,6 +73,8 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
   }, [visible, loadPackages]);
 
   const handlePurchase = useCallback(async (packageId) => {
+    if (purchasingRef.current) return;
+    purchasingRef.current = true;
     try {
       setPurchasing(packageId);
       await walletAPI.purchaseCoins(packageId);
@@ -73,10 +83,12 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
       setTimeout(() => {
         if (onRechargeSuccess) onRechargeSuccess();
         setPurchasing(null);
+        purchasingRef.current = false;
       }, SUCCESS_DISPLAY_MS);
     } catch (e) {
       console.log('Purchase failed:', e);
       setPurchasing(null);
+      purchasingRef.current = false;
     }
   }, [onRechargeSuccess]);
 
@@ -90,10 +102,11 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
 
       <Animated.View style={[styles.popupContainer, { transform: [{ translateY: slideAnim }] }]}>
         <LinearGradient
-          colors={['#1A0505', '#0A0A0A', '#111']}
-          locations={[0, 0.5, 1]}
+          colors={['#000', '#1A0000', '#4A0000']}
+          locations={[0, 0.55, 1]}
           style={styles.popup}
         >
+          <AnimatedSparkles color="#F87171" size={18} />
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.handleBar} />
@@ -140,37 +153,61 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
                   <Text style={styles.loadingText}>Loading packages...</Text>
                 </View>
               ) : (
-                packages.map((pkg) => (
-                  <TouchableOpacity
-                    key={pkg.id || pkg._id}
-                    style={[styles.packageCard, purchasing === (pkg.id || pkg._id) && styles.packageCardActive]}
-                    activeOpacity={0.75}
-                    onPress={() => handlePurchase(pkg.id || pkg._id)}
-                    disabled={purchasing !== null}
-                  >
-                    <View style={styles.packageLeft}>
-                      <View style={styles.coinsRow}>
-                        <Text style={{ fontSize: 14, marginRight: 4 }}>🪙</Text>
-                        <Text style={styles.packageCoins}>{pkg.coins}</Text>
-                        <Text style={styles.packageCoinsLabel}>coins</Text>
+                packages.map((pkg) => {
+                  const targetId = pkg.id || pkg._id;
+                  const isThisPurchasing = purchasing === targetId;
+                  const hasDiscount = pkg.originalPrice && Number(pkg.originalPrice) > Number(pkg.price);
+
+                  return (
+                    <TouchableOpacity
+                      key={targetId}
+                      style={[styles.packageCard, isThisPurchasing && styles.packageCardActive]}
+                      activeOpacity={0.75}
+                      onPress={() => handlePurchase(targetId)}
+                      disabled={purchasing !== null}
+                    >
+                      <View style={styles.packageLeft}>
+                        <View style={styles.coinsRow}>
+                          <Image
+                            source={{
+                              uri: pkg.iconUrl
+                                ? (pkg.iconUrl.includes('/coin_packages/v3/') ? pkg.iconUrl : pkg.iconUrl.replace('/coin_packages/', '/coin_packages/v3/'))
+                                : `https://d3arutsevouzgm.cloudfront.net/coin_packages/v3/pack_${pkg.coins}.png`
+                            }}
+                            style={{ width: 24, height: 24, marginRight: 6 }}
+                            resizeMode="contain"
+                          />
+                          <Text style={styles.packageCoins}>{pkg.coins}</Text>
+                          <Text style={styles.packageCoinsLabel}>coins</Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                          {pkg.tag ? (
+                            <View style={styles.tagBadge}>
+                              <Text style={styles.tagText}>{pkg.tag}</Text>
+                            </View>
+                          ) : null}
+                          {pkg.subTag ? (
+                            <View style={[styles.tagBadge, { backgroundColor: 'rgba(16,185,129,0.15)' }]}>
+                              <Text style={[styles.tagText, { color: '#10B981' }]}>{pkg.subTag}</Text>
+                            </View>
+                          ) : null}
+                        </View>
                       </View>
-                      {pkg.tag && (
-                        <View style={styles.tagBadge}>
-                          <Text style={styles.tagText}>{pkg.tag}</Text>
-                        </View>
-                      )}
-                    </View>
-                    <View style={styles.packageRight}>
-                      {purchasing === (pkg._id || pkg.id) ? (
-                        <ActivityIndicator size="small" color="#fff" />
-                      ) : (
-                        <View style={styles.priceBtn}>
-                          <Text style={styles.priceText}>₹{pkg.price}</Text>
-                        </View>
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                ))
+                      <View style={styles.packageRight}>
+                        {hasDiscount ? (
+                          <Text style={styles.originalPrice}>₹{pkg.originalPrice}</Text>
+                        ) : null}
+                        {isThisPurchasing ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <View style={styles.priceBtn}>
+                            <Text style={styles.priceText}>₹{pkg.price}</Text>
+                          </View>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
               )}
             </ScrollView>
           )}
@@ -205,8 +242,9 @@ const styles = StyleSheet.create({
     paddingTop: vs(8),
     paddingBottom: vs(28),
     borderWidth: 1,
-    borderColor: '#3A1212',
+    borderColor: 'rgba(239, 68, 68, 0.4)',
     borderBottomWidth: 0,
+    overflow: 'hidden',
   },
 
   header: {
@@ -217,7 +255,7 @@ const styles = StyleSheet.create({
     width: s(40),
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#333',
+    backgroundColor: 'rgba(255,255,255,0.4)',
     marginBottom: vs(4),
   },
   closeBtn: {
@@ -309,16 +347,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#1A1A1A',
+    backgroundColor: 'rgba(0,0,0,0.3)',
     borderRadius: 18,
     paddingHorizontal: s(16),
     paddingVertical: vs(14),
     borderWidth: 1,
-    borderColor: '#2A2A2A',
+    borderColor: 'rgba(255,255,255,0.12)',
   },
   packageCardActive: {
     borderColor: '#EF4444',
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
   },
 
   packageLeft: {

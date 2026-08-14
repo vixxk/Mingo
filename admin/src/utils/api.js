@@ -248,6 +248,13 @@ export const adminAPI = {
     })
   },
 
+  getRingtoneUploadUrl: async (payload) => {
+    return apiRequest('/admin/ringtone/upload-url', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+
   sendPushNotification: async (data) => {
     return apiRequest('/admin/notifications/send', {
       method: 'POST',

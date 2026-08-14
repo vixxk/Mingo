@@ -106,14 +106,14 @@ export default function AdSlider({ ads, intervalSec = 4 }) {
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: hp(2),
-    marginTop: hp(1),
+    marginBottom: hp(1),
+    marginTop: hp(0.5),
     position: 'relative',
   },
   itemContainer: {
     width: ITEM_WIDTH,
-    height: hp(15),
-    borderRadius: wp(4),
+    height: hp(11),
+    borderRadius: wp(3.5),
     overflow: 'hidden',
     backgroundColor: '#1A1A1A',
     borderWidth: 1,
@@ -127,12 +127,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: wp(2),
     top: '50%',
-    marginTop: -wp(3),
+    marginTop: -wp(2.5),
   },
   arrowCircle: {
-    width: wp(7),
-    height: wp(7),
-    borderRadius: wp(3.5),
+    width: wp(6),
+    height: wp(6),
+    borderRadius: wp(3),
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',

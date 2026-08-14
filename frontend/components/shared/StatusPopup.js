@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Modal, TouchableOpacity, Animated, Dimensions }
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ms, s, vs, wp, hp } from '../../utils/responsive';
+import AnimatedSparkles from './AnimatedSparkles';
 
 const { height: SH } = Dimensions.get('window');
 
@@ -94,6 +95,7 @@ const StatusPopup = ({
             colors={config.bg}
             style={styles.content}
           >
+            {type === 'success' && <AnimatedSparkles color="#34D399" size={16} />}
             <View style={[styles.iconContainer, { backgroundColor: `${config.color}20` }]}>
               <Ionicons name={config.icon} size={ms(40)} color={config.color} />
             </View>

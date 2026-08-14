@@ -16,6 +16,7 @@ import CallTimer from '../../components/call/CallTimer';
 import CallCancelledPopup from '../../components/shared/CallCancelledPopup';
 import GiftPopup from '../../components/shared/GiftPopup';
 import GiftAnimationOverlay from '../../components/call/GiftAnimationOverlay';
+import VideoUpgradeModal from '../../components/call/VideoUpgradeModal';
 import { callAPI, walletAPI } from '../../utils/api';
 import { socketService } from '../../utils/socket';
 import { AGORA_APP_ID } from '../../utils/agoraConfig';
@@ -223,6 +224,8 @@ export default function AudioCallScreen() {
   const [receivedGift, setReceivedGift] = useState(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isSpeaker, setIsSpeaker] = useState(true);
+  const [upgradeModalVisible, setUpgradeModalVisible] = useState(false);
+  const [upgradeModalMode, setUpgradeModalMode] = useState('request');
   const [currentCoins, setCurrentCoins] = useState(null);
   const [lowBalanceMessage, setLowBalanceMessage] = useState('');
   const [permission, setPermission] = useState({ mic: false });
@@ -425,6 +428,44 @@ export default function AudioCallScreen() {
       triggerGiftAnimation(data);
     };
 
+    const handleUpgradeRequested = (data) => {
+      if (data.sessionId === callId) {
+        setUpgradeModalMode('incoming');
+        setUpgradeModalVisible(true);
+      }
+    };
+
+    const handleUpgradeAccepted = (data) => {
+      if (data.sessionId === callId) {
+        setUpgradeModalVisible(false);
+        if (agoraRef.current) {
+          try { agoraRef.current.leave(); } catch (e) {}
+        }
+        router.replace({
+          pathname: '/(call)/video-call',
+          params: {
+            name,
+            callId,
+            roomId,
+            listenerId,
+            avatarIndex,
+            gender,
+            agoraAppId,
+            agoraToken,
+            isConverted: 'true',
+          },
+        });
+      }
+    };
+
+    const handleUpgradeDeclined = (data) => {
+      if (data.sessionId === callId) {
+        setUpgradeModalVisible(false);
+        setCallCancelledMessage(data.message || 'The upgrade to video call was declined.');
+        setShowCallCancelled(true);
+      }
+    };
+
     // Register listeners
     socketService.on('balance_updated', handleBalanceUpdate);
     socketService.on('low_balance_warning', handleLowBalance);
@@ -433,6 +474,9 @@ export default function AudioCallScreen() {
     socketService.on('call_cancelled', handleCallCancelled);
     socketService.on('call_validation_failed', handleCallCancelled);
     socketService.on('gift_received', handleGiftReceived);
+    socketService.on('call_upgrade_requested', handleUpgradeRequested);
+    socketService.on('call_upgrade_accepted', handleUpgradeAccepted);
+    socketService.on('call_upgrade_declined', handleUpgradeDeclined);
 
     setupBilling();
 
@@ -448,6 +492,9 @@ export default function AudioCallScreen() {
       socketService.off('call_cancelled', handleCallCancelled);
       socketService.off('call_validation_failed', handleCallCancelled);
       socketService.off('gift_received', handleGiftReceived);
+      socketService.off('call_upgrade_requested', handleUpgradeRequested);
+      socketService.off('call_upgrade_accepted', handleUpgradeAccepted);
+      socketService.off('call_upgrade_declined', handleUpgradeDeclined);
     };
   }, [callId]);
 
@@ -613,6 +660,25 @@ export default function AudioCallScreen() {
     if (agoraRef.current) agoraRef.current.setSpeaker(next);
   }, [isSpeaker]);
 
+  const handleVideoUpgradePress = useCallback(() => {
+    setUpgradeModalMode('request');
+    setUpgradeModalVisible(true);
+  }, []);
+
+  const handleSendUpgradeRequest = useCallback(() => {
+    setUpgradeModalMode('pending');
+    socketService.emit('request_call_upgrade', { sessionId: callId, roomId });
+  }, [callId, roomId]);
+
+  const handleAcceptUpgradeRequest = useCallback(() => {
+    socketService.emit('respond_call_upgrade', { sessionId: callId, roomId, accepted: true });
+  }, [callId, roomId]);
+
+  const handleDeclineUpgradeRequest = useCallback(() => {
+    setUpgradeModalVisible(false);
+    socketService.emit('respond_call_upgrade', { sessionId: callId, roomId, accepted: false });
+  }, [callId, roomId]);
+
   // Tap anywhere on the screen toggles all controls.
   const toggleControls = useCallback(() => {
     // Don't toggle while a popup is open — its backdrop may pass taps through.
@@ -760,6 +826,13 @@ export default function AudioCallScreen() {
                 activeColor: '#EF4444',
                 onPress: toggleSpeaker,
               },
+              {
+                id: 'video_switch',
+                icon: 'videocam-outline',
+                label: 'Video',
+                active: false,
+                onPress: handleVideoUpgradePress,
+              },
             ]}
           />
         </View>
@@ -769,6 +842,16 @@ export default function AudioCallScreen() {
         visible={showEndCallPopup}
         onEndCall={finishAndExit}
         onDismiss={() => setShowEndCallPopup(false)}
+      />
+
+      <VideoUpgradeModal
+        visible={upgradeModalVisible}
+        mode={upgradeModalMode}
+        name={name}
+        onSend={handleSendUpgradeRequest}
+        onAccept={handleAcceptUpgradeRequest}
+        onDecline={handleDeclineUpgradeRequest}
+        onCancel={() => setUpgradeModalVisible(false)}
       />
 
       <CallCancelledPopup

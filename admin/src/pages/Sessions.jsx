@@ -51,7 +51,36 @@ function CallTypeIcon({ type, size = 14 }) {
   return <IoCall size={size} />
 }
 
-function CallTypeBadge({ type }) {
+function CallTypeBadge({ type, isConverted, initialCallType }) {
+  if (isConverted) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 4,
+          backgroundColor: 'var(--accent-light)', color: 'var(--accent)',
+          borderRadius: 8, padding: '4px 8px', fontSize: 11, fontWeight: 700,
+        }}>
+          <IoCall size={12} /> Audio
+        </div>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 800 }}>➔</span>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 4,
+          backgroundColor: 'var(--info-light)', color: 'var(--info)',
+          borderRadius: 8, padding: '4px 8px', fontSize: 11, fontWeight: 700,
+        }}>
+          <IoVideocam size={12} /> Video
+        </div>
+        <div style={{
+          backgroundColor: 'rgba(167, 139, 250, 0.15)', color: '#A78BFA',
+          borderRadius: 6, padding: '2px 6px', fontSize: 10, fontWeight: 800,
+          textTransform: 'uppercase', letterSpacing: '0.5px', border: '1px solid rgba(167, 139, 250, 0.3)'
+        }}>
+          Converted
+        </div>
+      </div>
+    )
+  }
+
   const config = {
     audio: { bg: 'var(--accent-light)', color: 'var(--accent)', label: 'Audio' },
     video: { bg: 'var(--info-light)', color: 'var(--info)', label: 'Video' },
@@ -392,7 +421,11 @@ export default function Sessions() {
               {/* Header: type badge + status + date */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <CallTypeBadge type={session.callType || session.type} />
+                  <CallTypeBadge
+                    type={session.callType || session.type}
+                    isConverted={session.isConverted}
+                    initialCallType={session.initialCallType}
+                  />
                   <StatusBadge status={session.status} />
                 </div>
                 <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{formatDate(session.createdAt)}</span>
@@ -440,6 +473,26 @@ export default function Sessions() {
                   />
                 </div>
               </div>
+
+              {/* Conversion duration breakdown row */}
+              {session.isConverted && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+                  backgroundColor: 'rgba(167, 139, 250, 0.08)', border: '1px dashed rgba(167, 139, 250, 0.3)',
+                  borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 12,
+                }}>
+                  <span style={{ fontWeight: 700, color: '#A78BFA' }}>Breakdown:</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--accent)' }}>
+                    <IoCall size={13} />
+                    <span>Audio: <strong>{formatDuration(session.audioDuration ? session.audioDuration * 60 : 0)}</strong> ({session.audioCoinsDeducted ?? 0} coins)</span>
+                  </div>
+                  <span style={{ color: 'var(--border)' }}>•</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--info)' }}>
+                    <IoVideocam size={13} />
+                    <span>Video: <strong>{formatDuration(session.videoDuration ? session.videoDuration * 60 : 0)}</strong> ({session.videoCoinsDeducted ?? 0} coins)</span>
+                  </div>
+                </div>
+              )}
 
               {/* Stats row */}
               <div className="session-stats-row" style={{

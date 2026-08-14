@@ -18,12 +18,12 @@ export default function Wallet() {
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' })
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState({
-    coins: '', price: '', originalPrice: '', tag: '', discount: '', isPopular: false,
+    coins: '', price: '', originalPrice: '', tag: '', subTag: '', discount: '', isPopular: false,
   })
   const [deleteConfirm, setDeleteConfirm] = useState({ visible: false, id: null })
   const [showAddForm, setShowAddForm] = useState(false)
   const [addForm, setAddForm] = useState({
-    coins: '', price: '', originalPrice: '', tag: '', discount: '', isPopular: false,
+    coins: '', price: '', originalPrice: '', tag: '', subTag: '', discount: '', isPopular: false,
   })
   const [saving, setSaving] = useState(false)
 
@@ -75,6 +75,7 @@ export default function Wallet() {
       price: String(pkg.price ?? ''),
       originalPrice: String(pkg.originalPrice ?? ''),
       tag: pkg.tag ?? '',
+      subTag: pkg.subTag ?? '',
       discount: String(pkg.discount ?? ''),
       isPopular: pkg.isPopular ?? false,
     })
@@ -93,13 +94,14 @@ export default function Wallet() {
         price: Number(editForm.price),
         originalPrice: editForm.originalPrice ? Number(editForm.originalPrice) : undefined,
         tag: editForm.tag || undefined,
+        subTag: editForm.subTag || undefined,
         discount: editForm.discount ? Number(editForm.discount) : undefined,
         isPopular: editForm.isPopular,
       }
       await adminAPI.updateCoinPackage(id, payload)
       const updated = packages.map(p => {
         if (p._id === id) {
-          return { ...p, ...payload, originalPrice: payload.originalPrice ?? p.originalPrice, discount: payload.discount ?? p.discount, tag: payload.tag ?? p.tag }
+          return { ...p, ...payload, originalPrice: payload.originalPrice ?? p.originalPrice, discount: payload.discount ?? p.discount, tag: payload.tag ?? p.tag, subTag: payload.subTag ?? p.subTag }
         }
         if (payload.isPopular && p._id !== id) {
           return { ...p, isPopular: false }
@@ -151,6 +153,7 @@ export default function Wallet() {
         price: Number(addForm.price),
         originalPrice: addForm.originalPrice ? Number(addForm.originalPrice) : undefined,
         tag: addForm.tag || undefined,
+        subTag: addForm.subTag || undefined,
         discount: addForm.discount ? Number(addForm.discount) : undefined,
         isPopular: addForm.isPopular,
       }
@@ -161,7 +164,7 @@ export default function Wallet() {
         : [...packages, newPkg]
       setPackages(updated)
       setShowAddForm(false)
-      setAddForm({ coins: '', price: '', originalPrice: '', tag: '', discount: '', isPopular: false })
+      setAddForm({ coins: '', price: '', originalPrice: '', tag: '', subTag: '', discount: '', isPopular: false })
       showToast('Package added successfully')
     } catch (e) {
       showToast(e.message || 'Failed to add package', 'error')
@@ -520,6 +523,15 @@ export default function Wallet() {
                           fontSize: 11, fontWeight: 600,
                         }}>
                           {pkg.tag}
+                        </span>
+                      )}
+                      {pkg.subTag && (
+                        <span style={{
+                          padding: '2px 6px', borderRadius: 4,
+                          background: 'rgba(16,185,129,0.15)', color: '#10B981',
+                          fontSize: 11, fontWeight: 700,
+                        }}>
+                          {pkg.subTag}
                         </span>
                       )}
                     </div>

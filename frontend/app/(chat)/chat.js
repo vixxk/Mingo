@@ -286,7 +286,7 @@ export default function ChatScreen() {
   // Call options the listener chose while going live (audio defaults to on,
   // video defaults to off — same convention used across the app).
   const [otherAudioEnabled, setOtherAudioEnabled] = useState(true);
-  const [otherVideoEnabled, setOtherVideoEnabled] = useState(false);
+  const [otherVideoEnabled, setOtherVideoEnabled] = useState(true);
 
   const avatarSource = { uri: getAvatarUrl(otherGender, otherAvatarIndex) };
 
@@ -472,9 +472,17 @@ export default function ChatScreen() {
   const realConversationIdRef = useRef(conversationId);
   const otherUserIdRef = useRef(null);
 
+  // Heartbeat to maintain stable online status during active chat session
   useEffect(() => {
-    realConversationIdRef.current = realConversationId;
-  }, [realConversationId]);
+    const sendHeartbeatPing = () => {
+      if (socketService.socket?.connected) {
+        socketService.emit('heartbeat', { conversationId: realConversationIdRef.current });
+      }
+    };
+    sendHeartbeatPing();
+    const interval = setInterval(sendHeartbeatPing, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Animate the header swap between the name/online label and the timer capsule.
   // Only the USER's header swaps (name fades out while the timer slides in) —
@@ -528,7 +536,6 @@ export default function ChatScreen() {
       try {
         // Reset per navigation — the same screen instance is reused when
         // moving between a history page and a fresh session page.
-        setLoading(true);
         setMessages([]);
         setHistoryMode(false);
         setEndedPanelVisible(false);
@@ -537,6 +544,7 @@ export default function ChatScreen() {
         setEverHadSession(false);
         setWaitingForReply(false);
         setChatBlocked(false);
+        setLoading(false); // Enable chatbox immediately so user can type without delay
 
         let myId = null;
         let myRole = 'USER';
@@ -593,8 +601,8 @@ export default function ChatScreen() {
                     setOtherAvatarIndex(String(profileRes.data.avatarIndex ?? paramAvatarIndex));
                     setOtherGender(profileRes.data.gender || paramGender);
                     // Show call buttons only for the options this listener enabled while going live.
-                    setOtherAudioEnabled(profileRes.data.audioEnabled !== false);
-                    setOtherVideoEnabled(profileRes.data.videoEnabled === true);
+                    setOtherAudioEnabled(true);
+                    setOtherVideoEnabled(true);
                     // Show the listener's real online state in the header.
                     setIsListenerOnline(profileRes.data.isOnline !== false);
                   }
@@ -1247,43 +1255,7 @@ export default function ChatScreen() {
   const endedStart = endedSessionData?.startTime || paramStartTime;
   const endedEnd = endedSessionData?.endTime || paramEndTime;
 
-  if (loading) {
-    return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <StatusBar style="light" />
-        {/* Skeleton Header */}
-        <View style={styles.header}>
-          <View style={{ width: wp(5.5), height: wp(5.5), borderRadius: wp(1), backgroundColor: 'rgba(255,255,255,0.06)' }} />
-          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: wp(2) }}>
-            <View style={{ width: wp(10), height: wp(10), borderRadius: wp(5), backgroundColor: 'rgba(255,255,255,0.08)' }} />
-            <View style={{ flex: 1 }}>
-              <View style={{ width: wp(25), height: hp(1.8), borderRadius: wp(1), backgroundColor: 'rgba(255,255,255,0.1)', marginBottom: hp(0.5) }} />
-              <View style={{ width: wp(15), height: hp(1.2), borderRadius: wp(1), backgroundColor: 'rgba(255,255,255,0.06)' }} />
-            </View>
-          </View>
-          <View style={{ width: wp(18), height: hp(3.5), borderRadius: wp(5), backgroundColor: 'rgba(255,255,255,0.06)' }} />
-        </View>
-        {/* Skeleton Messages */}
-        <View style={{ paddingHorizontal: wp(4), paddingTop: hp(2), flex: 1 }}>
-          {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-            <View key={i} style={{ alignSelf: i % 2 === 0 ? 'flex-end' : 'flex-start', marginBottom: hp(1.5) }}>
-              <View style={{
-                width: wp(i % 3 === 0 ? 55 : i % 2 === 0 ? 40 : 65),
-                height: hp(i % 3 === 0 ? 6 : 4),
-                borderRadius: 18,
-                backgroundColor: i % 2 === 0 ? 'rgba(124, 58, 237, 0.12)' : 'rgba(255,255,255,0.05)',
-              }} />
-            </View>
-          ))}
-        </View>
-        {/* Skeleton Input Bar */}
-        <View style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, hp(1.2)) }]}>
-          <View style={{ flex: 1, height: hp(4.5), borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.06)' }} />
-          <View style={{ width: wp(9), height: wp(9), borderRadius: wp(4.5), backgroundColor: 'rgba(255,255,255,0.06)', marginLeft: wp(2) }} />
-        </View>
-      </View>
-    );
-  }
+  // Fast instant load - loading state is handled inside message area so user can type immediately
 
   return (
     <KeyboardAvoidingView
@@ -1393,31 +1365,28 @@ export default function ChatScreen() {
           )}
         </View>
 
-        {/* In-chat call buttons — only shown for the options the listener enabled while going live */}
-        {userRole === 'USER' && !isAdminChat && otherUserId && (
+        {/* In-chat Audio & Video Call Switch Buttons */}
+        {userRole === 'USER' && !isAdminChat && (
           <View style={styles.headerCallBtns}>
-            {otherAudioEnabled && (
-              <TouchableOpacity
-                style={[styles.headerCallBtn, { borderColor: 'rgba(34,197,94,0.35)' }, !isListenerOnline && styles.headerCallBtnDisabled]}
-                activeOpacity={0.7}
-                disabled={!isListenerOnline}
-                onPress={() => handleStartCall('audio')}
-                accessibilityLabel="Start audio call"
-              >
-                <Ionicons name="call" size={wp(4.6)} color="#22C55E" />
-              </TouchableOpacity>
-            )}
-            {otherVideoEnabled && (
-              <TouchableOpacity
-                style={[styles.headerCallBtn, { borderColor: 'rgba(59,130,246,0.35)' }, !isListenerOnline && styles.headerCallBtnDisabled]}
-                activeOpacity={0.7}
-                disabled={!isListenerOnline}
-                onPress={() => handleStartCall('video')}
-                accessibilityLabel="Start video call"
-              >
-                <Ionicons name="videocam" size={wp(4.6)} color="#3B82F6" />
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity
+              style={[styles.headerCallBtn, !isListenerOnline && styles.headerCallBtnDisabled]}
+              activeOpacity={0.7}
+              disabled={!isListenerOnline}
+              onPress={() => handleStartCall('audio')}
+              accessibilityLabel="Instant switch to Audio Call"
+            >
+              <Ionicons name="call" size={wp(4.6)} color="#fff" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.headerCallBtn, !isListenerOnline && styles.headerCallBtnDisabled]}
+              activeOpacity={0.7}
+              disabled={!isListenerOnline}
+              onPress={() => handleStartCall('video')}
+              accessibilityLabel="Instant switch to Video Call"
+            >
+              <Ionicons name="videocam" size={wp(4.6)} color="#fff" />
+            </TouchableOpacity>
           </View>
         )}
 
@@ -1428,6 +1397,11 @@ export default function ChatScreen() {
             <Text style={styles.coinCount}>{coinBalance}</Text>
           </TouchableOpacity>
         )}
+      </View>
+
+      {/* Connected Session Subtext Banner */}
+      <View style={styles.connectedBanner}>
+        <Text style={styles.connectedBannerText}>You are connected. Stay online during this session.</Text>
       </View>
 
       {/* Messages */}
@@ -1833,17 +1807,38 @@ const styles = StyleSheet.create({
   coinCount: { fontSize: wp(3.5), color: '#fff', fontWeight: '700' },
 
   // In-chat call buttons
-  headerCallBtns: { flexDirection: 'row', alignItems: 'center', gap: wp(1.5) },
+  headerCallBtns: { flexDirection: 'row', alignItems: 'center', gap: wp(2) },
   headerCallBtn: {
-    width: wp(9),
-    height: wp(9),
-    borderRadius: wp(4.5),
-    borderWidth: wp(0.25),
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    width: wp(9.5),
+    height: wp(9.5),
+    borderRadius: wp(4.75),
+    backgroundColor: '#DC2626',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 4,
   },
-  headerCallBtnDisabled: { opacity: 0.3 },
+  headerCallBtnDisabled: { opacity: 0.35 },
+
+  // Connected Banner
+  connectedBanner: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    paddingVertical: hp(0.6),
+    paddingHorizontal: wp(4),
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(239, 68, 68, 0.2)',
+  },
+  connectedBannerText: {
+    fontSize: wp(2.9),
+    color: '#F87171',
+    fontFamily: 'Inter_500Medium',
+    textAlign: 'center',
+  },
 
   // Messages
   messagesScroll: { flex: 1 },

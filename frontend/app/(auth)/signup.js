@@ -32,6 +32,9 @@ export default function SignupScreen() {
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [phone, setPhone] = useState('');
+  const [dobDay, setDobDay] = useState('');
+  const [dobMonth, setDobMonth] = useState('');
+  const [dobYear, setDobYear] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [showOtpStep, setShowOtpStep] = useState(false);
@@ -70,6 +73,29 @@ export default function SignupScreen() {
     return () => clearInterval(interval);
   }, [showOtpStep, countdown]);
 
+  const getFormattedDob = () => {
+    if (!dobDay || !dobMonth || !dobYear) return null;
+    const d = parseInt(dobDay.trim(), 10);
+    const m = parseInt(dobMonth.trim(), 10);
+    const y = parseInt(dobYear.trim(), 10);
+    if (isNaN(d) || isNaN(m) || isNaN(y)) return null;
+    if (d < 1 || d > 31 || m < 1 || m > 12 || y < 1900 || y > new Date().getFullYear()) return null;
+    return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  };
+
+  const calculateAgeFromDob = (dobStr) => {
+    if (!dobStr) return null;
+    const birthDate = new Date(dobStr);
+    if (isNaN(birthDate.getTime())) return null;
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
   // Validation
   const validateForm = (isOtpVerification = false) => {
     const newErrors = {};
@@ -92,6 +118,16 @@ export default function SignupScreen() {
       newErrors.phone = 'Phone number is required';
     } else if (phone.trim().length < 10) {
       newErrors.phone = 'Please enter a valid phone number';
+    }
+
+    const formattedDob = getFormattedDob();
+    if (!formattedDob) {
+      newErrors.dob = 'Valid Date of Birth (DD/MM/YYYY) is required';
+    } else {
+      const age = calculateAgeFromDob(formattedDob);
+      if (age === null || age < 18) {
+        newErrors.dob = 'You must be at least 18 years old to join Mingo';
+      }
     }
 
     if (isOtpVerification) {
@@ -141,6 +177,7 @@ export default function SignupScreen() {
       const gender = await AsyncStorage.getItem('userGender') || 'Male';
       const language = await AsyncStorage.getItem('userLanguage') || 'Hindi';
       const avatarIndex = await AsyncStorage.getItem('userAvatarIndex') || '0';
+      const dob = getFormattedDob();
 
       const result = await authAPI.signup({
         name: name.trim(),
@@ -148,6 +185,7 @@ export default function SignupScreen() {
         phone: phone.trim(),
         otp: otp.trim(),
         gender,
+        dob,
         language,
         avatarIndex: parseInt(avatarIndex, 10),
       });
@@ -427,6 +465,55 @@ export default function SignupScreen() {
                 {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
               </View>
 
+              {/* Date of Birth Input Field */}
+              <View style={styles.inputGroup}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: hp(1) }}>
+                  <Text style={styles.inputLabel}>Date of Birth</Text>
+                  <View style={styles.badge18}>
+                    <Text style={styles.badge18Text}>🔞 Strictly 18+</Text>
+                  </View>
+                </View>
+                <View style={styles.dobRow}>
+                  <View style={[styles.dobInputWrapper, errors.dob && styles.inputError]}>
+                    <TextInput 
+                      style={styles.dobInput}
+                      placeholder="DD"
+                      placeholderTextColor="#4b5563"
+                      keyboardType="number-pad"
+                      maxLength={2}
+                      value={dobDay}
+                      onChangeText={(text) => { setDobDay(text); clearFieldError('dob'); }}
+                      editable={!isLoading && !showOtpStep}
+                    />
+                  </View>
+                  <View style={[styles.dobInputWrapper, errors.dob && styles.inputError]}>
+                    <TextInput 
+                      style={styles.dobInput}
+                      placeholder="MM"
+                      placeholderTextColor="#4b5563"
+                      keyboardType="number-pad"
+                      maxLength={2}
+                      value={dobMonth}
+                      onChangeText={(text) => { setDobMonth(text); clearFieldError('dob'); }}
+                      editable={!isLoading && !showOtpStep}
+                    />
+                  </View>
+                  <View style={[styles.dobInputWrapperFlex, errors.dob && styles.inputError]}>
+                    <TextInput 
+                      style={styles.dobInput}
+                      placeholder="YYYY"
+                      placeholderTextColor="#4b5563"
+                      keyboardType="number-pad"
+                      maxLength={4}
+                      value={dobYear}
+                      onChangeText={(text) => { setDobYear(text); clearFieldError('dob'); }}
+                      editable={!isLoading && !showOtpStep}
+                    />
+                  </View>
+                </View>
+                {errors.dob && <Text style={styles.errorText}>{errors.dob}</Text>}
+              </View>
+
               {}
               {showOtpStep && (
                 <View style={styles.inputGroup}>
@@ -654,6 +741,53 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
+  },
+  badge18: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  badge18Text: {
+    color: '#EF4444',
+    fontSize: ms(11),
+    fontWeight: '700',
+    fontFamily: 'Inter_700Bold',
+  },
+  dobRow: {
+    flexDirection: 'row',
+    gap: s(10),
+  },
+  dobInputWrapper: {
+    flex: 1,
+    backgroundColor: '#000',
+    borderRadius: 30,
+    borderWidth: 1.5,
+    borderColor: '#1F2937',
+    minHeight: vs(48),
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  dobInputWrapperFlex: {
+    flex: 1.4,
+    backgroundColor: '#000',
+    borderRadius: 30,
+    borderWidth: 1.5,
+    borderColor: '#1F2937',
+    minHeight: vs(48),
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  dobInput: {
+    color: '#fff',
+    fontSize: ms(15),
+    fontFamily: 'Inter_400Regular',
+    textAlign: 'center',
+    width: '100%',
   },
   inputError: {
     borderColor: 'rgba(239, 68, 68, 0.5)',

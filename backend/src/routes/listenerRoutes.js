@@ -6,6 +6,7 @@ const { authenticate, authorize } = require('../middlewares/auth');
 // Online/Offline management
 router.post('/go-online', authenticate, authorize('LISTENER'), ListenerController.goOnline);
 router.post('/go-offline', authenticate, authorize('LISTENER'), ListenerController.goOffline);
+router.post('/set-busy', authenticate, authorize('LISTENER'), ListenerController.setBusy);
 router.post('/heartbeat', authenticate, authorize('LISTENER'), ListenerController.heartbeat);
 
 // Listener own profile management

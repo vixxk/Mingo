@@ -7,7 +7,8 @@ const AppError = require('../utils/appError');
 class UserController {
   static async updateProfile(req, res, next) {
     try {
-      const { name, username, gender, language, avatarIndex, interests, billingAddress } = req.body;
+      const { name, username, gender, dob, language, avatarIndex, interests, billingAddress } = req.body;
+      const { calculateAge } = require('../utils/ageHelper');
       const update = {};
       if (name !== undefined) update.name = name;
       if (gender !== undefined) update.gender = gender;
@@ -15,6 +16,17 @@ class UserController {
       if (avatarIndex !== undefined) update.avatarIndex = avatarIndex;
       if (interests !== undefined) update.interests = interests;
       if (billingAddress !== undefined) update.billingAddress = billingAddress;
+
+      if (dob !== undefined) {
+        if (!dob) {
+          throw new AppError('Date of Birth is required for 18+ verification', 400);
+        }
+        const age = calculateAge(dob);
+        if (age === null || age < 18) {
+          throw new AppError('You must be at least 18 years old to join Mingo', 400);
+        }
+        update.dob = new Date(dob);
+      }
 
       // Handle username update with uniqueness check
       if (username !== undefined) {
@@ -47,6 +59,8 @@ class UserController {
         phone: user.phone,
         role: user.role,
         gender: user.gender,
+        dob: user.dob,
+        age: calculateAge(user.dob),
         language: user.language,
         avatarIndex: user.avatarIndex,
         coins: user.coins,

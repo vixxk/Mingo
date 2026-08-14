@@ -9,6 +9,7 @@ import {
   Dimensions,
   PanResponder,
   Modal,
+  Vibration,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -149,14 +150,22 @@ const IncomingCallPopup = ({ calls = [], onAccept, onReject, visible }) => {
     (call) => !dismissedCallIds.includes(call.callId)
   );
 
-  // Play the incoming-call chime while there's a call to answer,
-  // and stop it as soon as all calls are gone (answered/rejected/dismissed).
+  // Play the incoming-call ringtone & vibration while there's a call to answer,
+  // and stop as soon as all calls are gone (answered/rejected/dismissed).
   useEffect(() => {
     if (activeCalls.length > 0) {
-      playIncomingCallSound();
+      const topCall = activeCalls[0];
+      const customSoundUrl = topCall?.customRingtoneUrl || topCall?.ringtoneUrl;
+      playIncomingCallSound(customSoundUrl);
+      Vibration.vibrate([1000, 1000], true);
     } else {
       stopIncomingCallSound();
+      Vibration.cancel();
     }
+    return () => {
+      stopIncomingCallSound();
+      Vibration.cancel();
+    };
   }, [activeCalls.length]);
 
   if (activeCalls.length === 0) return null;

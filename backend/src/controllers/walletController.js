@@ -15,13 +15,18 @@ const getCoinsPerDiamond = async () => {
 };
 
 const COIN_PACKAGES = [
-  { id: '1', coins: 40,   originalPrice: 38, price: 19,  discount: 50, tag: 'Starter Offer' },
-  { id: '2', coins: 100,  originalPrice: 98, price: 49,  discount: 50, tag: 'Flat 50% Off' },
-  { id: '3', coins: 220,  originalPrice: 198, price: 99,  discount: 50, tag: 'Most Popular' },
-  { id: '4', coins: 350,  originalPrice: 373, price: 149, discount: 60, tag: 'Flat 60% Off' },
-  { id: '5', coins: 850,  originalPrice: 873, price: 349, discount: 60, tag: 'Best Value' },
-  { id: '6', coins: 1500, originalPrice: 1198, price: 599, discount: 50, tag: 'Super Saver' },
-  { id: '7', coins: 3000, originalPrice: 2497, price: 999, discount: 60, tag: 'Limited Offer' },
+  { id: '1',  coins: 80,    originalPrice: 62,    price: 62,    discount: 0,  tag: 'Starter Offer', subTag: '',               isPopular: false },
+  { id: '2',  coins: 300,   originalPrice: 149,   price: 149,   discount: 0,  tag: '',              subTag: '',               isPopular: false },
+  { id: '3',  coins: 450,   originalPrice: 251,   price: 251,   discount: 0,  tag: 'Most Popular',  subTag: '',               isPopular: true  },
+  { id: '4',  coins: 1100,  originalPrice: 550,   price: 550,   discount: 0,  tag: 'Hot',           subTag: '',               isPopular: false },
+  { id: '5',  coins: 1800,  originalPrice: 1055,  price: 1055,  discount: 0,  tag: 'Hot',           subTag: '',               isPopular: false },
+  { id: '6',  coins: 3500,  originalPrice: 1549,  price: 1049,  discount: 32, tag: 'Best Value',   subTag: 'Flat ₹500 off',  isPopular: false },
+  { id: '7',  coins: 5000,  originalPrice: 1999,  price: 1999,  discount: 0,  tag: 'Super Saver',  subTag: '',               isPopular: false },
+  { id: '8',  coins: 9000,  originalPrice: 3251,  price: 2651,  discount: 18, tag: 'Limited Offer', subTag: 'Flat ₹600 off',  isPopular: false },
+  { id: '9',  coins: 15000, originalPrice: 6000,  price: 3600,  discount: 40, tag: 'Value Pack',    subTag: 'Flat ₹2400 off', isPopular: false },
+  { id: '10', coins: 20000, originalPrice: 8000,  price: 5000,  discount: 38, tag: 'Premium Pack',  subTag: 'Flat ₹3000 off', isPopular: false },
+  { id: '11', coins: 30000, originalPrice: 12000, price: 7500,  discount: 38, tag: 'Mega Pack',     subTag: 'Flat ₹4500 off', isPopular: false },
+  { id: '12', coins: 50000, originalPrice: 18000, price: 11000, discount: 39, tag: 'Ultimate Pack', subTag: 'Flat ₹7000 off', isPopular: false },
 ];
 
 class WalletController {
@@ -59,7 +64,7 @@ class WalletController {
 
       const SystemSettings = require('../models/SystemSettings');
       const settings = await SystemSettings.getSettings();
-      const count = settings.activePackagesCount || 7;
+      const count = settings.activePackagesCount || 12;
       const dbPackages = (await WalletController._getPackages()).slice(0, count);
       const packages = dbPackages.map(pkg => {
         // pkg is a Mongoose subdoc, convert to object
@@ -67,7 +72,9 @@ class WalletController {
         const effectiveDiscount = isFirstPurchaseEligible 
           ? Math.min((p.discount || 0) + 50, 80) 
           : (p.discount || 0);
-        const effectivePrice = Math.round((p.originalPrice || p.price) * (1 - effectiveDiscount / 100));
+        const effectivePrice = isFirstPurchaseEligible
+          ? Math.round((p.originalPrice || p.price) * (1 - effectiveDiscount / 100))
+          : (p.price ?? Math.round((p.originalPrice || p.price) * (1 - effectiveDiscount / 100)));
 
         return {
           ...p,
@@ -92,7 +99,7 @@ class WalletController {
       try {
         const SystemSettings = require('../models/SystemSettings');
         const settings = await SystemSettings.getSettings();
-        const count = settings.activePackagesCount || 7;
+        const count = settings.activePackagesCount || 12;
         const allDbPackages = await WalletController._getPackages() || [];
         dbPackages = allDbPackages.slice(0, count);
       } catch (e) {

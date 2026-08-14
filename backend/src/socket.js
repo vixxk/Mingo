@@ -142,6 +142,31 @@ const initSocket = (server) => {
       await syncAndResumeChatSession(conversationId);
     });
 
+    socket.on('heartbeat', async () => {
+      if (socket.userId) {
+        const userIdStr = socket.userId.toString();
+        await redis.set(REDIS_KEYS.ONLINE(userIdStr), '1', 'EX', PRESENCE_HEARTBEAT_TTL).catch(() => {});
+        const listener = await Listener.findOne({ userId: socket.userId });
+        if (listener && !listener.isOnline) {
+          await Listener.setOnlineStatus(socket.userId, true).catch(() => {});
+        }
+      }
+    });
+
+    socket.on('listener_set_busy', async () => {
+      if (socket.userId) {
+        const PresenceService = require('./services/presenceService');
+        await PresenceService.setBusy(socket.userId, true).catch(err => console.error('Error in listener_set_busy:', err.message));
+      }
+    });
+
+    socket.on('listener_clear_busy', async () => {
+      if (socket.userId) {
+        const PresenceService = require('./services/presenceService');
+        await PresenceService.setBusy(socket.userId, false).catch(err => console.error('Error in listener_clear_busy:', err.message));
+      }
+    });
+
     socket.on('leave_conversation', (conversationId) => {
       socket.leave(conversationId);
       console.log(`Socket ${socket.id} left conversation ${conversationId}`);
@@ -583,8 +608,19 @@ const initSocket = (server) => {
       await endChatSession(conversationId);
     });
 
-    socket.on('call_incoming', (data) => {
+    socket.on('call_incoming', async (data) => {
       const { listenerId, callData } = data;
+      if (callData && !callData.customRingtoneUrl) {
+        try {
+          const SystemSettings = require('./models/SystemSettings');
+          const settings = await SystemSettings.getSettings();
+          if (settings?.customRingtoneUrl) {
+            callData.customRingtoneUrl = settings.customRingtoneUrl;
+          }
+        } catch (e) {
+          console.error('[Socket] Error fetching custom ringtone for call_incoming:', e.message);
+        }
+      }
       io.to(`user_${listenerId}`).emit('incoming_call', callData);
     });
 
@@ -737,6 +773,75 @@ const initSocket = (server) => {
       stopCallBillingTimer(sessionId);
     });
 
+    // ─── Call Upgrade (Audio -> Video) ─────────────────────────
+    socket.on('request_call_upgrade', async (data) => {
+      const { sessionId, roomId, targetUserId } = data;
+      console.log(`[Socket] request_call_upgrade for session: ${sessionId}`);
+      try {
+        const session = await Session.findById(sessionId);
+        if (!session || session.status !== 'active') {
+          socket.emit('call_upgrade_failed', { sessionId, reason: 'session_inactive' });
+          return;
+        }
+
+        const callerUserId = socket.userId;
+        const recipientId = targetUserId || (session.userId.toString() === callerUserId?.toString() ? session.listenerId : session.userId);
+
+        io.to(`user_${recipientId}`).emit('call_upgrade_requested', {
+          sessionId,
+          roomId: roomId || session.roomId,
+          requestedBy: callerUserId,
+          toCallType: 'video'
+        });
+      } catch (err) {
+        console.error('[Socket] Error in request_call_upgrade:', err.message);
+      }
+    });
+
+    socket.on('respond_call_upgrade', async (data) => {
+      const { sessionId, roomId, accepted } = data;
+      console.log(`[Socket] respond_call_upgrade for session ${sessionId}, accepted: ${accepted}`);
+      try {
+        const session = await Session.findById(sessionId);
+        if (!session || session.status !== 'active') return;
+
+        if (accepted) {
+          if (!session.initialCallType) {
+            session.initialCallType = session.callType || 'audio';
+          }
+          session.callType = 'video';
+          session.isConverted = true;
+          session.convertedAt = new Date();
+          await session.save();
+
+          console.log(`[Socket] Session ${sessionId} upgraded to VIDEO!`);
+
+          const payload = {
+            sessionId: session._id.toString(),
+            roomId: session.roomId,
+            callType: 'video',
+            isConverted: true,
+            message: 'Call upgraded to video'
+          };
+
+          io.to(`user_${session.userId}`).emit('call_upgrade_accepted', payload);
+          io.to(`user_${session.listenerId}`).emit('call_upgrade_accepted', payload);
+          if (roomId || session.roomId) {
+            io.to(roomId || session.roomId).emit('call_upgrade_accepted', payload);
+          }
+        } else {
+          const declinerId = socket.userId;
+          const callerId = session.userId.toString() === declinerId?.toString() ? session.listenerId : session.userId;
+          io.to(`user_${callerId}`).emit('call_upgrade_declined', {
+            sessionId,
+            message: 'The upgrade to video call was declined.'
+          });
+        }
+      } catch (err) {
+        console.error('[Socket] Error in respond_call_upgrade:', err.message);
+      }
+    });
+
     // Random Call Matching
     socket.on('request_random_call', async (data) => {
       const { role } = data;
@@ -869,35 +974,12 @@ const initSocket = (server) => {
           delete randomSearchTimeouts[socket.userId];
         }
         
-        // Auto-offline listener, end active call/chat sessions on disconnect (app closing)
+        // End active call/chat sessions on disconnect (if any) without marking listener offline
         const disconnectedUserId = socket.userId;
         (async () => {
           try {
-            // 1. Auto-offline listener
-            const listener = await Listener.findOne({ userId: disconnectedUserId });
-            if (listener) {
-              const userIdStr = disconnectedUserId.toString();
-              if (socket.isBackgrounded) {
-                console.log(`Listener ${userIdStr} disconnected due to backgrounding. Keeping online for 2 minutes.`);
-                if (backgroundOfflineTimers[userIdStr]) {
-                  clearTimeout(backgroundOfflineTimers[userIdStr]);
-                }
-                backgroundOfflineTimers[userIdStr] = setTimeout(async () => {
-                  try {
-                    const PresenceService = require('./services/presenceService');
-                    await PresenceService.goOffline(disconnectedUserId);
-                    console.log(`Listener ${userIdStr} automatically set to offline after 2 mins background timeout.`);
-                    delete backgroundOfflineTimers[userIdStr];
-                  } catch (err) {
-                    console.error('Error running background offline timeout:', err.message);
-                  }
-                }, 120000); // 2 minutes
-              } else {
-                const PresenceService = require('./services/presenceService');
-                await PresenceService.goOffline(disconnectedUserId);
-                console.log(`Listener ${userIdStr} automatically set to offline on socket disconnect.`);
-              }
-            }
+            // Note: Online availability persists when app enters background or socket reconnects.
+            // Presence is explicitly toggled by listener in app or upon explicit logout.
 
             // 2. Auto-end active calls (immediately) - only audio and video calls, not chat sessions
             const activeCall = await Session.findOne({
@@ -1527,7 +1609,20 @@ async function startCallBillingTimer(sessionId) {
         stopCallBillingTimer(sessionId);
         return;
       }
-      await deductCallMinute(realSessionId, activeSession.userId, activeSession.listenerId, coinsPerMin, payoutPerMin, activeSession.callType);
+      const currentCallType = activeSession.callType || 'audio';
+      const isVideo = currentCallType === 'video';
+      const coinsPerMin = isVideo ? VIDEO_COINS_PER_MIN : AUDIO_COINS_PER_MIN;
+      let payoutPerMin = isVideo ? VIDEO_PAYOUT_PER_MIN : AUDIO_PAYOUT_PER_MIN;
+      try {
+        const SystemSettings = require('./models/SystemSettings');
+        const settings = await SystemSettings.findOne();
+        if (settings) {
+          payoutPerMin = isVideo ? (settings.videoPayoutRate ?? VIDEO_PAYOUT_PER_MIN) : (settings.audioPayoutRate ?? AUDIO_PAYOUT_PER_MIN);
+        }
+      } catch (err) {
+        console.error('Error loading dynamic payout rates:', err);
+      }
+      await deductCallMinute(realSessionId, activeSession.userId, activeSession.listenerId, coinsPerMin, payoutPerMin, currentCallType);
     } catch (err) {
       console.error(`[CallBilling] Error in billing timer for ${realSessionId}:`, err);
     }
@@ -1536,7 +1631,10 @@ async function startCallBillingTimer(sessionId) {
   callBillingTimers[sessionId] = timer;
   callBillingTimers[realSessionId] = timer;
 
-  await deductCallMinute(realSessionId, session.userId, session.listenerId, coinsPerMin, payoutPerMin, session.callType);
+  const currentCallType = session.callType || 'audio';
+  const initialIsVideo = currentCallType === 'video';
+  const initialCoins = initialIsVideo ? VIDEO_COINS_PER_MIN : AUDIO_COINS_PER_MIN;
+  await deductCallMinute(realSessionId, session.userId, session.listenerId, initialCoins, payoutPerMin, currentCallType);
 }
 
 /**
@@ -1620,19 +1718,32 @@ async function deductCallMinute(sessionId, userId, listenerId, coinsPerMin, payo
     // Update session tracking
     const session = await Session.findById(sessionId);
     if (session) {
-      session.coinsDeducted = (session.coinsDeducted || 0) + coinsPerMin;
-      session.duration = (session.duration || 0) + 1;
+      const isVideo = callType === 'video';
+      if (isVideo) {
+        session.videoDuration = (session.videoDuration || 0) + 1;
+        session.videoCoinsDeducted = (session.videoCoinsDeducted || 0) + coinsPerMin;
+        session.videoListenerEarnings = (session.videoListenerEarnings || 0) + payoutPerMin;
+      } else {
+        session.audioDuration = (session.audioDuration || 0) + 1;
+        session.audioCoinsDeducted = (session.audioCoinsDeducted || 0) + coinsPerMin;
+        session.audioListenerEarnings = (session.audioListenerEarnings || 0) + payoutPerMin;
+      }
+
+      session.coinsDeducted = (session.audioCoinsDeducted || 0) + (session.videoCoinsDeducted || 0);
+      session.duration = (session.audioDuration || 0) + (session.videoDuration || 0);
+      session.listenerEarnings = (session.audioListenerEarnings || 0) + (session.videoListenerEarnings || 0);
       session.lastDeductionTime = new Date();
 
       // Calculate financial fields
-      const isVideo = callType === 'video';
       const zegoRate = isVideo ? 0.20 : 0.06;
       const infraRate = isVideo ? 0.15 : 0.09;
-      const sellingPrice = isVideo ? 15.00 : 5.00;
-      session.listenerEarnings = (session.listenerEarnings || 0) + payoutPerMin;
       session.zegoCost = (session.zegoCost || 0) + zegoRate;
       session.infraCost = (session.infraCost || 0) + infraRate;
-      session.platformProfit = (session.duration * sellingPrice) - (session.listenerEarnings + session.zegoCost + session.infraCost);
+
+      const audioRev = (session.audioCoinsDeducted || 0) * 0.5; // 1 coin = ₹0.50
+      const videoRev = (session.videoCoinsDeducted || 0) * 0.5;
+      const totalRev = audioRev + videoRev;
+      session.platformProfit = totalRev - (session.listenerEarnings + session.zegoCost + session.infraCost);
 
       await session.save();
     }

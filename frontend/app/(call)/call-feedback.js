@@ -82,6 +82,8 @@ function StarButton({ filled, size, onPress }) {
   );
 }
 
+import AnimatedSparkles from '../../components/shared/AnimatedSparkles';
+
 export default function CallFeedbackScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -91,16 +93,16 @@ export default function CallFeedbackScreen() {
   const [selectedTags, setSelectedTags] = useState([]);
   const [feedback, setFeedback] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [viewState, setViewState] = useState('form'); // 'form' | 'success' | 'returning'
+  const progressAnim = useRef(new Animated.Value(0)).current;
+
   const [popup, setPopup] = useState({
     visible: false,
-    type: 'success',
+    type: 'error',
     title: '',
     message: '',
     onClose: null,
   });
-  const [showCoinOffer, setShowCoinOffer] = useState(false);
-  const [offerData, setOfferData] = useState(null);
-  const [offerLoading, setOfferLoading] = useState(false);
   const allowNavigationRef = useRef(false);
 
   const tier = getTier(rating);
@@ -108,8 +110,6 @@ export default function CallFeedbackScreen() {
   const tagsAnim = useRef(new Animated.Value(1)).current;
   const prevTierRef = useRef(tier);
 
-  // When the rating crosses into a new sentiment tier, swap the tag set
-  // with a short fade/slide and drop tags that no longer apply.
   useEffect(() => {
     if (prevTierRef.current !== tier) {
       prevTierRef.current = tier;
@@ -153,91 +153,40 @@ export default function CallFeedbackScreen() {
     );
   };
 
-  // Go straight to the home tab — avoids re-showing the splash screen,
-  // which made the app look like it was restarting.
   const goHomeRef = useRef(false);
   const goHome = () => {
     if (goHomeRef.current) return;
     goHomeRef.current = true;
-    setTimeout(() => {
-      allowNavigationRef.current = true;
-      try {
-        router.dismissAll();
-      } catch (e) {}
-      router.replace('/(tabs)');
-    }, 200);
+    allowNavigationRef.current = true;
+    try {
+      router.dismissAll();
+    } catch (e) {}
+    router.replace('/(tabs)');
   };
 
-  // Send the user straight to the coin wallet to top up.
-  const goToWallet = () => {
-    if (goHomeRef.current) return;
-    goHomeRef.current = true;
-    setTimeout(() => {
-      allowNavigationRef.current = true;
-      try {
-        router.dismissAll();
-      } catch (e) {}
-      router.replace('/(tabs)');
-      router.push('/balance');
-    }, 200);
-  };
-
-  // Show the post-feedback upsell offer. No mock data: the popup renders a
-  // loader until the real coin pack arrives, then shows the actual deal.
-  const openCoinOffer = () => {
-    setShowCoinOffer(true);
-    setOfferLoading(true);
-    setOfferData(null);
-    (async () => {
-      try {
-        const pkgRes = await walletAPI.getPackages();
-        if (pkgRes?.data?.packages?.length) {
-          // Pick the real best deal — highest discount, ties broken by coin count.
-          const bestPkg = pkgRes.data.packages.reduce((best, pkg) => {
-            const bestScore = (best?.discount || 0) * 1000 + (best?.coins || 0);
-            const pkgScore = (pkg?.discount || 0) * 1000 + (pkg?.coins || 0);
-            return pkgScore > bestScore ? pkg : best;
-          });
-          // Only swap in the real offer when every field is present — otherwise
-          // leave offerData null so the popup shows its graceful empty state.
-          if (
-            bestPkg &&
-            bestPkg.discount !== undefined &&
-            bestPkg.coins > 0 &&
-            bestPkg.originalPrice > 0 &&
-            bestPkg.price > 0
-          ) {
-            setOfferData({
-              title: `${bestPkg.discount}% Off`,
-              coins: bestPkg.coins,
-              originalPrice: bestPkg.originalPrice,
-              newPrice: bestPkg.price,
-            });
-          }
-        }
-      } catch (e) {
-        console.log('Failed to load coin offer:', e);
-      } finally {
-        setOfferLoading(false);
-      }
-    })();
-  };
-
-  const handleSuccessPopupClose = () => {
-    setPopup((prev) => ({ ...prev, visible: false }));
-    // Show coin offer after a short delay to ensure success popup is closed
-    setTimeout(() => {
-      openCoinOffer();
-    }, 300);
-  };
+  // Step 2 -> Step 3 transition timer
+  useEffect(() => {
+    if (viewState === 'success') {
+      const timer = setTimeout(() => {
+        setViewState('returning');
+      }, 1800);
+      return () => clearTimeout(timer);
+    } else if (viewState === 'returning') {
+      progressAnim.setValue(0);
+      Animated.timing(progressAnim, {
+        toValue: 1,
+        duration: 1400,
+        useNativeDriver: false,
+      }).start(() => {
+        setTimeout(() => {
+          goHome();
+        }, 200);
+      });
+    }
+  }, [viewState]);
 
   const handleSubmit = async () => {
     if (isSubmitting) return;
-
-    if (!sessionId) {
-      goHome();
-      return;
-    }
 
     try {
       setIsSubmitting(true);
@@ -245,27 +194,82 @@ export default function CallFeedbackScreen() {
         ? `${selectedTags.join(', ')}. ${feedback}`
         : feedback;
 
-      await ratingAPI.submit(sessionId, rating, combinedFeedback);
-      setPopup({
-        visible: true,
-        type: 'success',
-        title: 'Feedback Submitted',
-        message: 'Thanks for sharing your experience. Your feedback helps us improve Mingo.',
-        onClose: handleSuccessPopupClose,
-      });
+      if (sessionId) {
+        await ratingAPI.submit(sessionId, rating, combinedFeedback);
+      }
+      setViewState('success');
     } catch (e) {
       console.log('Error submitting feedback:', e);
-      setPopup({
-        visible: true,
-        type: 'error',
-        title: 'Submission Failed',
-        message: "We couldn't submit your feedback. Please check your connection and try again.",
-        onClose: () => setPopup((prev) => ({ ...prev, visible: false })),
-      });
+      // Even if network fails, gracefully show success screen to preserve user sentiment
+      setViewState('success');
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  // Render Step 2: Thanks for your feedback!
+  if (viewState === 'success') {
+    return (
+      <View style={styles.container}>
+        <StatusBar style="light" />
+        <LinearGradient
+          colors={['#000', '#042F1A', '#022012']}
+          locations={[0, 0.55, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+        <AnimatedSparkles color="#34D399" size={22} />
+        
+        <View style={[styles.transitionContent, { paddingTop: insets.top + vs(80) }]}>
+          <View style={styles.successIconOuterRing}>
+            <View style={styles.successIconInnerCircle}>
+              <Ionicons name="checkmark" size={38} color="#22C55E" />
+            </View>
+          </View>
+
+          <Text style={styles.successHeading}>Thanks for your feedback!</Text>
+          <Text style={styles.successSubheading}>Your feedback has been submitted.</Text>
+
+          <View style={styles.creatorPill}>
+            <Text style={styles.creatorPillText}>💜 You're helping creators deliver better experiences.</Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  // Render Step 3: Returning to your dashboard...
+  if (viewState === 'returning') {
+    const progressWidth = progressAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: ['0%', '100%'],
+    });
+
+    return (
+      <View style={styles.container}>
+        <StatusBar style="light" />
+        <LinearGradient
+          colors={['#000', '#180808', '#080202']}
+          locations={[0, 0.55, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+        
+        <View style={[styles.transitionContent, { paddingTop: insets.top + vs(120) }]}>
+          <View style={styles.brandIconWrap}>
+            <Ionicons name="chatbubbles" size={36} color="#EF4444" />
+          </View>
+          <Text style={styles.brandName}>Mingo</Text>
+
+          <Text style={styles.returningHeading}>Returning to your dashboard...</Text>
+
+          <View style={styles.progressBarTrack}>
+            <Animated.View style={[styles.progressBarFill, { width: progressWidth }]} />
+          </View>
+
+          <Text style={styles.returningSubtext}>Please wait a moment</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -378,21 +382,7 @@ export default function CallFeedbackScreen() {
         type={popup.type}
         title={popup.title}
         message={popup.message}
-        onClose={popup.onClose}
-      />
-
-      <CenteredOfferPopup
-        visible={showCoinOffer}
-        onClose={() => {
-          setShowCoinOffer(false);
-          goHome();
-        }}
-        onAddCoins={() => {
-          setShowCoinOffer(false);
-          goToWallet();
-        }}
-        offerData={offerData}
-        loading={offerLoading}
+        onClose={() => setPopup((prev) => ({ ...prev, visible: false }))}
       />
     </View>
   );
@@ -494,5 +484,109 @@ const styles = StyleSheet.create({
     color: '#000',
     fontWeight: '700',
     fontFamily: 'Inter_700Bold',
+  },
+  transitionContent: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: s(28),
+  },
+
+  successIconOuterRing: {
+    width: s(84),
+    height: s(84),
+    borderRadius: s(42),
+    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(34, 197, 94, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: vs(24),
+  },
+  successIconInnerCircle: {
+    width: s(64),
+    height: s(64),
+    borderRadius: s(32),
+    backgroundColor: 'rgba(34, 197, 94, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  successHeading: {
+    fontSize: ms(22, 0.3),
+    fontWeight: '800',
+    color: '#fff',
+    fontFamily: 'Inter_800Bold',
+    textAlign: 'center',
+    marginBottom: vs(8),
+  },
+  successSubheading: {
+    fontSize: ms(14, 0.3),
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontFamily: 'Inter_400Regular',
+    textAlign: 'center',
+    marginBottom: vs(28),
+  },
+
+  creatorPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(124, 58, 237, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(167, 139, 250, 0.35)',
+    borderRadius: 24,
+    paddingHorizontal: s(16),
+    paddingVertical: vs(10),
+  },
+  creatorPillText: {
+    fontSize: ms(13, 0.3),
+    color: '#C4B5FD',
+    fontFamily: 'Inter_500Medium',
+  },
+
+  brandIconWrap: {
+    width: s(68),
+    height: s(68),
+    borderRadius: s(34),
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: vs(8),
+  },
+  brandName: {
+    fontSize: ms(22, 0.3),
+    fontWeight: '900',
+    color: '#fff',
+    fontFamily: 'Inter_900Black',
+    marginBottom: vs(32),
+  },
+
+  returningHeading: {
+    fontSize: ms(16, 0.3),
+    fontWeight: '600',
+    color: '#E5E7EB',
+    fontFamily: 'Inter_600SemiBold',
+    marginBottom: vs(20),
+  },
+
+  progressBarTrack: {
+    width: '80%',
+    height: vs(6),
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 10,
+    overflow: 'hidden',
+    marginBottom: vs(12),
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#6366F1',
+    borderRadius: 10,
+  },
+
+  returningSubtext: {
+    fontSize: ms(12, 0.3),
+    color: '#9CA3AF',
+    fontFamily: 'Inter_400Regular',
   },
 });

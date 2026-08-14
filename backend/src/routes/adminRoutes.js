@@ -44,6 +44,7 @@ router.patch('/payouts/:id', AdminController.updatePayoutStatus);
 // Settings
 router.get('/settings', AdminController.getSettings);
 router.patch('/settings', AdminController.updateSettings);
+router.post('/ringtone/upload-url', AdminController.getRingtoneUploadUrl);
 
 // Notifications
 router.post('/notifications/send', AdminController.sendPushNotification);

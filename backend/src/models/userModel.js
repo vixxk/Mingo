@@ -39,6 +39,10 @@ const userSchema = new mongoose.Schema(
       enum: ['Male', 'Female', 'Other'],
       default: null,
     },
+    dob: {
+      type: Date,
+      default: null,
+    },
     language: {
       type: String,
       default: 'English',

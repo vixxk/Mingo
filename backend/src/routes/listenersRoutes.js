@@ -7,6 +7,7 @@ router.get('/', authenticate, ListenerController.getRecommended);
 router.get('/status/sse', authenticate, ListenerController.sseStatusStream);
 router.post('/go-online', authenticate, ListenerController.goOnline);
 router.post('/go-offline', authenticate, ListenerController.goOffline);
+router.post('/set-busy', authenticate, ListenerController.setBusy);
 router.post('/heartbeat', authenticate, ListenerController.heartbeat);
 router.get('/:id', authenticate, ListenerController.getProfile);
 router.get('/:id/public-profile', authenticate, ListenerController.getPublicProfile);

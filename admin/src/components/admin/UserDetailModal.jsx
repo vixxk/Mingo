@@ -173,6 +173,13 @@ export default function UserDetailModal({ visible, user, onClose, onDelete, onBa
           }}>
             {[
               { label: 'Gender', value: user.gender || 'Not specified', icon: IoPersonOutline },
+              { 
+                label: 'Date of Birth', 
+                value: user.dob 
+                  ? `${new Date(user.dob).toLocaleDateString()} (${user.age !== undefined && user.age !== null ? user.age : Math.floor((new Date() - new Date(user.dob)) / 31557600000)} yrs) - 🔞 18+ Verified`
+                  : 'Not specified', 
+                icon: IoCalendarOutline 
+              },
               { label: 'Language', value: user.language || 'English', icon: IoGlobeOutline },
               { label: 'Coins', value: `🪙 ${user.coins || 0}`, icon: IoWalletOutline },
               { label: 'Joined', value: user.joinDate || (user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Unknown'), icon: IoCalendarOutline },

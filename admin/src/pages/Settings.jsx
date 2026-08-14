@@ -1,13 +1,14 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { authAPI } from '../utils/api'
+import { authAPI, adminAPI } from '../utils/api'
 import LogoutPopup from '../components/shared/LogoutPopup'
 import {
   IoSettings, IoMegaphoneOutline, IoStatsChartOutline,
   IoWalletOutline, IoCashOutline, IoBanOutline, IoFlagOutline,
   IoStarOutline, IoChevronForward, IoLogOut, IoPersonCircleOutline,
-  IoChevronBack,
+  IoChevronBack, IoMusicalNotes, IoPlay, IoPause, IoCloudUploadOutline,
+  IoCheckmarkCircle, IoAlertCircle, IoTrashOutline,
 } from 'react-icons/io5'
 
 const platformLinks = [
@@ -28,6 +29,41 @@ export default function Settings() {
   const { user } = useAuth()
   const [showLogoutPopup, setShowLogoutPopup] = useState(false)
 
+  // Ringtone State
+  const [ringtoneUrl, setRingtoneUrl] = useState('')
+  const [loadingSettings, setLoadingSettings] = useState(true)
+  const [savingRingtone, setSavingRingtone] = useState(false)
+  const [uploadingAudio, setUploadingAudio] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [feedback, setFeedback] = useState({ type: '', message: '' })
+
+  const audioRef = useRef(null)
+  const fileInputRef = useRef(null)
+
+  useEffect(() => {
+    fetchSystemSettings()
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current = null
+      }
+    }
+  }, [])
+
+  const fetchSystemSettings = async () => {
+    try {
+      setLoadingSettings(true)
+      const res = await adminAPI.getSettings()
+      if (res?.data?.customRingtoneUrl) {
+        setRingtoneUrl(res.data.customRingtoneUrl)
+      }
+    } catch (err) {
+      console.error('Failed to load settings:', err)
+    } finally {
+      setLoadingSettings(false)
+    }
+  }
+
   const navigateTo = (path) => {
     window.scrollTo(0, 0)
     navigate(path)
@@ -44,7 +80,85 @@ export default function Settings() {
     navigate('/login')
   }
 
-return (
+  const handlePlayToggle = () => {
+    if (!ringtoneUrl) return
+    if (isPlaying && audioRef.current) {
+      audioRef.current.pause()
+      setIsPlaying(false)
+    } else {
+      if (audioRef.current) {
+        audioRef.current.pause()
+      }
+      const audio = new Audio(ringtoneUrl)
+      audioRef.current = audio
+      audio.play().then(() => setIsPlaying(true)).catch((err) => {
+        console.error('Audio playback error:', err)
+        setFeedback({ type: 'error', message: 'Unable to play audio from URL' })
+        setIsPlaying(false)
+      })
+      audio.onended = () => setIsPlaying(false)
+    }
+  }
+
+  const handleAudioUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith('audio/') && !file.name.match(/\.(mp3|wav|m4a|aac|ogg)$/i)) {
+      setFeedback({ type: 'error', message: 'Please select a valid audio file (.mp3, .wav, .m4a)' })
+      return
+    }
+
+    try {
+      setUploadingAudio(true)
+      setFeedback({ type: '', message: '' })
+
+      const uploadUrlRes = await adminAPI.getRingtoneUploadUrl({
+        fileName: file.name,
+        fileType: file.type || 'audio/mpeg',
+      })
+
+      const { uploadUrl, fileUrl } = uploadUrlRes.data
+
+      const uploadRes = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': file.type || 'audio/mpeg',
+        },
+        body: file,
+      })
+
+      if (!uploadRes.ok) {
+        throw new Error('Failed to upload file to storage')
+      }
+
+      setRingtoneUrl(fileUrl)
+      setFeedback({ type: 'success', message: 'Audio uploaded successfully! Don\'t forget to click Save.' })
+    } catch (err) {
+      console.error('Upload error:', err)
+      setFeedback({ type: 'error', message: err.message || 'Audio upload failed' })
+    } finally {
+      setUploadingAudio(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  const handleSaveRingtone = async () => {
+    try {
+      setSavingRingtone(true)
+      setFeedback({ type: '', message: '' })
+      await adminAPI.updateSettings({ customRingtoneUrl: ringtoneUrl.trim() })
+      setFeedback({ type: 'success', message: 'Incoming call ringtone updated successfully!' })
+      setTimeout(() => setFeedback({ type: '', message: '' }), 4000)
+    } catch (err) {
+      console.error('Save ringtone error:', err)
+      setFeedback({ type: 'error', message: err.message || 'Failed to save ringtone' })
+    } finally {
+      setSavingRingtone(false)
+    }
+  }
+
+  return (
     <div className="page-wrap" style={{ backgroundColor: 'var(--bg-primary)', minHeight: '100vh', padding: 'var(--page-padding)' }}>
       {/* Header */}
       <div className="page-hdr-row" style={{ display: 'flex', alignItems: 'center', marginBottom: 16, gap: 12 }}>
@@ -101,6 +215,122 @@ return (
                 SUPER ADMIN
               </span>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Incoming Call Ringtone Settings ─── */}
+      <div style={{
+        backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border)',
+        padding: 'var(--card-padding)', marginBottom: 'var(--section-gap)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 10,
+            backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+          }}>
+            <IoMusicalNotes size={20} color="#EF4444" />
+          </div>
+          <div>
+            <h3 style={{ fontSize: 16, fontWeight: 800, color: '#fff', margin: 0 }}>
+              Incoming Call Ringtone
+            </h3>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+              Set custom audio played on listener's app during incoming call ring
+            </p>
+          </div>
+        </div>
+
+        {feedback.message && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 12,
+            marginBottom: 14, fontSize: 13, fontWeight: 600,
+            backgroundColor: feedback.type === 'error' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(34, 197, 94, 0.12)',
+            border: feedback.type === 'error' ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(34, 197, 94, 0.3)',
+            color: feedback.type === 'error' ? '#FCA5A5' : '#86EFAC',
+          }}>
+            {feedback.type === 'error' ? <IoAlertCircle size={18} /> : <IoCheckmarkCircle size={18} />}
+            <span>{feedback.message}</span>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <input
+              type="text"
+              placeholder="Paste audio file URL (.mp3, .wav) or upload below"
+              value={ringtoneUrl}
+              onChange={(e) => setRingtoneUrl(e.target.value)}
+              disabled={loadingSettings || savingRingtone || uploadingAudio}
+              style={{
+                flex: 1, minWidth: 240, padding: '12px 16px', borderRadius: 14,
+                backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+                color: '#fff', fontSize: 14, outline: 'none',
+              }}
+            />
+            {ringtoneUrl ? (
+              <button
+                onClick={handlePlayToggle}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6, padding: '0 18px', height: 44,
+                  borderRadius: 14, backgroundColor: isPlaying ? '#EF4444' : 'var(--bg-tertiary)',
+                  border: '1px solid var(--border)', color: '#fff', fontSize: 13, fontWeight: 700,
+                  cursor: 'pointer', flexShrink: 0,
+                }}
+              >
+                {isPlaying ? <IoPause size={18} /> : <IoPlay size={18} />}
+                <span>{isPlaying ? 'Pause' : 'Test Play'}</span>
+              </button>
+            ) : null}
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="audio/*,.mp3,.wav,.m4a"
+              onChange={handleAudioUpload}
+              style={{ display: 'none' }}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingAudio || savingRingtone}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: 12,
+                backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+                color: '#E5E7EB', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              <IoCloudUploadOutline size={18} color="#A855F7" />
+              <span>{uploadingAudio ? 'Uploading audio...' : 'Upload Ringtone File'}</span>
+            </button>
+
+            {ringtoneUrl && (
+              <button
+                onClick={() => setRingtoneUrl('')}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 4, padding: '10px 14px', borderRadius: 12,
+                  backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)',
+                  color: '#FCA5A5', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                <IoTrashOutline size={16} />
+                <span>Clear</span>
+              </button>
+            )}
+
+            <button
+              onClick={handleSaveRingtone}
+              disabled={savingRingtone || uploadingAudio}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '10px 24px', borderRadius: 12,
+                background: 'linear-gradient(to right, #EF4444, #B91C1C)', border: 'none',
+                color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', marginLeft: 'auto',
+              }}
+            >
+              <span>{savingRingtone ? 'Saving...' : 'Save Ringtone'}</span>
+            </button>
           </div>
         </div>
       </div>

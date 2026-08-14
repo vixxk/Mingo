@@ -209,6 +209,10 @@ class CallService {
       color: callType === 'video' ? '#3B82F6' : '#10B981',
     });
 
+    const SystemSettings = require('../models/SystemSettings');
+    const systemSettings = await SystemSettings.getSettings().catch(() => null);
+    const customRingtoneUrl = systemSettings?.customRingtoneUrl || '';
+
     // Send push notification to listener
     try {
       console.log(`[CallService] Sending push notification to listener: ${matchedListenerId}`);
@@ -224,6 +228,7 @@ class CallService {
           avatarIndex: (user.avatarIndex || 0).toString(),
           gender: user.gender || 'Female',
           callType: callType,
+          customRingtoneUrl: customRingtoneUrl,
           // Agora credentials for audio/video calls (accepting side / notification path)
           ...agoraPayload,
         }
@@ -244,6 +249,7 @@ class CallService {
       listenerAvatarIndex: listenerUser?.avatarIndex || 0,
       listenerGender: listenerUser?.gender,
       listenerRating: listenerProfile?.rating || 0,
+      customRingtoneUrl: customRingtoneUrl,
       ...agoraPayload,
       startTime: session.startTime,
     };

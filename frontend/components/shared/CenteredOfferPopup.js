@@ -3,6 +3,7 @@ import { useRef, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ms, s, vs, wp, hp, SCREEN_WIDTH, SCREEN_HEIGHT } from '../../utils/responsive';
+import AnimatedSparkles from './AnimatedSparkles';
 
 export default function CenteredOfferPopup({ visible, onClose, onAddCoins, offerData, loading = false }) {
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
@@ -36,16 +37,17 @@ export default function CenteredOfferPopup({ visible, onClose, onAddCoins, offer
       </Animated.View>
       <Animated.View style={[styles.popupContainer, { transform: [{ scale: scaleAnim }], opacity: opacityAnim }]}>
         <LinearGradient
-          colors={['#7F1D1D', '#B91C1C', '#0A0A0A']}
-          locations={[0, 0.5, 1]}
+          colors={['#000', '#1A0000', '#4A0000']}
+          locations={[0, 0.55, 1]}
           style={styles.popup}
         >
+          <AnimatedSparkles color="#F87171" size={18} />
           <TouchableOpacity 
             style={styles.closeBtn} 
             activeOpacity={0.7} 
             onPress={onClose}
           >
-            <Ionicons name="close" size={hp(3)} color="rgba(255,255,255,0.8)" />
+            <Ionicons name="close" size={wp(5)} color="#fff" />
           </TouchableOpacity>
 
           {showLoader ? (
@@ -126,7 +128,7 @@ const styles = StyleSheet.create({
     paddingBottom: hp(3),
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#7F1D1D',
+    borderColor: 'rgba(239, 68, 68, 0.4)',
     overflow: 'hidden',
   },
   closeBtn: {
