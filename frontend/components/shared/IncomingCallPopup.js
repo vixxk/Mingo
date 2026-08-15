@@ -10,6 +10,7 @@ import {
   PanResponder,
   Modal,
   Vibration,
+  AppState,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -135,6 +136,17 @@ const IncomingCallCard = ({ call, onAccept, onReject, onDismiss, isStacked, styl
 
 const IncomingCallPopup = ({ calls = [], onAccept, onReject, visible }) => {
   const [dismissedCallIds, setDismissedCallIds] = useState([]);
+  // Track app foreground state: when the app is in the background the NATIVE
+  // call card owns the ringtone/vibration (this popup is invisible anyway), so
+  // skip the JS sound to avoid double-ringing.
+  const [appActive, setAppActive] = useState(AppState.currentState === 'active');
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      setAppActive(state === 'active');
+    });
+    return () => subscription.remove();
+  }, []);
 
   // Keep local dismissed set in sync with actual active calls
   useEffect(() => {
@@ -150,10 +162,11 @@ const IncomingCallPopup = ({ calls = [], onAccept, onReject, visible }) => {
     (call) => !dismissedCallIds.includes(call.callId)
   );
 
-  // Play the incoming-call ringtone & vibration while there's a call to answer,
+  // Play the incoming-call ringtone & vibration while there's a call to answer
+  // (only while the app is foregrounded — the native card handles background),
   // and stop as soon as all calls are gone (answered/rejected/dismissed).
   useEffect(() => {
-    if (activeCalls.length > 0) {
+    if (activeCalls.length > 0 && appActive) {
       const topCall = activeCalls[0];
       const customSoundUrl = topCall?.customRingtoneUrl || topCall?.ringtoneUrl;
       playIncomingCallSound(customSoundUrl);
@@ -166,7 +179,7 @@ const IncomingCallPopup = ({ calls = [], onAccept, onReject, visible }) => {
       stopIncomingCallSound();
       Vibration.cancel();
     };
-  }, [activeCalls.length]);
+  }, [activeCalls.length, appActive]);
 
   if (activeCalls.length === 0) return null;
 

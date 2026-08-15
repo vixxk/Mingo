@@ -175,6 +175,21 @@ export default function ConnectingScreen() {
     }
   };
 
+  // Missed-call screen (the listener never answered) — carries the listener's
+  // details so the user can call again immediately.
+  const goToMissedCall = (callerName, listenerIdValue, avatarIdx, callerGender) => {
+    router.replace({
+      pathname: '/(call)/missed-call',
+      params: {
+        name: callerName,
+        listenerId: listenerIdValue,
+        callType,
+        avatarIndex: avatarIdx,
+        gender: callerGender,
+      },
+    });
+  };
+
   const handleCancel = useCallback(() => {
     if (callTimeoutRef.current) {
       clearTimeout(callTimeoutRef.current);
@@ -266,10 +281,20 @@ export default function ConnectingScreen() {
             callTimeoutRef.current = null;
           }
           stopRingtone();
-          router.replace({
-            pathname: '/(call)/user-busy',
-            params: { name: partnerNameRef.current, reason: data.reason || 'rejected' },
-          });
+          if (data.reason === 'timeout' || data.reason === 'no_answer') {
+            // The listener's card rang its full ring count unanswered — missed call.
+            goToMissedCall(
+              partnerNameRef.current,
+              partnerListenerIdRef.current || listenerId,
+              partnerAvatarIndexRef.current,
+              partnerGenderRef.current
+            );
+          } else {
+            router.replace({
+              pathname: '/(call)/user-busy',
+              params: { name: partnerNameRef.current, reason: data.reason || 'rejected' },
+            });
+          }
         });
 
         if (isRandom === 'true') {
@@ -340,12 +365,10 @@ export default function ConnectingScreen() {
                 stopRingtone();
                 socketService.emit('call_cancelled', { 
                   userId: targetListenerId, 
-                  sessionId: finalSessionId 
+                  sessionId: finalSessionId,
+                  reason: 'timeout',
                 });
-                router.replace({
-                  pathname: '/(call)/user-busy',
-                  params: { name: data.partnerName, reason: 'timeout' },
-                });
+                goToMissedCall(data.partnerName, targetListenerId, data.partnerAvatar, data.partnerGender);
               }, 30000);
 
             } catch (err) {
@@ -464,12 +487,10 @@ export default function ConnectingScreen() {
             stopRingtone();
             socketService.emit('call_cancelled', { 
               userId: listenerId, 
-              sessionId: realCallIdRef.current || initialCallId 
+              sessionId: realCallIdRef.current || initialCallId,
+              reason: 'timeout',
             });
-            router.replace({
-              pathname: '/(call)/user-busy',
-              params: { name, reason: 'timeout' },
-            });
+            goToMissedCall(name, listenerId, avatarIndex, gender);
           }, 30000);
         }
 

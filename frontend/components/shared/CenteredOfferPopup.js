@@ -25,10 +25,18 @@ export default function CenteredOfferPopup({ visible, onClose, onAddCoins, offer
 
   if (!visible) return null;
 
-  // Never fall back to mock data — show a loader until the real coin pack
-  // arrives, and a graceful empty state if it can't be loaded.
+  const defaultOffer = {
+    title: 'Starter Offer',
+    coins: 80,
+    originalPrice: 62,
+    newPrice: 62,
+  };
+  const offer = offerData || defaultOffer;
   const showLoader = loading && !offerData;
-  const showEmpty = !loading && !offerData;
+
+  const titleText = offer.title 
+    ? (offer.title.toLowerCase().includes('off') || offer.title.toLowerCase().includes('offer') ? offer.title : `Flat ${offer.title}`)
+    : 'Special Offer';
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
@@ -55,39 +63,31 @@ export default function CenteredOfferPopup({ visible, onClose, onAddCoins, offer
               <ActivityIndicator size="large" color="#FCA5A5" />
               <Text style={styles.loaderText}>Loading your best offer...</Text>
             </View>
-          ) : showEmpty ? (
-            <View style={styles.loaderWrap}>
-              <Text style={styles.emptyText}>No offers available right now.</Text>
-              <TouchableOpacity style={styles.emptyBtn} onPress={onClose} activeOpacity={0.8}>
-                <LinearGradient
-                  colors={['#EF4444', '#B91C1C']}
-                  start={{ x: 0, y: 0.5 }}
-                  end={{ x: 1, y: 0.5 }}
-                  style={styles.emptyBtnGradient}
-                >
-                  <Text style={styles.addBtnText}>Okay</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
           ) : (
             <>
               <Text style={styles.offerSubtitle}>Limited Time Offer</Text>
-              <Text style={styles.offerTitle}>Flat <Text style={styles.offerTitleBold}>{offerData.title}</Text></Text>
+              <Text style={styles.offerTitle}>{titleText}</Text>
 
               <View style={styles.coinsImageWrap}>
                 <Image
-                  source={require('../../images/coins image for popup.png')}
+                  source={
+                    offer.iconUrl 
+                      ? { uri: offer.iconUrl }
+                      : require('../../images/coins image for popup.png')
+                  }
                   style={styles.coinsImage}
                   resizeMode="contain"
                 />
               </View>
 
-              <Text style={styles.coinsAmount}>{offerData.coins} coins</Text>
+              <Text style={styles.coinsAmount}>{offer.coins} coins</Text>
               
               <View style={styles.priceRow}>
                 <Text style={styles.priceAt}>@ </Text>
-                <Text style={styles.priceOld}>₹{offerData.originalPrice}</Text>
-                <Text style={styles.priceNew}> ₹{offerData.newPrice}</Text>
+                {offer.originalPrice !== offer.newPrice && (
+                  <Text style={styles.priceOld}>₹{offer.originalPrice}</Text>
+                )}
+                <Text style={styles.priceNew}> ₹{offer.newPrice}</Text>
               </View>
 
               <TouchableOpacity activeOpacity={0.8} onPress={onAddCoins} style={styles.addBtnWrap}>
@@ -97,7 +97,7 @@ export default function CenteredOfferPopup({ visible, onClose, onAddCoins, offer
                   end={{ x: 1, y: 0.5 }}
                   style={styles.addBtn}
                 >
-                  <Text style={styles.addBtnText}>Add {offerData.coins} Coins</Text>
+                  <Text style={styles.addBtnText}>Add {offer.coins} Coins</Text>
                 </LinearGradient>
               </TouchableOpacity>
             </>

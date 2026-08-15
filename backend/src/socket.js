@@ -10,6 +10,7 @@ const config = require('./config/env');
 const { redis, REDIS_KEYS } = require('./config/redis');
 const PushService = require('./services/pushService');
 const CallService = require('./services/callService');
+const { getAvatarUrl } = require('./utils/avatars');
 const { analyzeMessage } = require('./utils/contactSafety');
 const { analyzeAbuse } = require('./utils/abusiveLanguage');
 
@@ -641,6 +642,20 @@ const initSocket = (server) => {
           console.error('[Socket] Error fetching custom ringtone for call_incoming:', e.message);
         }
       }
+
+      // Resolve the caller's avatar photo server-side so the native call card
+      // can show it (the client payload only carries gender/avatarIndex).
+      if (callData && callData.callerId && !callData.callerPhoto) {
+        try {
+          const caller = await User.findById(callData.callerId).select('gender avatarIndex');
+          if (caller) {
+            callData.callerPhoto = getAvatarUrl(caller.gender, caller.avatarIndex);
+          }
+        } catch (e) {
+          console.error('[Socket] Error resolving caller photo for call_incoming:', e.message);
+        }
+      }
+
       io.to(`user_${listenerId}`).emit('incoming_call', callData);
     });
 
@@ -689,7 +704,10 @@ const initSocket = (server) => {
       io.to(`user_${userId}`).emit('call_rejected', { reason: reason || 'rejected' });
       try {
         if (sessionId) {
-          await Session.findByIdAndUpdate(sessionId, { status: 'cancelled' });
+          // Nobody answered (listener's incoming-call card timed out) — record
+          // it as a missed call so it shows up in both sides' history.
+          const isNoAnswer = reason === 'timeout' || reason === 'no_answer';
+          await Session.findByIdAndUpdate(sessionId, { status: isNoAnswer ? 'missed' : 'cancelled' });
         }
         let listenerUserId = socket.userId;
         if (!listenerUserId && sessionId) {
@@ -710,13 +728,20 @@ const initSocket = (server) => {
     });
 
     socket.on('call_cancelled', async (data) => {
-      let { userId, sessionId } = data;
+      let { userId, sessionId, reason } = data;
       console.log(`[Socket] call_cancelled received from caller. Listener: ${userId}, Session: ${sessionId}`);
       
       try {
         let session = null;
         if (sessionId) {
-          session = await Session.findByIdAndUpdate(sessionId, { status: 'cancelled' }, { new: true });
+          // The caller's ring timer gave up (no answer) — record as missed so
+          // it shows up in both sides' history. Manual cancels stay 'cancelled'.
+          const isNoAnswer = reason === 'timeout' || reason === 'no_answer';
+          session = await Session.findByIdAndUpdate(
+            sessionId,
+            { status: isNoAnswer ? 'missed' : 'cancelled' },
+            { new: true }
+          );
         }
         
         // Extract listener's user ID from the active session if missing from data
@@ -726,7 +751,20 @@ const initSocket = (server) => {
 
         if (userId) {
           io.to(`user_${userId}`).emit('call_cancelled', { sessionId });
-          
+
+          // Push so the listener's device stops ringing even when the app is
+          // backgrounded/killed — the native incoming-call card dismisses on
+          // this event (see frontend IncomingCallNotificationService).
+          try {
+            PushService.sendPushNotification(userId, {
+              title: 'Call ended',
+              body: 'The caller ended the call.',
+              data: { type: 'call_cancelled', callId: (sessionId || '').toString() },
+            });
+          } catch (pushErr) {
+            console.error('[Socket] call_cancelled push failed:', pushErr.message);
+          }
+
           await Listener.findOneAndUpdate({ userId: userId }, { isBusy: false, busySince: null });
           io.emit('listener_status_changed', { userId: userId, isOnline: true, isBusy: false });
           const sseService = require('./services/sseService');

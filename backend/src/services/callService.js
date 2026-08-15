@@ -7,6 +7,7 @@ const Transaction = require('../models/transactionModel');
 const MatchingService = require('./matchingService');
 const PresenceService = require('./presenceService');
 const { getAgoraCredentials, buildAgoraRtcToken } = require('../utils/agoraToken');
+const { getAvatarUrl } = require('../utils/avatars');
 const AppError = require('../utils/appError');
 const ActivityLog = require('../models/ActivityLog');
 const PushService = require('./pushService');
@@ -231,6 +232,9 @@ class CallService {
           callerName: user.name || 'User',
           avatarIndex: (user.avatarIndex || 0).toString(),
           gender: user.gender || 'Female',
+          // Resolved avatar URL so the native incoming-call card can show the
+          // caller's photo (the card can't run the frontend's getAvatarUrl).
+          callerPhoto: getAvatarUrl(user.gender, user.avatarIndex),
           callType: callType,
           customRingtoneUrl: customRingtoneUrl,
           // Agora credentials for audio/video calls (accepting side / notification path)
@@ -304,6 +308,18 @@ class CallService {
 
       // Mark listener as not busy in DB
       await Listener.findOneAndUpdate({ userId: sessionListenerIdStr }, { isBusy: false, busySince: null });
+
+      // The call never connected — tell the listener's device to stop ringing
+      // (dismisses the native incoming-call card when the app is backgrounded/killed).
+      try {
+        PushService.sendPushNotification(sessionListenerIdStr, {
+          title: 'Call ended',
+          body: 'The call was cancelled before it connected.',
+          data: { type: 'call_cancelled', callId: session._id.toString() },
+        });
+      } catch (pushErr) {
+        console.error('[CallService] call_cancelled push failed:', pushErr.message);
+      }
 
       try {
         const { getIo } = require('../socket');

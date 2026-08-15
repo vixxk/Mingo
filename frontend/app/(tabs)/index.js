@@ -566,24 +566,30 @@ export default function HomeScreen() {
         setCoinBalance(liveCoins);
         setDiamondBalance(balRes.data.diamonds || Math.floor(liveCoins / 10));
         setIsFirstPurchaseEligible(!!balRes.data.isFirstPurchaseEligible);
-        if (balRes.data.isFirstPurchaseEligible && balRes.data.signupTimestamp) {
+        if (balRes.data.signupTimestamp) {
           const actualSignupTime = new Date(balRes.data.signupTimestamp).getTime();
           const expiry = actualSignupTime + 6 * 3600 * 1000;
           setDiscountTimeLeft(Math.max(0, Math.floor((expiry - Date.now()) / 1000)));
           setSignupTimestamp(actualSignupTime);
+        }
 
+        try {
           const pkgRes = await walletAPI.getPackages();
-          if (pkgRes?.data?.packages) {
-            const bestPkg = pkgRes.data.packages[0]; 
-            if (bestPkg) {
+          if (pkgRes?.data?.packages && pkgRes.data.packages.length > 0) {
+            const targetPkg = pkgRes.data.packages.find(p => p.coins === 80) || pkgRes.data.packages[0];
+            if (targetPkg) {
               setTopOffer({
-                title: `${bestPkg.discount}% Off`,
-                coins: bestPkg.coins,
-                originalPrice: bestPkg.originalPrice,
-                newPrice: bestPkg.price,
+                title: targetPkg.discount > 0 ? `${targetPkg.discount}% Off` : 'Starter Offer',
+                coins: targetPkg.coins,
+                originalPrice: targetPkg.originalPrice,
+                newPrice: targetPkg.price,
+                iconUrl: targetPkg.iconUrl,
+                packageId: targetPkg.id || targetPkg._id,
               });
             }
           }
+        } catch (pkgErr) {
+          console.log('Error fetching packages for offer:', pkgErr);
         }
       }
     } catch (e) {

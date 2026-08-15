@@ -360,6 +360,12 @@ const sendNotificationToOneSignalByUserIds = async (userIds, title, body, data =
         ios_badgeType: 'Increase',
         ios_badgeCount: 1,
         priority: 10,
+        // Incoming-call pushes reference the bundled ringtone so the device
+        // rings even when the app is backgrounded/killed. The app's native
+        // OneSignal extension replaces this notification with the full-screen
+        // call card + looping ringtone; the sound here is the fallback for
+        // builds where the extension is unavailable.
+        ...(data?.type === 'incoming_call' ? { android_sound: 'incoming_ringtone' } : {}),
       },
       {
         headers: {

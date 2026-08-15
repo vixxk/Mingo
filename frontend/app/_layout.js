@@ -13,10 +13,11 @@ import {
   PlayfairDisplay_700Bold_Italic, 
   PlayfairDisplay_400Regular_Italic 
 } from '@expo-google-fonts/playfair-display';
-import { View, ActivityIndicator, Alert } from 'react-native';
+import { View, ActivityIndicator, Alert, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { addNotificationResponseReceivedListener, dismissCallNotification } from '../utils/notifications';
 import { socketService } from '../utils/socket';
+import { incomingCallNative, onIncomingCallAction } from '../utils/incomingCall';
 import { callAPI, walletAPI } from '../utils/api';
 import IncomingCallPopup from '../components/shared/IncomingCallPopup';
 import CallCancelledPopup from '../components/shared/CallCancelledPopup';
@@ -109,6 +110,10 @@ function RootLayout() {
 
     // Ensure socket is connected before emitting events
     await socketService.connect();
+
+    // A native call card may still be ringing (accept happened from the
+    // background/killed card) — dismiss it and the shade notification.
+    incomingCallNative.stopIncomingCall();
 
     const { callerId, callerName, callType, callId, roomId, avatarIndex, gender } = acceptedCall;
 
@@ -214,6 +219,8 @@ function RootLayout() {
     if (!rejectedCall) return;
     // Ensure socket is connected so the rejection reaches the caller
     await socketService.connect();
+    // Dismiss any native card/notification still ringing
+    incomingCallNative.stopIncomingCall();
     socketService.emit('call_rejected', {
       userId: rejectedCall.callerId,
       sessionId: rejectedCall.callId,
@@ -230,6 +237,66 @@ function RootLayout() {
     handleRejectCallRef.current = handleRejectCall;
   }, [handleAcceptCall, handleRejectCall]);
 
+  // ── Native incoming-call card (background / killed app) ────────────────
+  // Actions tapped on the Android full-screen card (Accept / Decline / Open)
+  // are forwarded here — from the running JS (backgrounded app) via the
+  // IncomingCallAction event, or from a cold start (killed app) via
+  // getPendingCallAction. They reuse the exact same accept/reject flow as the
+  // in-app popup and the notification buttons.
+  const handleNativeCallAction = useCallback(async (action, callData) => {
+    if (!callData || !callData.callId) return;
+    console.log('[RootLayout] Native call card action:', action, callData.callId);
+    if (action === 'accept') {
+      socketService.triggerLocalEvent('accept_incoming_call', callData);
+    } else if (action === 'decline') {
+      socketService.triggerLocalEvent('reject_incoming_call', callData);
+    } else if (action === 'timeout') {
+      // The native card rang for its full ring count unanswered — reject the
+      // call so the caller is not left hanging, and drop any stale popup.
+      console.log('[RootLayout] Native call card timed out:', callData.callId);
+      incomingCallNative.stopIncomingCall();
+      socketService.emit('call_rejected', {
+        userId: callData.callerId,
+        sessionId: callData.callId,
+        reason: 'timeout',
+      });
+      setIncomingCalls(prev => prev.filter(c => c.callId !== callData.callId));
+    } else if (action === 'open') {
+      socketService.triggerLocalEvent('incoming_call', callData);
+      // Bring the user to their role's home so the in-app popup is visible
+      try {
+        const userData = await AsyncStorage.getItem('user');
+        const u = userData ? JSON.parse(userData) : null;
+        router.push(u?.role === 'LISTENER' ? '/(listener)' : '/(tabs)');
+      } catch (roleErr) {
+        router.push('/(listener)');
+      }
+    }
+  }, [router]);
+
+  const handleNativeCallActionRef = useRef(handleNativeCallAction);
+  useEffect(() => {
+    handleNativeCallActionRef.current = handleNativeCallAction;
+  }, [handleNativeCallAction]);
+
+  // Native card actions while the app is running in the background
+  useEffect(() => {
+    const unsubscribe = onIncomingCallAction((action, payload) => {
+      handleNativeCallActionRef.current(action, payload);
+    });
+    return unsubscribe;
+  }, []);
+
+  // When the app returns to the foreground the in-app popup takes over from
+  // the native card: stop the ringtone/card but keep the shade notification so
+  // a call is never silently dropped if the socket missed the event.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') incomingCallNative.dismissCard();
+    });
+    return () => subscription.remove();
+  }, []);
+
   // Global socket listeners — show the incoming-call popup on every screen
   useEffect(() => {
     const handleIncomingCall = (callData) => {
@@ -238,11 +305,19 @@ function RootLayout() {
         if (prev.some(c => c.callId === callData.callId)) return prev;
         return [...prev, callData];
       });
+      // App is backgrounded (JS still alive): show the native card too — the
+      // socket can beat the push. Native ignores it while foregrounded.
+      if (AppState.currentState !== 'active') {
+        incomingCallNative.showIncomingCall(callData);
+      }
     };
 
     const handleCallCancelled = (data) => {
       console.log('[RootLayout] Call cancelled by caller:', data);
       setIncomingCalls(prev => prev.filter(c => c.callId !== data.callId && c.callId !== data.sessionId));
+      // Stop any native card/ringtone still playing (killed/backgrounded case
+      // is covered by the call_cancelled push handled natively).
+      incomingCallNative.stopIncomingCall();
     };
 
     const handleAccountBanned = (data) => {
@@ -298,6 +373,13 @@ function RootLayout() {
           if (prev.some(c => c.callId === pending.callId)) return prev;
           return [...prev, pending];
         });
+      }
+
+      // Cold start launched from the native call card while the app was killed
+      const pendingNative = await incomingCallNative.getPendingCallAction();
+      if (pendingNative) {
+        console.log('[RootLayout] Found pending native call card action:', pendingNative.action);
+        handleNativeCallActionRef.current(pendingNative.action, pendingNative.payload);
       }
     };
 

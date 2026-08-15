@@ -42,6 +42,139 @@ export default function EditProfileScreen() {
   const [dobDay, setDobDay] = useState('');
   const [dobMonth, setDobMonth] = useState('');
   const [dobYear, setDobYear] = useState('');
+  const monthRef = useRef(null);
+  const yearRef = useRef(null);
+  const [focusedDobField, setFocusedDobField] = useState(null);
+
+  const calculateAge = () => {
+    if (!dobDay || !dobMonth || !dobYear) return null;
+    const d = parseInt(dobDay.trim(), 10);
+    const m = parseInt(dobMonth.trim(), 10);
+    const y = parseInt(dobYear.trim(), 10);
+    if (isNaN(d) || isNaN(m) || isNaN(y)) return null;
+    if (d < 1 || d > 31 || m < 1 || m > 12 || y < 1900 || y > new Date().getFullYear()) return null;
+    const birthDate = new Date(y, m - 1, d);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  };
+  const calculatedAge = calculateAge();
+
+  const handleDayChange = (text) => {
+    const cleaned = text.replace(/[^0-9]/g, '');
+    if (!cleaned) {
+      setDobDay('');
+      return;
+    }
+    let num = parseInt(cleaned, 10);
+    if (num > 31) num = 31;
+
+    let val = String(num);
+    if (cleaned.length === 1 && num > 3) {
+      val = `0${num}`;
+      setDobDay(val);
+      monthRef.current?.focus();
+      return;
+    }
+    setDobDay(val);
+    if (cleaned.length === 2) {
+      monthRef.current?.focus();
+    }
+  };
+
+  const handleDayBlur = () => {
+    setFocusedDobField(null);
+    if (!dobDay) return;
+    let num = parseInt(dobDay, 10);
+    if (isNaN(num) || num < 1) num = 1;
+    if (num > 31) num = 31;
+    if (dobMonth) {
+      const m = parseInt(dobMonth, 10);
+      const y = parseInt(dobYear, 10) || 2000;
+      const maxDays = new Date(y, m, 0).getDate();
+      if (num > maxDays) num = maxDays;
+    }
+    setDobDay(String(num).padStart(2, '0'));
+  };
+
+  const handleMonthChange = (text) => {
+    const cleaned = text.replace(/[^0-9]/g, '');
+    if (!cleaned) {
+      setDobMonth('');
+      return;
+    }
+    let num = parseInt(cleaned, 10);
+    if (num > 12) num = 12;
+
+    let val = String(num);
+    if (cleaned.length === 1 && num > 1) {
+      val = `0${num}`;
+      setDobMonth(val);
+      yearRef.current?.focus();
+      return;
+    }
+    setDobMonth(val);
+    if (cleaned.length === 2) {
+      yearRef.current?.focus();
+    }
+  };
+
+  const handleMonthBlur = () => {
+    setFocusedDobField(null);
+    if (!dobMonth) return;
+    let num = parseInt(dobMonth, 10);
+    if (isNaN(num) || num < 1) num = 1;
+    if (num > 12) num = 12;
+    setDobMonth(String(num).padStart(2, '0'));
+
+    if (dobDay) {
+      const d = parseInt(dobDay, 10);
+      const y = parseInt(dobYear, 10) || 2000;
+      const maxDays = new Date(y, num, 0).getDate();
+      if (d > maxDays) {
+        setDobDay(String(maxDays).padStart(2, '0'));
+      }
+    }
+  };
+
+  const handleYearChange = (text) => {
+    const cleaned = text.replace(/[^0-9]/g, '');
+    if (!cleaned) {
+      setDobYear('');
+      return;
+    }
+    const currentYear = new Date().getFullYear();
+    let num = parseInt(cleaned, 10);
+    if (cleaned.length === 4 && num > currentYear) {
+      setDobYear(String(currentYear));
+      return;
+    }
+    setDobYear(cleaned);
+  };
+
+  const handleYearBlur = () => {
+    setFocusedDobField(null);
+    if (!dobYear) return;
+    const currentYear = new Date().getFullYear();
+    let num = parseInt(dobYear, 10);
+    if (isNaN(num)) return;
+    if (num > currentYear) num = currentYear;
+    if (num < 1900 && String(num).length === 4) num = 1900;
+    setDobYear(String(num));
+
+    if (dobDay && dobMonth) {
+      const d = parseInt(dobDay, 10);
+      const m = parseInt(dobMonth, 10);
+      const maxDays = new Date(num, m, 0).getDate();
+      if (d > maxDays) {
+        setDobDay(String(maxDays).padStart(2, '0'));
+      }
+    }
+  };
 
   const [isLoading, setIsLoading] = useState(true);
   const [popup, setPopup] = useState({
@@ -326,43 +459,104 @@ export default function EditProfileScreen() {
         <Text style={styles.fieldHint}>Username must be 4-10 charaters.</Text>
 
         {/* Date of Birth */}
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: vs(16) }}>
-          <Text style={styles.fieldLabel}>Date of Birth</Text>
-          <Text style={{ color: '#EF4444', fontSize: ms(11), fontWeight: '700' }}>🔞 18+ Required</Text>
+        <View style={styles.dobHeaderRow}>
+          <View style={styles.dobHeaderLeft}>
+            <Ionicons name="calendar" size={ms(18)} color="#A855F7" />
+            <Text style={styles.dobFieldLabel}>Date of Birth</Text>
+          </View>
+          {calculatedAge !== null ? (
+            calculatedAge >= 18 ? (
+              <View style={styles.ageBadgeValid}>
+                <Ionicons name="checkmark-circle" size={ms(13)} color="#34D399" />
+                <Text style={styles.ageBadgeValidText}>{calculatedAge} yrs old (18+)</Text>
+              </View>
+            ) : (
+              <View style={styles.ageBadgeInvalid}>
+                <Ionicons name="alert-circle" size={ms(13)} color="#EF4444" />
+                <Text style={styles.ageBadgeInvalidText}>Under 18 ({calculatedAge} yrs)</Text>
+              </View>
+            )
+          ) : (
+            <View style={styles.ageBadgeReq}>
+              <Text style={styles.ageBadgeReqText}>🔞 18+ Required</Text>
+            </View>
+          )}
         </View>
-        <View style={{ flexDirection: 'row', gap: 10, marginTop: vs(8) }}>
-          <View style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#374151' }}>
-            <TextInput
-              style={{ color: '#fff', fontSize: ms(14), textAlign: 'center' }}
-              placeholder="DD"
-              placeholderTextColor="#6B7280"
-              keyboardType="number-pad"
-              maxLength={2}
-              value={dobDay}
-              onChangeText={setDobDay}
-            />
+
+        <View style={styles.dobContainer}>
+          {/* Day Segment */}
+          <View style={styles.dobSegment}>
+            <Text style={styles.dobSubLabel}>DAY</Text>
+            <View
+              style={[
+                styles.dobInputCard,
+                focusedDobField === 'day' && styles.dobInputCardFocused,
+              ]}
+            >
+              <TextInput
+                style={styles.dobInputText}
+                placeholder="DD"
+                placeholderTextColor="#4B5563"
+                keyboardType="number-pad"
+                maxLength={2}
+                value={dobDay}
+                onFocus={() => setFocusedDobField('day')}
+                onBlur={handleDayBlur}
+                onChangeText={handleDayChange}
+              />
+            </View>
           </View>
-          <View style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#374151' }}>
-            <TextInput
-              style={{ color: '#fff', fontSize: ms(14), textAlign: 'center' }}
-              placeholder="MM"
-              placeholderTextColor="#6B7280"
-              keyboardType="number-pad"
-              maxLength={2}
-              value={dobMonth}
-              onChangeText={setDobMonth}
-            />
+
+          <Text style={styles.dobSeparator}>/</Text>
+
+          {/* Month Segment */}
+          <View style={styles.dobSegment}>
+            <Text style={styles.dobSubLabel}>MONTH</Text>
+            <View
+              style={[
+                styles.dobInputCard,
+                focusedDobField === 'month' && styles.dobInputCardFocused,
+              ]}
+            >
+              <TextInput
+                ref={monthRef}
+                style={styles.dobInputText}
+                placeholder="MM"
+                placeholderTextColor="#4B5563"
+                keyboardType="number-pad"
+                maxLength={2}
+                value={dobMonth}
+                onFocus={() => setFocusedDobField('month')}
+                onBlur={handleMonthBlur}
+                onChangeText={handleMonthChange}
+              />
+            </View>
           </View>
-          <View style={{ flex: 1.4, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#374151' }}>
-            <TextInput
-              style={{ color: '#fff', fontSize: ms(14), textAlign: 'center' }}
-              placeholder="YYYY"
-              placeholderTextColor="#6B7280"
-              keyboardType="number-pad"
-              maxLength={4}
-              value={dobYear}
-              onChangeText={setDobYear}
-            />
+
+          <Text style={styles.dobSeparator}>/</Text>
+
+          {/* Year Segment */}
+          <View style={[styles.dobSegment, { flex: 1.4 }]}>
+            <Text style={styles.dobSubLabel}>YEAR</Text>
+            <View
+              style={[
+                styles.dobInputCard,
+                focusedDobField === 'year' && styles.dobInputCardFocused,
+              ]}
+            >
+              <TextInput
+                ref={yearRef}
+                style={styles.dobInputText}
+                placeholder="YYYY"
+                placeholderTextColor="#4B5563"
+                keyboardType="number-pad"
+                maxLength={4}
+                value={dobYear}
+                onFocus={() => setFocusedDobField('year')}
+                onBlur={handleYearBlur}
+                onChangeText={handleYearChange}
+              />
+            </View>
           </View>
         </View>
         <Text style={styles.fieldHint}>Must be 18 years or older to update profile.</Text>
@@ -544,6 +738,116 @@ const styles = StyleSheet.create({
     fontSize: ms(15, 0.3),
     color: '#9CA3AF',
     fontFamily: 'Inter_400Regular',
+  },
+
+  dobHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: s(20),
+    marginTop: vs(16),
+    marginBottom: vs(8),
+  },
+  dobHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(6),
+  },
+  dobFieldLabel: {
+    fontSize: ms(16, 0.3),
+    color: '#E5E7EB',
+    fontWeight: '700',
+    fontFamily: 'Inter_700Bold',
+  },
+  ageBadgeReq: {
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderWidth: 1,
+    paddingHorizontal: s(10),
+    paddingVertical: vs(3),
+    borderRadius: 20,
+  },
+  ageBadgeReqText: {
+    color: '#F87171',
+    fontSize: ms(11, 0.3),
+    fontFamily: 'Inter_600SemiBold',
+  },
+  ageBadgeValid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(4),
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+    borderWidth: 1,
+    paddingHorizontal: s(10),
+    paddingVertical: vs(3),
+    borderRadius: 20,
+  },
+  ageBadgeValidText: {
+    color: '#34D399',
+    fontSize: ms(11, 0.3),
+    fontFamily: 'Inter_600SemiBold',
+  },
+  ageBadgeInvalid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(4),
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+    borderWidth: 1,
+    paddingHorizontal: s(10),
+    paddingVertical: vs(3),
+    borderRadius: 20,
+  },
+  ageBadgeInvalidText: {
+    color: '#EF4444',
+    fontSize: ms(11, 0.3),
+    fontFamily: 'Inter_600SemiBold',
+  },
+  dobContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: s(20),
+    gap: s(6),
+  },
+  dobSegment: {
+    flex: 1,
+  },
+  dobSubLabel: {
+    fontSize: ms(10, 0.3),
+    color: '#9CA3AF',
+    fontFamily: 'Inter_600SemiBold',
+    letterSpacing: 0.8,
+    marginBottom: vs(4),
+    textAlign: 'center',
+  },
+  dobInputCard: {
+    backgroundColor: '#0A0A0A',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    paddingVertical: vs(12),
+    paddingHorizontal: s(8),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dobInputCardFocused: {
+    borderColor: '#A855F7',
+    backgroundColor: 'rgba(168, 85, 247, 0.08)',
+  },
+  dobInputText: {
+    color: '#FFF',
+    fontSize: ms(16, 0.3),
+    fontFamily: 'Inter_700Bold',
+    textAlign: 'center',
+    padding: 0,
+    width: '100%',
+  },
+  dobSeparator: {
+    color: '#4B5563',
+    fontSize: ms(18, 0.3),
+    fontWeight: '700',
+    marginTop: vs(14),
   },
 
   

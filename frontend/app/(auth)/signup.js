@@ -35,6 +35,8 @@ export default function SignupScreen() {
   const [dobDay, setDobDay] = useState('');
   const [dobMonth, setDobMonth] = useState('');
   const [dobYear, setDobYear] = useState('');
+  const signupMonthRef = useRef(null);
+  const signupYearRef = useRef(null);
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [showOtpStep, setShowOtpStep] = useState(false);
@@ -72,6 +74,118 @@ export default function SignupScreen() {
     }
     return () => clearInterval(interval);
   }, [showOtpStep, countdown]);
+
+  const handleDayChangeSignup = (text) => {
+    clearFieldError('dob');
+    const cleaned = text.replace(/[^0-9]/g, '');
+    if (!cleaned) {
+      setDobDay('');
+      return;
+    }
+    let num = parseInt(cleaned, 10);
+    if (num > 31) num = 31;
+
+    let val = String(num);
+    if (cleaned.length === 1 && num > 3) {
+      val = `0${num}`;
+      setDobDay(val);
+      signupMonthRef.current?.focus();
+      return;
+    }
+    setDobDay(val);
+    if (cleaned.length === 2) {
+      signupMonthRef.current?.focus();
+    }
+  };
+
+  const handleDayBlurSignup = () => {
+    if (!dobDay) return;
+    let num = parseInt(dobDay, 10);
+    if (isNaN(num) || num < 1) num = 1;
+    if (num > 31) num = 31;
+    if (dobMonth) {
+      const m = parseInt(dobMonth, 10);
+      const y = parseInt(dobYear, 10) || 2000;
+      const maxDays = new Date(y, m, 0).getDate();
+      if (num > maxDays) num = maxDays;
+    }
+    setDobDay(String(num).padStart(2, '0'));
+  };
+
+  const handleMonthChangeSignup = (text) => {
+    clearFieldError('dob');
+    const cleaned = text.replace(/[^0-9]/g, '');
+    if (!cleaned) {
+      setDobMonth('');
+      return;
+    }
+    let num = parseInt(cleaned, 10);
+    if (num > 12) num = 12;
+
+    let val = String(num);
+    if (cleaned.length === 1 && num > 1) {
+      val = `0${num}`;
+      setDobMonth(val);
+      signupYearRef.current?.focus();
+      return;
+    }
+    setDobMonth(val);
+    if (cleaned.length === 2) {
+      signupYearRef.current?.focus();
+    }
+  };
+
+  const handleMonthBlurSignup = () => {
+    if (!dobMonth) return;
+    let num = parseInt(dobMonth, 10);
+    if (isNaN(num) || num < 1) num = 1;
+    if (num > 12) num = 12;
+    setDobMonth(String(num).padStart(2, '0'));
+
+    if (dobDay) {
+      const d = parseInt(dobDay, 10);
+      const y = parseInt(dobYear, 10) || 2000;
+      const maxDays = new Date(y, num, 0).getDate();
+      if (d > maxDays) {
+        setDobDay(String(maxDays).padStart(2, '0'));
+      }
+    }
+  };
+
+  const handleYearChangeSignup = (text) => {
+    clearFieldError('dob');
+    const cleaned = text.replace(/[^0-9]/g, '');
+    if (!cleaned) {
+      setDobYear('');
+      return;
+    }
+    const currentYear = new Date().getFullYear();
+    let num = parseInt(cleaned, 10);
+    if (cleaned.length === 4 && num > currentYear) {
+      setDobYear(String(currentYear));
+      return;
+    }
+    setDobYear(cleaned);
+  };
+
+  const handleYearBlurSignup = () => {
+    if (!dobYear) return;
+    const currentYear = new Date().getFullYear();
+    let num = parseInt(dobYear, 10);
+    if (isNaN(num)) return;
+    if (num > currentYear) num = currentYear;
+    if (num < 1900 && String(num).length === 4) num = 1900;
+    setDobYear(String(num));
+
+    if (dobDay && dobMonth) {
+      const d = parseInt(dobDay, 10);
+      const m = parseInt(dobMonth, 10);
+      const maxDays = new Date(num, m, 0).getDate();
+      if (d > maxDays) {
+        setDobDay(String(maxDays).padStart(2, '0'));
+      }
+    }
+  };
 
   const getFormattedDob = () => {
     if (!dobDay || !dobMonth || !dobYear) return null;
@@ -482,31 +596,36 @@ export default function SignupScreen() {
                       keyboardType="number-pad"
                       maxLength={2}
                       value={dobDay}
-                      onChangeText={(text) => { setDobDay(text); clearFieldError('dob'); }}
+                      onChangeText={handleDayChangeSignup}
+                      onBlur={handleDayBlurSignup}
                       editable={!isLoading && !showOtpStep}
                     />
                   </View>
                   <View style={[styles.dobInputWrapper, errors.dob && styles.inputError]}>
                     <TextInput 
+                      ref={signupMonthRef}
                       style={styles.dobInput}
                       placeholder="MM"
                       placeholderTextColor="#4b5563"
                       keyboardType="number-pad"
                       maxLength={2}
                       value={dobMonth}
-                      onChangeText={(text) => { setDobMonth(text); clearFieldError('dob'); }}
+                      onChangeText={handleMonthChangeSignup}
+                      onBlur={handleMonthBlurSignup}
                       editable={!isLoading && !showOtpStep}
                     />
                   </View>
                   <View style={[styles.dobInputWrapperFlex, errors.dob && styles.inputError]}>
                     <TextInput 
+                      ref={signupYearRef}
                       style={styles.dobInput}
                       placeholder="YYYY"
                       placeholderTextColor="#4b5563"
                       keyboardType="number-pad"
                       maxLength={4}
                       value={dobYear}
-                      onChangeText={(text) => { setDobYear(text); clearFieldError('dob'); }}
+                      onChangeText={handleYearChangeSignup}
+                      onBlur={handleYearBlurSignup}
                       editable={!isLoading && !showOtpStep}
                     />
                   </View>

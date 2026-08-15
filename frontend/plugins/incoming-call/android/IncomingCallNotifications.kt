@@ -1,0 +1,282 @@
+package app.themingo
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.media.AudioAttributes
+import android.net.Uri
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import org.json.JSONObject
+
+/**
+ * Shared state + helpers for the native incoming-call experience:
+ *  - posts the WhatsApp-style full-screen card notification (with the bundled
+ *    ringtone played by [IncomingCallActivity], not the channel sound, so it
+ *    loops like a real ringtone),
+ *  - tracks whether the React app is in the foreground (the in-app popup owns
+ *    the foreground case),
+ *  - routes Accept / Decline / Open from the native card into the app.
+ */
+object IncomingCallNotifications {
+
+    const val CHANNEL_ID = "calls"
+    const val NOTIFICATION_ID = 9901
+
+    const val EXTRA_ACTION = "incomingCallAction"
+    const val EXTRA_PAYLOAD = "incomingCallPayload"
+
+    const val ACTION_ACCEPT = "accept"
+    const val ACTION_DECLINE = "decline"
+    const val ACTION_OPEN = "open"
+    const val ACTION_TIMEOUT = "timeout"
+
+    // Ring cadence (matches the card's vibration pattern: 1s on, 1s off) and
+    // how many rings the card rings before auto-dismissing when unanswered.
+    const val RING_INTERVAL_MS = 2_000L
+    const val RING_COUNT = 15
+    const val RING_TIMEOUT_MS = RING_INTERVAL_MS * RING_COUNT
+
+    /** True while the app's MainActivity is resumed (React app in the foreground).
+     *  Defaults to FALSE: when the process starts fresh from a push (app killed
+     *  or cold-started), React has not resumed yet, so the native card must show. */
+    @Volatile
+    var appInForeground: Boolean = false
+        private set
+
+    /** True while the React (JS) runtime is alive — used to decide whether a
+     *  decline tapped on the native card can be forwarded to JS so it can
+     *  reject the call over the socket. */
+    @Volatile
+    var reactInstanceAlive: Boolean = false
+
+    /** Wired up by [IncomingCallModule] so the native card can push actions
+     *  into the running React instance. */
+    var emitActionToJs: ((action: String, payloadJson: String) -> Unit)? = null
+
+    @Volatile
+    var currentActivity: IncomingCallActivity? = null
+        private set
+
+    @Volatile
+    private var ringTimeoutRunnable: Runnable? = null
+
+    fun setAppInForeground(foreground: Boolean) {
+        appInForeground = foreground
+    }
+
+    fun registerActivity(activity: IncomingCallActivity?) {
+        currentActivity = activity
+    }
+
+    fun getBundledRingtoneUri(context: Context): Uri =
+        Uri.parse("android.resource://${context.packageName}/raw/incoming_ringtone")
+
+    /**
+     * Creates (or updates) the "Calls" notification channel. The channel is
+     * intentionally SILENT — the looping ringtone is played by
+     * [IncomingCallActivity] itself (a notification sound plays only once,
+     * which is not a ringtone). The channel still gets a light vibration for
+     * the heads-up fallback when full-screen intents are unavailable.
+     */
+    fun ensureCallChannel(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val channel = NotificationChannel(CHANNEL_ID, "Calls", NotificationManager.IMPORTANCE_HIGH)
+        channel.description = "Incoming audio and video calls"
+        channel.setSound(null, null)
+        channel.enableVibration(true)
+        channel.vibrationPattern = longArrayOf(0, 400, 400, 400, 400, 400)
+        channel.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.createNotificationChannel(channel)
+    }
+
+    /**
+     * Displays the WhatsApp-style incoming-call card + ringtone. No-op while
+     * the app is in the foreground (the in-app IncomingCallPopup handles it).
+     */
+    fun showIncomingCall(context: Context, payload: JSONObject) {
+        if (appInForeground) return
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
+
+        try {
+            ensureCallChannel(context)
+        } catch (e: Exception) {
+            // Channel creation failed — still try to post below.
+        }
+
+        val callerName = payload.optString("callerName", "Mingo")
+        val callType = payload.optString("callType", "audio")
+        val title = "Incoming ${if (callType == "video") "Video" else "Audio"} Call"
+
+        // Full-screen intent -> IncomingCallActivity (the card itself)
+        val fullScreenPending = PendingIntent.getActivity(
+            context, 101,
+            buildCardIntent(context, null, payload),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // Tapping the notification body opens the app and shows the in-app popup
+        val openPending = PendingIntent.getActivity(
+            context, 102,
+            buildMainActivityIntent(context, ACTION_OPEN, payload),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // Notification action buttons (tray / heads-up fallback)
+        val acceptPending = PendingIntent.getActivity(
+            context, 103,
+            buildCardIntent(context, ACTION_ACCEPT, payload),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val declinePending = PendingIntent.getActivity(
+            context, 104,
+            buildCardIntent(context, ACTION_DECLINE, payload),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle(title)
+            .setContentText("$callerName is calling you")
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setAutoCancel(false)
+            .setShowWhen(true)
+            .setColor(0xFFA855F7.toInt())
+            .setDefaults(NotificationCompat.DEFAULT_VIBRATE or NotificationCompat.DEFAULT_LIGHTS)
+            .setContentIntent(openPending)
+            .setFullScreenIntent(fullScreenPending, true)
+            .addAction(0, "Decline", declinePending)
+            .addAction(0, "Accept", acceptPending)
+
+        try {
+            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, builder.build())
+        } catch (e: Exception) {
+            // Posting failed (e.g. permission race) — nothing else to do.
+        }
+
+        // Auto-dismiss after the ring count if the listener never answers — the
+        // card must not ring forever when the caller's app is also backgrounded
+        // (so it can't emit call_cancelled). Reset on every re-post.
+        scheduleRingTimeout(context, payload)
+    }
+
+    /** Stops the ringtone (via the activity), dismisses the notification and
+     *  closes the card. */
+    fun stopIncomingCall(context: Context) {
+        cancelRingTimeout()
+        try {
+            NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
+        } catch (e: Exception) {
+            // ignore
+        }
+        dismissCard()
+    }
+
+    /** The listener never answered within the ring count — dismiss the card and
+     *  ringtone, and (when the app is alive) tell JS to reject the call over the
+     *  socket so the caller is not left hanging. When the app is killed there is
+     *  no socket to reject on; the caller-side ring timeout cancels the session
+     *  server-side instead. */
+    fun onRingTimeout(context: Context, payload: JSONObject) {
+        stopIncomingCall(context)
+        if (reactInstanceAlive) {
+            emitActionToJs?.invoke(ACTION_TIMEOUT, payload.toString())
+        }
+    }
+
+    private fun scheduleRingTimeout(context: Context, payload: JSONObject) {
+        cancelRingTimeout()
+        val runnable = Runnable {
+            ringTimeoutRunnable = null
+            onRingTimeout(context, payload)
+        }
+        ringTimeoutRunnable = runnable
+        Handler(Looper.getMainLooper()).postDelayed(runnable, RING_TIMEOUT_MS)
+    }
+
+    private fun cancelRingTimeout() {
+        val runnable = ringTimeoutRunnable
+        if (runnable != null) {
+            Handler(Looper.getMainLooper()).removeCallbacks(runnable)
+            ringTimeoutRunnable = null
+        }
+    }
+
+    /** Closes the card (stops the ringtone) but leaves the notification in the
+     *  shade — used when the app returns to the foreground and the in-app
+     *  popup takes over, so a call is never silently dropped if the socket
+     *  missed the event. */
+    fun dismissCard() {
+        currentActivity?.let { activity ->
+            if (!activity.isFinishing) activity.finish()
+        }
+    }
+
+    /** Handles Accept / Decline / Open pressed on the native card. */
+    fun handleCardAction(context: Context, action: String, payload: JSONObject) {
+        stopIncomingCall(context)
+        when (action) {
+            ACTION_ACCEPT -> {
+                // Always route into the React app — cold start if it was killed.
+                launchMainActivity(context, action, payload)
+            }
+            ACTION_DECLINE -> {
+                if (reactInstanceAlive) {
+                    // App is running in the background — let JS reject over the socket.
+                    emitActionToJs?.invoke(action, payload.toString())
+                }
+                // If the app was killed there is no socket to reject on; the
+                // caller-side ring timeout cancels the session server-side.
+            }
+            ACTION_OPEN -> {
+                launchMainActivity(context, action, payload)
+            }
+        }
+    }
+
+    fun launchMainActivity(context: Context, action: String, payload: JSONObject) {
+        try {
+            context.startActivity(buildMainActivityIntent(context, action, payload))
+        } catch (e: Exception) {
+            // Rare launch failure — nothing sensible to do.
+        }
+    }
+
+    /** Intent that launches MainActivity carrying the card action + payload. */
+    fun buildMainActivityIntent(context: Context, action: String, payload: JSONObject): Intent =
+        Intent().apply {
+            component = ComponentName(context.packageName, "${context.packageName}.MainActivity")
+            action = Intent.ACTION_MAIN
+            addCategory(Intent.CATEGORY_LAUNCHER)
+            putExtra(EXTRA_ACTION, action)
+            putExtra(EXTRA_PAYLOAD, payload.toString())
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+            )
+        }
+
+    /** Intent that opens (or resumes) the card. When [action] is non-null the
+     *  activity performs that action immediately instead of showing the UI. */
+    fun buildCardIntent(context: Context, action: String?, payload: JSONObject): Intent =
+        Intent(context, IncomingCallActivity::class.java).apply {
+            if (action != null) putExtra(EXTRA_ACTION, action)
+            putExtra(EXTRA_PAYLOAD, payload.toString())
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+            )
+        }
+}

@@ -38,8 +38,12 @@ export default function CoinsOfferPopup({ visible, onClose, onAddCoins, timeLeft
 
   if (!visible) return null;
 
-  const defaultOffer = { title: '80% Off', coins: 100, originalPrice: 82, newPrice: 17 };
+  const defaultOffer = { title: 'Starter Offer', coins: 80, originalPrice: 62, newPrice: 62 };
   const offer = offerData || defaultOffer;
+
+  const titleText = offer.title 
+    ? (offer.title.toLowerCase().includes('off') || offer.title.toLowerCase().includes('offer') ? offer.title : `Flat ${offer.title}`)
+    : 'Special Offer';
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
@@ -54,11 +58,15 @@ export default function CoinsOfferPopup({ visible, onClose, onAddCoins, timeLeft
         >
           <View style={styles.handleBar} />
           <Text style={styles.offerSubtitle}>Limited Time Offer</Text>
-          <Text style={styles.offerTitle}>Flat <Text style={styles.offerTitleBold}>{offer.title}</Text></Text>
+          <Text style={styles.offerTitle}>{titleText}</Text>
 
           <View style={styles.coinsImageWrap}>
             <Image
-              source={require('../../images/coins image for popup.png')}
+              source={
+                offer.iconUrl 
+                  ? { uri: offer.iconUrl }
+                  : require('../../images/coins image for popup.png')
+              }
               style={styles.coinsImage}
               resizeMode="contain"
             />
@@ -68,7 +76,9 @@ export default function CoinsOfferPopup({ visible, onClose, onAddCoins, timeLeft
           
           <View style={styles.priceRow}>
             <Text style={styles.priceAt}>@ </Text>
-            <Text style={styles.priceOld}>₹{offer.originalPrice}</Text>
+            {offer.originalPrice !== offer.newPrice && (
+              <Text style={styles.priceOld}>₹{offer.originalPrice}</Text>
+            )}
             <Text style={styles.priceNew}> ₹{offer.newPrice}</Text>
           </View>
 
