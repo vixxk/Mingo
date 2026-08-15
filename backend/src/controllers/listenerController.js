@@ -91,7 +91,7 @@ class ListenerController {
         profileImage: listener.profileImage,
         rating: listener.rating,
         totalSessions: listener.totalSessions,
-        isOnline: listener.isOnline,
+        isOnline: (listener.userId?.role === 'LISTENER' || req.user?.role === 'LISTENER') && !!listener.isOnline,
         status: listener.status,
         verified: listener.verified,
         bestChoice: listener.bestChoice,
@@ -227,6 +227,7 @@ class ListenerController {
         throw new AppError('Listener not found', 404);
       }
 
+      const isUserListenerRole = listener.userId?.role === 'LISTENER';
       return ApiResponse.success(res, {
         id: listener.userId?._id || listener.userId,
         displayName: listener.displayName,
@@ -236,9 +237,9 @@ class ListenerController {
         avatarIndex: listener.userId?.avatarIndex,
         rating: listener.rating,
         totalSessions: listener.totalSessions,
-        isOnline: listener.isOnline,
-        isBusy: listener.isBusy,
-        busySince: listener.busySince,
+        isOnline: isUserListenerRole && !!listener.isOnline,
+        isBusy: isUserListenerRole ? listener.isBusy : false,
+        busySince: isUserListenerRole ? listener.busySince : null,
         verified: listener.verified,
         bestChoice: listener.bestChoice,
         introAudioUrl: listener.introAudioUrl,

@@ -368,11 +368,9 @@ class UserController {
         user.role = 'USER';
         await user.save();
 
-        // Make listener offline
-        await Listener.findOneAndUpdate(
-          { userId: user._id },
-          { isOnline: false, isBusy: false, busySince: null }
-        );
+        // Make listener offline across DB, Redis, SSE, and Socket events
+        const PresenceService = require('../services/presenceService');
+        await PresenceService.goOffline(user._id);
 
         return ApiResponse.success(res, {
           id: user._id,

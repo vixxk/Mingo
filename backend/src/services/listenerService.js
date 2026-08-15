@@ -42,6 +42,9 @@ class ListenerService {
         (lang) => lang && lang.toLowerCase() === userLanguage.toLowerCase()
       );
 
+      const isUserListenerRole = listener.userId?.role === 'LISTENER';
+      const actualIsOnline = isUserListenerRole && !!listener.isOnline;
+
       results.push({
         id: listener.userId._id || listener.userId,
         name: listener.displayName || listener.userId.name,
@@ -50,9 +53,9 @@ class ListenerService {
         avatarIndex: listener.userId.avatarIndex,
         rating: listener.rating,
         totalSessions: listener.totalSessions,
-        isOnline: listener.isOnline,
-        isBusy: listener.isBusy,
-        busySince: listener.busySince,
+        isOnline: actualIsOnline,
+        isBusy: isUserListenerRole ? listener.isBusy : false,
+        busySince: isUserListenerRole ? listener.busySince : null,
         isVerified: listener.verified,
         bestChoice: listener.bestChoice,
         audioEnabled: listener.audioEnabled,
@@ -83,6 +86,7 @@ class ListenerService {
       throw new AppError('Listener not found', 404);
     }
 
+    const isUserListenerRole = listener.userId?.role === 'LISTENER';
     return {
       id: listener.userId?._id || listener.userId,
       name: listener.userId?.name,
@@ -93,7 +97,7 @@ class ListenerService {
       email: listener.userId?.email,
       rating: listener.rating,
       totalSessions: listener.totalSessions,
-      isOnline: listener.isOnline,
+      isOnline: isUserListenerRole && !!listener.isOnline,
       verified: listener.verified,
       bestChoice: listener.bestChoice,
       introAudioUrl: listener.introAudioUrl,

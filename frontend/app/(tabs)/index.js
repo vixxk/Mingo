@@ -644,7 +644,39 @@ export default function HomeScreen() {
     }
   }, []);
 
-  // Note: Home page data updates on page load/refresh, not via real-time socket updates
+  useEffect(() => {
+    const handleStatusChanged = (data) => {
+      if (!data || !data.userId) return;
+      const targetId = data.userId.toString();
+      setPeopleData(prev => prev.map(item => {
+        if (item.id?.toString() === targetId) {
+          return {
+            ...item,
+            isLive: !!data.isOnline,
+            isBusy: !!data.isBusy,
+            busySince: data.busySince || null,
+          };
+        }
+        return item;
+      }));
+      setBestChoiceData(prev => prev.map(item => {
+        if (item.id?.toString() === targetId) {
+          return {
+            ...item,
+            isLive: !!data.isOnline,
+            isBusy: !!data.isBusy,
+            busySince: data.busySince || null,
+          };
+        }
+        return item;
+      }));
+    };
+
+    socketService.on('listener_status_changed', handleStatusChanged);
+    return () => {
+      socketService.off('listener_status_changed', handleStatusChanged);
+    };
+  }, []);
 
   useFocusEffect(
     useCallback(() => {

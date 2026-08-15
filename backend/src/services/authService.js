@@ -283,7 +283,7 @@ class AuthService {
         createdAt: user.createdAt,
         listener: listenerData ? {
           status: listenerData.status,
-          isOnline: listenerData.isOnline,
+          isOnline: user.role === 'LISTENER' && !!listenerData.isOnline,
           rating: listenerData.rating,
           totalSessions: listenerData.totalSessions,
           audioEnabled: listenerData.audioEnabled,
@@ -324,7 +324,7 @@ class AuthService {
         ? {
             rating: listenerProfile.rating,
             totalSessions: listenerProfile.totalSessions,
-            isOnline: listenerProfile.isOnline,
+            isOnline: user.role === 'LISTENER' && !!listenerProfile.isOnline,
             status: listenerProfile.status,
             verified: listenerProfile.verified,
             bestChoice: listenerProfile.bestChoice,

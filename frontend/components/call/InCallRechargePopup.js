@@ -13,7 +13,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ms, s, vs } from '../../utils/responsive';
 import { walletAPI } from '../../utils/api';
-import AnimatedSparkles from '../shared/AnimatedSparkles';
 
 const DEFAULT_PACKAGES = [
   { id: '1',  coins: 80,    originalPrice: 62,    price: 62,    discount: 0,  tag: 'Starter Offer', subTag: '' },
@@ -107,7 +106,6 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
           locations={[0, 0.55, 1]}
           style={styles.popup}
         >
-          <AnimatedSparkles color="#F87171" size={18} />
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.handleBar} />

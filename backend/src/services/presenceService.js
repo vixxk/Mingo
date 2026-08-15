@@ -6,6 +6,12 @@ const HEARTBEAT_TTL = 30;
 
 class PresenceService {
     static async goOnline(userId) {
+    const User = require('../models/userModel');
+    const user = await User.findById(userId);
+    if (!user || user.role !== 'LISTENER') {
+      throw new AppError('You must be in Listener mode to go online', 400);
+    }
+
     const listener = await Listener.findOne({ userId });
     if (!listener) {
       throw new AppError('Listener profile not found', 404);

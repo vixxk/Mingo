@@ -35,6 +35,10 @@ function getAgoraCallPayload(roomId, callType) {
 }
 
 class CallService {
+    // Expose as a static so external modules (e.g. socket.js) can call
+    // CallService.getAgoraCallPayload(...) without importing the bare function.
+    static getAgoraCallPayload = getAgoraCallPayload;
+
     static async incrementListenerCounters(listenerId, callType) {
     if (!listenerId) return;
     const Listener = require('../models/listenerModel');

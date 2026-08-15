@@ -226,6 +226,7 @@ export default function AudioCallScreen() {
   const [isSpeaker, setIsSpeaker] = useState(true);
   const [upgradeModalVisible, setUpgradeModalVisible] = useState(false);
   const [upgradeModalMode, setUpgradeModalMode] = useState('request');
+  const [pendingUpgradeState, setPendingUpgradeState] = useState(null); // null | 'incoming' | 'pending'
   const [currentCoins, setCurrentCoins] = useState(null);
   const [lowBalanceMessage, setLowBalanceMessage] = useState('');
   const [permission, setPermission] = useState({ mic: false });
@@ -246,6 +247,7 @@ export default function AudioCallScreen() {
   const callEndedRef = useRef(false);
   const cancelledExitTimerRef = useRef(null);
   const remoteJoinedRef = useRef(false);
+  const upgradeNavigatedRef = useRef(false);
   // Agora credentials — the backend mints a session-scoped token for audio
   // calls (agoraAppId + agoraToken). Falls back to the bundled App ID only
   // when the server did not attach one.
@@ -432,6 +434,7 @@ export default function AudioCallScreen() {
       console.log('[Socket] handleUpgradeRequested received:', data);
       const isMatch = !callId || String(data.sessionId) === String(callId) || (data.roomId && data.roomId === roomId);
       if (isMatch) {
+        setPendingUpgradeState('incoming');
         setUpgradeModalMode('incoming');
         setUpgradeModalVisible(true);
       }
@@ -439,26 +442,34 @@ export default function AudioCallScreen() {
 
     const handleUpgradeAccepted = (data) => {
       console.log('[Socket] handleUpgradeAccepted received:', data);
+      // Guard against duplicate events (user room + Agora room both trigger)
+      if (upgradeNavigatedRef.current) return;
       const isMatch = !callId || String(data.sessionId) === String(callId) || (data.roomId && data.roomId === roomId);
       if (isMatch) {
+        upgradeNavigatedRef.current = true;
+        setPendingUpgradeState(null);
         setUpgradeModalVisible(false);
+        // Leave the audio channel before navigating to video
         if (agoraRef.current) {
           try { agoraRef.current.leave(); } catch (e) {}
         }
-        router.replace({
-          pathname: '/(call)/video-call',
-          params: {
-            name,
-            callId: data.sessionId || callId,
-            roomId: data.roomId || roomId,
-            listenerId,
-            avatarIndex,
-            gender,
-            agoraAppId: data.agoraAppId || agoraAppId,
-            agoraToken: data.agoraToken || agoraToken,
-            isConverted: 'true',
-          },
-        });
+        // Small delay to let Agora engine release before video-call mounts
+        setTimeout(() => {
+          router.replace({
+            pathname: '/(call)/video-call',
+            params: {
+              name,
+              callId: data.sessionId || callId,
+              roomId: data.roomId || roomId,
+              listenerId,
+              avatarIndex,
+              gender,
+              agoraAppId: data.agoraAppId || agoraAppId,
+              agoraToken: data.agoraToken || agoraToken,
+              isConverted: 'true',
+            },
+          });
+        }, 300);
       }
     };
 
@@ -466,10 +477,16 @@ export default function AudioCallScreen() {
       console.log('[Socket] handleUpgradeDeclined received:', data);
       const isMatch = !callId || String(data.sessionId) === String(callId) || (data.roomId && data.roomId === roomId);
       if (isMatch) {
+        setPendingUpgradeState(null);
         setUpgradeModalVisible(false);
         setCallCancelledMessage(data.message || 'The upgrade to video call was declined.');
         setShowCallCancelled(true);
       }
+    };
+    const handleUpgradeFailed = (data) => {
+      console.log('[Socket] handleUpgradeFailed received:', data);
+      setPendingUpgradeState(null);
+      setUpgradeModalVisible(false);
     };
 
     // Register listeners
@@ -483,6 +500,7 @@ export default function AudioCallScreen() {
     socketService.on('call_upgrade_requested', handleUpgradeRequested);
     socketService.on('call_upgrade_accepted', handleUpgradeAccepted);
     socketService.on('call_upgrade_declined', handleUpgradeDeclined);
+    socketService.on('call_upgrade_failed', handleUpgradeFailed);
 
     setupBilling();
 
@@ -501,6 +519,7 @@ export default function AudioCallScreen() {
       socketService.off('call_upgrade_requested', handleUpgradeRequested);
       socketService.off('call_upgrade_accepted', handleUpgradeAccepted);
       socketService.off('call_upgrade_declined', handleUpgradeDeclined);
+      socketService.off('call_upgrade_failed', handleUpgradeFailed);
     };
   }, [callId]);
 
@@ -667,23 +686,41 @@ export default function AudioCallScreen() {
   }, [isSpeaker]);
 
   const handleVideoUpgradePress = useCallback(() => {
-    setUpgradeModalMode('request');
-    setUpgradeModalVisible(true);
-  }, []);
+    if (pendingUpgradeState === 'incoming') {
+      setUpgradeModalMode('incoming');
+      setUpgradeModalVisible(true);
+    } else if (pendingUpgradeState === 'pending') {
+      setUpgradeModalMode('pending');
+      setUpgradeModalVisible(true);
+    } else {
+      setUpgradeModalMode('request');
+      setUpgradeModalVisible(true);
+    }
+  }, [pendingUpgradeState]);
 
   const handleSendUpgradeRequest = useCallback(() => {
+    setPendingUpgradeState('pending');
     setUpgradeModalMode('pending');
     socketService.emit('request_call_upgrade', { sessionId: callId, roomId, targetUserId: listenerId });
   }, [callId, roomId, listenerId]);
 
   const handleAcceptUpgradeRequest = useCallback(() => {
+    setPendingUpgradeState(null);
     socketService.emit('respond_call_upgrade', { sessionId: callId, roomId, accepted: true });
   }, [callId, roomId]);
 
   const handleDeclineUpgradeRequest = useCallback(() => {
+    setPendingUpgradeState(null);
     setUpgradeModalVisible(false);
     socketService.emit('respond_call_upgrade', { sessionId: callId, roomId, accepted: false });
   }, [callId, roomId]);
+
+  const handleCancelUpgradeModal = useCallback(() => {
+    if (upgradeModalMode === 'pending') {
+      setPendingUpgradeState(null);
+    }
+    setUpgradeModalVisible(false);
+  }, [upgradeModalMode]);
 
   // Tap anywhere on the screen toggles all controls.
   const toggleControls = useCallback(() => {
@@ -857,7 +894,7 @@ export default function AudioCallScreen() {
         onSend={handleSendUpgradeRequest}
         onAccept={handleAcceptUpgradeRequest}
         onDecline={handleDeclineUpgradeRequest}
-        onCancel={() => setUpgradeModalVisible(false)}
+        onCancel={handleCancelUpgradeModal}
       />
 
       <CallCancelledPopup

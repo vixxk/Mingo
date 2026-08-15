@@ -31,6 +31,10 @@ const PRESENCE_HEARTBEAT_TTL = 30;
 const chatSessionTimers = {};
 const chatSessionOfflineCheckers = {};
 
+// Track when users/listeners go offline: { userIdStr: timestamp }
+const userOfflineSince = {};
+const OFFLINE_CHAT_AUTO_END_MS = 5 * 60 * 1000; // 5 minutes
+
 // ─── Call Billing ────────────────────────────────────────────
 // Rates per minute
 const AUDIO_COINS_PER_MIN = 10;  // 10 coins/min (from user screenshot)
@@ -63,6 +67,8 @@ const initSocket = (server) => {
   const sseService = require('./services/sseService');
   sseService.setIo(io);
 
+  startOfflineChatSessionChecker();
+
   io.on('connection', (socket) => {
     console.log('User connected to socket:', socket.id);
     socket.connectTime = Date.now();
@@ -76,6 +82,7 @@ const initSocket = (server) => {
         socket.join(`user_${decoded.userId}`);
         console.log(`Socket ${socket.id} automatically authenticated from handshake as ${decoded.userId}`);
         const userIdStr = decoded.userId.toString();
+        delete userOfflineSince[userIdStr];
         if (backgroundOfflineTimers[userIdStr]) {
           clearTimeout(backgroundOfflineTimers[userIdStr]);
           delete backgroundOfflineTimers[userIdStr];
@@ -102,6 +109,7 @@ const initSocket = (server) => {
         socket.join(`user_${decoded.userId}`);
         console.log(`Socket ${socket.id} authenticated as ${decoded.userId}`);
         const userIdStr = decoded.userId.toString();
+        delete userOfflineSince[userIdStr];
         if (backgroundOfflineTimers[userIdStr]) {
           clearTimeout(backgroundOfflineTimers[userIdStr]);
           delete backgroundOfflineTimers[userIdStr];
@@ -775,7 +783,7 @@ const initSocket = (server) => {
 
     // ─── Call Upgrade (Audio -> Video) ─────────────────────────
     socket.on('request_call_upgrade', async (data) => {
-      const { sessionId, roomId, targetUserId } = data;
+      const { sessionId, roomId } = data;
       console.log(`[Socket] request_call_upgrade for session: ${sessionId}`);
       try {
         const session = await Session.findById(sessionId);
@@ -784,13 +792,14 @@ const initSocket = (server) => {
           return;
         }
 
+        // Always derive recipient from the session — the client-supplied
+        // targetUserId can be stale or point at the caller's own ID.
         const callerUserId = socket.userId;
-        let recipientId = targetUserId;
-        if (!recipientId) {
-          recipientId = (callerUserId && session.userId.toString() === callerUserId.toString())
-            ? session.listenerId.toString()
-            : session.userId.toString();
-        }
+        const recipientId = (callerUserId && session.userId.toString() === callerUserId.toString())
+          ? session.listenerId.toString()
+          : session.userId.toString();
+
+        console.log(`[Socket] Upgrade request from ${callerUserId} to ${recipientId}`);
 
         io.to(`user_${recipientId}`).emit('call_upgrade_requested', {
           sessionId: session._id.toString(),
@@ -834,9 +843,6 @@ const initSocket = (server) => {
 
           io.to(`user_${session.userId}`).emit('call_upgrade_accepted', payload);
           io.to(`user_${session.listenerId}`).emit('call_upgrade_accepted', payload);
-          if (roomId || session.roomId) {
-            io.to(roomId || session.roomId).emit('call_upgrade_accepted', payload);
-          }
         } else {
           const declinerId = socket.userId;
           const callerId = (declinerId && session.userId.toString() === declinerId.toString())
@@ -986,6 +992,12 @@ const initSocket = (server) => {
         
         // End active call/chat sessions on disconnect (if any) without marking listener offline
         const disconnectedUserId = socket.userId;
+        if (disconnectedUserId) {
+          const userSockets = io ? io.sockets.adapter.rooms.get(`user_${disconnectedUserId}`) : null;
+          if (!userSockets || userSockets.size === 0) {
+            userOfflineSince[disconnectedUserId.toString()] = Date.now();
+          }
+        }
         (async () => {
           try {
             // Note: Online availability persists when app enters background or socket reconnects.
@@ -1832,6 +1844,68 @@ function stopCallBillingTimer(sessionId) {
     });
     console.log(`[CallBilling] Stopped billing timer for session ${sessionId}`);
   }
+}
+
+/**
+ * Periodically checks active chat sessions to see if any participant (user or listener)
+ * has been offline continuously for 5+ minutes, and auto-ends the session if so.
+ */
+function startOfflineChatSessionChecker() {
+  setInterval(async () => {
+    try {
+      if (!io) return;
+      const activeConversations = await Conversation.find({ 'chatSession.active': true });
+      if (!activeConversations || activeConversations.length === 0) return;
+
+      const now = Date.now();
+      for (const conv of activeConversations) {
+        if (!conv.chatSession || !conv.chatSession.active) continue;
+        const convIdStr = conv._id.toString();
+
+        let shouldEnd = false;
+        let offlineUserId = null;
+
+        for (const participantId of conv.participants) {
+          const pIdStr = participantId.toString();
+          const userSockets = io.sockets.adapter.rooms.get(`user_${pIdStr}`);
+          const isOnline = userSockets && userSockets.size > 0;
+
+          if (isOnline) {
+            delete userOfflineSince[pIdStr];
+          } else {
+            if (!userOfflineSince[pIdStr]) {
+              userOfflineSince[pIdStr] = now;
+            } else if (now - userOfflineSince[pIdStr] >= OFFLINE_CHAT_AUTO_END_MS) {
+              shouldEnd = true;
+              offlineUserId = pIdStr;
+              break;
+            }
+          }
+        }
+
+        if (shouldEnd) {
+          console.log(`[Socket] Auto-ending active chat session for conv ${convIdStr} — participant ${offlineUserId} offline for 5+ minutes.`);
+          await endChatSession(convIdStr);
+
+          const systemMsg = new Message({
+            conversationId: conv._id,
+            sender: null,
+            senderModel: 'System',
+            content: 'Session ended — participant offline for 5+ minutes.',
+            type: 'system',
+          });
+          await systemMsg.save();
+          await Conversation.findByIdAndUpdate(conv._id, { lastMessage: systemMsg._id });
+
+          if (io) {
+            io.to(convIdStr).emit('receive_message', systemMsg);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[Socket] Error in offline chat session checker:', err.message);
+    }
+  }, 15000);
 }
 
 const getIo = () => {
