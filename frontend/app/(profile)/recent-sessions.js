@@ -13,6 +13,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { ms, s, vs, wp, hp } from '../../utils/responsive';
 import { callAPI } from '../../utils/api';
+import { formatSessionDuration, formatSessionType } from '../../utils/sessionFormat';
 import RaiseIssuePopup from '../../components/shared/RaiseIssuePopup';
 import SkeletonRecentList from '../../components/SkeletonRecentList';
 
@@ -56,7 +57,7 @@ const SessionCard = ({ item, index }) => (
     <View style={styles.sessionInfo}>
       <Text style={styles.sessionName}>{item.name}</Text>
       <Text style={styles.sessionMeta}>
-        {item.callType === 'video' ? 'Video' : 'Audio'} Call • {item.duration || '0 mins'} •{' '}
+        {item.typeLabel} Call • {item.durationLabel || '0 mins'} •{' '}
         {item.callTime}
       </Text>
     </View>
@@ -84,7 +85,9 @@ export default function RecentSessionsScreen() {
             id: call._id,
             name: call.listenerId?.name || 'Unknown',
             duration: `${call.duration || 0} mins`,
+            durationLabel: formatSessionDuration(call),
             callType: call.callType || 'audio',
+            typeLabel: formatSessionType(call),
             callTime: formatCallTime(call.startTime || call.createdAt),
             diamonds: Math.floor((call.coinsDeducted || 0) / 10),
             gradientColors: GRADIENTS[index % GRADIENTS.length],

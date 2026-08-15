@@ -42,8 +42,15 @@ const AUDIO_COINS_PER_MIN = 10;  // 10 coins/min (from user screenshot)
 const VIDEO_COINS_PER_MIN = 40;  // 40 coins/min (from user screenshot)
 const AUDIO_PAYOUT_PER_MIN = 1.00; // ₹1.00/min listener payout
 const VIDEO_PAYOUT_PER_MIN = 4.00; // ₹4.00/min listener payout (from listener screenshot)
-const CALL_BILLING_INTERVAL = 60 * 1000; // 1 minute
+const CALL_BILLING_INTERVAL = Number(process.env.CALL_BILLING_INTERVAL_MS) || 60 * 1000; // 1 minute (env-overridable for tests)
 const LOW_BALANCE_THRESHOLD = 10; // Warn when below this many coins remaining
+
+// When a listener's LAST socket drops, wait this long for a reconnect before
+// auto-marking them offline. Covers transient network blips and quick app
+// reconnects; a force-closed app (swiped from RAM) never reconnects, so it
+// goes offline once the grace period elapses instead of staying "online"
+// forever.
+const DISCONNECT_OFFLINE_GRACE_MS = Number(process.env.DISCONNECT_OFFLINE_GRACE_MS) || 30 * 1000;
 
 // Active call billing timers: { sessionId: intervalRef }
 const callBillingTimers = {};
@@ -154,6 +161,12 @@ const initSocket = (server) => {
     socket.on('heartbeat', async () => {
       if (socket.userId) {
         const userIdStr = socket.userId.toString();
+        // A heartbeat means the app is alive — cancel any pending auto-offline
+        // timer scheduled by a recent disconnect.
+        if (backgroundOfflineTimers[userIdStr]) {
+          clearTimeout(backgroundOfflineTimers[userIdStr]);
+          delete backgroundOfflineTimers[userIdStr];
+        }
         await redis.set(REDIS_KEYS.ONLINE(userIdStr), '1', 'EX', PRESENCE_HEARTBEAT_TTL).catch(() => {});
         const listener = await Listener.findOne({ userId: socket.userId });
         if (listener && !listener.isOnline) {
@@ -916,6 +929,20 @@ const initSocket = (server) => {
           session.convertedAt = new Date();
           await session.save();
 
+          // Realign billing so the video minute boundaries start at the
+          // conversion moment: the old timer's 60s cadence was anchored to the
+          // call start, which would bill the first video minute up to 60s late
+          // (or never, if the call ends before the next tick). Stopping and
+          // restarting deducts the first video minute immediately and anchors
+          // subsequent ticks at convertedAt.
+          try {
+            stopCallBillingTimer(session._id.toString());
+            if (session.roomId) stopCallBillingTimer(session.roomId);
+            await startCallBillingTimer(session._id.toString(), { restart: true });
+          } catch (billingErr) {
+            console.error('[Socket] Failed to restart billing after video upgrade:', billingErr.message);
+          }
+
           console.log(`[Socket] Session ${sessionId} upgraded to VIDEO!`);
 
           const agoraPayload = CallService.getAgoraCallPayload(session.roomId, 'video');
@@ -1088,8 +1115,11 @@ const initSocket = (server) => {
         }
         (async () => {
           try {
-            // Note: Online availability persists when app enters background or socket reconnects.
-            // Presence is explicitly toggled by listener in app or upon explicit logout.
+            // Note: a listener is not marked offline immediately on disconnect —
+            // a grace timer is scheduled instead, so transient drops and quick
+            // reconnects never flip them offline. If the app was force-closed
+            // (swiped from RAM) it never reconnects, and the timer marks them
+            // offline automatically (see step 4 below).
 
             // 2. Auto-end active calls (immediately) - only audio and video calls, not chat sessions
             const activeCall = await Session.findOne({
@@ -1141,6 +1171,39 @@ const initSocket = (server) => {
                   });
                 }
               }
+            }
+
+            // 4. Auto-mark the listener offline if the app was closed from RAM.
+            //    When a listener's last connection drops, schedule an offline
+            //    transition after a short grace period. The timer is cancelled
+            //    if the app reconnects (handshake auth / authenticate event) or
+            //    returns to the foreground (app_foregrounded) or heartbeats
+            //    before it fires — so network blips and quick reconnects never
+            //    flip the listener offline. A force-closed app never reconnects,
+            //    so it goes offline automatically once the grace elapses instead
+            //    of staying "online" forever.
+            const userIdStr = disconnectedUserId.toString();
+            const existingTimer = backgroundOfflineTimers[userIdStr];
+            if (existingTimer) {
+              clearTimeout(existingTimer);
+              delete backgroundOfflineTimers[userIdStr];
+            }
+            const disconnectedListener = await Listener.findOne({ userId: disconnectedUserId }).select('isOnline');
+            if (disconnectedListener && disconnectedListener.isOnline) {
+              backgroundOfflineTimers[userIdStr] = setTimeout(async () => {
+                delete backgroundOfflineTimers[userIdStr];
+                try {
+                  // Only go offline if the listener still has no live connection.
+                  const room = io ? io.sockets.adapter.rooms.get(`user_${userIdStr}`) : null;
+                  if (!room || room.size === 0) {
+                    const PresenceService = require('./services/presenceService');
+                    await PresenceService.goOffline(disconnectedUserId);
+                    console.log(`[Socket] Listener ${userIdStr} auto-marked offline (no reconnect within ${DISCONNECT_OFFLINE_GRACE_MS}ms of disconnect).`);
+                  }
+                } catch (err) {
+                  console.error('[Socket] Error auto-marking listener offline:', err.message);
+                }
+              }, DISCONNECT_OFFLINE_GRACE_MS);
             }
           } catch (e) {
             console.error('Error on disconnect cleanup:', e.message);
@@ -1677,7 +1740,8 @@ const mongoose = require('mongoose');
  * Deducts coins every 60 seconds, emits balance updates,
  * warns on low balance, and auto-ends when balance is 0.
  */
-async function startCallBillingTimer(sessionId) {
+async function startCallBillingTimer(sessionId, options = {}) {
+  const { restart = false } = options;
   if (callBillingTimers[sessionId]) return;
 
   let realSessionId = sessionId;
@@ -1689,13 +1753,22 @@ async function startCallBillingTimer(sessionId) {
     sessionId = realSessionId;
   }
 
-  const session = await Session.findOneAndUpdate(
-    { _id: realSessionId, status: 'active', lastDeductionTime: null },
-    { $set: { lastDeductionTime: new Date() } },
-    { new: true }
-  );
-
-  if (!session) return;
+  let session;
+  if (restart) {
+    // Restart after an audio→video conversion: the old timer (anchored to the
+    // call start) was stopped, and this fresh timer anchors the video minute
+    // boundaries to the conversion moment. lastDeductionTime is already set,
+    // so skip the idempotency guard that prevents double-starts.
+    session = await Session.findById(realSessionId);
+    if (!session || session.status !== 'active') return;
+  } else {
+    session = await Session.findOneAndUpdate(
+      { _id: realSessionId, status: 'active', lastDeductionTime: null },
+      { $set: { lastDeductionTime: new Date() } },
+      { new: true }
+    );
+    if (!session) return;
+  }
 
   const isVideo = session.callType === 'video';
   const coinsPerMin = isVideo ? VIDEO_COINS_PER_MIN : AUDIO_COINS_PER_MIN;

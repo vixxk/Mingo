@@ -144,7 +144,7 @@ class IncomingCallModule(private val reactContext: ReactApplicationContext) :
         // not used
     }
 
-    override fun onNewIntent(activity: Activity, intent: Intent) {
+    override fun onNewIntent(intent: Intent) {
         val action = intent.getStringExtra(IncomingCallNotifications.EXTRA_ACTION)
         val payloadStr = intent.getStringExtra(IncomingCallNotifications.EXTRA_PAYLOAD)
         if (action != null && payloadStr != null) {

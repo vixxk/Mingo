@@ -624,8 +624,11 @@ export default function HomeScreen() {
           return 0;
         });
 
-        const bestChoice = mappedListeners.filter(l => l.bestChoice);
-        setBestChoiceData(bestChoice.length > 0 ? bestChoice : mappedListeners.slice(0, 8));
+        // Best Choice shows ONLY online listeners — never offline/inactive
+        // cards. If no best-choice listener is online, keep the list empty so
+        // the section hides entirely (the old fallback surfaced offline cards).
+        const bestChoiceOnline = mappedListeners.filter(l => l.bestChoice && l.isLive);
+        setBestChoiceData(bestChoiceOnline);
         setPeopleData(mappedListeners);
       } else {
         setBestChoiceData([]);
@@ -665,17 +668,13 @@ export default function HomeScreen() {
         }
         return item;
       }));
-      setBestChoiceData(prev => prev.map(item => {
-        if (item.id?.toString() === targetId) {
-          return {
-            ...item,
-            isLive: !!data.isOnline,
-            isBusy: !!data.isBusy,
-            busySince: data.busySince || null,
-          };
-        }
-        return item;
-      }));
+      // Keep the section live-only: update the changed listener and drop it
+      // entirely if it went offline, so offline cards never linger here.
+      setBestChoiceData(prev => prev
+        .map(item => item.id?.toString() === targetId
+          ? { ...item, isLive: !!data.isOnline, isBusy: !!data.isBusy, busySince: data.busySince || null }
+          : item)
+        .filter(item => item.isLive));
     };
 
     socketService.on('listener_status_changed', handleStatusChanged);
@@ -1039,28 +1038,28 @@ export default function HomeScreen() {
       >
         <AdSlider ads={ads} intervalSec={sliderInterval} />
         {}
-        {/* Mingo Mates Header */}
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>Mingo Mates</Text>
-        </View>
+        {/* Mingo Mates — rendered only when at least one best-choice listener
+            is online. Never shows offline cards, and hides entirely (header
+            included) when none are online. */}
+        {bestChoiceData.length > 0 && (
+          <>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Mingo Mates</Text>
+            </View>
 
-        {/* Mingo Mates Horizontal Cards (Same size as People cards) */}
-        {bestChoiceData.length === 0 ? (
-          <View style={styles.emptyCardContainer}>
-            <Text style={styles.emptyCardText}>No listeners available at the moment.</Text>
-          </View>
-        ) : (
-          <FlatList
-            ref={flatListRef}
-            data={bestChoiceData}
-            renderItem={renderMingoMatesItem}
-            keyExtractor={(item) => item.id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.mingoMatesCarouselContainer}
-            decelerationRate="fast"
-            scrollEventThrottle={16}
-          />
+            {/* Mingo Mates Horizontal Cards (Same size as People cards) */}
+            <FlatList
+              ref={flatListRef}
+              data={bestChoiceData}
+              renderItem={renderMingoMatesItem}
+              keyExtractor={(item) => item.id}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.mingoMatesCarouselContainer}
+              decelerationRate="fast"
+              scrollEventThrottle={16}
+            />
+          </>
         )}
 
         {}

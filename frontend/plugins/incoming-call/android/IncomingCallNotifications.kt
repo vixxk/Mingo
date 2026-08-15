@@ -68,6 +68,12 @@ object IncomingCallNotifications {
     @Volatile
     private var ringTimeoutRunnable: Runnable? = null
 
+    /** The callId currently being shown / ringing. Used to deduplicate — when
+     *  both the socket path and the OneSignal push fire for the same call we
+     *  only post the notification once. */
+    @Volatile
+    private var activeCallId: String? = null
+
     fun setAppInForeground(foreground: Boolean) {
         appInForeground = foreground
     }
@@ -80,31 +86,53 @@ object IncomingCallNotifications {
         Uri.parse("android.resource://${context.packageName}/raw/incoming_ringtone")
 
     /**
-     * Creates (or updates) the "Calls" notification channel. The channel is
-     * intentionally SILENT — the looping ringtone is played by
-     * [IncomingCallActivity] itself (a notification sound plays only once,
-     * which is not a ringtone). The channel still gets a light vibration for
-     * the heads-up fallback when full-screen intents are unavailable.
+     * Creates (or updates) the "Calls" notification channel.
+     *
+     * The channel carries the bundled ringtone as its sound so the heads-up
+     * notification (shown when the system cannot launch the full-screen intent)
+     * still plays an audible ring. The full-screen card (IncomingCallActivity)
+     * plays a *looping* ringtone independently via MediaPlayer and the
+     * notification builder sets setSound(null) to avoid doubling up.
      */
     fun ensureCallChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        // Delete the old silent channel so the new one with sound takes effect.
+        // (Android locks channel settings after first creation.)
+        try { manager.deleteNotificationChannel(CHANNEL_ID) } catch (_: Exception) {}
+
+        val ringtoneUri = getBundledRingtoneUri(context)
+        val audioAttrs = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+
         val channel = NotificationChannel(CHANNEL_ID, "Calls", NotificationManager.IMPORTANCE_HIGH)
         channel.description = "Incoming audio and video calls"
-        channel.setSound(null, null)
+        channel.setSound(ringtoneUri, audioAttrs)
         channel.enableVibration(true)
-        channel.vibrationPattern = longArrayOf(0, 400, 400, 400, 400, 400)
+        channel.vibrationPattern = longArrayOf(0, 800, 800, 800, 800, 800)
         channel.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(channel)
     }
 
     /**
      * Displays the WhatsApp-style incoming-call card + ringtone. No-op while
      * the app is in the foreground (the in-app IncomingCallPopup handles it).
+     *
+     * Deduplicated by callId — if a notification for the same call is already
+     * active (posted by the socket path), the push path is silently ignored
+     * and vice-versa.
      */
     fun showIncomingCall(context: Context, payload: JSONObject) {
         if (appInForeground) return
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
+
+        // ── Dedup: skip if we're already showing a notification for this call ──
+        val callId = payload.optString("callId", "")
+        if (callId.isNotEmpty() && callId == activeCallId) return
+        activeCallId = callId
 
         try {
             ensureCallChannel(context)
@@ -150,13 +178,16 @@ object IncomingCallNotifications {
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(false)
+            .setOngoing(true)
             .setShowWhen(true)
             .setColor(0xFFA855F7.toInt())
-            .setDefaults(NotificationCompat.DEFAULT_VIBRATE or NotificationCompat.DEFAULT_LIGHTS)
+            .setVibrate(longArrayOf(0, 800, 800, 800, 800, 800))
             .setContentIntent(openPending)
             .setFullScreenIntent(fullScreenPending, true)
             .addAction(0, "Decline", declinePending)
             .addAction(0, "Accept", acceptPending)
+            // Let the channel sound play for the heads-up fallback case.
+            // The IncomingCallActivity will handle its own looping ringtone.
 
         try {
             NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, builder.build())
@@ -174,6 +205,7 @@ object IncomingCallNotifications {
      *  closes the card. */
     fun stopIncomingCall(context: Context) {
         cancelRingTimeout()
+        activeCallId = null
         try {
             NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
         } catch (e: Exception) {
@@ -253,12 +285,12 @@ object IncomingCallNotifications {
     }
 
     /** Intent that launches MainActivity carrying the card action + payload. */
-    fun buildMainActivityIntent(context: Context, action: String, payload: JSONObject): Intent =
+    fun buildMainActivityIntent(context: Context, actionStr: String, payload: JSONObject): Intent =
         Intent().apply {
             component = ComponentName(context.packageName, "${context.packageName}.MainActivity")
-            action = Intent.ACTION_MAIN
+            this.action = Intent.ACTION_MAIN
             addCategory(Intent.CATEGORY_LAUNCHER)
-            putExtra(EXTRA_ACTION, action)
+            putExtra(EXTRA_ACTION, actionStr)
             putExtra(EXTRA_PAYLOAD, payload.toString())
             addFlags(
                 Intent.FLAG_ACTIVITY_NEW_TASK or

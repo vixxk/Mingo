@@ -102,7 +102,7 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
 
       <Animated.View style={[styles.popupContainer, { transform: [{ translateY: slideAnim }] }]}>
         <LinearGradient
-          colors={['#000', '#1A0000', '#4A0000']}
+          colors={['#000', '#052E16', '#14532D']}
           locations={[0, 0.55, 1]}
           style={styles.popup}
         >
@@ -148,7 +148,7 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
             >
               {loading ? (
                 <View style={styles.loadingWrap}>
-                  <ActivityIndicator size="small" color="#EF4444" />
+                  <ActivityIndicator size="small" color="#22C55E" />
                   <Text style={styles.loadingText}>Loading packages...</Text>
                 </View>
               ) : (
@@ -241,7 +241,7 @@ const styles = StyleSheet.create({
     paddingTop: vs(8),
     paddingBottom: vs(28),
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.4)',
+    borderColor: 'rgba(34, 197, 94, 0.5)',
     borderBottomWidth: 0,
     overflow: 'hidden',
   },
@@ -354,8 +354,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.12)',
   },
   packageCardActive: {
-    borderColor: '#EF4444',
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderColor: '#22C55E',
+    backgroundColor: 'rgba(34, 197, 94, 0.15)',
   },
 
   packageLeft: {
@@ -380,14 +380,14 @@ const styles = StyleSheet.create({
   },
   tagBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    backgroundColor: 'rgba(34, 197, 94, 0.15)',
     paddingHorizontal: s(8),
     paddingVertical: vs(2),
     borderRadius: 8,
   },
   tagText: {
     fontSize: ms(10, 0.3),
-    color: '#EF4444',
+    color: '#22C55E',
     fontFamily: 'Inter_600SemiBold',
   },
 
@@ -402,7 +402,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
   },
   priceBtn: {
-    backgroundColor: '#EF4444',
+    backgroundColor: '#22C55E',
     paddingHorizontal: s(16),
     paddingVertical: vs(8),
     borderRadius: 14,

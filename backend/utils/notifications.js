@@ -365,7 +365,10 @@ const sendNotificationToOneSignalByUserIds = async (userIds, title, body, data =
         // OneSignal extension replaces this notification with the full-screen
         // call card + looping ringtone; the sound here is the fallback for
         // builds where the extension is unavailable.
-        ...(data?.type === 'incoming_call' ? { android_sound: 'incoming_ringtone' } : {}),
+        ...(data?.type === 'incoming_call' ? {
+          android_sound: 'incoming_ringtone',
+          android_channel_id: 'calls',
+        } : {}),
       },
       {
         headers: {

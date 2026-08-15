@@ -83,6 +83,14 @@ export default function MissedCallScreen() {
     });
   };
 
+  const handleGoBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)');
+    }
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
@@ -185,7 +193,7 @@ export default function MissedCallScreen() {
             activeOpacity={0.7}
             accessibilityRole="button"
             accessibilityLabel="Go back"
-            onPress={() => router.back()}
+            onPress={handleGoBack}
           >
             <Ionicons name="arrow-back" size={wp(4.6)} color="#D4D4D8" />
             <Text style={styles.backBtnText}>Go Back</Text>

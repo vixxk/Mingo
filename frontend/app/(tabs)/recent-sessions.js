@@ -17,6 +17,7 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, wp, hp, SCREEN_WIDTH } from '../../utils/responsive';
 import { callAPI, userAPI, walletAPI, listenersAPI } from '../../utils/api';
+import { formatSessionDuration } from '../../utils/sessionFormat';
 import FavouriteListenerPopup from '../../components/shared/FavouriteListenerPopup';
 import NotificationsPopup from '../../components/shared/NotificationsPopup';
 import StatusPopup from '../../components/shared/StatusPopup';
@@ -127,7 +128,7 @@ const SessionItem = ({ item, onShowOfflinePopup }) => {
 
                 {/* Row 2: Duration & Diamond Cost */}
                 <View style={[styles.cardDetailRow, { marginTop: vs(3) }]}>
-                  <Text style={styles.callDurationText}>{item.duration}</Text>
+                  <Text style={styles.callDurationText}>{item.durationLabel}</Text>
                   <View style={styles.bulletDot} />
                   <View style={styles.miniCostBadge}>
                     <Text style={styles.miniCostText}>{item.diamonds}</Text>
@@ -288,6 +289,7 @@ export default function RecentSessionsScreen() {
             gender: call.listenerId?.gender,
             avatarIndex: call.listenerId?.avatarIndex,
             duration: `${call.duration || 0} mins`,
+            durationLabel: formatSessionDuration(call),
             callType: call.callType || 'audio',
             callTime: formatCallTime(call.startTime || call.createdAt),
             diamonds: diamonds,

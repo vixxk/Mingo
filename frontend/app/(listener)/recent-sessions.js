@@ -17,6 +17,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, wp, hp, SCREEN_WIDTH } from '../../utils/responsive';
 import { callAPI, walletAPI } from '../../utils/api';
+import { formatSessionDuration, formatSessionType } from '../../utils/sessionFormat';
 import ReportUserPopup from '../../components/shared/ReportUserPopup';
 import { getAvatarUrl } from '../../utils/avatars';
 
@@ -77,7 +78,7 @@ const SessionItem = ({ item, onReport }) => {
                 color="rgba(255,255,255,0.8)" 
                 style={{ marginRight: wp(1) }} 
               />
-              <Text style={[styles.sessionDuration, { color: 'rgba(255,255,255,0.8)' }]}>{item.duration} • {item.type ? (item.type.charAt(0).toUpperCase() + item.type.slice(1)) : ''}</Text>
+              <Text style={[styles.sessionDuration, { color: 'rgba(255,255,255,0.8)' }]}>{item.durationLabel} • {item.typeLabel}</Text>
             </View>
           </View>
         </View>
@@ -193,7 +194,9 @@ export default function RecentSessionsScreen() {
           gender: call.userId?.gender || 'Female',
           avatarIndex: call.userId?.avatarIndex || '0',
           duration: `${call.duration || 0} mins`,
+          durationLabel: formatSessionDuration(call),
           type: call.callType || 'audio',
+          typeLabel: formatSessionType(call),
           time: call.createdAt,
           earnings: call.listenerEarnings || 0,
           coinsDeducted: call.coinsDeducted || 0,

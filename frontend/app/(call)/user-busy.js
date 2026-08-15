@@ -70,7 +70,13 @@ export default function UserBusyScreen() {
     ).start();
   }, []);
 
-  // NOTE: no auto-redirect — this screen stays until the user taps a button.
+  const handleGoBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)');
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -162,7 +168,7 @@ export default function UserBusyScreen() {
             activeOpacity={0.7}
             accessibilityRole="button"
             accessibilityLabel="Go back"
-            onPress={() => router.back()}
+            onPress={handleGoBack}
           >
             <Ionicons name="arrow-back" size={wp(4.6)} color="#FCA5A5" />
             <Text style={styles.secondaryBtnText}>Go Back</Text>

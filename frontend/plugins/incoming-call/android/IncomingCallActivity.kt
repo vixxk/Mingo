@@ -1,6 +1,7 @@
 package app.themingo
 
 import android.app.Activity
+import android.app.PendingIntent
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
@@ -19,6 +20,8 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import com.facebook.drawee.backends.pipeline.Fresco
 import com.facebook.drawee.generic.RoundingParams
 import com.facebook.drawee.view.SimpleDraweeView
@@ -73,6 +76,12 @@ class IncomingCallActivity : Activity() {
         setContentView(buildUi(payload))
         startRinging(payload)
         startVibrating()
+
+        // The notification channel plays the ringtone sound once for the
+        // heads-up fallback. Now that IncomingCallActivity is open and playing
+        // its own looping ringtone, re-post the notification silently so the
+        // channel sound stops and doesn't overlap.
+        silenceChannelNotification(payload)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -163,6 +172,42 @@ class IncomingCallActivity : Activity() {
             vibrator.cancel()
         } catch (e: Exception) {
             // ignore
+        }
+    }
+
+    /**
+     * Re-posts the call notification silently to cut the channel's one-shot
+     * ringtone sound. The activity's MediaPlayer loop is already running, so
+     * we don't want both playing at once.
+     */
+    private fun silenceChannelNotification(payload: JSONObject) {
+        try {
+            val callerName = payload.optString("callerName", "Mingo")
+            val callType = payload.optString("callType", "audio")
+            val title = "Incoming ${if (callType == "video") "Video" else "Audio"} Call"
+
+            val openPending = PendingIntent.getActivity(
+                this, 102,
+                IncomingCallNotifications.buildMainActivityIntent(this, IncomingCallNotifications.ACTION_OPEN, payload),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val builder = NotificationCompat.Builder(this, IncomingCallNotifications.CHANNEL_ID)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle(title)
+                .setContentText("$callerName is calling you")
+                .setCategory(NotificationCompat.CATEGORY_CALL)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setAutoCancel(false)
+                .setOngoing(true)
+                .setSilent(true)
+                .setContentIntent(openPending)
+                .setColor(0xFFA855F7.toInt())
+
+            NotificationManagerCompat.from(this).notify(IncomingCallNotifications.NOTIFICATION_ID, builder.build())
+        } catch (e: Exception) {
+            // Silencing failed — the channel sound will play its one-shot and stop.
         }
     }
 

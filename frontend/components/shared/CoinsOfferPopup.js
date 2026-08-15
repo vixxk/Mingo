@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Image } from 'react-native';
 import { useRef, useEffect, useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ms, s, vs, wp, hp, SCREEN_WIDTH, SCREEN_HEIGHT } from '../../utils/responsive';
 import AnimatedSparkles from './AnimatedSparkles';
@@ -52,11 +53,15 @@ export default function CoinsOfferPopup({ visible, onClose, onAddCoins, timeLeft
       </Animated.View>
       <Animated.View style={[styles.popupContainer, { transform: [{ translateY: slideAnim }] }]}>
         <LinearGradient
-          colors={['#000', '#1A0000', '#4A0000']}
+          colors={['#000', '#052E16', '#14532D']}
           locations={[0, 0.55, 1]}
           style={styles.popup}
         >
+          <AnimatedSparkles color="#34D399" size={18} />
           <View style={styles.handleBar} />
+          <TouchableOpacity style={styles.closeBtn} activeOpacity={0.7} onPress={onClose}>
+            <Ionicons name="close" size={wp(5)} color="#fff" />
+          </TouchableOpacity>
           <Text style={styles.offerSubtitle}>Limited Time Offer</Text>
           <Text style={styles.offerTitle}>{titleText}</Text>
 
@@ -82,15 +87,17 @@ export default function CoinsOfferPopup({ visible, onClose, onAddCoins, timeLeft
             <Text style={styles.priceNew}> ₹{offer.newPrice}</Text>
           </View>
 
-          <TouchableOpacity activeOpacity={0.8} onPress={onAddCoins} style={styles.addBtnWrap}>
-            <LinearGradient
-              colors={['#EF4444', '#B91C1C']}
-              start={{ x: 0, y: 0.5 }}
-              end={{ x: 1, y: 0.5 }}
-              style={styles.addBtn}
-            >
-              <Text style={styles.addBtnText}>Add {offer.coins} Coins</Text>
-            </LinearGradient>
+          <TouchableOpacity activeOpacity={0.8} onPress={onAddCoins} style={styles.addBtnGlow}>
+            <View style={styles.addBtnWrap}>
+              <LinearGradient
+                colors={['#22C55E', '#16A34A']}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={styles.addBtn}
+              >
+                <Text style={styles.addBtnText}>Add {offer.coins} Coins</Text>
+              </LinearGradient>
+            </View>
           </TouchableOpacity>
         </LinearGradient>
       </Animated.View>
@@ -124,9 +131,21 @@ const styles = StyleSheet.create({
     paddingBottom: hp(4),
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.4)',
+    borderColor: 'rgba(34, 197, 94, 0.5)',
     borderBottomWidth: 0,
     overflow: 'hidden',
+  },
+  closeBtn: {
+    position: 'absolute',
+    top: hp(2),
+    right: wp(6),
+    width: wp(9),
+    height: wp(9),
+    borderRadius: wp(4.5),
+    backgroundColor: '#22C55E',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
   },
   offerSubtitle: {
     fontSize: ms(14),
@@ -190,11 +209,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontFamily: 'Inter_700Bold',
   },
-  addBtnWrap: {
+  addBtnGlow: {
     width: '100%',
     borderRadius: 30,
-    overflow: 'hidden',
     height: hp(6),
+    shadowColor: '#22C55E',
+    shadowOpacity: 0.6,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 10,
+  },
+  addBtnWrap: {
+    flex: 1,
+    borderRadius: 30,
+    overflow: 'hidden',
   },
   addBtn: {
     flex: 1,
