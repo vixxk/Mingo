@@ -50,6 +50,13 @@ const {
   RemoteAudioState,
 } = AgoraSDK || {};
 
+// Video calls bill at this rate per minute (keep in sync with
+// VIDEO_COINS_PER_MIN in backend/src/socket.js). The payer needs at least one
+// video minute to convert an audio call — otherwise the backend refuses the
+// upgrade (call_upgrade_failed → insufficient_balance) and the frontend
+// prompts to recharge instead of converting and auto-ending a minute later.
+const VIDEO_UPGRADE_MIN_COINS = 40;
+
 /**
  * Owns the Agora engine for the duration of the audio call. Controls are
  * exposed imperatively via the ref so the screen can wire them to the UI
@@ -227,6 +234,10 @@ export default function AudioCallScreen() {
   const [upgradeModalVisible, setUpgradeModalVisible] = useState(false);
   const [upgradeModalMode, setUpgradeModalMode] = useState('request');
   const [pendingUpgradeState, setPendingUpgradeState] = useState(null); // null | 'incoming' | 'pending'
+  // True while the cancelled-call popup is showing a plain notice (upgrade
+  // declined, other side short on balance, ...) rather than a real call
+  // cancellation. Closing a notice must NOT end the ongoing audio call.
+  const [callCancelledNotice, setCallCancelledNotice] = useState(false);
   const [currentCoins, setCurrentCoins] = useState(null);
   const [lowBalanceMessage, setLowBalanceMessage] = useState('');
   const [permission, setPermission] = useState({ mic: false });
@@ -248,6 +259,9 @@ export default function AudioCallScreen() {
   const cancelledExitTimerRef = useRef(null);
   const remoteJoinedRef = useRef(false);
   const upgradeNavigatedRef = useRef(false);
+  // Live role value for socket handlers registered once inside the billing
+  // effect — reading the isListener state directly there would be stale.
+  const isListenerRef = useRef(false);
   // Agora credentials — the backend mints a session-scoped token for audio
   // calls (agoraAppId + agoraToken). Falls back to the bundled App ID only
   // when the server did not attach one.
@@ -337,6 +351,10 @@ export default function AudioCallScreen() {
   }, [remoteJoined]);
 
   useEffect(() => {
+    isListenerRef.current = isListener;
+  }, [isListener]);
+
+  useEffect(() => {
     const requestPermissions = async () => {
       try {
         const { status: micStatus } = await Camera.requestMicrophonePermissionsAsync();
@@ -416,6 +434,9 @@ export default function AudioCallScreen() {
     const handleCallCancelled = async (data) => {
       if (data.sessionId === callId || data.callId === callId) {
         setCallCancelledMessage('The call was cancelled by the user.');
+        // A real cancellation must close with the end-call handler, so clear
+        // any stale notice flag first.
+        setCallCancelledNotice(false);
         setShowCallCancelled(true);
         // Fallback auto-exit: if the user doesn't dismiss the popup, leave the
         // call so billing doesn't keep running on an already-cancelled session.
@@ -447,6 +468,16 @@ export default function AudioCallScreen() {
       const isMatch = !callId || String(data.sessionId) === String(callId) || (data.roomId && data.roomId === roomId);
       if (isMatch) {
         upgradeNavigatedRef.current = true;
+        // Mark the audio call as "ended" from this screen's perspective BEFORE
+        // leaving the Agora channel. Two things depend on this:
+        //   1. The beforeRemove guard below blocks router.replace for ANY
+        //      state-changing action (including REPLACE), so unless we flip
+        //      this flag the conversion never navigates to the video screen.
+        //   2. Leaving the channel makes the OTHER participant's engine fire
+        //      onUserOffline → handleRemoteLeft → finishAndExit. With this
+        //      flag set, that teardown is a no-op, so the call isn't ended and
+        //      routed to feedback mid-conversion — the video screen takes over.
+        callEndedRef.current = true;
         setPendingUpgradeState(null);
         setUpgradeModalVisible(false);
         // Leave the audio channel before navigating to video
@@ -480,6 +511,9 @@ export default function AudioCallScreen() {
         setPendingUpgradeState(null);
         setUpgradeModalVisible(false);
         setCallCancelledMessage(data.message || 'The upgrade to video call was declined.');
+        // This is only a notice — the ongoing audio call keeps running, so
+        // closing it must NOT end the call (unlike a real cancellation).
+        setCallCancelledNotice(true);
         setShowCallCancelled(true);
       }
     };
@@ -487,6 +521,26 @@ export default function AudioCallScreen() {
       console.log('[Socket] handleUpgradeFailed received:', data);
       setPendingUpgradeState(null);
       setUpgradeModalVisible(false);
+      // The backend refused the upgrade because the PAYING user (session.userId)
+      // can't afford one video minute. Prompt them to recharge instead of
+      // letting the call convert and then auto-end on the first video minute.
+      if (data.reason === 'insufficient_balance') {
+        if (isListenerRef.current) {
+          // The listener doesn't pay — the other side is short on balance, so
+          // just inform (without ending the call).
+          setCallCancelledMessage(
+            data.message || 'The user does not have enough balance to switch to a video call.'
+          );
+          setCallCancelledNotice(true);
+          setShowCallCancelled(true);
+        } else {
+          setLowBalanceMessage(
+            data.message ||
+              `Video calls cost ${VIDEO_UPGRADE_MIN_COINS} 💎 per minute. Please recharge to switch.`
+          );
+          setShowRecharge(true);
+        }
+      }
     };
 
     // Register listeners
@@ -653,12 +707,20 @@ export default function AudioCallScreen() {
       clearTimeout(cancelledExitTimerRef.current);
       cancelledExitTimerRef.current = null;
     }
+    setCallCancelledNotice(false);
     setShowCallCancelled(false);
     // finishAndExit performs the full teardown (leave Agora + stop billing +
     // endCall API + navigate), so closing the popup behaves exactly like
     // tapping End Call — identically for both roles.
     finishAndExit();
   }, [finishAndExit]);
+
+  // Closing a notice popup (upgrade declined, other side low on balance) only
+  // dismisses it — the ongoing audio call keeps running untouched.
+  const handleCallCancelledNoticeClose = useCallback(() => {
+    setCallCancelledNotice(false);
+    setShowCallCancelled(false);
+  }, []);
 
   const handleRechargeSuccess = useCallback(async () => {
     try {
@@ -698,16 +760,70 @@ export default function AudioCallScreen() {
     }
   }, [pendingUpgradeState]);
 
-  const handleSendUpgradeRequest = useCallback(() => {
+  const handleSendUpgradeRequest = useCallback(async () => {
+    // The USER pays for the video minutes — check their balance up front so a
+    // low-balance user is prompted to recharge instead of having the request
+    // rejected (or worse, converting and auto-ending on the first video
+    // minute). The listener never pays, so the backend validates the user's
+    // balance in that case.
+    if (!isListener) {
+      let balance = currentCoins;
+      if (balance === null || balance === undefined) {
+        try {
+          const res = await walletAPI.getBalance();
+          if (res?.data?.coins !== undefined) {
+            balance = res.data.coins;
+            setCurrentCoins(balance);
+          }
+        } catch (e) {
+          console.log('Balance check before upgrade request failed:', e);
+        }
+      }
+      if (balance !== null && balance !== undefined && balance < VIDEO_UPGRADE_MIN_COINS) {
+        setLowBalanceMessage(
+          `Video calls cost ${VIDEO_UPGRADE_MIN_COINS} 💎 per minute. You need at least ${VIDEO_UPGRADE_MIN_COINS} coins to switch — please recharge.`
+        );
+        setShowRecharge(true);
+        return;
+      }
+    }
     setPendingUpgradeState('pending');
     setUpgradeModalMode('pending');
     socketService.emit('request_call_upgrade', { sessionId: callId, roomId, targetUserId: listenerId });
-  }, [callId, roomId, listenerId]);
+  }, [callId, roomId, listenerId, isListener, currentCoins]);
 
-  const handleAcceptUpgradeRequest = useCallback(() => {
+  const handleAcceptUpgradeRequest = useCallback(async () => {
+    // Same payer balance gate as the request side: when the USER accepts an
+    // incoming upgrade, their balance may have dropped below one video minute
+    // since the request arrived. Prompt them to recharge instead of accepting
+    // and getting auto-ended on the first video minute. (The listener never
+    // pays — the backend re-checks the user's balance on accept regardless.)
+    if (!isListener) {
+      let balance = currentCoins;
+      if (balance === null || balance === undefined) {
+        try {
+          const res = await walletAPI.getBalance();
+          if (res?.data?.coins !== undefined) {
+            balance = res.data.coins;
+            setCurrentCoins(balance);
+          }
+        } catch (e) {
+          console.log('Balance check before accepting upgrade failed:', e);
+        }
+      }
+      if (balance !== null && balance !== undefined && balance < VIDEO_UPGRADE_MIN_COINS) {
+        setUpgradeModalVisible(false);
+        setPendingUpgradeState(null);
+        setLowBalanceMessage(
+          `Video calls cost ${VIDEO_UPGRADE_MIN_COINS} 💎 per minute. You need at least ${VIDEO_UPGRADE_MIN_COINS} coins to switch — please recharge.`
+        );
+        setShowRecharge(true);
+        return;
+      }
+    }
     setPendingUpgradeState(null);
     socketService.emit('respond_call_upgrade', { sessionId: callId, roomId, accepted: true });
-  }, [callId, roomId]);
+  }, [callId, roomId, isListener, currentCoins]);
 
   const handleDeclineUpgradeRequest = useCallback(() => {
     setPendingUpgradeState(null);
@@ -900,7 +1016,7 @@ export default function AudioCallScreen() {
       <CallCancelledPopup
         visible={showCallCancelled}
         message={callCancelledMessage}
-        onClose={handleCallCancelledClose}
+        onClose={callCancelledNotice ? handleCallCancelledNoticeClose : handleCallCancelledClose}
       />
 
       <SafetyPopup

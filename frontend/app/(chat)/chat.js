@@ -461,6 +461,7 @@ export default function ChatScreen() {
   useEffect(() => { chatRestrictedRef.current = chatRestricted; }, [chatRestricted]);
   useEffect(() => { historyModeRef.current = historyMode; }, [historyMode]);
   useEffect(() => { endedPanelVisibleRef.current = endedPanelVisible; }, [endedPanelVisible]);
+  useEffect(() => { if (realConversationId) realConversationIdRef.current = realConversationId; }, [realConversationId]);
 
   const handleBack = useCallback(() => {
     if (router.canGoBack()) {
@@ -644,6 +645,7 @@ export default function ChatScreen() {
           if (response?.data) {
             const actualConvId = response.data.conversationId;
             setRealConversationId(actualConvId);
+            realConversationIdRef.current = actualConvId;
             if (response.data.isAdmin !== undefined) {
               setIsAdminChat(response.data.isAdmin);
             }
@@ -1219,7 +1221,7 @@ export default function ChatScreen() {
     setMessages((prev) => [...prev, optimisticMsg]);
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
 
-    const convId = realConversationIdRef.current || realConversationId;
+    const convId = realConversationId || realConversationIdRef.current;
     const msgData = {
       conversationId: convId, 
       senderId: currentUserIdRef.current || currentUserId, 

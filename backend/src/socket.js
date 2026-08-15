@@ -182,10 +182,22 @@ const initSocket = (server) => {
 
     socket.on('send_message', async (data) => {
       console.log('[Socket] send_message event received:', JSON.stringify(data));
-      const { conversationId, senderId, senderModel, content, type, mediaUrl } = data;
+      let { conversationId, senderId, senderModel, content, type, mediaUrl } = data;
       
       try {
-        const conversation = await Conversation.findById(conversationId);
+        const mongoose = require('mongoose');
+        let conversation = null;
+        if (conversationId && mongoose.Types.ObjectId.isValid(conversationId)) {
+          conversation = await Conversation.findById(conversationId);
+        }
+        if (!conversation && senderId && conversationId && mongoose.Types.ObjectId.isValid(conversationId)) {
+          conversation = await Conversation.findOne({
+            participants: { $all: [senderId, conversationId] }
+          });
+          if (conversation) {
+            conversationId = conversation._id.toString();
+          }
+        }
         if (!conversation) {
           socket.emit('message_error', { error: 'Conversation not found' });
           return;
@@ -792,6 +804,24 @@ const initSocket = (server) => {
           return;
         }
 
+        // The paying user is ALWAYS session.userId — billing deducts from them
+        // regardless of who initiated the request. A converted call bills at
+        // the video rate (40 coins/min), so refuse the upgrade up front when
+        // they can't afford a single video minute. Otherwise the call would
+        // just be auto-ended on the first video billing tick — prompt the
+        // payer to recharge instead.
+        const payingUser = await User.findById(session.userId);
+        if (!payingUser || payingUser.coins < VIDEO_COINS_PER_MIN) {
+          socket.emit('call_upgrade_failed', {
+            sessionId: session._id.toString(),
+            reason: 'insufficient_balance',
+            requiredCoins: VIDEO_COINS_PER_MIN,
+            currentCoins: payingUser ? payingUser.coins : 0,
+            message: `You need at least ${VIDEO_COINS_PER_MIN} coins to switch to a video call. Please recharge.`,
+          });
+          return;
+        }
+
         // Always derive recipient from the session — the client-supplied
         // targetUserId can be stale or point at the caller's own ID.
         const callerUserId = socket.userId;
@@ -820,6 +850,26 @@ const initSocket = (server) => {
         if (!session || session.status !== 'active') return;
 
         if (accepted) {
+          // Re-check the paying user's balance at ACCEPT time too — it may
+          // have dropped below one video minute since the request (billing
+          // tick, gift, balance spent elsewhere). Refuse the conversion so the
+          // call isn't converted and then auto-ended on the first video
+          // minute. The payer gets the recharge prompt, the other side is
+          // informed — and the audio call keeps running.
+          const payingUser = await User.findById(session.userId);
+          if (!payingUser || payingUser.coins < VIDEO_COINS_PER_MIN) {
+            const failedPayload = {
+              sessionId: session._id.toString(),
+              reason: 'insufficient_balance',
+              requiredCoins: VIDEO_COINS_PER_MIN,
+              currentCoins: payingUser ? payingUser.coins : 0,
+              message: `You need at least ${VIDEO_COINS_PER_MIN} coins to switch to a video call. Please recharge.`,
+            };
+            io.to(`user_${session.userId}`).emit('call_upgrade_failed', failedPayload);
+            io.to(`user_${session.listenerId}`).emit('call_upgrade_failed', failedPayload);
+            return;
+          }
+
           if (!session.initialCallType) {
             session.initialCallType = session.callType || 'audio';
           }
