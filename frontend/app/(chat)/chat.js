@@ -258,6 +258,70 @@ const EMOJIS = [
   '🙄','😔','😏','💕','👏','😁','😌','😅','😜','💖','✌️','😉','🎉','🌟','💯','🔥',
 ];
 
+function ChatSkeleton() {
+  const pulseAnim = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 0.7,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 0.3,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [pulseAnim]);
+
+  const skeletonItems = [
+    { id: 1, align: 'flex-start', width: wp(55), height: hp(5.5) },
+    { id: 2, align: 'flex-end', width: wp(45), height: hp(4.5) },
+    { id: 3, align: 'flex-start', width: wp(68), height: hp(7.5) },
+    { id: 4, align: 'flex-end', width: wp(38), height: hp(4.5) },
+    { id: 5, align: 'flex-start', width: wp(58), height: hp(5) },
+    { id: 6, align: 'flex-end', width: wp(48), height: hp(5) },
+  ];
+
+  return (
+    <View style={{ paddingHorizontal: wp(4), paddingTop: hp(2) }}>
+      {skeletonItems.map((item) => (
+        <Animated.View
+          key={item.id}
+          style={{
+            alignSelf: item.align,
+            marginBottom: hp(1.8),
+            opacity: pulseAnim,
+          }}
+        >
+          <View
+            style={{
+              width: item.width,
+              height: item.height,
+              borderRadius: 18,
+              backgroundColor:
+                item.align === 'flex-end'
+                  ? 'rgba(99, 102, 241, 0.22)'
+                  : 'rgba(255, 255, 255, 0.08)',
+              borderWidth: 1,
+              borderColor:
+                item.align === 'flex-end'
+                  ? 'rgba(99, 102, 241, 0.3)'
+                  : 'rgba(255, 255, 255, 0.1)',
+            }}
+          />
+        </Animated.View>
+      ))}
+    </View>
+  );
+}
+
 // Minimum coins required to start/resume a 5-minute chat session — must stay
 // in sync with the backend's CHAT_COINS_PER_SESSION constant.
 const MIN_CHAT_COINS = 10;
@@ -277,16 +341,21 @@ export default function ChatScreen() {
     coinsDeducted: paramCoinsDeducted,
     startTime: paramStartTime,
     endTime: paramEndTime,
+    audioEnabled: paramAudioEnabled,
+    videoEnabled: paramVideoEnabled,
   } = useLocalSearchParams();
 
   // Other user display info (will be resolved after loading)
   const [otherName, setOtherName] = useState(paramName);
   const [otherAvatarIndex, setOtherAvatarIndex] = useState(paramAvatarIndex);
   const [otherGender, setOtherGender] = useState(paramGender);
-  // Call options the listener chose while going live (audio defaults to on,
-  // video defaults to off — same convention used across the app).
-  const [otherAudioEnabled, setOtherAudioEnabled] = useState(true);
-  const [otherVideoEnabled, setOtherVideoEnabled] = useState(true);
+  // Call options the listener chose while going live
+  const [otherAudioEnabled, setOtherAudioEnabled] = useState(
+    paramAudioEnabled !== undefined ? (paramAudioEnabled === 'true' || paramAudioEnabled === true) : true
+  );
+  const [otherVideoEnabled, setOtherVideoEnabled] = useState(
+    paramVideoEnabled !== undefined ? (paramVideoEnabled === 'true' || paramVideoEnabled === true) : true
+  );
 
   const avatarSource = { uri: getAvatarUrl(otherGender, otherAvatarIndex) };
 
@@ -471,6 +540,7 @@ export default function ChatScreen() {
   const typingTimeout = useRef(null);
   const realConversationIdRef = useRef(conversationId);
   const otherUserIdRef = useRef(null);
+  const currentUserIdRef = useRef(null);
 
   // Heartbeat to maintain stable online status during active chat session
   useEffect(() => {
@@ -544,7 +614,7 @@ export default function ChatScreen() {
         setEverHadSession(false);
         setWaitingForReply(false);
         setChatBlocked(false);
-        setLoading(false); // Enable chatbox immediately so user can type without delay
+        setLoading(true); // Show skeleton until messages & profile load
 
         let myId = null;
         let myRole = 'USER';
@@ -555,6 +625,8 @@ export default function ChatScreen() {
           myRole = user.role || 'USER';
           setCurrentUserId(myId);
           setUserRole(myRole);
+          currentUserIdRef.current = myId;
+          userRoleRef.current = myRole;
         }
 
         // Fetch balance
@@ -600,9 +672,8 @@ export default function ChatScreen() {
                     setOtherName(profileRes.data.name || paramName);
                     setOtherAvatarIndex(String(profileRes.data.avatarIndex ?? paramAvatarIndex));
                     setOtherGender(profileRes.data.gender || paramGender);
-                    // Show call buttons only for the options this listener enabled while going live.
-                    setOtherAudioEnabled(true);
-                    setOtherVideoEnabled(true);
+                    setOtherAudioEnabled(profileRes.data.audioEnabled !== false);
+                    setOtherVideoEnabled(profileRes.data.videoEnabled === true);
                     // Show the listener's real online state in the header.
                     setIsListenerOnline(profileRes.data.isOnline !== false);
                   }
@@ -736,13 +807,21 @@ export default function ChatScreen() {
   }, [currentUserId]);
 
   useEffect(() => {
+    const handleSocketReconnect = () => {
+      const curConvId = realConversationIdRef.current || conversationId;
+      if (curConvId && !historyModeRef.current) {
+        console.log('[Chat] Socket reconnected, rejoining room:', curConvId);
+        socketService.joinRoom(curConvId);
+      }
+    };
+
     const handleNewMessage = (msg) => {
       console.log('[Chat] Received message via socket:', msg);
       // History pages are frozen — never append live messages to an ended session.
       if (historyModeRef.current) return;
       
       // Only process messages for the current conversation
-      const msgConvId = (msg.conversationId?._id || msg.conversationId || '').toString();
+      const msgConvId = (msg.conversationId?._id || msg.conversationId || msg.conversation || '').toString();
       const currentConvId = (realConversationIdRef.current || '').toString();
       if (msgConvId && currentConvId && msgConvId !== currentConvId) {
         return; // Message belongs to a different conversation
@@ -750,8 +829,13 @@ export default function ChatScreen() {
 
       const isSystem = msg.senderModel === 'System' || msg.type === 'system';
       const msgSenderId = (msg.sender?._id || msg.sender || '').toString();
-      const myId = (currentUserId || '').toString();
-      const isSent = !isSystem && msgSenderId === myId;
+      const myId = (currentUserIdRef.current || currentUserId || '').toString();
+      const role = userRoleRef.current || userRole;
+
+      const isSent = !isSystem && (
+        (myId && msgSenderId && msgSenderId === myId) ||
+        (role === 'LISTENER' ? msg.senderModel === 'Listener' : msg.senderModel === 'User')
+      );
 
       let type = msg.type || 'text';
       let content = msg.content;
@@ -787,10 +871,10 @@ export default function ChatScreen() {
 
       // Listener replies unlock the user's message box (session billing starts
       // only on the user's next message, guarded by the backend).
-      if (userRole === 'LISTENER' && !isSent && !isSystem && msg.senderModel === 'User') {
+      if (role === 'LISTENER' && !isSent && !isSystem && msg.senderModel === 'User') {
         setChatBlocked(false);
       }
-      if (userRole === 'USER' && !isSent && !isSystem && msg.senderModel === 'Listener') {
+      if (role === 'USER' && !isSent && !isSystem && msg.senderModel === 'Listener') {
         setWaitingForReply(false);
       }
       // A real message after the session ended means the chat is resuming —
@@ -807,8 +891,7 @@ export default function ChatScreen() {
         if (isSent) {
           const optimisticIndex = prev.findIndex(m => 
             String(m.id).startsWith('temp_') && 
-            m.text === content && 
-            m.senderId === msgSenderId
+            (m.text === content || !content)
           );
           if (optimisticIndex !== -1) {
             const updated = [...prev];
@@ -819,10 +902,10 @@ export default function ChatScreen() {
               type: type,
               mediaUrl: mediaUrl,
               giftCount: msg.giftCount || 1,
-              senderId: msgSenderId,
+              senderId: msgSenderId || myId,
               senderModel: msg.senderModel,
               isAdminMessage: msg.isAdminMessage || false,
-              createdAt: msg.createdAt,
+              createdAt: msg.createdAt || new Date().toISOString(),
             };
             return updated;
           }
@@ -838,7 +921,7 @@ export default function ChatScreen() {
           senderId: msgSenderId,
           senderModel: msg.senderModel,
           isAdminMessage: msg.isAdminMessage || false,
-          createdAt: msg.createdAt,
+          createdAt: msg.createdAt || new Date().toISOString(),
         }];
       });
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
@@ -1017,7 +1100,7 @@ export default function ChatScreen() {
 
     const handleListenerStatusChanged = (data) => {
       console.log('[Chat] Listener status changed:', data);
-      const { userId, isOnline } = data;
+      const { userId, isOnline, audioEnabled, videoEnabled } = data;
       const selfIsListener = userRole === 'LISTENER';
       // For a listener, the event is about their OWN online state. For a user,
       // it's about the listener they're chatting with.
@@ -1026,7 +1109,10 @@ export default function ChatScreen() {
         : (otherUserIdRef.current || '').toString();
       if (!targetId || userId.toString() !== targetId) return;
 
-      setIsListenerOnline(isOnline);
+      if (isOnline !== undefined) setIsListenerOnline(isOnline);
+      if (audioEnabled !== undefined) setOtherAudioEnabled(audioEnabled !== false);
+      if (videoEnabled !== undefined) setOtherVideoEnabled(videoEnabled === true);
+
       if (selfIsListener) {
         if (!isOnline) {
           setChatBlocked(true);
@@ -1053,6 +1139,7 @@ export default function ChatScreen() {
       setShowListenerOfflinePopup(true);
     };
 
+    socketService.on('connect', handleSocketReconnect);
     socketService.on('receive_message', handleNewMessage);
     socketService.on('user_typing', handleTyping);
     socketService.on('user_stop_typing', handleStopTyping);
@@ -1071,6 +1158,7 @@ export default function ChatScreen() {
     socketService.on('chat_restricted', handleChatRestricted);
 
     return () => {
+      socketService.off('connect', handleSocketReconnect);
       socketService.off('receive_message', handleNewMessage);
       socketService.off('user_typing', handleTyping);
       socketService.off('user_stop_typing', handleStopTyping);
@@ -1131,16 +1219,17 @@ export default function ChatScreen() {
     setMessages((prev) => [...prev, optimisticMsg]);
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
 
+    const convId = realConversationIdRef.current || realConversationId;
     const msgData = {
-      conversationId: realConversationId, 
-      senderId: currentUserId, 
-      senderModel: userRole === 'LISTENER' ? 'Listener' : 'User',
+      conversationId: convId, 
+      senderId: currentUserIdRef.current || currentUserId, 
+      senderModel: (userRoleRef.current || userRole) === 'LISTENER' ? 'Listener' : 'User',
       content: msgContent, 
       type: 'text',
     };
     console.log('[Chat] Sending message:', msgData);
     socketService.emit('send_message', msgData);
-    socketService.emit('stop_typing', { conversationId: realConversationId, userId: currentUserId });
+    socketService.emit('stop_typing', { conversationId: convId, userId: currentUserIdRef.current || currentUserId });
     setMessage('');
     setShowEmojis(false);
     setPhoneDetected(false);
@@ -1369,23 +1458,23 @@ export default function ChatScreen() {
         {userRole === 'USER' && !isAdminChat && (
           <View style={styles.headerCallBtns}>
             <TouchableOpacity
-              style={[styles.headerCallBtn, !isListenerOnline && styles.headerCallBtnDisabled]}
+              style={[styles.headerCallBtn, (!isListenerOnline || !otherAudioEnabled) && styles.headerCallBtnDisabled]}
               activeOpacity={0.7}
-              disabled={!isListenerOnline}
+              disabled={!isListenerOnline || !otherAudioEnabled}
               onPress={() => handleStartCall('audio')}
               accessibilityLabel="Instant switch to Audio Call"
             >
-              <Ionicons name="call" size={wp(4.6)} color="#fff" />
+              <Ionicons name="call" size={wp(4.6)} color={otherAudioEnabled && isListenerOnline ? "#fff" : "#9CA3AF"} />
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.headerCallBtn, !isListenerOnline && styles.headerCallBtnDisabled]}
+              style={[styles.headerCallBtn, (!isListenerOnline || !otherVideoEnabled) && styles.headerCallBtnDisabled]}
               activeOpacity={0.7}
-              disabled={!isListenerOnline}
+              disabled={!isListenerOnline || !otherVideoEnabled}
               onPress={() => handleStartCall('video')}
               accessibilityLabel="Instant switch to Video Call"
             >
-              <Ionicons name="videocam" size={wp(4.6)} color="#fff" />
+              <Ionicons name="videocam" size={wp(4.6)} color={otherVideoEnabled && isListenerOnline ? "#fff" : "#9CA3AF"} />
             </TouchableOpacity>
           </View>
         )}
@@ -1431,20 +1520,7 @@ export default function ChatScreen() {
           </View>
         )}
         {loading ? (
-          <View style={{ paddingHorizontal: wp(4), paddingTop: hp(2) }}>
-            {/* Skeleton message bubbles */}
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <View key={i} style={{ alignSelf: i % 2 === 0 ? 'flex-end' : 'flex-start', marginBottom: hp(1.5) }}>
-                <View style={{
-                  width: wp(i % 3 === 0 ? 55 : i % 2 === 0 ? 45 : 65),
-                  height: hp(i % 3 === 0 ? 6 : 4.5),
-                  borderRadius: 18,
-                  backgroundColor: i % 2 === 0 ? 'rgba(59, 130, 246, 0.12)' : 'rgba(255,255,255,0.05)',
-                  opacity: 0.6,
-                }} />
-              </View>
-            ))}
-          </View>
+          <ChatSkeleton />
         ) : displayedMessages.length === 0 ? (
           <View style={styles.emptyChat}>
             <Ionicons name="chatbubbles-outline" size={wp(12)} color="#333" />
@@ -1800,11 +1876,11 @@ const styles = StyleSheet.create({
   },
   coinBadge: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A1A',
-    borderRadius: wp(5), paddingHorizontal: wp(3), paddingVertical: hp(0.5),
-    gap: wp(1), borderWidth: wp(0.25), borderColor: '#333',
+    borderRadius: wp(5), paddingHorizontal: wp(2.2), paddingVertical: hp(0.35),
+    gap: wp(0.8), borderWidth: wp(0.25), borderColor: '#333',
   },
-  coinEmoji: { fontSize: wp(3.5) },
-  coinCount: { fontSize: wp(3.5), color: '#fff', fontWeight: '700' },
+  coinEmoji: { fontSize: wp(3.0) },
+  coinCount: { fontSize: wp(3.0), color: '#fff', fontWeight: '700' },
 
   // In-chat call buttons
   headerCallBtns: { flexDirection: 'row', alignItems: 'center', gap: wp(2) },

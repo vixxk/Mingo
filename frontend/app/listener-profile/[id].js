@@ -47,7 +47,7 @@ export default function ListenerProfileScreen() {
   }, [id]);
 
   useEffect(() => {
-    const unsub = socketService.on('listener_status_changed', (data) => {
+    const handleStatusChanged = (data) => {
       if (!data || !data.userId) return;
       if (String(data.userId) === String(id)) {
         setProfile((prev) =>
@@ -61,10 +61,12 @@ export default function ListenerProfileScreen() {
             : prev
         );
       }
-    });
+    };
+
+    socketService.on('listener_status_changed', handleStatusChanged);
 
     return () => {
-      unsub();
+      socketService.off('listener_status_changed', handleStatusChanged);
     };
   }, [id]);
 
@@ -419,30 +421,43 @@ export default function ListenerProfileScreen() {
               </TouchableOpacity>
             )}
             
-            {profile.videoEnabled === true && (
-              <TouchableOpacity 
-                style={[styles.actionBtnWrapper, (profile.isBusy || !profile.isOnline) && { opacity: 0.3 }]} 
-                activeOpacity={0.85}
-                disabled={profile.isBusy || !profile.isOnline}
-                onPress={() => router.push({
-                  pathname: '/(call)/connecting',
-                  params: {
-                    name: profile.displayName || profile.name || 'Listener',
-                    callType: 'video',
-                    callId: `call_${Date.now()}`,
-                    roomId: `room_${Date.now()}`,
-                    listenerId: id,
-                    avatarIndex: profile.avatarIndex || '0',
-                    gender: profile.gender || 'Female'
-                  }
-                })}
+            <TouchableOpacity 
+              style={[
+                styles.actionBtnWrapper, 
+                (profile.isBusy || !profile.isOnline || profile.videoEnabled !== true) && { opacity: 0.3 }
+              ]} 
+              activeOpacity={0.85}
+              disabled={profile.isBusy || !profile.isOnline || profile.videoEnabled !== true}
+              onPress={() => router.push({
+                pathname: '/(call)/connecting',
+                params: {
+                  name: profile.displayName || profile.name || 'Listener',
+                  callType: 'video',
+                  callId: `call_${Date.now()}`,
+                  roomId: `room_${Date.now()}`,
+                  listenerId: id,
+                  avatarIndex: profile.avatarIndex || '0',
+                  gender: profile.gender || 'Female'
+                }
+              })}
+            >
+              <LinearGradient 
+                colors={profile.videoEnabled === true && profile.isOnline && !profile.isBusy ? ['#3B82F6', '#2563EB'] : ['#374151', '#1F2937']} 
+                start={{ x: 0, y: 0 }} 
+                end={{ x: 1, y: 1 }} 
+                style={styles.actionBtn}
               >
-                <LinearGradient colors={['#3B82F6', '#2563EB']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.actionBtn}>
-                  <Ionicons name="videocam" size={SW * 0.05} color="#fff" />
-                  <Text style={styles.actionBtnText}>Video</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            )}
+                <Ionicons 
+                  name="videocam" 
+                  size={SW * 0.05} 
+                  color={profile.videoEnabled === true && profile.isOnline && !profile.isBusy ? "#fff" : "#9CA3AF"} 
+                />
+                <Text style={[
+                  styles.actionBtnText, 
+                  (profile.videoEnabled !== true || !profile.isOnline || profile.isBusy) && { color: '#9CA3AF' }
+                ]}>Video</Text>
+              </LinearGradient>
+            </TouchableOpacity>
             
             {profile.chatEnabled !== false && (
               <TouchableOpacity 

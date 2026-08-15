@@ -64,7 +64,7 @@ export default function VideoUpgradeModal({
             <>
               <Text style={styles.title}>Switch to Video Call?</Text>
               <Text style={styles.subtitle}>
-                Send a request to {name} to switch this audio call to a video call (40 coins/min).
+                Send a request to {name} to switch this audio call to a video call (4 💎 / min).
               </Text>
               <View style={styles.buttonRow}>
                 <TouchableOpacity style={styles.cancelBtn} activeOpacity={0.8} onPress={onCancel}>

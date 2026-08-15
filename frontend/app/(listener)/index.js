@@ -199,19 +199,30 @@ export default function ListenerHomeScreen() {
     );
 
     const unsubscribe = parentNav.addListener('beforeRemove', (e) => {
-      const actionType = e.data.action.type;
+      const actionType = e.data?.action?.type;
       if (actionType === 'GO_BACK' || actionType === 'POP') {
         const state = parentNav.getState();
         const routes = state?.routes || [];
         if (routes.length >= 2) {
+          const currentRoute = routes[routes.length - 1];
           const prevRoute = routes[routes.length - 2];
+          const currentName = currentRoute?.name?.toLowerCase() || '';
           const prevName = prevRoute?.name?.toLowerCase() || '';
+
+          // If we are popping back from a sub-screen to listener home/index, allow it
+          if (
+            prevName.includes('index') ||
+            prevName.includes('tabs') ||
+            prevName.includes('listener')
+          ) {
+            return;
+          }
+
           if (
             prevName.includes('auth') ||
             prevName.includes('login') ||
             prevName.includes('signup') ||
-            prevName.includes('welcome') ||
-            prevName === 'index'
+            prevName.includes('welcome')
           ) {
             e.preventDefault();
           }

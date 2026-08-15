@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   LayoutAnimation,
   UIManager,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -82,8 +83,6 @@ function StarButton({ filled, size, onPress }) {
   );
 }
 
-import AnimatedSparkles from '../../components/shared/AnimatedSparkles';
-
 export default function CallFeedbackScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -93,7 +92,7 @@ export default function CallFeedbackScreen() {
   const [selectedTags, setSelectedTags] = useState([]);
   const [feedback, setFeedback] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [viewState, setViewState] = useState('form'); // 'form' | 'success' | 'returning'
+  const [viewState, setViewState] = useState('form'); // 'form' | 'returning'
   const progressAnim = useRef(new Animated.Value(0)).current;
 
   const [popup, setPopup] = useState({
@@ -164,14 +163,9 @@ export default function CallFeedbackScreen() {
     router.replace('/(tabs)');
   };
 
-  // Step 2 -> Step 3 transition timer
+  // Transition animation on returning to dashboard
   useEffect(() => {
-    if (viewState === 'success') {
-      const timer = setTimeout(() => {
-        setViewState('returning');
-      }, 1800);
-      return () => clearTimeout(timer);
-    } else if (viewState === 'returning') {
+    if (viewState === 'returning') {
       progressAnim.setValue(0);
       Animated.timing(progressAnim, {
         toValue: 1,
@@ -197,47 +191,17 @@ export default function CallFeedbackScreen() {
       if (sessionId) {
         await ratingAPI.submit(sessionId, rating, combinedFeedback);
       }
-      setViewState('success');
+      setViewState('returning');
     } catch (e) {
       console.log('Error submitting feedback:', e);
-      // Even if network fails, gracefully show success screen to preserve user sentiment
-      setViewState('success');
+      // Even if network fails, gracefully transition to returning screen
+      setViewState('returning');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Render Step 2: Thanks for your feedback!
-  if (viewState === 'success') {
-    return (
-      <View style={styles.container}>
-        <StatusBar style="light" />
-        <LinearGradient
-          colors={['#000', '#042F1A', '#022012']}
-          locations={[0, 0.55, 1]}
-          style={StyleSheet.absoluteFill}
-        />
-        <AnimatedSparkles color="#34D399" size={22} />
-        
-        <View style={[styles.transitionContent, { paddingTop: insets.top + vs(80) }]}>
-          <View style={styles.successIconOuterRing}>
-            <View style={styles.successIconInnerCircle}>
-              <Ionicons name="checkmark" size={38} color="#22C55E" />
-            </View>
-          </View>
-
-          <Text style={styles.successHeading}>Thanks for your feedback!</Text>
-          <Text style={styles.successSubheading}>Your feedback has been submitted.</Text>
-
-          <View style={styles.creatorPill}>
-            <Text style={styles.creatorPillText}>💜 You're helping creators deliver better experiences.</Text>
-          </View>
-        </View>
-      </View>
-    );
-  }
-
-  // Render Step 3: Returning to your dashboard...
+  // Render Step 2: Returning to your dashboard...
   if (viewState === 'returning') {
     const progressWidth = progressAnim.interpolate({
       inputRange: [0, 1],
@@ -254,10 +218,13 @@ export default function CallFeedbackScreen() {
         />
         
         <View style={[styles.transitionContent, { paddingTop: insets.top + vs(120) }]}>
-          <View style={styles.brandIconWrap}>
-            <Ionicons name="chatbubbles" size={36} color="#EF4444" />
-          </View>
-          <Text style={styles.brandName}>Mingo</Text>
+          <Image 
+            source={require('../../images/Mingo Splash Text.png')} 
+            style={styles.headerLogoImage} 
+            resizeMode="contain" 
+          />
+
+          <Text style={styles.thanksText}>Thanks for your feedback!</Text>
 
           <Text style={styles.returningHeading}>Returning to your dashboard...</Text>
 
@@ -490,76 +457,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: s(28),
   },
-
-  successIconOuterRing: {
-    width: s(84),
-    height: s(84),
-    borderRadius: s(42),
-    backgroundColor: 'rgba(34, 197, 94, 0.15)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(34, 197, 94, 0.35)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: vs(24),
-  },
-  successIconInnerCircle: {
-    width: s(64),
-    height: s(64),
-    borderRadius: s(32),
-    backgroundColor: 'rgba(34, 197, 94, 0.25)',
-    alignItems: 'center',
-    justifyContent: 'center',
+  headerLogoImage: {
+    width: s(160),
+    height: vs(55),
+    marginBottom: vs(12),
   },
 
-  successHeading: {
-    fontSize: ms(22, 0.3),
-    fontWeight: '800',
-    color: '#fff',
-    fontFamily: 'Inter_800Bold',
-    textAlign: 'center',
-    marginBottom: vs(8),
-  },
-  successSubheading: {
-    fontSize: ms(14, 0.3),
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontFamily: 'Inter_400Regular',
+  thanksText: {
+    fontSize: ms(18, 0.3),
+    fontWeight: '700',
+    color: '#34D399',
+    fontFamily: 'Inter_700Bold',
     textAlign: 'center',
     marginBottom: vs(28),
-  },
-
-  creatorPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(124, 58, 237, 0.16)',
-    borderWidth: 1,
-    borderColor: 'rgba(167, 139, 250, 0.35)',
-    borderRadius: 24,
-    paddingHorizontal: s(16),
-    paddingVertical: vs(10),
-  },
-  creatorPillText: {
-    fontSize: ms(13, 0.3),
-    color: '#C4B5FD',
-    fontFamily: 'Inter_500Medium',
-  },
-
-  brandIconWrap: {
-    width: s(68),
-    height: s(68),
-    borderRadius: s(34),
-    backgroundColor: 'rgba(239, 68, 68, 0.12)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: vs(8),
-  },
-  brandName: {
-    fontSize: ms(22, 0.3),
-    fontWeight: '900',
-    color: '#fff',
-    fontFamily: 'Inter_900Black',
-    marginBottom: vs(32),
   },
 
   returningHeading: {

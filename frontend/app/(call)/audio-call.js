@@ -429,14 +429,18 @@ export default function AudioCallScreen() {
     };
 
     const handleUpgradeRequested = (data) => {
-      if (data.sessionId === callId) {
+      console.log('[Socket] handleUpgradeRequested received:', data);
+      const isMatch = !callId || String(data.sessionId) === String(callId) || (data.roomId && data.roomId === roomId);
+      if (isMatch) {
         setUpgradeModalMode('incoming');
         setUpgradeModalVisible(true);
       }
     };
 
     const handleUpgradeAccepted = (data) => {
-      if (data.sessionId === callId) {
+      console.log('[Socket] handleUpgradeAccepted received:', data);
+      const isMatch = !callId || String(data.sessionId) === String(callId) || (data.roomId && data.roomId === roomId);
+      if (isMatch) {
         setUpgradeModalVisible(false);
         if (agoraRef.current) {
           try { agoraRef.current.leave(); } catch (e) {}
@@ -445,13 +449,13 @@ export default function AudioCallScreen() {
           pathname: '/(call)/video-call',
           params: {
             name,
-            callId,
-            roomId,
+            callId: data.sessionId || callId,
+            roomId: data.roomId || roomId,
             listenerId,
             avatarIndex,
             gender,
-            agoraAppId,
-            agoraToken,
+            agoraAppId: data.agoraAppId || agoraAppId,
+            agoraToken: data.agoraToken || agoraToken,
             isConverted: 'true',
           },
         });
@@ -459,7 +463,9 @@ export default function AudioCallScreen() {
     };
 
     const handleUpgradeDeclined = (data) => {
-      if (data.sessionId === callId) {
+      console.log('[Socket] handleUpgradeDeclined received:', data);
+      const isMatch = !callId || String(data.sessionId) === String(callId) || (data.roomId && data.roomId === roomId);
+      if (isMatch) {
         setUpgradeModalVisible(false);
         setCallCancelledMessage(data.message || 'The upgrade to video call was declined.');
         setShowCallCancelled(true);
@@ -667,8 +673,8 @@ export default function AudioCallScreen() {
 
   const handleSendUpgradeRequest = useCallback(() => {
     setUpgradeModalMode('pending');
-    socketService.emit('request_call_upgrade', { sessionId: callId, roomId });
-  }, [callId, roomId]);
+    socketService.emit('request_call_upgrade', { sessionId: callId, roomId, targetUserId: listenerId });
+  }, [callId, roomId, listenerId]);
 
   const handleAcceptUpgradeRequest = useCallback(() => {
     socketService.emit('respond_call_upgrade', { sessionId: callId, roomId, accepted: true });

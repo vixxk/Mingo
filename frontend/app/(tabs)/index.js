@@ -114,9 +114,9 @@ const BestChoiceCard = ({ item, onCallPress, onChatPress, onProfilePress }) => {
   };
 
   const isInactive = !item.isLive || item.isBusy;
-  const canUseAudio = isInactive || item.audioEnabled !== false;
-  const canUseVideo = isInactive || item.videoEnabled === true;
-  const canUseChat = isInactive || item.chatEnabled !== false;
+  const isAudioAvailable = !isInactive && item.audioEnabled !== false;
+  const isVideoAvailable = !isInactive && item.videoEnabled === true;
+  const isChatAvailable = !isInactive && item.chatEnabled !== false;
 
   return (
     <TouchableOpacity
@@ -139,44 +139,40 @@ const BestChoiceCard = ({ item, onCallPress, onChatPress, onProfilePress }) => {
               style={[styles.bestChoiceImage, isInactive && { opacity: 0.5 }]}
               resizeMode="cover"
             />
-            {}
+            {/* Live / Busy Badge */}
             <View style={styles.bestChoiceLiveBadgeWrapper}>
               {item.isBusy ? <BusyBadge busySince={item.busySince} /> : item.isLive ? <LiveBadge /> : <InactiveBadge />}
             </View>
-            {}
+            {/* Call / Chat actions stacked vertically on top right */}
             <View style={styles.bestChoiceActionStack}>
-              {canUseAudio && (
-                <TouchableOpacity
-                  style={[styles.bestChoiceActionBtn, isInactive && { opacity: 0.5 }]}
-                  activeOpacity={0.7}
-                  onPress={() => onCallPress('audio')}
-                  disabled={isInactive}
-                >
-                  <Ionicons name="call-outline" size={18} color="#fff" />
-                </TouchableOpacity>
-              )}
-              {canUseVideo && (
-                <TouchableOpacity
-                  style={[styles.bestChoiceActionBtn, isInactive && { opacity: 0.5 }]}
-                  activeOpacity={0.7}
-                  onPress={() => onCallPress('video')}
-                  disabled={isInactive}
-                >
-                  <Ionicons name="videocam-outline" size={18} color="#fff" />
-                </TouchableOpacity>
-              )}
-              {canUseChat && (
-                <TouchableOpacity
-                  style={[styles.bestChoiceActionBtn, isInactive && { opacity: 0.5 }]}
-                  activeOpacity={0.7}
-                  onPress={onChatPress}
-                  disabled={isInactive}
-                >
-                  <Ionicons name="chatbubble-outline" size={18} color="#fff" />
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity
+                style={[styles.bestChoiceActionBtn, !isAudioAvailable && { opacity: 0.35, backgroundColor: 'rgba(0,0,0,0.3)' }]}
+                activeOpacity={0.7}
+                onPress={() => onCallPress('audio')}
+                disabled={!isAudioAvailable}
+              >
+                <Ionicons name="call-outline" size={18} color={isAudioAvailable ? "#fff" : "rgba(255,255,255,0.4)"} />
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.bestChoiceActionBtn, !isVideoAvailable && { opacity: 0.35, backgroundColor: 'rgba(0,0,0,0.3)' }]}
+                activeOpacity={0.7}
+                onPress={() => onCallPress('video')}
+                disabled={!isVideoAvailable}
+              >
+                <Ionicons name="videocam-outline" size={18} color={isVideoAvailable ? "#fff" : "rgba(255,255,255,0.4)"} />
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.bestChoiceActionBtn, !isChatAvailable && { opacity: 0.35, backgroundColor: 'rgba(0,0,0,0.3)' }]}
+                activeOpacity={0.7}
+                onPress={onChatPress}
+                disabled={!isChatAvailable}
+              >
+                <Ionicons name="chatbubble-outline" size={18} color={isChatAvailable ? "#fff" : "rgba(255,255,255,0.4)"} />
+              </TouchableOpacity>
             </View>
-            {}
+            {/* Listener Name + Verification */}
             <View style={styles.bestChoiceNameRow}>
               <Text style={styles.bestChoiceName} numberOfLines={1}>
                 {item.name}
@@ -213,9 +209,9 @@ const PeopleCard = ({ item, onCallPress, onChatPress, onProfilePress }) => {
   };
 
   const isInactive = !item.isLive || item.isBusy;
-  const canUseAudio = isInactive || item.audioEnabled !== false;
-  const canUseVideo = isInactive || item.videoEnabled === true;
-  const canUseChat = isInactive || item.chatEnabled !== false;
+  const isAudioAvailable = !isInactive && item.audioEnabled !== false;
+  const isVideoAvailable = !isInactive && item.videoEnabled === true;
+  const isChatAvailable = !isInactive && item.chatEnabled !== false;
 
   return (
     <TouchableOpacity
@@ -247,36 +243,32 @@ const PeopleCard = ({ item, onCallPress, onChatPress, onProfilePress }) => {
           </View>
         </View>
         <View style={styles.peopleActions}>
-          {canUseAudio && (
-            <TouchableOpacity
-              style={[styles.peopleActionBtn, isInactive && { opacity: 0.5 }]}
-              activeOpacity={0.7}
-              onPress={() => onCallPress('audio')}
-              disabled={isInactive}
-            >
-              <Ionicons name="call-outline" size={18} color="#22C55E" />
-            </TouchableOpacity>
-          )}
-          {canUseChat && (
-            <TouchableOpacity
-              style={[styles.peopleActionBtn, isInactive && { opacity: 0.5 }]}
-              activeOpacity={0.7}
-              onPress={onChatPress}
-              disabled={isInactive}
-            >
-              <Ionicons name="chatbubble-outline" size={18} color="#fff" />
-            </TouchableOpacity>
-          )}
-          {canUseVideo && (
-            <TouchableOpacity
-              style={[styles.peopleActionBtn, isInactive && { opacity: 0.5 }]}
-              activeOpacity={0.7}
-              onPress={() => onCallPress('video')}
-              disabled={isInactive}
-            >
-              <Ionicons name="videocam-outline" size={18} color="#3B82F6" />
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={[styles.peopleActionBtn, !isAudioAvailable && { opacity: 0.35, backgroundColor: 'rgba(255,255,255,0.05)' }]}
+            activeOpacity={0.7}
+            onPress={() => onCallPress('audio')}
+            disabled={!isAudioAvailable}
+          >
+            <Ionicons name="call-outline" size={18} color={isAudioAvailable ? "#22C55E" : "#6B7280"} />
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.peopleActionBtn, !isChatAvailable && { opacity: 0.35, backgroundColor: 'rgba(255,255,255,0.05)' }]}
+            activeOpacity={0.7}
+            onPress={onChatPress}
+            disabled={!isChatAvailable}
+          >
+            <Ionicons name="chatbubble-outline" size={18} color={isChatAvailable ? "#fff" : "#6B7280"} />
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.peopleActionBtn, !isVideoAvailable && { opacity: 0.35, backgroundColor: 'rgba(255,255,255,0.05)' }]}
+            activeOpacity={0.7}
+            onPress={() => onCallPress('video')}
+            disabled={!isVideoAvailable}
+          >
+            <Ionicons name="videocam-outline" size={18} color={isVideoAvailable ? "#3B82F6" : "#6B7280"} />
+          </TouchableOpacity>
         </View>
       </Animated.View>
     </TouchableOpacity>
@@ -480,19 +472,30 @@ export default function HomeScreen() {
     );
 
     const unsubscribe = parentNav.addListener('beforeRemove', (e) => {
-      const actionType = e.data.action.type;
+      const actionType = e.data?.action?.type;
       if (actionType === 'GO_BACK' || actionType === 'POP') {
         const state = parentNav.getState();
         const routes = state?.routes || [];
         if (routes.length >= 2) {
+          const currentRoute = routes[routes.length - 1];
           const prevRoute = routes[routes.length - 2];
+          const currentName = currentRoute?.name?.toLowerCase() || '';
           const prevName = prevRoute?.name?.toLowerCase() || '';
+
+          // If we are popping back from a sub-screen to index or tabs, allow it
+          if (
+            prevName.includes('index') ||
+            prevName.includes('tabs') ||
+            prevName.includes('listener')
+          ) {
+            return;
+          }
+
           if (
             prevName.includes('auth') ||
             prevName.includes('login') ||
             prevName.includes('signup') ||
-            prevName.includes('welcome') ||
-            prevName === 'index'
+            prevName.includes('welcome')
           ) {
             e.preventDefault();
           }
@@ -641,38 +644,7 @@ export default function HomeScreen() {
     }
   }, []);
 
-  // Live listener-status updates via socket `listener_status_changed`
-  useEffect(() => {
-    const unsub = socketService.on('listener_status_changed', (data) => {
-      if (!data || !data.userId) return;
-      const targetId = String(data.userId);
-      const isOnline = !!data.isOnline;
-      const isBusy = !!data.isBusy;
-      const busySince = data.busySince || null;
-
-      setPeopleData((prev) =>
-        prev.map((item) => {
-          if (String(item.id) === targetId) {
-            return { ...item, isLive: isOnline, isBusy, busySince };
-          }
-          return item;
-        })
-      );
-
-      setBestChoiceData((prev) =>
-        prev.map((item) => {
-          if (String(item.id) === targetId) {
-            return { ...item, isLive: isOnline, isBusy, busySince };
-          }
-          return item;
-        })
-      );
-    });
-
-    return () => {
-      unsub();
-    };
-  }, []);
+  // Note: Home page data updates on page load/refresh, not via real-time socket updates
 
   useFocusEffect(
     useCallback(() => {
@@ -853,6 +825,11 @@ export default function HomeScreen() {
   
   const [showInsufficientBalance, setShowInsufficientBalance] = useState(false);
   const handleCallPress = (listener, callType = 'audio') => {
+    // Block video call if listener disabled video
+    if (listener && callType === 'video' && listener.videoEnabled !== true) {
+      return;
+    }
+
     // Minimum: audio=10 coins/min, video=40 coins/min
     const minCoins = callType === 'video' ? 40 : 10;
     

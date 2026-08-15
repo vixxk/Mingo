@@ -7,6 +7,7 @@ import {
   Animated,
   ScrollView,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -170,9 +171,9 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
                         <View style={styles.coinsRow}>
                           <Image
                             source={{
-                              uri: pkg.iconUrl
+                              uri: (typeof pkg?.iconUrl === 'string' && pkg.iconUrl)
                                 ? (pkg.iconUrl.includes('/coin_packages/v3/') ? pkg.iconUrl : pkg.iconUrl.replace('/coin_packages/', '/coin_packages/v3/'))
-                                : `https://d3arutsevouzgm.cloudfront.net/coin_packages/v3/pack_${pkg.coins}.png`
+                                : `https://d3arutsevouzgm.cloudfront.net/coin_packages/v3/pack_${pkg?.coins || 100}.png`
                             }}
                             style={{ width: 24, height: 24, marginRight: 6 }}
                             resizeMode="contain"

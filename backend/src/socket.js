@@ -785,10 +785,15 @@ const initSocket = (server) => {
         }
 
         const callerUserId = socket.userId;
-        const recipientId = targetUserId || (session.userId.toString() === callerUserId?.toString() ? session.listenerId : session.userId);
+        let recipientId = targetUserId;
+        if (!recipientId) {
+          recipientId = (callerUserId && session.userId.toString() === callerUserId.toString())
+            ? session.listenerId.toString()
+            : session.userId.toString();
+        }
 
         io.to(`user_${recipientId}`).emit('call_upgrade_requested', {
-          sessionId,
+          sessionId: session._id.toString(),
           roomId: roomId || session.roomId,
           requestedBy: callerUserId,
           toCallType: 'video'
@@ -816,12 +821,15 @@ const initSocket = (server) => {
 
           console.log(`[Socket] Session ${sessionId} upgraded to VIDEO!`);
 
+          const agoraPayload = CallService.getAgoraCallPayload(session.roomId, 'video');
+
           const payload = {
             sessionId: session._id.toString(),
             roomId: session.roomId,
             callType: 'video',
             isConverted: true,
-            message: 'Call upgraded to video'
+            message: 'Call upgraded to video',
+            ...agoraPayload
           };
 
           io.to(`user_${session.userId}`).emit('call_upgrade_accepted', payload);
@@ -831,9 +839,11 @@ const initSocket = (server) => {
           }
         } else {
           const declinerId = socket.userId;
-          const callerId = session.userId.toString() === declinerId?.toString() ? session.listenerId : session.userId;
+          const callerId = (declinerId && session.userId.toString() === declinerId.toString())
+            ? session.listenerId.toString()
+            : session.userId.toString();
           io.to(`user_${callerId}`).emit('call_upgrade_declined', {
-            sessionId,
+            sessionId: session._id.toString(),
             message: 'The upgrade to video call was declined.'
           });
         }
