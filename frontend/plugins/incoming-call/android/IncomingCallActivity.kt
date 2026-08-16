@@ -111,19 +111,40 @@ class IncomingCallActivity : Activity() {
     // ── Ringtone + vibration ─────────────────────────────────────
 
     private fun startRinging(payload: JSONObject) {
-        try {
-            val customUrl = payload.optString("customRingtoneUrl")
-            val uri = if (customUrl.isNotBlank()) {
-                try {
-                    val parsed = Uri.parse(customUrl)
-                    if (parsed.scheme == "http" || parsed.scheme == "https") parsed
-                    else IncomingCallNotifications.getBundledRingtoneUri(this)
-                } catch (e: Exception) {
-                    IncomingCallNotifications.getBundledRingtoneUri(this)
+        val customUrl = payload.optString("customRingtoneUrl")
+        if (customUrl.isNotBlank()) {
+            try {
+                val parsed = Uri.parse(customUrl)
+                if (parsed.scheme == "http" || parsed.scheme == "https") {
+                    ringtonePlayer = MediaPlayer().apply {
+                        setAudioAttributes(
+                            AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                .build()
+                        )
+                        setDataSource(this@IncomingCallActivity, parsed)
+                        isLooping = true
+                        setOnErrorListener { _, _, _ ->
+                            playBundledRingtone()
+                            true
+                        }
+                        setOnPreparedListener { start() }
+                        prepareAsync()
+                    }
+                    return
                 }
-            } else {
-                IncomingCallNotifications.getBundledRingtoneUri(this)
+            } catch (e: Exception) {
+                // Fall back to bundled ringtone
             }
+        }
+        playBundledRingtone()
+    }
+
+    private fun playBundledRingtone() {
+        try {
+            stopRinging()
+            val uri = IncomingCallNotifications.getBundledRingtoneUri(this)
             ringtonePlayer = MediaPlayer().apply {
                 setAudioAttributes(
                     AudioAttributes.Builder()
@@ -137,7 +158,24 @@ class IncomingCallActivity : Activity() {
                 start()
             }
         } catch (e: Exception) {
-            ringtonePlayer = null
+            // Final fallback to system default ringtone
+            try {
+                val defaultUri = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE)
+                ringtonePlayer = MediaPlayer().apply {
+                    setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+                    )
+                    setDataSource(this@IncomingCallActivity, defaultUri)
+                    isLooping = true
+                    prepare()
+                    start()
+                }
+            } catch (_: Exception) {
+                ringtonePlayer = null
+            }
         }
     }
 
@@ -219,94 +257,103 @@ class IncomingCallActivity : Activity() {
         val dp = resources.displayMetrics.density
         val screenHeight = resources.displayMetrics.heightPixels
 
-        // Dim scrim behind the card — the app beneath stays visible.
+        // Transparent root scrim so the phone home screen or active app underneath stays visible
         val root = FrameLayout(this).apply {
-            setBackgroundColor(0x66000000)
+            setBackgroundColor(Color.TRANSPARENT)
         }
 
+        // Compact dark horizontal card matching Screenshot 2 & 3
         val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
             elevation = 16f * dp
-            setPadding((18 * dp).toInt(), (16 * dp).toInt(), (18 * dp).toInt(), (16 * dp).toInt())
+            setPadding((14 * dp).toInt(), (12 * dp).toInt(), (14 * dp).toInt(), (12 * dp).toInt())
             background = GradientDrawable().apply {
                 cornerRadius = 24 * dp
-                setColor(0xFF1F1F1F.toInt())
+                setColor(0xFF18151D.toInt()) // Sleek dark card container matching screenshots
             }
         }
 
-        // Row 1: avatar + caller info
-        val infoRow = LinearLayout(this).apply {
+        // 1. Avatar on the left with purple border ring
+        val avatar = buildAvatar(callerName, 52f, dp, payload.optString("callerPhoto"))
+        val avatarParams = LinearLayout.LayoutParams((52 * dp).toInt(), (52 * dp).toInt()).apply {
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        card.addView(avatar, avatarParams)
+
+        // 2. Middle Caller Info Column
+        val infoCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val subtitleView = TextView(this).apply {
+            text = "Incoming ${if (callType == "video") "Video" else "Audio"} Call"
+            setTextColor(0xFFC084FC.toInt()) // Light purple text (#C084FC)
+            textSize = 13f
+            typeface = Typeface.DEFAULT_BOLD
+        }
+        val nameView = TextView(this).apply {
+            text = callerName
+            setTextColor(Color.WHITE)
+            textSize = 18f
+            typeface = Typeface.DEFAULT_BOLD
+            maxLines = 1
+        }
+
+        infoCol.addView(subtitleView)
+        infoCol.addView(nameView)
+
+        val infoParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+            leftMargin = (12 * dp).toInt()
+            rightMargin = (8 * dp).toInt()
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        card.addView(infoCol, infoParams)
+
+        // 3. Right Action Buttons (Decline & Accept in single horizontal row)
+        val actionRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val avatar = buildAvatar(callerName, 52f, dp, payload.optString("callerPhoto"))
-        infoRow.addView(avatar, LinearLayout.LayoutParams((52 * dp).toInt(), (52 * dp).toInt()))
 
-        val infoCol = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-        }
-        infoCol.addView(
-            TextView(this).apply {
-                text = "Incoming ${if (callType == "video") "Video" else "Audio"} Call"
-                setTextColor(0xFFC084FC.toInt())
-                textSize = 12f
-                typeface = Typeface.DEFAULT_BOLD
-            }
-        )
-        infoCol.addView(
-            TextView(this).apply {
-                text = callerName
-                setTextColor(Color.WHITE)
-                textSize = 17f
-                typeface = Typeface.DEFAULT_BOLD
-            }
-        )
-        infoRow.addView(
-            infoCol,
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                leftMargin = (14 * dp).toInt()
-            }
-        )
-        card.addView(infoRow)
+        val btnSize = (44 * dp).toInt()
 
-        // Row 2: decline + accept buttons
-        val actionRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.END
-        }
-        val btnSize = 48f * dp
-        val decline = buildActionButton("\u2715", 0xFFEF4444.toInt())
+        // Red circular Decline button with '✕' icon
+        val declineBtn = buildActionButton("\u2715", 0xFFEF4444.toInt())
+        
+        // Green circular Accept button with phone '📞' or camera '📹' icon
         val acceptIcon = if (callType == "video") "\uD83C\uDFA5" else "\uD83D\uDCDE"
-        val accept = buildActionButton(acceptIcon, 0xFF22C55E.toInt())
+        val acceptBtn = buildActionButton(acceptIcon, 0xFF22C55E.toInt())
 
-        decline.setOnClickListener {
+        declineBtn.setOnClickListener {
             IncomingCallNotifications.handleCardAction(this, IncomingCallNotifications.ACTION_DECLINE, payload)
             finish()
         }
-        accept.setOnClickListener {
+
+        acceptBtn.setOnClickListener {
             IncomingCallNotifications.handleCardAction(this, IncomingCallNotifications.ACTION_ACCEPT, payload)
             finish()
         }
 
-        actionRow.addView(decline, LinearLayout.LayoutParams(btnSize.toInt(), btnSize.toInt()).apply {
-            rightMargin = (14 * dp).toInt()
+        actionRow.addView(declineBtn, LinearLayout.LayoutParams(btnSize, btnSize).apply {
+            rightMargin = (10 * dp).toInt()
         })
-        actionRow.addView(accept, LinearLayout.LayoutParams(btnSize.toInt(), btnSize.toInt()))
-        card.addView(
-            actionRow,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = (14 * dp).toInt()
-            }
-        )
+        actionRow.addView(acceptBtn, LinearLayout.LayoutParams(btnSize, btnSize))
 
-        // Card pinned to the top ~10% of the screen, below the notification bar.
+        val actionParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        card.addView(actionRow, actionParams)
+
+        // Floating top position (just below top status bar / notch)
         val cardParams = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.WRAP_CONTENT
         ).apply {
-            topMargin = (screenHeight * 0.10f).toInt()
-            leftMargin = (16 * dp).toInt()
-            rightMargin = (16 * dp).toInt()
+            topMargin = (screenHeight * 0.04f).toInt() + (14 * dp).toInt()
+            leftMargin = (12 * dp).toInt()
+            rightMargin = (12 * dp).toInt()
         }
         root.addView(card, cardParams)
 
@@ -322,8 +369,7 @@ class IncomingCallActivity : Activity() {
         }
         val innerSize = (size * 0.86f).toInt()
 
-        // Dark circle + initial-letter fallback (visible until the photo loads,
-        // or if the photo URL is missing/fails).
+        // Dark circle + initial-letter fallback
         val circle = FrameLayout(this).apply {
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
@@ -339,9 +385,6 @@ class IncomingCallActivity : Activity() {
         }
         circle.addView(letter, FrameLayout.LayoutParams(innerSize, innerSize, Gravity.CENTER))
 
-        // The caller's real photo on top (Fresco — already shipped with RN). It
-        // covers the letter once loaded; on failure it stays transparent so the
-        // letter fallback shows through.
         if (photoUrl.isNotBlank()) {
             try {
                 if (!Fresco.hasBeenInitialized()) {
@@ -353,7 +396,7 @@ class IncomingCallActivity : Activity() {
                 photo.setImageURI(Uri.parse(photoUrl))
                 circle.addView(photo, FrameLayout.LayoutParams(innerSize, innerSize, Gravity.CENTER))
             } catch (e: Exception) {
-                // Photo load unavailable — the letter fallback remains.
+                // Photo load unavailable — initial letter fallback shows
             }
         }
 
@@ -364,7 +407,7 @@ class IncomingCallActivity : Activity() {
     private fun buildActionButton(label: String, color: Int): TextView =
         TextView(this).apply {
             text = label
-            textSize = 22f
+            textSize = 18f
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
             background = GradientDrawable().apply {

@@ -35,24 +35,16 @@ class PushService {
     if (cleanUserIds.length === 0) return emptyResult;
 
     try {
-      // 1. Try OneSignal first (uses external_user_ids — no DB token lookup needed)
+      // 1. Send via OneSignal (uses external_user_ids)
       const { sendNotificationToOneSignalByUserIds, sendNotificationToMultiple } = require('../../utils/notifications');
       const oneSignalResult = await sendNotificationToOneSignalByUserIds(
         cleanUserIds, message.title, message.body, message.data || {}
       );
       if (oneSignalResult.success && oneSignalResult.sent > 0) {
         console.log(`[PushService] Sent via OneSignal to ${oneSignalResult.sent} user(s)`);
-        return {
-          success: true,
-          usersTargeted: cleanUserIds.length,
-          tokensTargeted: oneSignalResult.sent,
-          sentCount: oneSignalResult.sent,
-          failedCount: 0,
-          channel: 'onesignal',
-        };
       }
 
-      // 2. Fall back to Expo/FCM push tokens
+      // 2. Also dispatch via Expo/FCM push tokens for maximum reliability (especially call alerts)
       const User = require('../models/userModel');
       const usersWithTokens = await User.find({
         _id: { $in: cleanUserIds },
@@ -74,15 +66,17 @@ class PushService {
           tokensTargeted: pushTokens.length,
           sentCount,
           failedCount,
-          channel: 'expo-fcm',
+          channel: oneSignalResult?.sent > 0 ? 'dual (onesignal+fcm)' : 'expo-fcm',
         };
-      } else {
-        console.log('[PushService] No push tokens found for users:', cleanUserIds);
       }
 
       return {
-        ...emptyResult,
+        success: true,
         usersTargeted: cleanUserIds.length,
+        tokensTargeted: oneSignalResult?.sent || 0,
+        sentCount: oneSignalResult?.sent || 0,
+        failedCount: 0,
+        channel: 'onesignal',
       };
     } catch (err) {
       console.error('[PushService] Dispatch failed:', err.message);

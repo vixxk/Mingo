@@ -78,7 +78,7 @@ const SessionItem = ({ item, onReport }) => {
                 color="rgba(255,255,255,0.8)" 
                 style={{ marginRight: wp(1) }} 
               />
-              <Text style={[styles.sessionDuration, { color: 'rgba(255,255,255,0.8)' }]}>{item.durationLabel} • {item.typeLabel}</Text>
+              <Text style={[styles.sessionDuration, { color: 'rgba(255,255,255,0.8)' }]}>{item.durationLabel}</Text>
             </View>
           </View>
         </View>
@@ -86,43 +86,63 @@ const SessionItem = ({ item, onReport }) => {
         {/* Extra Session Information Section */}
         <View style={[styles.sessionMetaSection, { borderTopColor: 'rgba(255,255,255,0.2)' }]}>
           <View style={styles.metaRow}>
-            {/* Earnings Badge */}
-            <View style={[styles.metaBadge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-              <Text style={[styles.metaBadgeText, { color: '#fff' }]}>+ ₹{(item.earnings || 0).toFixed(2)}</Text>
+            <View style={styles.badgesLeft}>
+              {/* Earnings Badge */}
+              <View style={[styles.metaBadge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                <Text style={[styles.metaBadgeText, { color: '#fff' }]}>+ ₹{(item.earnings || 0).toFixed(2)}</Text>
+              </View>
+
+              {/* Status Badge */}
+              <View style={[styles.metaBadge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                <Text style={[styles.metaBadgeText, { color: '#fff' }]}>
+                  {(item.status || 'active').toUpperCase()}
+                </Text>
+              </View>
             </View>
 
-            {/* Status Badge */}
-            <View style={[styles.metaBadge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-              <Text style={[styles.metaBadgeText, { color: '#fff' }]}>
-                {(item.status || 'active').toUpperCase()}
-              </Text>
+            {/* Call Type & Inline Report Button (when no rating) */}
+            <View style={styles.rightInfoRow}>
+              {!!item.typeLabel && (
+                <Text style={[styles.callTypeText, { color: 'rgba(255,255,255,0.9)' }]}>
+                  {item.typeLabel}
+                </Text>
+              )}
+              {!item.rating && (
+                <TouchableOpacity
+                  style={styles.inlineReportBtn}
+                  activeOpacity={0.7}
+                  onPress={() => onReport(item)}
+                >
+                  <Ionicons name="alert-circle-outline" size={wp(5)} color="rgba(255,255,255,0.6)" />
+                </TouchableOpacity>
+              )}
             </View>
           </View>
 
           {/* Rating and Feedback */}
           {item.rating && (
-            <View style={styles.ratingSection}>
-              <View style={styles.ratingRow}>
-                <Ionicons name="star" size={s(12)} color="#FBBF24" style={{ marginRight: wp(1) }} />
-                <Text style={[styles.ratingText, { color: '#fff' }]}>{item.rating}.0 / 5.0</Text>
+            <View style={styles.ratingSectionRow}>
+              <View style={styles.ratingSection}>
+                <View style={styles.ratingRow}>
+                  <Ionicons name="star" size={s(12)} color="#FBBF24" style={{ marginRight: wp(1) }} />
+                  <Text style={[styles.ratingText, { color: '#fff' }]}>{item.rating}.0 / 5.0</Text>
+                </View>
+                {item.feedback && (
+                  <Text style={[styles.feedbackText, { color: 'rgba(255,255,255,0.9)' }]}>
+                    "{item.feedback}"
+                  </Text>
+                )}
               </View>
-              {item.feedback && (
-                <Text style={[styles.feedbackText, { color: 'rgba(255,255,255,0.9)' }]}>
-                  "{item.feedback}"
-                </Text>
-              )}
+              <TouchableOpacity
+                style={styles.inlineReportBtn}
+                activeOpacity={0.7}
+                onPress={() => onReport(item)}
+              >
+                <Ionicons name="alert-circle-outline" size={wp(5)} color="rgba(255,255,255,0.6)" />
+              </TouchableOpacity>
             </View>
           )}
         </View>
-
-        {/* Report Button */}
-        <TouchableOpacity
-          style={styles.reportIconBtn}
-          activeOpacity={0.7}
-          onPress={() => onReport(item)}
-        >
-          <Ionicons name="alert-circle-outline" size={wp(5)} color="rgba(255,255,255,0.6)" />
-        </TouchableOpacity>
       </LinearGradient>
     </Animated.View>
   );
@@ -398,23 +418,34 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#1A1A1A',
     gap: hp(1.2),
-    paddingRight: wp(10),
   },
-  reportIconBtn: {
-    position: 'absolute',
-    bottom: wp(3.5),
-    right: wp(3.5),
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  badgesLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: wp(2),
+  },
+  rightInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: wp(2),
+  },
+  callTypeText: {
+    fontSize: wp(3.3),
+    fontWeight: '600',
+    fontFamily: 'Inter_600SemiBold',
+  },
+  inlineReportBtn: {
     width: wp(8),
     height: wp(8),
     borderRadius: wp(4),
     backgroundColor: 'rgba(0,0,0,0.3)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  metaRow: {
-    flexDirection: 'row',
-    gap: wp(2),
-    flexWrap: 'wrap',
   },
   metaBadge: {
     paddingHorizontal: wp(2.5),
@@ -428,7 +459,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontFamily: 'Inter_700Bold',
   },
+  ratingSectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: wp(2),
+  },
   ratingSection: {
+    flex: 1,
     backgroundColor: 'rgba(255,255,255,0.02)',
     padding: wp(2.5),
     borderRadius: 8,

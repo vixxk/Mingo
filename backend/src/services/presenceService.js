@@ -20,15 +20,16 @@ class PresenceService {
     const userIdStr = userId.toString();
 
     
+    // Maintain in Redis available set and persistent Redis online status (no auto expiration)
     const pipeline = redis.pipeline();
     pipeline.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, userIdStr);
-    pipeline.set(REDIS_KEYS.ONLINE(userIdStr), '1', 'EX', HEARTBEAT_TTL);
+    pipeline.set(REDIS_KEYS.ONLINE(userIdStr), '1');
     await pipeline.exec();
 
-    
+    // Set DB isOnline flag
     await Listener.setOnlineStatus(userId, true);
 
-    
+    // Update ranking score
     await PresenceService._updateScore(userId);
 
     try {
@@ -43,7 +44,7 @@ class PresenceService {
     return { status: 'online', userId: userIdStr };
   }
 
-    static async setBusy(userId, isBusy) {
+  static async setBusy(userId, isBusy) {
     const userIdStr = userId.toString();
     const listener = await Listener.findOneAndUpdate(
       { userId },
@@ -98,14 +99,10 @@ class PresenceService {
     return { status: 'offline', userId: userIdStr };
   }
 
-    static async heartbeat(userId) {
+  static async heartbeat(userId) {
     const userIdStr = userId.toString();
-    const isOnline = await redis.exists(REDIS_KEYS.ONLINE(userIdStr));
-    if (!isOnline) {
-      throw new AppError('Listener is not online', 400);
-    }
-
-    await redis.set(REDIS_KEYS.ONLINE(userIdStr), '1', 'EX', HEARTBEAT_TTL);
+    await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, userIdStr);
+    await redis.set(REDIS_KEYS.ONLINE(userIdStr), '1');
     return { status: 'heartbeat_refreshed' };
   }
 

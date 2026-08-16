@@ -1016,15 +1016,15 @@ export default function ChatScreen() {
     };
 
     const handleChatUserOffline = (data) => {
-      console.log('[Chat] Other user went offline:', data);
+      console.log('[Chat] Other user left chat:', data);
       setMessages(prev => {
         const lastMsg = prev[prev.length - 1];
-        if (lastMsg && lastMsg.type === 'system' && lastMsg.text === (data.message || 'User went offline.')) {
+        if (lastMsg && lastMsg.type === 'system' && lastMsg.text === (data.message || 'User left the chat page.')) {
           return prev;
         }
         const offlineMsg = {
           id: `offline_${Date.now()}`,
-          text: data.message || 'User went offline.',
+          text: data.message || 'User left the chat page.',
           sent: false,
           type: 'system',
           createdAt: new Date().toISOString(),
@@ -1470,7 +1470,7 @@ export default function ChatScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.headerCallBtn, (!isListenerOnline || !otherVideoEnabled) && styles.headerCallBtnDisabled]}
+              style={[styles.headerCallBtn, styles.headerVideoCallBtn, (!isListenerOnline || !otherVideoEnabled) && styles.headerCallBtnDisabled]}
               activeOpacity={0.7}
               disabled={!isListenerOnline || !otherVideoEnabled}
               onPress={() => handleStartCall('video')}
@@ -1900,6 +1900,10 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   headerCallBtnDisabled: { opacity: 0.35 },
+  headerVideoCallBtn: {
+    backgroundColor: '#EC4899',
+    shadowColor: '#F472B6',
+  },
 
   // Connected Banner
   connectedBanner: {

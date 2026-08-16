@@ -144,6 +144,14 @@ object IncomingCallNotifications {
         val callType = payload.optString("callType", "audio")
         val title = "Incoming ${if (callType == "video") "Video" else "Audio"} Call"
 
+        // Direct overlay launch over home screen / other apps
+        try {
+            val cardIntent = buildCardIntent(context, null, payload)
+            context.startActivity(cardIntent)
+        } catch (e: Exception) {
+            // Background activity launch fallback
+        }
+
         // Full-screen intent -> IncomingCallActivity (the card itself)
         val fullScreenPending = PendingIntent.getActivity(
             context, 101,

@@ -86,14 +86,14 @@ const sendNotificationToDevice = async (token, title, body, data = {}) => {
         notification: {
           title,
           body,
-          sound: data?.type === 'incoming_call' ? 'ringtone' : 'default',
+          sound: data?.type === 'incoming_call' ? 'incoming_ringtone' : 'default',
           channelId: data?.type === 'incoming_call' ? 'calls' : 'default',
         },
       },
       apns: {
         payload: {
           aps: {
-            sound: 'default',
+            sound: data?.type === 'incoming_call' ? 'incoming_ringtone.wav' : 'default',
           },
         },
       },
@@ -354,6 +354,7 @@ const sendNotificationToOneSignalByUserIds = async (userIds, title, body, data =
       {
         app_id: appId,
         include_external_user_ids: cleanIds,
+        channel_for_external_user_ids: 'push',
         headings: { en: title },
         contents: { en: body },
         data,
@@ -361,13 +362,11 @@ const sendNotificationToOneSignalByUserIds = async (userIds, title, body, data =
         ios_badgeCount: 1,
         priority: 10,
         // Incoming-call pushes reference the bundled ringtone so the device
-        // rings even when the app is backgrounded/killed. The app's native
-        // OneSignal extension replaces this notification with the full-screen
-        // call card + looping ringtone; the sound here is the fallback for
-        // builds where the extension is unavailable.
+        // rings even when the app is backgrounded/killed.
         ...(data?.type === 'incoming_call' ? {
           android_sound: 'incoming_ringtone',
           android_channel_id: 'calls',
+          ttl: 30,
         } : {}),
       },
       {

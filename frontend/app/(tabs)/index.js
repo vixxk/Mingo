@@ -597,7 +597,7 @@ export default function HomeScreen() {
     }
 
     try {
-      const listenersRes = await listenersAPI.getRecommended(20);
+      const listenersRes = await listenersAPI.getRecommended(50);
       if (listenersRes?.data) {
         const mappedListeners = listenersRes.data.map(l => ({
           id: l.id,
@@ -607,6 +607,7 @@ export default function HomeScreen() {
           busySince: l.busySince,
           isVerified: l.isVerified,
           bestChoice: l.bestChoice,
+          rating: l.rating || 0,
           audioEnabled: l.audioEnabled !== false, // default true
           videoEnabled: l.videoEnabled === true,  // default false
           chatEnabled: l.chatEnabled !== false,   // default true
@@ -624,11 +625,38 @@ export default function HomeScreen() {
           return 0;
         });
 
-        // Best Choice shows ONLY online listeners — never offline/inactive
-        // cards. If no best-choice listener is online, keep the list empty so
-        // the section hides entirely (the old fallback surfaced offline cards).
-        const bestChoiceOnline = mappedListeners.filter(l => l.bestChoice && l.isLive);
-        setBestChoiceData(bestChoiceOnline);
+        // Mingo Mates / Best Choice logic:
+        // Priority given to online listeners. If total online listeners < 5, fill remainder with offline listeners (disabled card UI).
+        const onlineBestChoice = mappedListeners.filter(l => l.bestChoice && l.isLive);
+        const otherOnline = mappedListeners
+          .filter(l => l.isLive && !l.bestChoice)
+          .sort((a, b) => (b.rating || 0) - (a.rating || 0));
+
+        const combinedOnline = [...onlineBestChoice, ...otherOnline];
+
+        let finalBestChoiceData = [];
+
+        if (combinedOnline.length >= 5) {
+          if (onlineBestChoice.length >= 5) {
+            finalBestChoiceData = onlineBestChoice;
+          } else {
+            finalBestChoiceData = combinedOnline.slice(0, 5);
+          }
+        } else {
+          // If total online listeners < 5, show ALL online listeners followed by offline listeners up to 5
+          const neededOfflineCount = 5 - combinedOnline.length;
+          const offlineBestChoice = mappedListeners.filter(l => l.bestChoice && !l.isLive);
+          const otherOffline = mappedListeners
+            .filter(l => !l.bestChoice && !l.isLive)
+            .sort((a, b) => (b.rating || 0) - (a.rating || 0));
+
+          const combinedOffline = [...offlineBestChoice, ...otherOffline];
+          const fillOffline = combinedOffline.slice(0, neededOfflineCount);
+
+          finalBestChoiceData = [...combinedOnline, ...fillOffline];
+        }
+
+        setBestChoiceData(finalBestChoiceData);
         setPeopleData(mappedListeners);
       } else {
         setBestChoiceData([]);
@@ -653,35 +681,7 @@ export default function HomeScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    const handleStatusChanged = (data) => {
-      if (!data || !data.userId) return;
-      const targetId = data.userId.toString();
-      setPeopleData(prev => prev.map(item => {
-        if (item.id?.toString() === targetId) {
-          return {
-            ...item,
-            isLive: !!data.isOnline,
-            isBusy: !!data.isBusy,
-            busySince: data.busySince || null,
-          };
-        }
-        return item;
-      }));
-      // Keep the section live-only: update the changed listener and drop it
-      // entirely if it went offline, so offline cards never linger here.
-      setBestChoiceData(prev => prev
-        .map(item => item.id?.toString() === targetId
-          ? { ...item, isLive: !!data.isOnline, isBusy: !!data.isBusy, busySince: data.busySince || null }
-          : item)
-        .filter(item => item.isLive));
-    };
-
-    socketService.on('listener_status_changed', handleStatusChanged);
-    return () => {
-      socketService.off('listener_status_changed', handleStatusChanged);
-    };
-  }, []);
+  // Cards do not auto-update in real-time; users pull to refresh or re-focus to load new data
 
   useFocusEffect(
     useCallback(() => {

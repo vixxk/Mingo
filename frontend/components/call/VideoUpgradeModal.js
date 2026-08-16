@@ -1,5 +1,5 @@
-import React, { useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import React, { useRef, useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ms, s, vs } from '../../utils/responsive';
@@ -19,20 +19,33 @@ export default function VideoUpgradeModal({
 }) {
   const slideAnim = useRef(new Animated.Value(400)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
+  const [isAccepting, setIsAccepting] = useState(false);
 
   useEffect(() => {
     if (visible) {
+      setIsAccepting(false);
       Animated.parallel([
         Animated.timing(overlayAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
         Animated.spring(slideAnim, { toValue: 0, friction: 8, tension: 40, useNativeDriver: true }),
       ]).start();
     } else {
+      setIsAccepting(false);
       Animated.parallel([
         Animated.timing(overlayAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
         Animated.timing(slideAnim, { toValue: 400, duration: 200, useNativeDriver: true }),
       ]).start();
     }
   }, [visible]);
+
+  const handleAcceptPress = async () => {
+    if (isAccepting) return;
+    setIsAccepting(true);
+    try {
+      if (onAccept) await onAccept();
+    } catch (err) {
+      setIsAccepting(false);
+    }
+  };
 
   if (!visible) return null;
 
@@ -106,18 +119,22 @@ export default function VideoUpgradeModal({
                 {name} wants to switch this call to a Video Call. Would you like to turn on your camera?
               </Text>
               <View style={styles.buttonRow}>
-                <TouchableOpacity style={styles.declineBtn} activeOpacity={0.8} onPress={onDecline}>
+                <TouchableOpacity style={styles.declineBtn} activeOpacity={0.8} onPress={onDecline} disabled={isAccepting}>
                   <Text style={styles.declineText}>Decline</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.actionBtn} activeOpacity={0.85} onPress={onAccept}>
+                <TouchableOpacity style={styles.actionBtn} activeOpacity={0.85} onPress={handleAcceptPress} disabled={isAccepting}>
                   <LinearGradient
                     colors={['#22C55E', '#16A34A']}
                     style={styles.gradientBtn}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                   >
-                    <Ionicons name="videocam" size={18} color="#fff" style={{ marginRight: 6 }} />
-                    <Text style={styles.actionText}>Accept & Switch</Text>
+                    {isAccepting ? (
+                      <ActivityIndicator size="small" color="#fff" style={{ marginRight: 6 }} />
+                    ) : (
+                      <Ionicons name="videocam" size={18} color="#fff" style={{ marginRight: 6 }} />
+                    )}
+                    <Text style={styles.actionText}>{isAccepting ? 'Switching...' : 'Accept & Switch'}</Text>
                   </LinearGradient>
                 </TouchableOpacity>
               </View>

@@ -167,10 +167,9 @@ const initSocket = (server) => {
           clearTimeout(backgroundOfflineTimers[userIdStr]);
           delete backgroundOfflineTimers[userIdStr];
         }
-        await redis.set(REDIS_KEYS.ONLINE(userIdStr), '1', 'EX', PRESENCE_HEARTBEAT_TTL).catch(() => {});
         const listener = await Listener.findOne({ userId: socket.userId });
-        if (listener && !listener.isOnline) {
-          await Listener.setOnlineStatus(socket.userId, true).catch(() => {});
+        if (listener && listener.isOnline) {
+          await redis.set(REDIS_KEYS.ONLINE(userIdStr), '1').catch(() => {});
         }
       }
     });
@@ -189,9 +188,26 @@ const initSocket = (server) => {
       }
     });
 
-    socket.on('leave_conversation', (conversationId) => {
+    socket.on('leave_conversation', async (conversationId) => {
       socket.leave(conversationId);
       console.log(`Socket ${socket.id} left conversation ${conversationId}`);
+      if (socket.userId && conversationId) {
+        try {
+          const conv = await Conversation.findById(conversationId);
+          if (conv && conv.chatSession && conv.chatSession.active) {
+            const otherParticipant = conv.participants.find(p => p.toString() !== socket.userId.toString());
+            if (otherParticipant) {
+              io.to(`user_${otherParticipant}`).emit('chat_user_offline', {
+                conversationId: conversationId.toString(),
+                userId: socket.userId,
+                message: 'User left the chat page.',
+              });
+            }
+          }
+        } catch (err) {
+          console.error('[Socket] leave_conversation notify error:', err.message);
+        }
+      }
     });
 
     socket.on('send_message', async (data) => {
@@ -436,166 +452,9 @@ const initSocket = (server) => {
           console.log(`[Socket] Emitting receive_message (free) to room ${conversationId}`);
           io.to(conversationId).emit('receive_message', message);
 
-          // Emit notification to recipient's personal room (for badge/notification ONLY, not message)
+          // Emit notification to recipient's personal room and push notification only if they're NOT in the conversation room
           if (recipientIdStr && !isRecipientInConvRoom) {
             io.to(`user_${recipientIdStr}`).emit('receive_message', message);
-            
-            // Only send push notification if the recipient doesn't have unread messages in this conversation yet
-            const currentUnread = (updatedConv && updatedConv.unreadCount && typeof updatedConv.unreadCount.get === 'function')
-              ? (updatedConv.unreadCount.get(recipientIdStr) || 0)
-              : ((updatedConv && updatedConv.unreadCount && updatedConv.unreadCount[recipientIdStr]) || 0);
-
-            if (currentUnread === 1) {
-              // Send push notification
-              PushService.sendPushNotification(recipientIdStr, {
-                title: sender.name || 'Mingo',
-                body: type === 'text' ? content : `Sent a ${type}`,
-                data: { 
-                  url: `/chat?id=${conversationId}`,
-                  conversationId: conversationId.toString(),
-                  type: 'chat_message',
-                },
-              });
-            }
-          }
-
-          // The chat session (and its timer) does NOT start on a free user
-          // message. It starts when the listener replies (handled in the
-          // paid path below). This way the user only gets one free message.
-          return;
-        }
-
-        // --- BALANCE CHECK (after free messages used) ---
-        if (isUserRole) {
-          // Check if there's an active chat session
-          const hasActiveSession = conversation.chatSession && conversation.chatSession.active;
-
-          if (!hasActiveSession) {
-            // Need to start a new session — check balance
-            if (sender.coins < CHAT_COINS_PER_SESSION) {
-              // Insufficient balance — send system message
-              const systemMsg = new Message({
-                conversationId,
-                sender: null,
-                senderModel: 'System',
-                content: 'Please recharge to continue chatting.',
-                type: 'system',
-              });
-              await systemMsg.save();
-              await Conversation.findByIdAndUpdate(conversationId, { lastMessage: systemMsg._id });
-              io.to(conversationId).emit('receive_message', systemMsg);
-              // Also notify the user specifically for UI handling
-              io.to(`user_${senderId}`).emit('insufficient_balance', {
-                conversationId,
-                requiredCoins: CHAT_COINS_PER_SESSION,
-                currentCoins: sender.coins,
-              });
-              PushService.sendPushNotification(senderId, {
-                title: 'Recharge to continue chatting',
-                body: `Your chat needs ${CHAT_COINS_PER_SESSION} coins for the next session.`,
-                data: { type: 'insufficient_balance', reason: 'chat_start', conversationId: conversationId.toString() },
-              }).catch(err => console.error('[Chat] Insufficient-balance push failed:', err.message));
-              return;
-            }
-            // User has balance but no session is active.
-            // The session only starts once the LISTENER is actually online —
-            // otherwise the second message is blocked (a session cannot begin
-            // "live"). Online-ness is checked against the heartbeat key, the
-            // maintained availability set AND the persistent DB flag, because
-            // the heartbeat key alone has a short TTL and the app never sends
-            // periodic heartbeats — a fully online listener would otherwise be
-            // reported offline mid-chat and the user's message would be blocked.
-            const userListener = conversation.participants.find(
-              (p) => p.toString() !== senderId.toString()
-            );
-            const listenerOnline = userListener
-              ? await isListenerActuallyOnline(userListener.toString())
-              : false;
-            if (!listenerOnline) {
-              console.log(
-                `[Socket] Blocking paid msg in conv ${conversationId}: listener ${userListener} is offline`
-              );
-              socket.emit('listener_offline', {
-                conversationId,
-                listenerId: userListener ? userListener.toString() : null,
-              });
-              return;
-            }
-          }
-        }
-
-        // --- LISTENER REPLIES ARE NEVER RESTRICTED -------------------------
-        // The listener may send as many messages as they want at any time:
-        // during the free phase (before any paid chat session starts), while a
-        // session is active, and after a session has ended. Chat sessions are
-        // started and billed only by the USER's messages, so an unlimited
-        // listener reply stream can never trigger charges or start a session.
-
-        // Save and send the message
-        console.log(`[Socket] Saving message in conv ${conversationId} from ${senderId} (${senderModel})`);
-        const message = new Message({
-          conversationId,
-          sender: senderId,
-          senderModel: senderModel || (isUserRole ? 'User' : 'Listener'),
-          content,
-          type: type || 'text',
-          mediaUrl,
-          giftCount: data.giftCount || 1
-        });
-        await message.save();
-
-        const recipientId = conversation.participants.find(p => p.toString() !== senderId.toString());
-        const recipientIdStr = recipientId ? recipientId.toString() : null;
-        
-        // Determine if recipient is currently in the conversation room
-        let isRecipientInConvRoom = false;
-        if (recipientIdStr) {
-          const recipientRoom = io.sockets.adapter.rooms.get(conversationId);
-          const recipientPersonalSockets = io.sockets.adapter.rooms.get(`user_${recipientIdStr}`);
-          isRecipientInConvRoom = recipientRoom && recipientPersonalSockets && 
-            [...recipientPersonalSockets].some(sid => recipientRoom.has(sid));
-        }
-
-        let updatedConv = null;
-        if (recipientIdStr) {
-          if (isRecipientInConvRoom) {
-            // Recipient is already in the chat — just update lastMessage, don't increment unread
-            updatedConv = await Conversation.findByIdAndUpdate(conversationId, { 
-              lastMessage: message._id,
-              [`unreadCount.${recipientIdStr}`]: 0
-            }, { new: true });
-          } else {
-            // Recipient is NOT in the chat — increment unread count
-            updatedConv = await Conversation.findByIdAndUpdate(conversationId, { 
-              lastMessage: message._id,
-              $inc: { [`unreadCount.${recipientIdStr}`]: 1 }
-            }, { new: true });
-          }
-          try {
-            const sseService = require('./services/sseService');
-            sseService.notifyUser(recipientIdStr);
-          } catch (sseErr) {
-            console.error('SSE notify error in send_message:', sseErr);
-          }
-        } else {
-          updatedConv = await Conversation.findByIdAndUpdate(conversationId, { lastMessage: message._id }, { new: true });
-        }
-        
-        // Emit to the conversation room (for people already in the chat)
-        console.log(`[Socket] Emitting receive_message to room ${conversationId}`);
-        io.to(conversationId).emit('receive_message', message);
-
-        // Emit to recipient's personal room and push notification only if they're NOT in the conversation room
-        if (recipientIdStr && !isRecipientInConvRoom) {
-          io.to(`user_${recipientIdStr}`).emit('receive_message', message);
-          
-          // Only send push notification if the recipient doesn't have unread messages in this conversation yet
-          const currentUnread = (updatedConv && updatedConv.unreadCount && typeof updatedConv.unreadCount.get === 'function')
-            ? (updatedConv.unreadCount.get(recipientIdStr) || 0)
-            : ((updatedConv && updatedConv.unreadCount && updatedConv.unreadCount[recipientIdStr]) || 0);
-
-          if (currentUnread === 1) {
-            // Send push notification
             PushService.sendPushNotification(recipientIdStr, {
               title: sender.name || 'Mingo',
               body: type === 'text' ? content : `Sent a ${type}`,
@@ -604,9 +463,150 @@ const initSocket = (server) => {
                 conversationId: conversationId.toString(),
                 type: 'chat_message',
               },
+            }).catch(err => console.error('[Chat] Free msg push error:', err.message));
+          }
+
+        // The chat session (and its timer) does NOT start on a free user
+        // message. It starts when the listener replies (handled in the
+        // paid path below). This way the user only gets one free message.
+        return;
+      }
+
+      // --- BALANCE CHECK (after free messages used) ---
+      if (isUserRole) {
+        // Check if there's an active chat session
+        const hasActiveSession = conversation.chatSession && conversation.chatSession.active;
+
+        if (!hasActiveSession) {
+          // Need to start a new session — check balance
+          if (sender.coins < CHAT_COINS_PER_SESSION) {
+            // Insufficient balance — send system message
+            const systemMsg = new Message({
+              conversationId,
+              sender: null,
+              senderModel: 'System',
+              content: 'Please recharge to continue chatting.',
+              type: 'system',
             });
+            await systemMsg.save();
+            await Conversation.findByIdAndUpdate(conversationId, { lastMessage: systemMsg._id });
+            io.to(conversationId).emit('receive_message', systemMsg);
+            // Also notify the user specifically for UI handling
+            io.to(`user_${senderId}`).emit('insufficient_balance', {
+              conversationId,
+              requiredCoins: CHAT_COINS_PER_SESSION,
+              currentCoins: sender.coins,
+            });
+            PushService.sendPushNotification(senderId, {
+              title: 'Recharge to continue chatting',
+              body: `Your chat needs ${CHAT_COINS_PER_SESSION} coins for the next session.`,
+              data: { type: 'insufficient_balance', reason: 'chat_start', conversationId: conversationId.toString() },
+            }).catch(err => console.error('[Chat] Insufficient-balance push failed:', err.message));
+            return;
+          }
+          // User has balance but no session is active.
+          // The session only starts once the LISTENER is actually online —
+          // otherwise the second message is blocked (a session cannot begin
+          // "live"). Online-ness is checked against the heartbeat key, the
+          // maintained availability set AND the persistent DB flag, because
+          // the heartbeat key alone has a short TTL and the app never sends
+          // periodic heartbeats — a fully online listener would otherwise be
+          // reported offline mid-chat and the user's message would be blocked.
+          const userListener = conversation.participants.find(
+            (p) => p.toString() !== senderId.toString()
+          );
+          const listenerOnline = userListener
+            ? await isListenerActuallyOnline(userListener.toString())
+            : false;
+          if (!listenerOnline) {
+            console.log(
+              `[Socket] Blocking paid msg in conv ${conversationId}: listener ${userListener} is offline`
+            );
+            socket.emit('listener_offline', {
+              conversationId,
+              listenerId: userListener ? userListener.toString() : null,
+            });
+            return;
           }
         }
+      }
+
+      // --- LISTENER REPLIES ARE NEVER RESTRICTED -------------------------
+      // The listener may send as many messages as they want at any time:
+      // during the free phase (before any paid chat session starts), while a
+      // session is active, and after a session has ended. Chat sessions are
+      // started and billed only by the USER's messages, so an unlimited
+      // listener reply stream can never trigger charges or start a session.
+
+      // Save and send the message
+      console.log(`[Socket] Saving message in conv ${conversationId} from ${senderId} (${senderModel})`);
+      const message = new Message({
+        conversationId,
+        sender: senderId,
+        senderModel: senderModel || (isUserRole ? 'User' : 'Listener'),
+        content,
+        type: type || 'text',
+        mediaUrl,
+        giftCount: data.giftCount || 1
+      });
+      await message.save();
+
+      const recipientId = conversation.participants.find(p => p.toString() !== senderId.toString());
+      const recipientIdStr = recipientId ? recipientId.toString() : null;
+      
+      // Determine if recipient is currently in the conversation room
+      let isRecipientInConvRoom = false;
+      if (recipientIdStr) {
+        const recipientRoom = io.sockets.adapter.rooms.get(conversationId);
+        const recipientPersonalSockets = io.sockets.adapter.rooms.get(`user_${recipientIdStr}`);
+        isRecipientInConvRoom = recipientRoom && recipientPersonalSockets && 
+          [...recipientPersonalSockets].some(sid => recipientRoom.has(sid));
+      }
+
+      let updatedConv = null;
+      if (recipientIdStr) {
+        if (isRecipientInConvRoom) {
+          // Recipient is already in the chat — just update lastMessage, don't increment unread
+          updatedConv = await Conversation.findByIdAndUpdate(conversationId, { 
+            lastMessage: message._id,
+            [`unreadCount.${recipientIdStr}`]: 0
+          }, { new: true });
+        } else {
+          // Recipient is NOT in the chat — increment unread count
+          updatedConv = await Conversation.findByIdAndUpdate(conversationId, { 
+            lastMessage: message._id,
+            $inc: { [`unreadCount.${recipientIdStr}`]: 1 }
+          }, { new: true });
+        }
+        try {
+          const sseService = require('./services/sseService');
+          sseService.notifyUser(recipientIdStr);
+        } catch (sseErr) {
+          console.error('SSE notify error in send_message:', sseErr);
+        }
+      } else {
+        updatedConv = await Conversation.findByIdAndUpdate(conversationId, { lastMessage: message._id }, { new: true });
+      }
+      
+      // Emit to the conversation room (for people already in the chat)
+      console.log(`[Socket] Emitting receive_message to room ${conversationId}`);
+      io.to(conversationId).emit('receive_message', message);
+
+      // Emit to recipient's personal room and push notification only if they're NOT in the conversation room
+      if (recipientIdStr && !isRecipientInConvRoom) {
+        io.to(`user_${recipientIdStr}`).emit('receive_message', message);
+        
+        // Send push notification so recipient is informed when not in conversation room
+        PushService.sendPushNotification(recipientIdStr, {
+          title: sender.name || 'Mingo',
+          body: type === 'text' ? content : `Sent a ${type}`,
+          data: { 
+            url: `/chat?id=${conversationId}`,
+            conversationId: conversationId.toString(),
+            type: 'chat_message',
+          },
+        }).catch(err => console.error('[Chat] Message push error:', err.message));
+      }
 
         // --- SESSION START ---
         // A chat session (and its timer) starts ONLY when the USER sends a
@@ -1145,10 +1145,14 @@ const initSocket = (server) => {
               // Reset listener busy status and release lock
               const listenerIdStr = activeCall.listenerId.toString();
               await Listener.findOneAndUpdate({ userId: listenerIdStr }, { isBusy: false, busySince: null });
-              io.emit('listener_status_changed', { userId: listenerIdStr, isOnline: false, isBusy: false });
+              const listenerDoc = await Listener.findOne({ userId: listenerIdStr }).select('isOnline');
+              const listenerIsOnline = listenerDoc ? listenerDoc.isOnline : true;
+              io.emit('listener_status_changed', { userId: listenerIdStr, isOnline: listenerIsOnline, isBusy: false });
               const sseService = require('./services/sseService');
-              sseService.broadcastListenerStatus(listenerIdStr, false, false, null);
-              await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, listenerIdStr);
+              sseService.broadcastListenerStatus(listenerIdStr, listenerIsOnline, false, null);
+              if (listenerIsOnline) {
+                await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, listenerIdStr);
+              }
               await redis.del(REDIS_KEYS.LOCK(listenerIdStr));
             }
 
@@ -1160,51 +1164,22 @@ const initSocket = (server) => {
             if (activeChatConvs.length > 0) {
               console.log(`[Socket] User ${disconnectedUserId} disconnected with ${activeChatConvs.length} active chat(s).`);
               
-              // Notify the other participant that user went offline
+              // Notify the other participant that user left the chat page
               for (const conv of activeChatConvs) {
                 const otherParticipant = conv.participants.find(p => p.toString() !== disconnectedUserId.toString());
                 if (otherParticipant) {
                   io.to(`user_${otherParticipant}`).emit('chat_user_offline', {
                     conversationId: conv._id.toString(),
                     userId: disconnectedUserId,
-                    message: 'User went offline.',
+                    message: 'User left the chat page.',
                   });
                 }
               }
             }
 
-            // 4. Auto-mark the listener offline if the app was closed from RAM.
-            //    When a listener's last connection drops, schedule an offline
-            //    transition after a short grace period. The timer is cancelled
-            //    if the app reconnects (handshake auth / authenticate event) or
-            //    returns to the foreground (app_foregrounded) or heartbeats
-            //    before it fires — so network blips and quick reconnects never
-            //    flip the listener offline. A force-closed app never reconnects,
-            //    so it goes offline automatically once the grace elapses instead
-            //    of staying "online" forever.
-            const userIdStr = disconnectedUserId.toString();
-            const existingTimer = backgroundOfflineTimers[userIdStr];
-            if (existingTimer) {
-              clearTimeout(existingTimer);
-              delete backgroundOfflineTimers[userIdStr];
-            }
-            const disconnectedListener = await Listener.findOne({ userId: disconnectedUserId }).select('isOnline');
-            if (disconnectedListener && disconnectedListener.isOnline) {
-              backgroundOfflineTimers[userIdStr] = setTimeout(async () => {
-                delete backgroundOfflineTimers[userIdStr];
-                try {
-                  // Only go offline if the listener still has no live connection.
-                  const room = io ? io.sockets.adapter.rooms.get(`user_${userIdStr}`) : null;
-                  if (!room || room.size === 0) {
-                    const PresenceService = require('./services/presenceService');
-                    await PresenceService.goOffline(disconnectedUserId);
-                    console.log(`[Socket] Listener ${userIdStr} auto-marked offline (no reconnect within ${DISCONNECT_OFFLINE_GRACE_MS}ms of disconnect).`);
-                  }
-                } catch (err) {
-                  console.error('[Socket] Error auto-marking listener offline:', err.message);
-                }
-              }, DISCONNECT_OFFLINE_GRACE_MS);
-            }
+            // 4. Online/Offline status is strictly managed by the listener via explicit "Go Offline" button.
+            //    Closing or backgrounding the app MUST NOT mark the listener offline automatically.
+            console.log(`[Socket] User ${disconnectedUserId} socket disconnected. Listener online status preserved.`);
           } catch (e) {
             console.error('Error on disconnect cleanup:', e.message);
           }
@@ -1374,7 +1349,7 @@ function startChatSessionTimer(conversationId, userId) {
         await endChatSession(conversationId);
 
         // Send system message
-        const content = !isUserOnline ? 'Session ended — user went offline.' : 'Please recharge to continue chatting.';
+        const content = !isUserOnline ? 'Session ended — user left the chat page.' : 'Please recharge to continue chatting.';
         const systemMsg = new Message({
           conversationId,
           sender: null,
@@ -1651,7 +1626,7 @@ async function syncAndResumeChatSession(conversationId) {
 
             if (!isUserOnline || !user || user.coins < CHAT_COINS_PER_SESSION) {
               await endChatSession(conversationId);
-              const content = !isUserOnline ? 'Session ended — user went offline.' : 'Please recharge to continue chatting.';
+              const content = !isUserOnline ? 'Session ended — user left the chat page.' : 'Please recharge to continue chatting.';
               const systemMsg = new Message({
                 conversationId,
                 sender: null,
