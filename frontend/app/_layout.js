@@ -373,7 +373,7 @@ function RootLayout() {
       const cid = data?.callId || data?.sessionId;
       if (cid) handledCallIdsRef.current.add(cid);
       console.log('[RootLayout] Call cancelled by caller:', data);
-      setIncomingCalls(prev => prev.filter(c => c.callId !== data.callId && c.callId !== data.sessionId));
+      setIncomingCalls(prev => (cid ? prev.filter(c => c.callId !== cid) : []));
       incomingCallNative.stopIncomingCall();
     };
 

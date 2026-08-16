@@ -150,8 +150,8 @@ const GiftPopup = ({ visible, onClose, receiverId, sessionId, onGiftSent }) => {
           ]}
         >
           <LinearGradient
-            colors={['#051C14', '#07120E', '#030A07']}
-            locations={[0, 0.5, 1]}
+            colors={['#000', '#052E16', '#14532D']}
+            locations={[0, 0.55, 1]}
             style={StyleSheet.absoluteFill}
           />
           <View style={styles.header}>
@@ -240,14 +240,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
   sheet: {
-    backgroundColor: '#051C14',
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     paddingTop: vs(20),
     paddingHorizontal: wp(6),
     height: hp(65),
     borderWidth: 1,
-    borderColor: '#064E3B',
+    borderColor: 'rgba(34, 197, 94, 0.5)',
+    borderBottomWidth: 0,
     overflow: 'hidden',
   },
   header: {

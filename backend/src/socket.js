@@ -757,14 +757,14 @@ const initSocket = (server) => {
 
     socket.on('call_cancelled', async (data) => {
       let { userId, sessionId, reason } = data;
-      console.log(`[Socket] call_cancelled received from caller. Listener: ${userId}, Session: ${sessionId}`);
+      console.log(`[Socket] call_cancelled received from caller (${socket.userId}). Listener: ${userId}, Session: ${sessionId}`);
       
       try {
         let session = null;
-        if (sessionId) {
-          // The caller's ring timer gave up (no answer) — record as missed so
-          // it shows up in both sides' history. Manual cancels stay 'cancelled'.
-          const isNoAnswer = reason === 'timeout' || reason === 'no_answer';
+        const isMongoId = sessionId && mongoose.Types.ObjectId.isValid(sessionId);
+        const isNoAnswer = reason === 'timeout' || reason === 'no_answer';
+
+        if (isMongoId) {
           session = await Session.findByIdAndUpdate(
             sessionId,
             { status: isNoAnswer ? 'missed' : 'cancelled' },
@@ -772,9 +772,26 @@ const initSocket = (server) => {
           );
         }
         
-        // Extract listener's user ID from the active session if missing from data
-        if (!userId && session) {
-          userId = session.listenerId?.toString();
+        // If session was not found by ID, look up any recent active/pending session for this caller
+        if (!session && socket.userId) {
+          session = await Session.findOneAndUpdate(
+            { userId: socket.userId, status: { $in: ['active', 'created', 'pending'] } },
+            { status: isNoAnswer ? 'missed' : 'cancelled' },
+            { new: true, sort: { createdAt: -1 } }
+          );
+        }
+
+        if (session) {
+          sessionId = session._id.toString();
+          if (!userId) userId = session.listenerId?.toString();
+        }
+
+        // If userId is passed as a Listener profile ID (Listener._id), map to User._id
+        if (userId) {
+          const listenerDoc = await Listener.findOne({ $or: [{ userId: userId }, { _id: userId }] });
+          if (listenerDoc?.userId) {
+            userId = listenerDoc.userId.toString();
+          }
         }
 
         if (userId) {
@@ -783,7 +800,11 @@ const initSocket = (server) => {
           // Push so the listener's device stops ringing even when the app is
           // backgrounded/killed — the native incoming-call card dismisses on
           // this event (see frontend IncomingCallNotificationService).
-          const isNoAnswer = reason === 'timeout' || reason === 'no_answer' || session?.status === 'missed';
+          //
+          // A Missed Call notification is displayed ONLY when isNoAnswer is true
+          // (caller ring timer timed out without response). Manual cancellations
+          // dismiss the ringing UI quietly without generating a missed call notification.
+          const isMissed = isNoAnswer;
           let callerName = 'Someone';
           if (session?.userId) {
             try {
@@ -795,12 +816,12 @@ const initSocket = (server) => {
 
           try {
             PushService.sendPushNotification(userId, {
-              title: isNoAnswer ? 'Missed Call' : '',
-              body: isNoAnswer ? `Missed call from ${callerName}` : '',
+              title: isMissed ? 'Missed Call' : '',
+              body: isMissed ? `Missed call from ${callerName}` : '',
               data: {
                 type: 'call_cancelled',
                 callId: (sessionId || '').toString(),
-                isMissed: isNoAnswer ? 'true' : 'false',
+                isMissed: isMissed ? 'true' : 'false',
               },
             });
           } catch (pushErr) {

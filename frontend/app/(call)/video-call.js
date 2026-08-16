@@ -910,8 +910,8 @@ export default function VideoCallScreen() {
                 onPress={(e) => { e.stopPropagation?.(); setShowRecharge(true); }}
                 activeOpacity={0.8}
               >
-                <Ionicons name="wallet-outline" size={22} color="#EF4444" />
-                <Text style={[styles.floatingRechargeText, { color: '#EF4444' }]}>Recharge</Text>
+                <Ionicons name="wallet-outline" size={22} color="#10B981" />
+                <Text style={[styles.floatingRechargeText, { color: '#10B981' }]}>Recharge</Text>
               </TouchableOpacity>
             )}
 
@@ -921,8 +921,8 @@ export default function VideoCallScreen() {
                 onPress={(e) => { e.stopPropagation?.(); setShowGiftPopup(true); }}
                 activeOpacity={0.8}
               >
-                <Ionicons name="gift-outline" size={22} color="#EF4444" />
-                <Text style={[styles.floatingRechargeText, { color: '#EF4444' }]}>Gift</Text>
+                <Ionicons name="gift-outline" size={22} color="#10B981" />
+                <Text style={[styles.floatingRechargeText, { color: '#10B981' }]}>Gift</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -1073,8 +1073,8 @@ export default function VideoCallScreen() {
             onPress={(e) => { e.stopPropagation?.(); setShowRecharge(true); }}
             activeOpacity={0.8}
           >
-            <Ionicons name="wallet-outline" size={20} color="#EF4444" />
-            <Text style={[styles.floatingRechargeText, { color: '#EF4444' }]}>Recharge</Text>
+            <Ionicons name="wallet-outline" size={20} color="#10B981" />
+            <Text style={[styles.floatingRechargeText, { color: '#10B981' }]}>Recharge</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -1082,8 +1082,8 @@ export default function VideoCallScreen() {
             onPress={(e) => { e.stopPropagation?.(); setShowGiftPopup(true); }}
             activeOpacity={0.8}
           >
-            <Ionicons name="gift-outline" size={20} color="#EF4444" />
-            <Text style={[styles.floatingRechargeText, { color: '#EF4444' }]}>Gift</Text>
+            <Ionicons name="gift-outline" size={20} color="#10B981" />
+            <Text style={[styles.floatingRechargeText, { color: '#10B981' }]}>Gift</Text>
           </TouchableOpacity>
         </View>
         </Animated.View>

@@ -190,16 +190,21 @@ export default function ConnectingScreen() {
     });
   };
 
+  const isCancelledRef = useRef(false);
+
   const handleCancel = useCallback(() => {
+    isCancelledRef.current = true;
     if (callTimeoutRef.current) {
       clearTimeout(callTimeoutRef.current);
       callTimeoutRef.current = null;
     }
     stopRingtone();
     const targetUserId = partnerListenerIdRef.current || listenerId;
+    const currentSessionId = realCallIdRef.current || initialCallId;
+    console.log('[Connecting] Cancelling call for listener:', targetUserId, 'Session:', currentSessionId);
     socketService.emit('call_cancelled', { 
       userId: targetUserId, 
-      sessionId: realCallIdRef.current || initialCallId 
+      sessionId: currentSessionId 
     });
     socketService.emit('cancel_random_search');
     router.back();
@@ -420,10 +425,18 @@ export default function ConnectingScreen() {
         } else {
           // DIRECT CALL FLOW
           try {
-            // 1. Create real session in backend first
             const sessionRes = await callAPI.startCall(listenerId, callType);
             const finalSessionId = sessionRes.data.sessionId;
             const finalRoomId = sessionRes.data.roomId;
+            const finalListenerId = sessionRes.data.listenerId;
+
+            // Synchronously store in refs so instant clicks on Cancel Call find the IDs
+            realCallIdRef.current = finalSessionId;
+            realRoomIdRef.current = finalRoomId;
+            if (finalListenerId) {
+              partnerListenerIdRef.current = finalListenerId;
+              setPartnerListenerId(finalListenerId);
+            }
 
             // Use the backend's session-scoped Zego credentials so both
             // participants always join the same Zego app.
@@ -435,6 +448,15 @@ export default function ConnectingScreen() {
             
             setRealCallId(finalSessionId);
             setRealRoomId(finalRoomId);
+
+            if (isCancelledRef.current) {
+              console.log('[Connecting] User cancelled call while startCall was in-flight');
+              socketService.emit('call_cancelled', {
+                userId: finalListenerId || listenerId,
+                sessionId: finalSessionId,
+              });
+              return;
+            }
 
             // 2. Signal the listener with the real IDs
             socketService.emit('call_incoming', {
