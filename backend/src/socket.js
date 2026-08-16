@@ -783,11 +783,25 @@ const initSocket = (server) => {
           // Push so the listener's device stops ringing even when the app is
           // backgrounded/killed — the native incoming-call card dismisses on
           // this event (see frontend IncomingCallNotificationService).
+          const isNoAnswer = reason === 'timeout' || reason === 'no_answer' || session?.status === 'missed';
+          let callerName = 'Someone';
+          if (session?.userId) {
+            try {
+              const User = require('./models/userModel');
+              const callerUser = await User.findById(session.userId).select('name');
+              if (callerUser?.name) callerName = callerUser.name;
+            } catch (e) {}
+          }
+
           try {
             PushService.sendPushNotification(userId, {
-              title: 'Call ended',
-              body: 'The caller ended the call.',
-              data: { type: 'call_cancelled', callId: (sessionId || '').toString() },
+              title: isNoAnswer ? 'Missed Call' : '',
+              body: isNoAnswer ? `Missed call from ${callerName}` : '',
+              data: {
+                type: 'call_cancelled',
+                callId: (sessionId || '').toString(),
+                isMissed: isNoAnswer ? 'true' : 'false',
+              },
             });
           } catch (pushErr) {
             console.error('[Socket] call_cancelled push failed:', pushErr.message);

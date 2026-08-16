@@ -42,6 +42,14 @@ class PushService {
       );
       if (oneSignalResult.success && oneSignalResult.sent > 0) {
         console.log(`[PushService] Sent via OneSignal to ${oneSignalResult.sent} user(s)`);
+        return {
+          success: true,
+          usersTargeted: cleanUserIds.length,
+          tokensTargeted: oneSignalResult.sent,
+          sentCount: oneSignalResult.sent,
+          failedCount: 0,
+          channel: 'onesignal',
+        };
       }
 
       // 2. Also dispatch via Expo/FCM push tokens for maximum reliability (especially call alerts)

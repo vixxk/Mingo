@@ -52,8 +52,15 @@ class IncomingCallNotificationService : INotificationServiceExtension {
                     IncomingCallNotifications.showIncomingCall(event.context, payload)
                 }
                 "call_cancelled" -> {
-                    // The caller gave up — stop ringing and dismiss the card.
+                    // Stop ringing and dismiss the full-screen card/popup
                     IncomingCallNotifications.stopIncomingCall(event.context)
+                    val data = event.notification.additionalData
+                    val isMissed = data?.optString("isMissed", "false") == "true"
+                    if (isMissed) {
+                        val title = event.notification.title?.ifEmpty { "Missed Call" } ?: "Missed Call"
+                        val body = event.notification.body?.ifEmpty { "You missed a call" } ?: "You missed a call"
+                        IncomingCallNotifications.showMissedCallNotification(event.context, title, body)
+                    }
                 }
             }
         } catch (e: Exception) {

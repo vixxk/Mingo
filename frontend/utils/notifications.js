@@ -188,15 +188,15 @@ export { Notifications };
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
     const data = notification?.request?.content?.data || {};
-    const isCallPush = data?.type === 'incoming_call' || data?.type === 'call_cancelled';
+    const isIncomingCallPush = data?.type === 'incoming_call';
+    const isCancelledPush = data?.type === 'call_cancelled' && data?.isMissed !== 'true';
+    const isCallPush = isIncomingCallPush || isCancelledPush;
     const appActive = AppState.currentState === 'active';
 
     // Incoming calls never use the plain Expo banner:
     //  - foreground: the in-app IncomingCallPopup (socket event) handles it;
     //  - background: the native full-screen card + looping ringtone handles it
     //    on builds that have the module (plugins/withIncomingCall.js).
-    // Without the native module (old build / Expo Go) the banner is kept so the
-    // listener still gets *some* notification + sound when the app is closed.
     let nativeHandlesCall = false;
     if (isCallPush && !appActive) {
       try {

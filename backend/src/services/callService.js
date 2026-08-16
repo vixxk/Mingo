@@ -311,11 +311,19 @@ class CallService {
 
       // The call never connected — tell the listener's device to stop ringing
       // (dismisses the native incoming-call card when the app is backgrounded/killed).
+      const isMissed = session?.status === 'missed';
+      const callerUser = await User.findById(sessionUserIdStr).select('name').catch(() => null);
+      const callerName = callerUser?.name || 'Someone';
+
       try {
         PushService.sendPushNotification(sessionListenerIdStr, {
-          title: 'Call ended',
-          body: 'The call was cancelled before it connected.',
-          data: { type: 'call_cancelled', callId: session._id.toString() },
+          title: isMissed ? 'Missed Call' : '',
+          body: isMissed ? `Missed call from ${callerName}` : '',
+          data: {
+            type: 'call_cancelled',
+            callId: session._id.toString(),
+            isMissed: isMissed ? 'true' : 'false',
+          },
         });
       } catch (pushErr) {
         console.error('[CallService] call_cancelled push failed:', pushErr.message);

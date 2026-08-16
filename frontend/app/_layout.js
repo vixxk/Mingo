@@ -101,12 +101,14 @@ function RootLayout() {
   }, []);
 
   const incomingCallsRef = useRef([]);
+  const handledCallIdsRef = useRef(new Set());
   useEffect(() => {
     incomingCallsRef.current = incomingCalls;
   }, [incomingCalls]);
 
   const handleAcceptCall = useCallback(async (acceptedCall) => {
     if (!acceptedCall) return;
+    if (acceptedCall.callId) handledCallIdsRef.current.add(acceptedCall.callId);
 
     // Ensure socket is connected before emitting events
     await socketService.connect();
@@ -217,6 +219,7 @@ function RootLayout() {
 
   const handleRejectCall = useCallback(async (rejectedCall) => {
     if (!rejectedCall) return;
+    if (rejectedCall.callId) handledCallIdsRef.current.add(rejectedCall.callId);
     // Ensure socket is connected so the rejection reaches the caller
     await socketService.connect();
     // Dismiss any native card/notification still ringing
@@ -238,21 +241,17 @@ function RootLayout() {
   }, [handleAcceptCall, handleRejectCall]);
 
   // ── Native incoming-call card (background / killed app) ────────────────
-  // Actions tapped on the Android full-screen card (Accept / Decline / Open)
-  // are forwarded here — from the running JS (backgrounded app) via the
-  // IncomingCallAction event, or from a cold start (killed app) via
-  // getPendingCallAction. They reuse the exact same accept/reject flow as the
-  // in-app popup and the notification buttons.
   const handleNativeCallAction = useCallback(async (action, callData) => {
     if (!callData || !callData.callId) return;
     console.log('[RootLayout] Native call card action:', action, callData.callId);
+    if (action === 'accept' || action === 'decline' || action === 'timeout') {
+      handledCallIdsRef.current.add(callData.callId);
+    }
     if (action === 'accept') {
       socketService.triggerLocalEvent('accept_incoming_call', callData);
     } else if (action === 'decline') {
       socketService.triggerLocalEvent('reject_incoming_call', callData);
     } else if (action === 'timeout') {
-      // The native card rang for its full ring count unanswered — reject the
-      // call so the caller is not left hanging, and drop any stale popup.
       console.log('[RootLayout] Native call card timed out:', callData.callId);
       incomingCallNative.stopIncomingCall();
       socketService.emit('call_rejected', {
@@ -262,8 +261,9 @@ function RootLayout() {
       });
       setIncomingCalls(prev => prev.filter(c => c.callId !== callData.callId));
     } else if (action === 'open') {
-      socketService.triggerLocalEvent('incoming_call', callData);
-      // Bring the user to their role's home so the in-app popup is visible
+      if (!handledCallIdsRef.current.has(callData.callId)) {
+        socketService.triggerLocalEvent('incoming_call', callData);
+      }
       try {
         const userData = await AsyncStorage.getItem('user');
         const u = userData ? JSON.parse(userData) : null;
@@ -292,9 +292,11 @@ function RootLayout() {
     try {
       const res = await callAPI.getActiveIncomingCall();
       if (res?.data?.hasIncomingCall && res.data.callData) {
+        const cid = res.data.callData.callId;
+        if (handledCallIdsRef.current.has(cid)) return;
         console.log('[RootLayout] Found active incoming call from REST sync:', res.data.callData);
         setIncomingCalls(prev => {
-          if (prev.some(c => c.callId === res.data.callData.callId)) return prev;
+          if (prev.some(c => c.callId === cid)) return prev;
           return [...prev, res.data.callData];
         });
       }
@@ -319,23 +321,25 @@ function RootLayout() {
   // Global socket listeners — show the incoming-call popup on every screen
   useEffect(() => {
     const handleIncomingCall = (callData) => {
+      if (!callData?.callId || handledCallIdsRef.current.has(callData.callId)) {
+        console.log('[RootLayout] Ignoring incoming_call for already handled call:', callData?.callId);
+        return;
+      }
       console.log('[RootLayout] Incoming call received:', callData);
       setIncomingCalls((prev) => {
         if (prev.some(c => c.callId === callData.callId)) return prev;
         return [...prev, callData];
       });
-      // App is backgrounded (JS still alive): show the native card too — the
-      // socket can beat the push. Native ignores it while foregrounded.
       if (AppState.currentState !== 'active') {
         incomingCallNative.showIncomingCall(callData);
       }
     };
 
     const handleCallCancelled = (data) => {
+      const cid = data?.callId || data?.sessionId;
+      if (cid) handledCallIdsRef.current.add(cid);
       console.log('[RootLayout] Call cancelled by caller:', data);
       setIncomingCalls(prev => prev.filter(c => c.callId !== data.callId && c.callId !== data.sessionId));
-      // Stop any native card/ringtone still playing (killed/backgrounded case
-      // is covered by the call_cancelled push handled natively).
       incomingCallNative.stopIncomingCall();
     };
 
@@ -373,42 +377,36 @@ function RootLayout() {
       socketService.on('accept_incoming_call', handleAcceptLocal);
       socketService.on('reject_incoming_call', handleRejectLocal);
 
-      // Check server for any active ringing call (e.g. opened app 2-3s after call started)
+      // Check server for any active ringing call
       await syncActiveIncomingCall();
 
-      // Process pending local triggers from notification taps
       if (socketService.pendingAcceptCall) {
         const pending = socketService.pendingAcceptCall;
         socketService.pendingAcceptCall = null;
-        console.log('[RootLayout] Found pending accept call event, executing:', pending);
         handleAcceptCallRef.current(pending);
       } else if (socketService.pendingRejectCall) {
         const pending = socketService.pendingRejectCall;
         socketService.pendingRejectCall = null;
-        console.log('[RootLayout] Found pending reject call event, executing:', pending);
         handleRejectCallRef.current(pending);
       } else if (socketService.pendingIncomingCall) {
         const pending = socketService.pendingIncomingCall;
         socketService.pendingIncomingCall = null;
-        console.log('[RootLayout] Found pending incoming call event, displaying popup:', pending);
-        setIncomingCalls((prev) => {
-          if (prev.some(c => c.callId === pending.callId)) return prev;
-          return [...prev, pending];
-        });
+        if (pending?.callId && !handledCallIdsRef.current.has(pending.callId)) {
+          setIncomingCalls((prev) => {
+            if (prev.some(c => c.callId === pending.callId)) return prev;
+            return [...prev, pending];
+          });
+        }
       }
 
-      // Cold start launched from the native call card while the app was killed
       const pendingNative = await incomingCallNative.getPendingCallAction();
       if (pendingNative) {
-        console.log('[RootLayout] Found pending native call card action:', pendingNative.action);
         handleNativeCallActionRef.current(pendingNative.action, pendingNative.payload);
       }
     };
 
     setup();
 
-    // Only remove the listeners we registered — never wipe other modules'
-    // listeners for the same events.
     return () => {
       socketService.off('incoming_call', handleIncomingCall);
       socketService.off('call_cancelled', handleCallCancelled);
@@ -418,32 +416,23 @@ function RootLayout() {
     };
   }, [router]);
 
-  // Push received while the app is running (foreground or background). The
-  // socket `incoming_call` event usually beats the push, but when it doesn't
-  // (process backgrounded and the socket lagged, or the push is the only
-  // trigger) this renders the native call card from the push payload and seeds
-  // the in-app popup state — so opening the app 2-3s into the ring instantly
-  // shows the popup + ringtone instead of nothing.
   useEffect(() => {
     const subscription = addNotificationReceivedListener((notification) => {
       try {
         const data = notification?.request?.content?.data;
         if (!data || !data.callId) return;
         if (data.type === 'incoming_call') {
+          if (handledCallIdsRef.current.has(data.callId)) return;
           if (AppState.currentState !== 'active') {
-            // Backgrounded: show the native full-screen card + looping ringtone
-            // from the push payload. The native side dedups by callId, so this
-            // is idempotent with the socket path / OneSignal extension.
             incomingCallNative.showIncomingCall(data);
           }
-          // Seed the popup state — if the user opens the app mid-ring the
-          // in-app popup (with its JS ringtone) takes over seamlessly.
           setIncomingCalls((prev) => {
             if (prev.some(c => c.callId === data.callId)) return prev;
             return [...prev, data];
           });
         } else if (data.type === 'call_cancelled') {
-          // The caller gave up — stop any native card/ringtone + popup.
+          const cid = data.callId || data.sessionId;
+          if (cid) handledCallIdsRef.current.add(cid);
           incomingCallNative.stopIncomingCall();
           setIncomingCalls(prev => prev.filter(c => c.callId !== data.callId && c.callId !== data.sessionId));
         }

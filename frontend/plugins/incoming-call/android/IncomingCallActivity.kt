@@ -252,124 +252,167 @@ class IncomingCallActivity : Activity() {
     // ── UI ───────────────────────────────────────────────────────
 
     private fun buildUi(payload: JSONObject): View {
-        val callerName = payload.optString("callerName", "Mingo")
+        val callerName = payload.optString("callerName", "Mingo User")
         val callType = payload.optString("callType", "audio")
+        val isVideo = callType == "video"
         val dp = resources.displayMetrics.density
+        val screenWidth = resources.displayMetrics.widthPixels
         val screenHeight = resources.displayMetrics.heightPixels
 
-        // Transparent root scrim so the phone home screen or active app underneath stays visible
+        // Full screen root layout with dark gradient background
         val root = FrameLayout(this).apply {
-            setBackgroundColor(Color.TRANSPARENT)
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(0xFF0A0A0F.toInt(), 0xFF141028.toInt(), 0xFF09090E.toInt())
+            )
         }
 
-        // Compact dark horizontal card matching Screenshot 2 & 3
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            elevation = 16f * dp
-            setPadding((14 * dp).toInt(), (12 * dp).toInt(), (14 * dp).toInt(), (12 * dp).toInt())
-            background = GradientDrawable().apply {
-                cornerRadius = 24 * dp
-                setColor(0xFF18151D.toInt()) // Sleek dark card container matching screenshots
-            }
+        // 1. Top Bar Header - Mingo Logo Image (Top Left)
+        val logoImage = android.widget.ImageView(this).apply {
+            scaleType = android.widget.ImageView.ScaleType.FIT_START
+            try {
+                val resId = resources.getIdentifier("mingo_logo", "drawable", packageName)
+                if (resId != 0) {
+                    setImageResource(resId)
+                }
+            } catch (_: Exception) {}
         }
-
-        // 1. Avatar on the left with purple border ring
-        val avatar = buildAvatar(callerName, 52f, dp, payload.optString("callerPhoto"))
-        val avatarParams = LinearLayout.LayoutParams((52 * dp).toInt(), (52 * dp).toInt()).apply {
-            gravity = Gravity.CENTER_VERTICAL
+        val logoParams = FrameLayout.LayoutParams(
+            (screenWidth * 0.40f).toInt(),
+            (screenHeight * 0.06f).toInt()
+        ).apply {
+            topMargin = (screenHeight * 0.05f).toInt()
+            leftMargin = (screenWidth * 0.05f).toInt()
+            gravity = Gravity.TOP or Gravity.START
         }
-        card.addView(avatar, avatarParams)
+        root.addView(logoImage, logoParams)
 
-        // 2. Middle Caller Info Column
-        val infoCol = LinearLayout(this).apply {
+        // 2. Center Section (Avatar + Caller Name + Subtitle)
+        val centerCol = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
         }
 
-        val subtitleView = TextView(this).apply {
-            text = "Incoming ${if (callType == "video") "Video" else "Audio"} Call"
-            setTextColor(0xFFC084FC.toInt()) // Light purple text (#C084FC)
-            textSize = 13f
-            typeface = Typeface.DEFAULT_BOLD
-        }
+        // Avatar size: 36% of screen width
+        val avatarSizePx = (screenWidth * 0.36f).toInt()
+        val avatarView = buildAvatar(callerName, avatarSizePx, dp, payload.optString("callerPhoto"))
+        centerCol.addView(avatarView, LinearLayout.LayoutParams(avatarSizePx, avatarSizePx))
+
         val nameView = TextView(this).apply {
             text = callerName
             setTextColor(Color.WHITE)
-            textSize = 18f
+            textSize = 24f
             typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
             maxLines = 1
         }
-
-        infoCol.addView(subtitleView)
-        infoCol.addView(nameView)
-
-        val infoParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-            leftMargin = (12 * dp).toInt()
-            rightMargin = (8 * dp).toInt()
-            gravity = Gravity.CENTER_VERTICAL
+        val nameParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = (screenHeight * 0.03f).toInt()
         }
-        card.addView(infoCol, infoParams)
+        centerCol.addView(nameView, nameParams)
 
-        // 3. Right Action Buttons (Decline & Accept in single horizontal row)
-        val actionRow = LinearLayout(this).apply {
+        val subtitleView = TextView(this).apply {
+            text = if (isVideo) "Incoming Video Call..." else "Incoming Audio Call..."
+            setTextColor(0xFFC084FC.toInt()) // Light purple
+            textSize = 16f
+            typeface = Typeface.DEFAULT
+            gravity = Gravity.CENTER
+        }
+        val subtitleParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = (screenHeight * 0.01f).toInt()
+        }
+        centerCol.addView(subtitleView, subtitleParams)
+
+        val centerParams = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            topMargin = (screenHeight * 0.26f).toInt()
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+        }
+        root.addView(centerCol, centerParams)
+
+        // 3. Bottom Actions Section (Decline Red & Pick Call Green)
+        val actionsRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+            gravity = Gravity.CENTER
         }
 
-        val btnSize = (44 * dp).toInt()
+        val btnSizePx = (screenWidth * 0.18f).toInt()
 
-        // Red circular Decline button with '✕' icon
-        val declineBtn = buildActionButton("\u2715", 0xFFEF4444.toInt())
-        
-        // Green circular Accept button with phone '📞' or camera '📹' icon
-        val acceptIcon = if (callType == "video") "\uD83C\uDFA5" else "\uD83D\uDCDE"
-        val acceptBtn = buildActionButton(acceptIcon, 0xFF22C55E.toInt())
-
+        // Red Decline Column
+        val declineCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+        }
+        val declineBtn = buildActionButton("\u2715", 0xFFEF4444.toInt(), btnSizePx)
         declineBtn.setOnClickListener {
             IncomingCallNotifications.handleCardAction(this, IncomingCallNotifications.ACTION_DECLINE, payload)
             finish()
         }
+        val declineLabel = TextView(this).apply {
+            text = "Decline"
+            setTextColor(0xFFEF4444.toInt())
+            textSize = 14f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+        }
+        val labelParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = (10 * dp).toInt()
+        }
+        declineCol.addView(declineBtn, LinearLayout.LayoutParams(btnSizePx, btnSizePx))
+        declineCol.addView(declineLabel, labelParams)
 
+        // Green Accept Column
+        val acceptCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+        }
+        val acceptIcon = if (isVideo) "\uD83C\uDFA5" else "\uD83D\uDCDE"
+        val acceptBtn = buildActionButton(acceptIcon, 0xFF10B981.toInt(), btnSizePx)
         acceptBtn.setOnClickListener {
             IncomingCallNotifications.handleCardAction(this, IncomingCallNotifications.ACTION_ACCEPT, payload)
             finish()
         }
-
-        actionRow.addView(declineBtn, LinearLayout.LayoutParams(btnSize, btnSize).apply {
-            rightMargin = (10 * dp).toInt()
-        })
-        actionRow.addView(acceptBtn, LinearLayout.LayoutParams(btnSize, btnSize))
-
-        val actionParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            gravity = Gravity.CENTER_VERTICAL
+        val acceptLabel = TextView(this).apply {
+            text = "Pick Call"
+            setTextColor(0xFF10B981.toInt())
+            textSize = 14f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
         }
-        card.addView(actionRow, actionParams)
+        acceptCol.addView(acceptBtn, LinearLayout.LayoutParams(btnSizePx, btnSizePx))
+        acceptCol.addView(acceptLabel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = (10 * dp).toInt()
+        })
 
-        // Floating top position (just below top status bar / notch)
-        val cardParams = FrameLayout.LayoutParams(
+        val btnSpacing = (screenWidth * 0.18f).toInt()
+        actionsRow.addView(declineCol)
+        actionsRow.addView(acceptCol, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            leftMargin = btnSpacing
+        })
+
+        val actionsParams = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.WRAP_CONTENT
         ).apply {
-            topMargin = (screenHeight * 0.04f).toInt() + (14 * dp).toInt()
-            leftMargin = (12 * dp).toInt()
-            rightMargin = (12 * dp).toInt()
+            bottomMargin = (screenHeight * 0.08f).toInt()
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
         }
-        root.addView(card, cardParams)
+        root.addView(actionsRow, actionsParams)
 
         return root
     }
 
-    private fun buildAvatar(name: String, size: Float, dp: Float, photoUrl: String): View {
+    private fun buildAvatar(name: String, sizePx: Int, dp: Float, photoUrl: String): View {
         val ring = FrameLayout(this)
         ring.background = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
-            setColor(Color.TRANSPARENT)
-            setStroke((2 * dp).toInt(), 0xFFA855F7.toInt())
+            setColor(0xFF1E1B2E.toInt())
+            setStroke((3 * dp).toInt(), 0xFFA855F7.toInt())
         }
-        val innerSize = (size * 0.86f).toInt()
+        val innerSize = (sizePx * 0.90f).toInt()
 
-        // Dark circle + initial-letter fallback
         val circle = FrameLayout(this).apply {
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
@@ -379,7 +422,7 @@ class IncomingCallActivity : Activity() {
         val letter = TextView(this).apply {
             text = name.firstOrNull()?.uppercase() ?: "?"
             setTextColor(Color.WHITE)
-            textSize = 18f
+            textSize = 36f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
         }
@@ -395,19 +438,17 @@ class IncomingCallActivity : Activity() {
                 }
                 photo.setImageURI(Uri.parse(photoUrl))
                 circle.addView(photo, FrameLayout.LayoutParams(innerSize, innerSize, Gravity.CENTER))
-            } catch (e: Exception) {
-                // Photo load unavailable — initial letter fallback shows
-            }
+            } catch (_: Exception) {}
         }
 
         ring.addView(circle, FrameLayout.LayoutParams(innerSize, innerSize, Gravity.CENTER))
         return ring
     }
 
-    private fun buildActionButton(label: String, color: Int): TextView =
+    private fun buildActionButton(label: String, color: Int, sizePx: Int): TextView =
         TextView(this).apply {
             text = label
-            textSize = 18f
+            textSize = 24f
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
             background = GradientDrawable().apply {

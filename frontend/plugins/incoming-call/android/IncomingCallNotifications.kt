@@ -74,6 +74,8 @@ object IncomingCallNotifications {
     @Volatile
     private var activeCallId: String? = null
 
+    private val handledCallIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
     fun setAppInForeground(foreground: Boolean) {
         appInForeground = foreground
     }
@@ -85,21 +87,10 @@ object IncomingCallNotifications {
     fun getBundledRingtoneUri(context: Context): Uri =
         Uri.parse("android.resource://${context.packageName}/raw/incoming_ringtone")
 
-    /**
-     * Creates (or updates) the "Calls" notification channel.
-     *
-     * The channel carries the bundled ringtone as its sound so the heads-up
-     * notification (shown when the system cannot launch the full-screen intent)
-     * still plays an audible ring. The full-screen card (IncomingCallActivity)
-     * plays a *looping* ringtone independently via MediaPlayer and the
-     * notification builder sets setSound(null) to avoid doubling up.
-     */
     fun ensureCallChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        // Delete the old silent channel so the new one with sound takes effect.
-        // (Android locks channel settings after first creation.)
         try { manager.deleteNotificationChannel(CHANNEL_ID) } catch (_: Exception) {}
 
         val ringtoneUri = getBundledRingtoneUri(context)
@@ -117,21 +108,13 @@ object IncomingCallNotifications {
         manager.createNotificationChannel(channel)
     }
 
-    /**
-     * Displays the WhatsApp-style incoming-call card + ringtone. No-op while
-     * the app is in the foreground (the in-app IncomingCallPopup handles it).
-     *
-     * Deduplicated by callId — if a notification for the same call is already
-     * active (posted by the socket path), the push path is silently ignored
-     * and vice-versa.
-     */
     fun showIncomingCall(context: Context, payload: JSONObject) {
         if (appInForeground) return
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
 
-        // ── Dedup: skip if we're already showing a notification for this call ──
+        // ── Dedup: skip if already active or already handled for this call ──
         val callId = payload.optString("callId", "")
-        if (callId.isNotEmpty() && callId == activeCallId) return
+        if (callId.isNotEmpty() && (callId == activeCallId || handledCallIds.contains(callId))) return
         activeCallId = callId
 
         try {
@@ -213,6 +196,7 @@ object IncomingCallNotifications {
      *  closes the card. */
     fun stopIncomingCall(context: Context) {
         cancelRingTimeout()
+        activeCallId?.let { if (it.isNotEmpty()) handledCallIds.add(it) }
         activeCallId = null
         try {
             NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
@@ -222,6 +206,26 @@ object IncomingCallNotifications {
         dismissCard()
     }
 
+    /** Displays a single missed call notification in the system notification shade. */
+    fun showMissedCallNotification(context: Context, title: String, body: String) {
+        val manager = NotificationManagerCompat.from(context)
+        val intent = buildMainActivityIntent(context, ACTION_OPEN, JSONObject())
+        val pendingIntent = PendingIntent.getActivity(
+            context, 201, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val builder = NotificationCompat.Builder(context, "default")
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+
+        try {
+            manager.notify((System.currentTimeMillis() % 100000).toInt(), builder.build())
+        } catch (_: Exception) {}
+    }
+
     /** The listener never answered within the ring count — dismiss the card and
      *  ringtone, and (when the app is alive) tell JS to reject the call over the
      *  socket so the caller is not left hanging. When the app is killed there is
@@ -229,6 +233,8 @@ object IncomingCallNotifications {
      *  server-side instead. */
     fun onRingTimeout(context: Context, payload: JSONObject) {
         stopIncomingCall(context)
+        val callerName = payload.optString("callerName", "Someone")
+        showMissedCallNotification(context, "Missed Call", "Missed call from $callerName")
         if (reactInstanceAlive) {
             emitActionToJs?.invoke(ACTION_TIMEOUT, payload.toString())
         }

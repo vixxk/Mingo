@@ -1,144 +1,90 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Image,
-  Animated,
   TouchableOpacity,
-  Dimensions,
-  PanResponder,
   Modal,
   Vibration,
   AppState,
+  SafeAreaView,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ms, s, vs, hp, wp } from '../../utils/responsive';
+import { ms, hp, wp } from '../../utils/responsive';
 import { getAvatarUrl } from '../../utils/avatars';
 import { playIncomingCallSound, stopIncomingCallSound } from '../../utils/callSounds';
 
-const AVATAR_SIZE = Math.min(wp(12.8), 52);
-const AVATAR_RING_SIZE = AVATAR_SIZE + 6;
-const ACTION_BTN_SIZE = Math.min(wp(11.5), 46);
-
-
-
-const IncomingCallCard = ({ call, onAccept, onReject, onDismiss, isStacked, style }) => {
-  const slideAnim = useRef(new Animated.Value(-100)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const panY = useRef(new Animated.Value(0)).current;
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        // Detect vertical drag upwards
-        return Math.abs(gestureState.dx) < Math.abs(gestureState.dy) && gestureState.dy < -5;
-      },
-      onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dy < 0) {
-          panY.setValue(gestureState.dy);
-        }
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dy < -60) {
-          // Swipe up threshold met -> slide away completely
-          Animated.timing(panY, {
-            toValue: -300,
-            duration: 200,
-            useNativeDriver: true,
-          }).start(() => {
-            if (onDismiss) onDismiss();
-          });
-        } else {
-          // Snap back
-          Animated.spring(panY, {
-            toValue: 0,
-            useNativeDriver: true,
-            friction: 5,
-          }).start();
-        }
-      },
-    })
-  ).current;
-
-  useEffect(() => {
-    Animated.spring(slideAnim, {
-      toValue: 0,
-      useNativeDriver: true,
-      friction: 8,
-      tension: 40,
-    }).start();
-
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.08, duration: 1000, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
-      ])
-    ).start();
-  }, []);
-
-  const animatedStyle = [
-    styles.card,
-    style,
-    {
-      transform: [
-        ...(style?.transform || []),
-        { translateY: !isStacked ? Animated.add(slideAnim, panY) : panY }
-      ]
-    }
-  ];
+const DedicatedCallPage = ({ call, onAccept, onReject }) => {
+  const avatarUrl = getAvatarUrl(call.gender, call.avatarIndex);
+  const isVideo = call.callType === 'video';
 
   return (
-    <Animated.View style={animatedStyle} {...panResponder.panHandlers}>
+    <View style={styles.fullScreenContainer}>
+      <StatusBar barStyle="light-content" backgroundColor="#09090E" translucent />
       <LinearGradient
-        colors={['#1F1F1F', '#141414']}
-        style={styles.gradient}
+        colors={['#0A0A0F', '#141028', '#09090E']}
+        style={styles.gradientBackground}
       >
-        <View style={styles.content}>
-          <View style={styles.left}>
-            <Animated.View style={[styles.avatarRing, { transform: [{ scale: pulseAnim }] }]}>
-              <Image
-                source={{ uri: getAvatarUrl(call.gender, call.avatarIndex) }}
-                style={styles.avatar}
-              />
-            </Animated.View>
-            <View style={styles.info}>
-              <Text style={styles.callType}>
-                Incoming {call.callType === 'video' ? 'Video' : 'Audio'} Call
-              </Text>
-              <Text style={styles.name}>{call.callerName}</Text>
-            </View>
+        <SafeAreaView style={styles.safeArea}>
+          {/* Top Bar with Mingo Logo on Top Left */}
+          <View style={styles.headerRow}>
+            <Image
+              source={require('../../images/Mingo Splash Text.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </View>
 
-          <View style={styles.actions}>
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.rejectBtn]}
-              onPress={onReject}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="close" size={24} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.acceptBtn]}
-              onPress={onAccept}
-              activeOpacity={0.8}
-            >
-              <Ionicons name={call.callType === 'video' ? "videocam" : "call"} size={24} color="#fff" />
-            </TouchableOpacity>
+          {/* Center Section with Caller Photo & Details */}
+          <View style={styles.centerSection}>
+            <View style={styles.avatarOuterRing}>
+              <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+            </View>
+
+            <Text style={styles.callerName} numberOfLines={1}>
+              {call.callerName || 'Mingo User'}
+            </Text>
+
+            <Text style={styles.callTypeSubtitle}>
+              {isVideo ? 'Incoming Video Call...' : 'Incoming Audio Call...'}
+            </Text>
           </View>
-        </View>
+
+          {/* Bottom Control Buttons (Decline & Accept) */}
+          <View style={styles.bottomActionsContainer}>
+            <View style={styles.actionColumn}>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.declineButton]}
+                onPress={() => onReject(call)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="call-outline" size={wp(7.5)} color="#FFFFFF" style={{ transform: [{ rotate: '135deg' }] }} />
+              </TouchableOpacity>
+              <Text style={styles.declineLabel}>Decline</Text>
+            </View>
+
+            <View style={styles.actionColumn}>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.acceptButton]}
+                onPress={() => onAccept(call)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name={isVideo ? 'videocam' : 'call'} size={wp(7.5)} color="#FFFFFF" />
+              </TouchableOpacity>
+              <Text style={styles.acceptLabel}>Pick Call</Text>
+            </View>
+          </View>
+        </SafeAreaView>
       </LinearGradient>
-    </Animated.View>
+    </View>
   );
 };
 
 const IncomingCallPopup = ({ calls = [], onAccept, onReject, visible }) => {
   const [dismissedCallIds, setDismissedCallIds] = useState([]);
-  // Track app foreground state: when the app is in the background the NATIVE
-  // call card owns the ringtone/vibration (this popup is invisible anyway), so
-  // skip the JS sound to avoid double-ringing.
   const [appActive, setAppActive] = useState(AppState.currentState === 'active');
 
   useEffect(() => {
@@ -148,23 +94,15 @@ const IncomingCallPopup = ({ calls = [], onAccept, onReject, visible }) => {
     return () => subscription.remove();
   }, []);
 
-  // Keep local dismissed set in sync with actual active calls
   useEffect(() => {
     const parentCalls = Array.isArray(calls) ? calls : [];
-    setDismissedCallIds(prev => prev.filter(id => parentCalls.some(c => c.callId === id)));
+    setDismissedCallIds((prev) => prev.filter((id) => parentCalls.some((c) => c.callId === id)));
   }, [calls]);
-
-  const handleDismissCall = (callId) => {
-    setDismissedCallIds(prev => [...prev, callId]);
-  };
 
   const activeCalls = (Array.isArray(calls) ? calls : []).filter(
     (call) => !dismissedCallIds.includes(call.callId)
   );
 
-  // Play the incoming-call ringtone & vibration while there's a call to answer
-  // (only while the app is foregrounded — the native card handles background),
-  // and stop as soon as all calls are gone (answered/rejected/dismissed).
   useEffect(() => {
     if (activeCalls.length > 0 && appActive) {
       const topCall = activeCalls[0];
@@ -183,173 +121,123 @@ const IncomingCallPopup = ({ calls = [], onAccept, onReject, visible }) => {
 
   if (activeCalls.length === 0) return null;
 
-  const isOverflow = activeCalls.length > 3;
+  const currentCall = activeCalls[0];
 
-  let content;
-  if (isOverflow) {
-    // Stacked deck layout: top 3 calls shown stacked
-    content = (
-      <View style={styles.stackOuterContainer}>
-        {activeCalls.slice(0, 3).reverse().map((call, reverseIdx, arr) => {
-          // Compute original index in slice (0 is top/front, 2 is back)
-          const originalIdx = arr.length - 1 - reverseIdx;
-          
-          const offsetTop = originalIdx * hp(1.5);
-          const scale = 1 - originalIdx * 0.04;
-          const opacity = 1 - originalIdx * 0.15;
-          const zIndex = 100 - originalIdx;
-          const isBehind = originalIdx > 0;
-
-          return (
-            <View 
-              key={call.callId} 
-              pointerEvents={isBehind ? "none" : "auto"}
-              style={{
-                position: 'absolute',
-                top: offsetTop,
-                left: 0,
-                right: 0,
-                zIndex,
-                elevation: zIndex,
-              }}
-            >
-              <IncomingCallCard
-                call={call}
-                onAccept={() => onAccept(call)}
-                onReject={() => onReject(call)}
-                onDismiss={() => handleDismissCall(call.callId)}
-                isStacked={true}
-                style={{
-                  transform: [{ scale }],
-                  opacity,
-                }}
-              />
-            </View>
-          );
-        })}
-      </View>
-    );
-  } else {
-    // Normal column layout
-    content = (
-      <View style={styles.columnOuterContainer}>
-        {activeCalls.map((call) => (
-          <IncomingCallCard
-            key={call.callId}
-            call={call}
-            onAccept={() => onAccept(call)}
-            onReject={() => onReject(call)}
-            onDismiss={() => handleDismissCall(call.callId)}
-            isStacked={false}
-          />
-        ))}
-      </View>
-    );
-  }
-
-  // Render inside a transparent Modal so the incoming call always sits on top
-  // of any screen AND any other popup that may be open (gift popup, recharge
-  // gate, etc.), since Modals live on the native overlay layer.
   return (
-    <Modal visible transparent animationType="none" statusBarTranslucent>
-      <View style={styles.modalRoot} pointerEvents="box-none">
-        {content}
-      </View>
+    <Modal visible transparent animationType="fade" statusBarTranslucent>
+      <DedicatedCallPage
+        call={currentCall}
+        onAccept={() => onAccept(currentCall)}
+        onReject={() => onReject(currentCall)}
+      />
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  modalRoot: {
+  fullScreenContainer: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: '#09090E',
   },
-  columnOuterContainer: {
-    position: 'absolute',
-    top: hp(7.5),
-    width: wp(92),
-    alignSelf: 'center',
-    gap: hp(1.2),
-    zIndex: 99999,
+  gradientBackground: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
   },
-  stackOuterContainer: {
-    position: 'absolute',
-    top: hp(7.5),
-    width: wp(92),
-    alignSelf: 'center',
-    height: hp(15),
-    zIndex: 99999,
-  },
-  card: {
-    borderRadius: 24,
-    overflow: 'hidden',
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(168, 85, 247, 0.25)', // Premium purple glass border
-  },
-  gradient: {
-    paddingVertical: hp(1.8),
-    paddingHorizontal: wp(4),
-  },
-  content: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  safeArea: {
+    flex: 1,
     justifyContent: 'space-between',
+    paddingHorizontal: wp(6),
   },
-  left: {
+  headerRow: {
+    marginTop: hp(4),
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
   },
-  avatarRing: {
-    width: AVATAR_RING_SIZE,
-    height: AVATAR_RING_SIZE,
-    borderRadius: AVATAR_RING_SIZE / 2,
-    borderWidth: 2,
-    borderColor: '#A855F7', // brand theme purple
+  logoImage: {
+    width: wp(40),
+    height: hp(6),
+    marginLeft: -wp(4),
+  },
+  centerSection: {
     alignItems: 'center',
     justifyContent: 'center',
+    marginVertical: hp(2),
   },
-  avatar: {
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
-    borderRadius: AVATAR_SIZE / 2,
+  avatarOuterRing: {
+    width: wp(36),
+    height: wp(36),
+    borderRadius: wp(18),
+    borderWidth: 3,
+    borderColor: '#A855F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1E1B2E',
+    shadowColor: '#A855F7',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+    elevation: 12,
   },
-  info: {
-    marginLeft: wp(3.5),
-    flex: 1,
+  avatarImage: {
+    width: wp(33),
+    height: wp(33),
+    borderRadius: wp(16.5),
   },
-  callType: {
-    color: '#C084FC', // brand theme secondary accent
-    fontSize: ms(12, 0.3),
-    fontFamily: 'Inter_400Regular',
-    marginBottom: 2,
-  },
-  name: {
-    color: '#fff',
-    fontSize: ms(16, 0.3),
+  callerName: {
+    color: '#FFFFFF',
+    fontSize: ms(24, 0.3),
     fontFamily: 'Inter_700Bold',
+    marginTop: hp(3),
+    textAlign: 'center',
+    paddingHorizontal: wp(5),
   },
-  actions: {
+  callTypeSubtitle: {
+    color: '#C084FC',
+    fontSize: ms(16, 0.3),
+    fontFamily: 'Inter_500Medium',
+    marginTop: hp(1),
+    textAlign: 'center',
+  },
+  bottomActionsContainer: {
     flexDirection: 'row',
-    gap: wp(3),
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    marginBottom: hp(8),
+    paddingHorizontal: wp(8),
   },
-  actionBtn: {
-    width: ACTION_BTN_SIZE,
-    height: ACTION_BTN_SIZE,
-    borderRadius: ACTION_BTN_SIZE / 2,
+  actionColumn: {
+    alignItems: 'center',
+  },
+  actionButton: {
+    width: wp(18),
+    height: wp(18),
+    borderRadius: wp(9),
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  rejectBtn: {
+  declineButton: {
     backgroundColor: '#EF4444',
   },
-  acceptBtn: {
-    backgroundColor: '#22C55E',
+  acceptButton: {
+    backgroundColor: '#10B981',
+  },
+  declineLabel: {
+    color: '#EF4444',
+    fontSize: ms(14, 0.3),
+    fontFamily: 'Inter_600SemiBold',
+    marginTop: hp(1.2),
+  },
+  acceptLabel: {
+    color: '#10B981',
+    fontSize: ms(14, 0.3),
+    fontFamily: 'Inter_600SemiBold',
+    marginTop: hp(1.2),
   },
 });
 

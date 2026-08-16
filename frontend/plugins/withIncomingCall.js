@@ -18,7 +18,7 @@ const KOTLIN_SOURCE_DIR = path.join(__dirname, 'incoming-call', 'android');
 
 // Bundled ringtone used by the native call card (copied to res/raw). It is the
 // same asset the in-app popup already plays in the foreground.
-const RINGTONE_SOURCE = path.join(__dirname, '..', 'assets', 'sounds', 'ringtone.wav');
+const RINGTONE_SOURCE = path.join(__dirname, '..', 'assets', 'sounds', 'incoming-call.wav');
 
 const REQUIRED_PERMISSIONS = [
   'android.permission.POST_NOTIFICATIONS',
@@ -153,6 +153,14 @@ const withIncomingCallSources = (config) =>
     // Ringtone resource
     if (fs.existsSync(RINGTONE_SOURCE)) {
       fs.copyFileSync(RINGTONE_SOURCE, path.join(rawDir, 'incoming_ringtone.wav'));
+    }
+
+    // Logo resource
+    const LOGO_SOURCE = path.join(__dirname, '..', 'images', 'Mingo Splash Text.png');
+    const drawableDir = path.join(platformRoot, 'app', 'src', 'main', 'res', 'drawable');
+    if (!fs.existsSync(drawableDir)) fs.mkdirSync(drawableDir, { recursive: true });
+    if (fs.existsSync(LOGO_SOURCE)) {
+      fs.copyFileSync(LOGO_SOURCE, path.join(drawableDir, 'mingo_logo.png'));
     }
 
     return config;
