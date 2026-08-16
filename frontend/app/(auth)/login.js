@@ -22,6 +22,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { ms, s, vs, hp, wp, SCREEN_HEIGHT, SCREEN_WIDTH, isSmallPhone } from '../../utils/responsive';
 import { authAPI } from '../../utils/api';
+import { incomingCallNative } from '../../utils/incomingCall';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const ADMIN_PHONE = '1234567890';
@@ -86,6 +87,12 @@ export default function LoginScreen() {
           if (role === 'ADMIN') {
             router.replace('/(admin)');
           } else if (role === 'LISTENER') {
+            if (Platform.OS === 'android') {
+              const hasOverlay = await incomingCallNative.hasOverlayPermission();
+              if (!hasOverlay) {
+                await incomingCallNative.requestOverlayPermission();
+              }
+            }
             router.replace('/(listener)');
           } else if (listenerStatus === 'pending') {
             router.replace('/(profile)/listener-pending');
@@ -302,6 +309,12 @@ export default function LoginScreen() {
                   if (role === 'ADMIN') {
                     router.replace('/(admin)');
                   } else if (role === 'LISTENER') {
+                    if (Platform.OS === 'android') {
+                      const hasOverlay = await incomingCallNative.hasOverlayPermission();
+                      if (!hasOverlay) {
+                        await incomingCallNative.requestOverlayPermission();
+                      }
+                    }
                     router.replace('/(listener)');
                   } else if (listenerStatus === 'pending') {
                     router.replace('/(profile)/listener');

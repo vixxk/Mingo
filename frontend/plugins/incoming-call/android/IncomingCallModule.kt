@@ -12,7 +12,10 @@ import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.ReadableType
 import com.facebook.react.bridge.WritableMap
-import com.facebook.react.modules.core.DeviceEventManagerModule
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import com.facebook.react.bridge.Promise
 import org.json.JSONObject
 
 /**
@@ -107,6 +110,37 @@ class IncomingCallModule(private val reactContext: ReactApplicationContext) :
             }
         } catch (e: Exception) {
             callback.invoke(null, null)
+        }
+    }
+    @ReactMethod
+    fun hasOverlayPermission(promise: Promise) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                promise.resolve(Settings.canDrawOverlays(reactContext))
+            } else {
+                promise.resolve(true)
+            }
+        } catch (e: Exception) {
+            promise.resolve(false)
+        }
+    }
+
+    @ReactMethod
+    fun requestOverlayPermission(promise: Promise) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(reactContext)) {
+                val intent = Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:" + reactContext.packageName)
+                )
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                reactContext.startActivity(intent)
+                promise.resolve(true)
+            } else {
+                promise.resolve(true)
+            }
+        } catch (e: Exception) {
+            promise.reject("PERM_ERR", e.message)
         }
     }
 

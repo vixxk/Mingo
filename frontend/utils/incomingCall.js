@@ -74,6 +74,24 @@ export const incomingCallNative = {
       }
     });
   },
+  async hasOverlayPermission() {
+    if (!native || Platform.OS !== 'android') return true;
+    try {
+      return await native.hasOverlayPermission();
+    } catch (e) {
+      return false;
+    }
+  },
+
+  /** Opens system settings to request 'Display over other apps' permission. */
+  async requestOverlayPermission() {
+    if (!native || Platform.OS !== 'android') return true;
+    try {
+      return await native.requestOverlayPermission();
+    } catch (e) {
+      return false;
+    }
+  },
 };
 
 /** Subscribe to accept/decline/open actions tapped on the native card while

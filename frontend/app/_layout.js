@@ -13,7 +13,7 @@ import {
   PlayfairDisplay_700Bold_Italic, 
   PlayfairDisplay_400Regular_Italic 
 } from '@expo-google-fonts/playfair-display';
-import { View, ActivityIndicator, Alert, AppState } from 'react-native';
+import { View, ActivityIndicator, Alert, AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { addNotificationReceivedListener, addNotificationResponseReceivedListener, dismissCallNotification } from '../utils/notifications';
 import { socketService } from '../utils/socket';
@@ -80,6 +80,40 @@ function RootLayout() {
       }
     };
     checkWelcome();
+  }, [pathname]);
+
+  // ── Global Listener Permissions Check ──────────────────────────────────────
+  // Checks and requests 'Display over other apps' overlay permission prior for
+  // listeners so call pages work when app is backgrounded or killed.
+  useEffect(() => {
+    const checkListenerPermissions = async () => {
+      if (Platform.OS !== 'android') return;
+      try {
+        const userData = await AsyncStorage.getItem('user');
+        if (!userData) return;
+        const user = JSON.parse(userData);
+        const role = String(user.role || 'USER').toUpperCase();
+        if (role.includes('LISTENER')) {
+          const hasOverlay = await incomingCallNative.hasOverlayPermission();
+          if (!hasOverlay) {
+            Alert.alert(
+              'Display Over Other Apps Permission Required',
+              'To receive full-screen incoming call pages when the app is in the background or closed, Mingo requires the "Display over other apps" permission.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Enable in Settings',
+                  onPress: () => incomingCallNative.requestOverlayPermission(),
+                },
+              ]
+            );
+          }
+        }
+      } catch (e) {
+        console.log('[RootLayout] Permission check error:', e);
+      }
+    };
+    checkListenerPermissions();
   }, [pathname]);
 
   const handleWelcomeAgree = useCallback(async () => {

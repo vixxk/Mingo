@@ -23,9 +23,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, hp, wp, SCREEN_HEIGHT, SCREEN_WIDTH } from '../../utils/responsive';
 import { getAvatarUrl } from '../../utils/avatars';
 import { listenerAPI, userAPI, walletAPI, authAPI, listenersAPI } from '../../utils/api';
+import { Platform } from 'react-native';
 import { useFocusEffect, useRouter, useNavigation } from 'expo-router';
 import { useStatusSSE } from '../../utils/useStatusSSE';
 import StatusPopup from '../../components/shared/StatusPopup';
+import { incomingCallNative } from '../../utils/incomingCall';
 
 
 const ConfirmationModal = ({ visible, isOnline, onConfirm, onCancel }) => {
@@ -417,6 +419,24 @@ export default function ListenerHomeScreen() {
 
             const balRes = await walletAPI.getBalance();
             if (balRes?.data) setBalance(balRes.data.coins);
+
+            // Check & request 'Display over other apps' overlay permission for listeners on Android
+            if (Platform.OS === 'android') {
+              const hasOverlay = await incomingCallNative.hasOverlayPermission();
+              if (!hasOverlay) {
+                Alert.alert(
+                  'Display Over Other Apps Required',
+                  'To display full-screen incoming call pages while using other apps, Mingo requires the "Display over other apps" permission.',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Enable in Settings',
+                      onPress: () => incomingCallNative.requestOverlayPermission(),
+                    },
+                  ]
+                );
+              }
+            }
           }
 
         } catch (e) {
