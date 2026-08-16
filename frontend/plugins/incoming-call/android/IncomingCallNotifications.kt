@@ -127,20 +127,22 @@ object IncomingCallNotifications {
         val callType = payload.optString("callType", "audio")
         val title = "Incoming ${if (callType == "video") "Video" else "Audio"} Call"
 
-        // Direct overlay launch over home screen / other apps
-        try {
-            val cardIntent = buildCardIntent(context, null, payload)
-            context.startActivity(cardIntent)
-        } catch (e: Exception) {
-            // Background activity launch fallback
-        }
-
         // Full-screen intent -> IncomingCallActivity (the card itself)
         val fullScreenPending = PendingIntent.getActivity(
             context, 101,
             buildCardIntent(context, null, payload),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+
+        // Direct overlay launch over home screen / other apps when unlocked
+        try {
+            val cardIntent = buildCardIntent(context, null, payload)
+            context.startActivity(cardIntent)
+        } catch (e: Exception) {
+            try {
+                fullScreenPending.send()
+            } catch (_: Exception) {}
+        }
 
         // Tapping the notification body opens the app and shows the in-app popup
         val openPending = PendingIntent.getActivity(
@@ -322,7 +324,8 @@ object IncomingCallNotifications {
             addFlags(
                 Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
             )
         }
 }

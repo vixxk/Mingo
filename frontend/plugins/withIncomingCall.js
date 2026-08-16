@@ -24,6 +24,8 @@ const REQUIRED_PERMISSIONS = [
   'android.permission.POST_NOTIFICATIONS',
   'android.permission.USE_FULL_SCREEN_INTENT',
   'android.permission.WAKE_LOCK',
+  'android.permission.SYSTEM_ALERT_WINDOW',
+  'android.permission.SYSTEM_OVERLAY_WINDOW',
 ];
 
 const KOTLIN_FILES = [
