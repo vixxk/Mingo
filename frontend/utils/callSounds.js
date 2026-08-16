@@ -83,20 +83,23 @@ export async function playIncomingCallSound(customUrl) {
   // If already playing, don't restart
   if (incomingSound) return;
 
+  let loadedCustom = false;
   if (customUrl && typeof customUrl === 'string' && (customUrl.startsWith('http://') || customUrl.startsWith('https://'))) {
     try {
       await loadAndPlay('incoming', { uri: customUrl });
-      return;
+      loadedCustom = true;
     } catch (e) {
       console.log('callSounds: custom ringtone URL failed, falling back to default sound:', e.message);
       await stopAndUnload('incoming');
     }
   }
   
-  try {
-    await loadAndPlay('incoming', require('../assets/sounds/incoming-call.wav'));
-  } catch (e) {
-    console.log('callSounds: fallback incoming call sound error', e);
+  if (!loadedCustom && !incomingSound) {
+    try {
+      await loadAndPlay('incoming', require('../assets/sounds/incoming-call.wav'));
+    } catch (e) {
+      console.log('callSounds: fallback incoming call sound error', e);
+    }
   }
 }
 

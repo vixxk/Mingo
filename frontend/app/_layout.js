@@ -15,7 +15,7 @@ import {
 } from '@expo-google-fonts/playfair-display';
 import { View, ActivityIndicator, Alert, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { addNotificationResponseReceivedListener, dismissCallNotification } from '../utils/notifications';
+import { addNotificationReceivedListener, addNotificationResponseReceivedListener, dismissCallNotification } from '../utils/notifications';
 import { socketService } from '../utils/socket';
 import { incomingCallNative, onIncomingCallAction } from '../utils/incomingCall';
 import { callAPI, walletAPI } from '../utils/api';
@@ -287,15 +287,34 @@ function RootLayout() {
     return unsubscribe;
   }, []);
 
+  // Sync active incoming call from REST API (in case socket was slow or app opened mid-ring)
+  const syncActiveIncomingCall = useCallback(async () => {
+    try {
+      const res = await callAPI.getActiveIncomingCall();
+      if (res?.data?.hasIncomingCall && res.data.callData) {
+        console.log('[RootLayout] Found active incoming call from REST sync:', res.data.callData);
+        setIncomingCalls(prev => {
+          if (prev.some(c => c.callId === res.data.callData.callId)) return prev;
+          return [...prev, res.data.callData];
+        });
+      }
+    } catch (e) {
+      console.log('[RootLayout] Sync active incoming call error:', e.message);
+    }
+  }, []);
+
   // When the app returns to the foreground the in-app popup takes over from
   // the native card: stop the ringtone/card but keep the shade notification so
   // a call is never silently dropped if the socket missed the event.
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') incomingCallNative.dismissCard();
+      if (state === 'active') {
+        incomingCallNative.dismissCard();
+        syncActiveIncomingCall();
+      }
     });
     return () => subscription.remove();
-  }, []);
+  }, [syncActiveIncomingCall]);
 
   // Global socket listeners — show the incoming-call popup on every screen
   useEffect(() => {
@@ -354,6 +373,9 @@ function RootLayout() {
       socketService.on('accept_incoming_call', handleAcceptLocal);
       socketService.on('reject_incoming_call', handleRejectLocal);
 
+      // Check server for any active ringing call (e.g. opened app 2-3s after call started)
+      await syncActiveIncomingCall();
+
       // Process pending local triggers from notification taps
       if (socketService.pendingAcceptCall) {
         const pending = socketService.pendingAcceptCall;
@@ -395,6 +417,42 @@ function RootLayout() {
       socketService.off('reject_incoming_call', handleRejectLocal);
     };
   }, [router]);
+
+  // Push received while the app is running (foreground or background). The
+  // socket `incoming_call` event usually beats the push, but when it doesn't
+  // (process backgrounded and the socket lagged, or the push is the only
+  // trigger) this renders the native call card from the push payload and seeds
+  // the in-app popup state — so opening the app 2-3s into the ring instantly
+  // shows the popup + ringtone instead of nothing.
+  useEffect(() => {
+    const subscription = addNotificationReceivedListener((notification) => {
+      try {
+        const data = notification?.request?.content?.data;
+        if (!data || !data.callId) return;
+        if (data.type === 'incoming_call') {
+          if (AppState.currentState !== 'active') {
+            // Backgrounded: show the native full-screen card + looping ringtone
+            // from the push payload. The native side dedups by callId, so this
+            // is idempotent with the socket path / OneSignal extension.
+            incomingCallNative.showIncomingCall(data);
+          }
+          // Seed the popup state — if the user opens the app mid-ring the
+          // in-app popup (with its JS ringtone) takes over seamlessly.
+          setIncomingCalls((prev) => {
+            if (prev.some(c => c.callId === data.callId)) return prev;
+            return [...prev, data];
+          });
+        } else if (data.type === 'call_cancelled') {
+          // The caller gave up — stop any native card/ringtone + popup.
+          incomingCallNative.stopIncomingCall();
+          setIncomingCalls(prev => prev.filter(c => c.callId !== data.callId && c.callId !== data.sessionId));
+        }
+      } catch (e) {
+        console.log('[RootLayout] Push-received handler error:', e.message);
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     const subscription = addNotificationResponseReceivedListener(async (response) => {

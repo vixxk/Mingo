@@ -457,6 +457,52 @@ class CallService {
       ...agoraPayload,
     };
   }
+
+  static async getActiveIncomingCall(userId) {
+    try {
+      const userIdStr = userId.toString();
+      const cutoff = new Date(Date.now() - 45 * 1000);
+
+      const session = await Session.findOne({
+        status: 'active',
+        callType: { $in: ['audio', 'video'] },
+        listenerId: userIdStr,
+        lastDeductionTime: { $exists: false },
+        createdAt: { $gte: cutoff }
+      }).populate('userId', 'name username avatarIndex gender');
+
+      if (!session || !session.userId) return { hasIncomingCall: false };
+
+      const caller = session.userId;
+      const SystemSettings = require('../models/SystemSettings');
+      const systemSettings = await SystemSettings.getSettings().catch(() => null);
+      const customRingtoneUrl = systemSettings?.customRingtoneUrl || '';
+
+      const agoraPayload = getAgoraCallPayload(session.roomId, session.callType);
+
+      const callData = {
+        type: 'incoming_call',
+        callId: session._id.toString(),
+        roomId: session.roomId,
+        callerId: caller._id.toString(),
+        callerName: caller.name || 'User',
+        avatarIndex: (caller.avatarIndex || 0).toString(),
+        gender: caller.gender || 'Female',
+        callerPhoto: getAvatarUrl(caller.gender, caller.avatarIndex),
+        callType: session.callType,
+        customRingtoneUrl: customRingtoneUrl,
+        ...agoraPayload,
+      };
+
+      return {
+        hasIncomingCall: true,
+        callData,
+      };
+    } catch (err) {
+      console.error('[CallService] getActiveIncomingCall error:', err.message);
+      return { hasIncomingCall: false };
+    }
+  }
 }
 
 module.exports = CallService;

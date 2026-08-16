@@ -63,6 +63,19 @@ const randomUsers = new Set();
 const randomListeners = new Set();
 const randomSearchTimeouts = {};
 
+async function checkAndEmitActiveCall(socket, userId) {
+  try {
+    const CallService = require('./services/callService');
+    const res = await CallService.getActiveIncomingCall(userId);
+    if (res?.hasIncomingCall && res?.callData) {
+      console.log(`[Socket] Found active ringing call on connect for user ${userId}, emitting incoming_call`);
+      socket.emit('incoming_call', res.callData);
+    }
+  } catch (err) {
+    console.error('[Socket] Error checking active call on connect:', err.message);
+  }
+}
+
 const initSocket = (server) => {
   io = new Server(server, {
     cors: {
@@ -100,6 +113,7 @@ const initSocket = (server) => {
           socket.appOpened = true;
           User.findByIdAndUpdate(decoded.userId, { $inc: { appOpens: 1 } }).catch(err => console.error('handshake appOpen inc error:', err));
         }
+        checkAndEmitActiveCall(socket, decoded.userId);
       } catch (err) {
         console.error('Socket handshake auth error:', err.message);
       }
@@ -127,6 +141,7 @@ const initSocket = (server) => {
           socket.appOpened = true;
           User.findByIdAndUpdate(decoded.userId, { $inc: { appOpens: 1 } }).catch(err => console.error('authenticate appOpen inc error:', err));
         }
+        checkAndEmitActiveCall(socket, decoded.userId);
       } catch (err) {
         console.error('Socket auth error:', err.message);
       }

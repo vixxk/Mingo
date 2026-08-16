@@ -299,6 +299,10 @@ export const callAPI = {
     return apiRequest('/call/active/session');
   },
 
+  getActiveIncomingCall: async () => {
+    return apiRequest('/call/active/incoming');
+  },
+
   getSession: async (sessionId) => {
     return apiRequest(`/call/${sessionId}`);
   },

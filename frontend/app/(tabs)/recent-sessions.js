@@ -64,8 +64,8 @@ const SessionItem = ({ item, onShowOfflinePopup }) => {
   const handleCall = async (type) => {
     if (calling) return;
     setCalling(true);
+    const targetId = item.listenerId || item.id;
     try {
-      const targetId = item.listenerId || item.id;
       if (targetId) {
         const profileRes = await listenersAPI.getPublicProfile(targetId);
         if (profileRes?.data && !profileRes.data.isOnline) {
@@ -79,18 +79,25 @@ const SessionItem = ({ item, onShowOfflinePopup }) => {
     }
     setCalling(false);
 
-    router.push({
-      pathname: '/(call)/connecting',
-      params: {
-        name: item.name,
-        callType: type,
-        callId: `call_${Date.now()}`,
-        roomId: `room_${Date.now()}`,
-        listenerId: item.listenerId || item.id,
-        avatarIndex: item.avatarIndex || '0',
-        gender: item.gender || 'Female'
-      }
-    });
+    if (type === 'chat') {
+      router.push({
+        pathname: '/(chat)/chat',
+        params: { listenerId: targetId, name: item.name }
+      });
+    } else {
+      router.push({
+        pathname: '/(call)/connecting',
+        params: {
+          name: item.name,
+          callType: type || item.callType || 'audio',
+          callId: `call_${Date.now()}`,
+          roomId: `room_${Date.now()}`,
+          listenerId: targetId,
+          avatarIndex: item.avatarIndex || '0',
+          gender: item.gender || 'Female'
+        }
+      });
+    }
   };
 
   const handleProfilePress = () => {
@@ -107,7 +114,7 @@ const SessionItem = ({ item, onShowOfflinePopup }) => {
         activeOpacity={0.9}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
-        onPress={handleProfilePress}
+        onPress={() => handleCall(item.callType || 'audio')}
         disabled={calling}
       >
         <LinearGradient
@@ -116,9 +123,13 @@ const SessionItem = ({ item, onShowOfflinePopup }) => {
           end={{ x: 1, y: 0.5 }}
           style={styles.callItem}
         >
-          <Image source={{ uri: item.image || getAvatarUrl(item.gender, item.avatarIndex) }} style={styles.callAvatar} />
+          <TouchableOpacity onPress={handleProfilePress} activeOpacity={0.8} disabled={calling}>
+            <Image source={{ uri: item.image || getAvatarUrl(item.gender, item.avatarIndex) }} style={styles.callAvatar} />
+          </TouchableOpacity>
           <View style={styles.callInfo}>
-            <Text style={styles.callName}>{item.name}</Text>
+            <TouchableOpacity onPress={handleProfilePress} activeOpacity={0.8} disabled={calling}>
+              <Text style={styles.callName}>{item.name}</Text>
+            </TouchableOpacity>
             {item.diamonds !== undefined ? (
               <>
                 {/* Row 1: callTime */}
@@ -141,15 +152,26 @@ const SessionItem = ({ item, onShowOfflinePopup }) => {
             )}
           </View>
           {item.diamonds !== undefined ? (
-            <View style={styles.callTypeRightContainer}>
+            <TouchableOpacity 
+              style={styles.callTypeRightContainer}
+              onPress={() => handleCall(item.callType || 'audio')}
+              activeOpacity={0.7}
+              disabled={calling}
+            >
               <Ionicons 
                 name={item.callType === 'video' ? "videocam" : item.callType === 'chat' ? "chatbubble-ellipses" : "call"} 
                 size={22} 
                 color={item.callType === 'video' ? "#60A5FA" : item.callType === 'chat' ? "#EC4899" : "#4ADE80"} 
               />
-            </View>
+            </TouchableOpacity>
           ) : (
-            <Ionicons name="heart" size={24} color="#EF4444" style={styles.favHeartIcon} />
+            <TouchableOpacity 
+              onPress={() => handleCall('audio')}
+              activeOpacity={0.7}
+              disabled={calling}
+            >
+              <Ionicons name="call" size={22} color="#4ADE80" style={styles.favHeartIcon} />
+            </TouchableOpacity>
           )}
         </LinearGradient>
       </TouchableOpacity>
@@ -430,8 +452,8 @@ export default function RecentSessionsScreen() {
               key={item.id} 
               item={item} 
               onShowOfflinePopup={(name) => {
-                setStatusPopupTitle('Unavailable Right Now');
-                setStatusPopupMessage(`${name} is currently offline. We will let you know when they are back!`);
+                setStatusPopupTitle('Listener is offline');
+                setStatusPopupMessage(`${name} isn't online right now. Please try again when they're back online.`);
                 setStatusPopupType('error');
                 setStatusPopupVisible(true);
               }}

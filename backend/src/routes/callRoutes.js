@@ -12,6 +12,8 @@ router.get('/history', authenticate, CallController.getHistory);
 
 router.get('/active/session', authenticate, CallController.getActiveSession);
 
+router.get('/active/incoming', authenticate, CallController.getActiveIncoming);
+
 router.get('/:sessionId', authenticate, CallController.getSession);
 
 module.exports = router;

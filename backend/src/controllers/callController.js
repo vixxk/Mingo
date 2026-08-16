@@ -57,6 +57,15 @@ class CallController {
       next(err);
     }
   }
+
+  static async getActiveIncoming(req, res, next) {
+    try {
+      const result = await CallService.getActiveIncomingCall(req.user.id);
+      return ApiResponse.success(res, result, 'Active incoming call checked');
+    } catch (err) {
+      next(err);
+    }
+  }
 }
 
 module.exports = CallController;

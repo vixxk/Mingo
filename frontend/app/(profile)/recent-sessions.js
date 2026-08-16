@@ -12,9 +12,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { ms, s, vs, wp, hp } from '../../utils/responsive';
-import { callAPI } from '../../utils/api';
+import { callAPI, listenersAPI } from '../../utils/api';
 import { formatSessionDuration, formatSessionType } from '../../utils/sessionFormat';
 import RaiseIssuePopup from '../../components/shared/RaiseIssuePopup';
+import StatusPopup from '../../components/shared/StatusPopup';
 import SkeletonRecentList from '../../components/SkeletonRecentList';
 
 const GRADIENTS = [
@@ -40,33 +41,95 @@ const formatCallTime = (dateStr) => {
   return `${timeStr} ${date.toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}`;
 };
 
-const SessionCard = ({ item, index }) => (
-  <LinearGradient
-    colors={item.gradientColors || GRADIENTS[index % GRADIENTS.length]}
-    start={{ x: 0, y: 0 }}
-    end={{ x: 1, y: 0 }}
-    style={styles.sessionCard}
-  >
-    <View style={styles.sessionAvatar}>
-      <Ionicons
-        name={item.callType === 'video' ? 'videocam' : 'call'}
-        size={wp(5)}
-        color="#fff"
-      />
-    </View>
-    <View style={styles.sessionInfo}>
-      <Text style={styles.sessionName}>{item.name}</Text>
-      <Text style={styles.sessionMeta}>
-        {item.typeLabel} Call • {item.durationLabel || '0 mins'} •{' '}
-        {item.callTime}
-      </Text>
-    </View>
-    <View style={styles.sessionDiamonds}>
-      <Ionicons name="diamond" size={wp(4)} color="#F59E0B" />
-      <Text style={styles.sessionDiamondText}>{item.diamonds}</Text>
-    </View>
-  </LinearGradient>
-);
+const SessionCard = ({ item, index, onShowOfflinePopup }) => {
+  const router = useRouter();
+  const [calling, setCalling] = useState(false);
+
+  const handleConnect = async (type) => {
+    if (calling) return;
+    setCalling(true);
+    const targetId = item.listenerId || item.id;
+    try {
+      if (targetId) {
+        const profileRes = await listenersAPI.getPublicProfile(targetId);
+        if (profileRes?.data && !profileRes.data.isOnline) {
+          onShowOfflinePopup(item.name);
+          setCalling(false);
+          return;
+        }
+      }
+    } catch (e) {
+      console.log('Error checking listener online status:', e);
+    }
+    setCalling(false);
+
+    if (type === 'chat') {
+      router.push({
+        pathname: '/(chat)/chat',
+        params: { listenerId: targetId, name: item.name }
+      });
+    } else {
+      router.push({
+        pathname: '/(call)/connecting',
+        params: {
+          name: item.name,
+          callType: type || item.callType || 'audio',
+          callId: `call_${Date.now()}`,
+          roomId: `room_${Date.now()}`,
+          listenerId: targetId,
+          avatarIndex: item.avatarIndex || '0',
+          gender: item.gender || 'Female'
+        }
+      });
+    }
+  };
+
+  const handleProfilePress = () => {
+    if (calling) return;
+    const targetId = item.listenerId || item.id;
+    if (targetId) {
+      router.push(`/listener-profile/${targetId}`);
+    }
+  };
+
+  return (
+    <TouchableOpacity
+      activeOpacity={0.9}
+      onPress={() => handleConnect(item.callType || 'audio')}
+      disabled={calling}
+    >
+      <LinearGradient
+        colors={item.gradientColors || GRADIENTS[index % GRADIENTS.length]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={styles.sessionCard}
+      >
+        <TouchableOpacity onPress={handleProfilePress} activeOpacity={0.8} disabled={calling}>
+          <View style={styles.sessionAvatar}>
+            <Ionicons
+              name={item.callType === 'video' ? 'videocam' : item.callType === 'chat' ? 'chatbubble-ellipses' : 'call'}
+              size={wp(5)}
+              color="#fff"
+            />
+          </View>
+        </TouchableOpacity>
+        <View style={styles.sessionInfo}>
+          <TouchableOpacity onPress={handleProfilePress} activeOpacity={0.8} disabled={calling}>
+            <Text style={styles.sessionName}>{item.name}</Text>
+          </TouchableOpacity>
+          <Text style={styles.sessionMeta}>
+            {item.typeLabel} Call • {item.durationLabel || '0 mins'} •{' '}
+            {item.callTime}
+          </Text>
+        </View>
+        <View style={styles.sessionDiamonds}>
+          <Ionicons name="diamond" size={wp(4)} color="#F59E0B" />
+          <Text style={styles.sessionDiamondText}>{item.diamonds}</Text>
+        </View>
+      </LinearGradient>
+    </TouchableOpacity>
+  );
+};
 
 export default function RecentSessionsScreen() {
   const insets = useSafeAreaInsets();
@@ -74,6 +137,9 @@ export default function RecentSessionsScreen() {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showIssuePopup, setShowIssuePopup] = useState(false);
+  const [statusPopupVisible, setStatusPopupVisible] = useState(false);
+  const [statusPopupTitle, setStatusPopupTitle] = useState('');
+  const [statusPopupMessage, setStatusPopupMessage] = useState('');
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -83,6 +149,7 @@ export default function RecentSessionsScreen() {
         setSessions(
           res.data.map((call, index) => ({
             id: call._id,
+            listenerId: call.listenerId?._id || call.listenerId,
             name: call.listenerId?.name || 'Unknown',
             duration: `${call.duration || 0} mins`,
             durationLabel: formatSessionDuration(call),
@@ -141,7 +208,17 @@ export default function RecentSessionsScreen() {
           ListHeaderComponent={
             <Text style={styles.sectionTitle}>Your last 5 sessions</Text>
           }
-          renderItem={({ item, index }) => <SessionCard item={item} index={index} />}
+          renderItem={({ item, index }) => (
+            <SessionCard 
+              item={item} 
+              index={index} 
+              onShowOfflinePopup={(name) => {
+                setStatusPopupTitle('Listener is offline');
+                setStatusPopupMessage(`${name} isn't online right now. Please try again when they're back online.`);
+                setStatusPopupVisible(true);
+              }}
+            />
+          )}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Ionicons name="call-outline" size={wp(14)} color="#4B5563" />
@@ -175,6 +252,15 @@ export default function RecentSessionsScreen() {
       <RaiseIssuePopup
         visible={showIssuePopup}
         onClose={() => setShowIssuePopup(false)}
+      />
+
+      <StatusPopup
+        visible={statusPopupVisible}
+        type="error"
+        title={statusPopupTitle}
+        message={statusPopupMessage}
+        icon="cloud-offline-outline"
+        onClose={() => setStatusPopupVisible(false)}
       />
     </View>
   );

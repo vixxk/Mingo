@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { Platform, AppState } from 'react-native';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 
@@ -186,11 +186,34 @@ if (!isExpoGo) {
 export { Notifications };
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
+  handleNotification: async (notification) => {
+    const data = notification?.request?.content?.data || {};
+    const isCallPush = data?.type === 'incoming_call' || data?.type === 'call_cancelled';
+    const appActive = AppState.currentState === 'active';
+
+    // Incoming calls never use the plain Expo banner:
+    //  - foreground: the in-app IncomingCallPopup (socket event) handles it;
+    //  - background: the native full-screen card + looping ringtone handles it
+    //    on builds that have the module (plugins/withIncomingCall.js).
+    // Without the native module (old build / Expo Go) the banner is kept so the
+    // listener still gets *some* notification + sound when the app is closed.
+    let nativeHandlesCall = false;
+    if (isCallPush && !appActive) {
+      try {
+        const { incomingCallNative } = require('./incomingCall');
+        nativeHandlesCall = incomingCallNative.isAvailable();
+      } catch (e) {
+        // Keep the banner as the fallback.
+      }
+    }
+    const suppress = isCallPush && (!appActive ? nativeHandlesCall : true);
+
+    return {
+      shouldShowAlert: !suppress,
+      shouldPlaySound: !suppress,
+      shouldSetBadge: !isCallPush,
+    };
+  },
 });
 
 export async function registerForPushNotificationsAsync() {

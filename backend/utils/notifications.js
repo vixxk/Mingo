@@ -245,7 +245,7 @@ const sendNotificationToMultiple = async (tokens, title, body, data = {}) => {
             notification: {
               title,
               body,
-              sound: data?.type === 'incoming_call' ? 'ringtone' : 'default',
+              sound: data?.type === 'incoming_call' ? 'incoming_ringtone' : 'default',
               channelId: data?.type === 'incoming_call' ? 'calls' : 'default',
             },
           },
@@ -362,10 +362,14 @@ const sendNotificationToOneSignalByUserIds = async (userIds, title, body, data =
         ios_badgeCount: 1,
         priority: 10,
         // Incoming-call pushes reference the bundled ringtone so the device
-        // rings even when the app is backgrounded/killed.
+        // rings even when the app is backgrounded/killed. NOTE: no
+        // android_channel_id here — OneSignal validates it against channels
+        // registered ON ITS SIDE and rejects the push with 400
+        // ("Could not find android_channel_id") because our 'calls' channel is
+        // only created on-device by the incoming-call extension. The extension
+        // replaces OneSignal's notification with its own anyway.
         ...(data?.type === 'incoming_call' ? {
           android_sound: 'incoming_ringtone',
-          android_channel_id: 'calls',
           ttl: 30,
         } : {}),
       },
