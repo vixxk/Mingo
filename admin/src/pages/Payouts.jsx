@@ -29,19 +29,15 @@ const STATUS_BADGES = {
 }
 
 const ACTION_COLORS = {
-  paid: { bg: '#10B981', label: 'Mark as Paid' },
   approve: { bg: '#3B82F6', label: 'Approve' },
   reject: { bg: '#EF4444', label: 'Reject' },
   hold: { bg: '#F59E0B', label: 'On Hold' },
-  cancel: { bg: 'var(--text-muted)', label: 'Cancel' },
 }
 
 const CONFIRM_MESSAGES = {
-  paid: 'Are you sure you want to mark this payout as paid?',
   approve: 'Are you sure you want to approve this payout?',
   reject: 'Are you sure you want to reject this payout?',
   hold: 'Are you sure you want to put this payout on hold?',
-  cancel: 'Are you sure you want to cancel this payout?',
 }
 
 const STATUS_LABELS = {
@@ -259,6 +255,10 @@ export default function Payouts() {
   }
 
   const handleActionClick = (action) => {
+    if (action === 'reject' && !adminNotes.trim()) {
+      showToast('Admin notes are required to reject a payout request', 'error')
+      return
+    }
     setConfirmAction(action)
   }
 
@@ -267,8 +267,16 @@ export default function Payouts() {
     setUpdating(true)
     try {
       let status = confirmAction
-      if (status === 'cancel') status = 'cancelled'
+      if (status === 'approve') status = 'approved'
+      if (status === 'reject') status = 'rejected'
       if (status === 'hold') status = 'on_hold'
+      if (status === 'cancel') status = 'cancelled'
+
+      if (status === 'rejected' && !adminNotes.trim()) {
+        showToast('Admin notes are required to reject a payout request', 'error')
+        setUpdating(false)
+        return
+      }
 
       const payload = { status }
       if (transactionId && confirmAction === 'paid') {
@@ -382,9 +390,6 @@ export default function Payouts() {
             <div style={{ color: 'var(--accent)', fontWeight: 900, fontSize: 22, marginTop: 8 }}>
               ₹{p.amount?.toLocaleString?.() || p.amount}
             </div>
-            <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 2 }}>
-              {p.diamonds || 0} diamonds
-            </div>
 
             {(p.tdsAmount > 0 || p.netAmount > 0) && (
               <div style={{
@@ -492,51 +497,65 @@ export default function Payouts() {
             </div>
           </div>
 
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>
-              Transaction ID
-            </label>
-            <input
-              value={transactionId}
-              onChange={e => setTransactionId(e.target.value)}
-              placeholder="Enter transaction ID..."
-              style={{
-                width: '100%', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
-                borderRadius: 10, color: '#fff', padding: '10px 14px', fontSize: 14,
-                outline: 'none', boxSizing: 'border-box',
-              }}
-            />
-          </div>
+          {(() => {
+            const isReadOnly = ['approved', 'rejected', 'paid', 'cancelled'].includes(p.status)
+            return (
+              <>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>
+                    Transaction ID
+                  </label>
+                  <input
+                    value={transactionId}
+                    onChange={e => setTransactionId(e.target.value)}
+                    placeholder={isReadOnly ? 'No transaction ID' : 'Enter transaction ID...'}
+                    disabled={isReadOnly}
+                    style={{
+                      width: '100%', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+                      borderRadius: 10, color: isReadOnly ? 'var(--text-secondary)' : '#fff', padding: '10px 14px', fontSize: 14,
+                      outline: 'none', boxSizing: 'border-box',
+                      opacity: isReadOnly ? 0.7 : 1, cursor: isReadOnly ? 'not-allowed' : 'text',
+                    }}
+                  />
+                </div>
 
-          <div style={{ marginBottom: 20 }}>
-            <label style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>
-              Admin Notes
-            </label>
-            <textarea
-              value={adminNotes}
-              onChange={e => setAdminNotes(e.target.value)}
-              placeholder="Add admin notes..."
-              rows={3}
-              style={{
-                width: '100%', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
-                borderRadius: 10, color: '#fff', padding: '10px 14px', fontSize: 14,
-                outline: 'none', boxSizing: 'border-box', resize: 'vertical',
-                fontFamily: 'inherit', lineHeight: 1.4,
-              }}
-            />
-          </div>
+                <div style={{ marginBottom: 20 }}>
+                  <label style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>
+                    Admin Notes {!isReadOnly && <span style={{ color: '#EF4444', fontSize: 11, fontWeight: 500 }}>* (Required for rejection)</span>}
+                  </label>
+                  <textarea
+                    value={adminNotes}
+                    onChange={e => setAdminNotes(e.target.value)}
+                    placeholder={isReadOnly ? 'No admin notes' : 'Add admin notes (required for rejection, cannot be empty)...'}
+                    rows={3}
+                    disabled={isReadOnly}
+                    style={{
+                      width: '100%', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+                      borderRadius: 10, color: isReadOnly ? 'var(--text-secondary)' : '#fff', padding: '10px 14px', fontSize: 14,
+                      outline: 'none', boxSizing: 'border-box', resize: 'vertical',
+                      fontFamily: 'inherit', lineHeight: 1.4,
+                      opacity: isReadOnly ? 0.7 : 1, cursor: isReadOnly ? 'not-allowed' : 'text',
+                    }}
+                  />
+                </div>
+              </>
+            )
+          })()}
 
           {!confirmAction ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div className="payout-actions-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                {Object.entries(ACTION_COLORS).map(([key, config]) => {
-                  if (key === 'cancel' && p.status === 'cancelled') return null
-                  if (key === 'paid' && p.status === 'paid') return null
-                  if (key === 'approve' && p.status === 'approved') return null
-                  if (key === 'reject' && (p.status === 'rejected' || p.status === 'cancelled')) return null
-                  if (key === 'hold' && p.status === 'on_hold') return null
-                  if (key === 'hold' && (p.status === 'paid' || p.status === 'cancelled')) return null
-                  return (
+            (() => {
+              const activeActions = Object.entries(ACTION_COLORS).filter(([key]) => {
+                if (['approved', 'rejected', 'paid', 'cancelled'].includes(p.status)) return false
+                if (key === 'approve' && p.status === 'approved') return false
+                if (key === 'reject' && (p.status === 'rejected' || p.status === 'cancelled')) return false
+                if (key === 'hold' && (p.status === 'on_hold' || p.status === 'paid' || p.status === 'cancelled')) return false
+                return true
+              })
+              const isCloseFullRow = activeActions.length % 2 === 0
+
+              return (
+                <div className="payout-actions-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  {activeActions.map(([key, config]) => (
                     <button
                       key={key}
                       onClick={() => handleActionClick(key)}
@@ -550,21 +569,22 @@ export default function Payouts() {
                     >
                       {config.label}
                     </button>
-                  )
-                })}
-              </div>
-              <button
-                onClick={handleCloseDetail}
-                style={{
-                  width: '100%', padding: '10px 0', borderRadius: 10,
-                  border: '1px solid var(--border)', cursor: 'pointer',
-                  background: 'var(--bg-tertiary)', color: 'var(--text-secondary)',
-                  fontSize: 13, fontWeight: 600,
-                }}
-              >
-                Close
-              </button>
-            </div>
+                  ))}
+                  <button
+                    onClick={handleCloseDetail}
+                    style={{
+                      gridColumn: isCloseFullRow ? '1 / -1' : 'auto',
+                      padding: '10px 0', borderRadius: 10,
+                      border: '1px solid var(--border)', cursor: 'pointer',
+                      background: 'var(--bg-tertiary)', color: 'var(--text-secondary)',
+                      fontSize: 13, fontWeight: 600,
+                    }}
+                  >
+                    Close
+                  </button>
+                </div>
+              )
+            })()
           ) : (
             <div>
               <p style={{ color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.5, margin: '0 0 20px' }}>

@@ -1256,9 +1256,18 @@ class AdminController {
   static async updatePayoutStatus(req, res, next) {
     try {
       const PayoutRequest = require('../models/PayoutRequest');
-      const { status, adminNotes, transactionId } = req.body;
+      let { status, adminNotes, transactionId } = req.body;
       const payout = await PayoutRequest.findById(req.params.id);
       if (!payout) throw new AppError('Payout request not found', 404);
+
+      if (status === 'reject') status = 'rejected';
+      if (status === 'approve') status = 'approved';
+      if (status === 'hold') status = 'on_hold';
+      if (status === 'cancel') status = 'cancelled';
+
+      if (status === 'rejected' && (!adminNotes || !adminNotes.trim())) {
+        throw new AppError('Admin notes are required when rejecting a payout request', 400);
+      }
 
       payout.status = status;
       if (adminNotes) payout.adminNotes = adminNotes;

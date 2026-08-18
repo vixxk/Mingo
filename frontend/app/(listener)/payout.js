@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   RefreshControl,
   KeyboardAvoidingView,
   Platform,
+  Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -185,7 +186,33 @@ export default function PayoutScreen() {
     await Promise.all([loadDashboard(), loadUpdates()]);
   }, [loadDashboard, loadUpdates]);
 
+  const spinAnim = useRef(new Animated.Value(0)).current;
+
+  const handleRefresh = async () => {
+    spinAnim.setValue(0);
+    Animated.timing(spinAnim, {
+      toValue: 1,
+      duration: 800,
+      useNativeDriver: true,
+    }).start();
+    await onRefresh();
+  };
+
+  const spin = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
+  const isBankDetailsFormComplete = Boolean(
+    bankDetails.bankName?.trim() &&
+      bankDetails.accountNumber?.trim() &&
+      bankDetails.ifscCode?.trim() &&
+      bankDetails.phone?.trim() &&
+      bankDetails.panNumber?.trim()
+  );
+
   const handleSaveBankDetails = async () => {
+    if (!isBankDetailsFormComplete) return;
     setSavingBank(true);
     try {
       const res = await payoutAPI.saveBankDetails(bankDetails);
@@ -328,9 +355,15 @@ export default function PayoutScreen() {
           <Ionicons name="chevron-back" size={wp(6)} color="#fff" />
           <Text style={styles.headerTitle}>Payout</Text>
         </TouchableOpacity>
-        <View style={styles.headerAvatar}>
-          <Ionicons name="wallet" size={wp(4.6)} color="#C084FC" />
-        </View>
+        <TouchableOpacity 
+          onPress={handleRefresh}
+          activeOpacity={0.7}
+          style={styles.refreshBtn}
+        >
+          <Animated.View style={{ transform: [{ rotate: spin }] }}>
+            <Ionicons name="refresh" size={22} color="#9CA3AF" />
+          </Animated.View>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -357,9 +390,6 @@ export default function PayoutScreen() {
               style={styles.earningsCard}
             >
               <View style={styles.earningsTopRow}>
-                <View style={styles.earningsIconWrap}>
-                  <Ionicons name="wallet" size={ms(20)} color="#C084FC" />
-                </View>
                 <View style={styles.earningsLockBadge}>
                   <Ionicons name="lock-closed" size={ms(10)} color="#A78BFA" />
                   <Text style={styles.earningsLockText}>Secured</Text>
@@ -367,11 +397,6 @@ export default function PayoutScreen() {
               </View>
               <Text style={styles.earningsLabel}>Total Earnings</Text>
               <Text style={styles.earningsAmount}>{formatINR(totalEarnings)}</Text>
-              <View style={styles.earningsMetaRow}>
-                <Text style={styles.earningsMetaText}>All time earnings</Text>
-                <View style={styles.earningsDot} />
-                <Text style={styles.earningsMetaText}>Updated live</Text>
-              </View>
             </LinearGradient>
 
             <View style={styles.noteRow}>
@@ -434,13 +459,13 @@ export default function PayoutScreen() {
               />
 
               <TouchableOpacity
-                style={styles.saveBankBtnWrap}
+                style={[styles.saveBankBtnWrap, !isBankDetailsFormComplete && styles.saveBankBtnDisabled]}
                 activeOpacity={0.85}
                 onPress={handleSaveBankDetails}
-                disabled={savingBank}
+                disabled={!isBankDetailsFormComplete || savingBank}
               >
                 <LinearGradient
-                  colors={['#7C3AED', '#6D28D9', '#5B21B6']}
+                  colors={!isBankDetailsFormComplete ? ['#374151', '#262626', '#1F1F1F'] : ['#7C3AED', '#6D28D9', '#5B21B6']}
                   start={{ x: 0, y: 0.5 }}
                   end={{ x: 1, y: 0.5 }}
                   style={styles.saveBankBtn}
@@ -449,8 +474,8 @@ export default function PayoutScreen() {
                     <ActivityIndicator size="small" color="#fff" />
                   ) : (
                     <>
-                      <Ionicons name="lock-closed" size={ms(15)} color="#fff" />
-                      <Text style={styles.saveBankBtnText}>
+                      <Ionicons name="lock-closed" size={ms(15)} color={!isBankDetailsFormComplete ? '#6B7280' : '#fff'} />
+                      <Text style={[styles.saveBankBtnText, !isBankDetailsFormComplete && styles.saveBankBtnTextDisabled]}>
                         {bankDetails.isComplete ? 'Update Bank Details' : 'Save Bank Details'}
                       </Text>
                     </>
@@ -614,10 +639,28 @@ export default function PayoutScreen() {
                     const conf = STATUS_CONFIG[r.status] || STATUS_CONFIG.pending;
                     const d = new Date(r.createdAt);
                     const dateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+                    const isRejected = r.status === 'rejected';
+
                     return (
                       <View key={String(r._id)}>
                         {idx > 0 && <View style={styles.rowDivider} />}
-                        <View style={styles.historyRow}>
+                        <TouchableOpacity
+                          style={styles.historyRow}
+                          activeOpacity={isRejected ? 0.7 : 1}
+                          disabled={!isRejected}
+                          onPress={() => {
+                            if (isRejected) {
+                              const reason = r.adminNotes
+                                ? `Reason: ${r.adminNotes}`
+                                : 'Your payout request was not approved by the admin. Please contact support for more details.';
+                              showPopup(
+                                'error',
+                                'Payout Rejected ⚠️',
+                                `Payout request of ${formatINR(r.amount)} was rejected.\n\n${reason}`
+                              );
+                            }
+                          }}
+                        >
                           <View style={[styles.historyIconWrap, { backgroundColor: conf.bg }]}>
                             <Ionicons name={conf.icon} size={ms(16)} color={conf.color} />
                           </View>
@@ -626,12 +669,18 @@ export default function PayoutScreen() {
                             <Text style={styles.historyDate}>
                               {dateStr}{r.netAmount > 0 ? `  •  Net ${formatINR(r.netAmount)}` : ''}
                             </Text>
-                            {r.adminNotes ? <Text style={styles.historyNotes} numberOfLines={1}>{r.adminNotes}</Text> : null}
+                            {isRejected ? (
+                              <Text style={[styles.historyNotes, { color: '#EF4444', fontWeight: '600' }]}>
+                                {r.adminNotes ? `Reason: ${r.adminNotes} • Tap to view details` : 'Tap to view details'}
+                              </Text>
+                            ) : r.adminNotes ? (
+                              <Text style={styles.historyNotes} numberOfLines={1}>{r.adminNotes}</Text>
+                            ) : null}
                           </View>
                           <View style={[styles.historyBadge, { backgroundColor: conf.bg }]}>
                             <Text style={[styles.historyBadgeText, { color: conf.color }]}>{conf.label}</Text>
                           </View>
-                        </View>
+                        </TouchableOpacity>
                       </View>
                     );
                   })}
@@ -676,11 +725,21 @@ export default function PayoutScreen() {
               ) : (
                 payoutUpdates.map((n, idx) => {
                   const conf = getUpdateConfig(n);
+                  const isRejected = n.status === 'rejected' || (n.title && n.title.toLowerCase().includes('reject'));
                   return (
                     <TouchableOpacity
                       key={String(n._id)}
                       activeOpacity={0.7}
-                      onPress={() => handleMarkUpdateRead(n)}
+                      onPress={() => {
+                        handleMarkUpdateRead(n);
+                        if (isRejected) {
+                          showPopup(
+                            'error',
+                            n.title || 'Payout Rejected ⚠️',
+                            n.body || 'Your payout request was rejected by the admin. Please contact support for more details.'
+                          );
+                        }
+                      }}
                     >
                       {idx > 0 && <View style={styles.rowDivider} />}
                       <View style={styles.updateRow}>
@@ -698,7 +757,9 @@ export default function PayoutScreen() {
                               </Text>
                             )}
                           </View>
-                          <Text style={styles.updateBody} numberOfLines={2}>{n.body}</Text>
+                          <Text style={[styles.updateBody, isRejected && { color: '#EF4444', fontWeight: '600' }]} numberOfLines={2}>
+                            {isRejected ? 'Tap to view more details' : n.body}
+                          </Text>
                           <Text style={styles.updateTime}>{timeAgo(n.createdAt)}</Text>
                         </View>
                         {!n.isRead && <View style={styles.updateUnreadDot} />}
@@ -738,15 +799,15 @@ const styles = StyleSheet.create({
   },
   backBtn: { flexDirection: 'row', alignItems: 'center', gap: wp(1.5) },
   headerTitle: { fontSize: wp(5.5), color: '#fff', fontWeight: '700', fontFamily: 'Inter_700Bold' },
-  headerAvatar: {
-    width: wp(9),
-    height: wp(9),
-    borderRadius: wp(4.5),
-    backgroundColor: 'rgba(168,85,247,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(168,85,247,0.3)',
+  refreshBtn: {
+    width: wp(10),
+    height: wp(10),
+    borderRadius: wp(5),
+    backgroundColor: '#111827',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#1F2937',
   },
 
   scroll: { flex: 1 },
@@ -770,15 +831,7 @@ const styles = StyleSheet.create({
     padding: wp(5),
     marginBottom: hp(1),
   },
-  earningsTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: hp(2) },
-  earningsIconWrap: {
-    width: wp(11),
-    height: wp(11),
-    borderRadius: wp(5.5),
-    backgroundColor: 'rgba(168,85,247,0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  earningsTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginBottom: hp(2) },
   earningsLockBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -795,12 +848,8 @@ const styles = StyleSheet.create({
     fontSize: ms(34, 0.3),
     fontFamily: 'Inter_900Black',
     letterSpacing: -0.5,
-    marginBottom: hp(1),
+    marginBottom: 0,
   },
-  earningsMetaRow: { flexDirection: 'row', alignItems: 'center', gap: wp(2) },
-  earningsMetaText: { color: '#6B7280', fontSize: ms(11), fontFamily: 'Inter_400Regular' },
-
-  earningsDot: { width: wp(0.8), height: wp(0.8), borderRadius: wp(0.4), backgroundColor: '#4B5563' },
 
   noteRow: { flexDirection: 'row', alignItems: 'center', gap: wp(1.5), marginBottom: hp(2.5), paddingHorizontal: wp(1) },
   noteText: { flex: 1, color: '#6B7280', fontSize: ms(11), fontFamily: 'Inter_400Regular', lineHeight: ms(16) },
@@ -872,6 +921,7 @@ const styles = StyleSheet.create({
 
   // Save bank button
   saveBankBtnWrap: { borderRadius: wp(3), overflow: 'hidden', marginTop: hp(1) },
+  saveBankBtnDisabled: { opacity: 0.65 },
   saveBankBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -880,6 +930,7 @@ const styles = StyleSheet.create({
     paddingVertical: hp(1.7),
   },
   saveBankBtnText: { color: '#fff', fontSize: ms(14), fontWeight: '800', fontFamily: 'Inter_900Black' },
+  saveBankBtnTextDisabled: { color: '#9CA3AF' },
 
   // Info rows
   infoRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: hp(1.2) },
