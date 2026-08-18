@@ -47,11 +47,11 @@ export default function BlockedListModal({ visible, userId, userName, onClose })
       padding: '20px',
     }}>
       <div style={{
-        width: '100%', maxWidth: 500, maxHeight: '85vh',
-        backgroundColor: '#18181B', borderRadius: 24,
+        width: '100%', maxWidth: 560, maxHeight: '85vh',
+        backgroundColor: '#18181B', borderRadius: 16,
         border: '1px solid #27272A', display: 'flex',
         flexDirection: 'column', overflow: 'hidden',
-        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4)',
+        boxShadow: '0 20px 60px rgba(0, 0, 0, 0.6)',
       }}>
         {/* Header */}
         <div style={{

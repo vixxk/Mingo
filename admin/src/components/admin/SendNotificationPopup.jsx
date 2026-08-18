@@ -42,8 +42,9 @@ export default function SendNotificationPopup({ visible, onClose }) {
           padding: '5%',
         }} onClick={onClose}>
           <div style={{
-            width: '100%', maxWidth: 400, backgroundColor: '#141414',
-            borderRadius: 24, border: '1px solid #1F1F1F', padding: '5%',
+            width: '100%', maxWidth: 440, backgroundColor: '#141414',
+            borderRadius: 16, border: '1px solid #1F1F1F', padding: 24,
+            boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
           }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20 }}>
               <div style={{

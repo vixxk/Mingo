@@ -6,7 +6,7 @@ import { authAPI, adminAPI } from '../utils/api'
 import {
   IoGrid, IoPeople, IoHeadset, IoCall, IoShieldCheckmark,
   IoSettings, IoLogOut, IoMenu, IoChevronForward, IoClose, IoChevronBack, IoImage,
-  IoChatbubble, IoCash,
+  IoChatbubble, IoCash, IoFlag, IoDownload,
 } from 'react-icons/io5'
 
 const navItems = [
@@ -16,7 +16,9 @@ const navItems = [
   { to: '/sessions', icon: IoCall, label: 'Sessions' },
   { to: '/chat-logs', icon: IoChatbubble, label: 'Chat Logs' },
   { to: '/approvals', icon: IoShieldCheckmark, label: 'Approvals' },
+  { to: '/reports', icon: IoFlag, label: 'Reports', badgeKey: 'pendingReports' },
   { to: '/payouts', icon: IoCash, label: 'Payouts', badgeKey: 'pendingPayouts' },
+  { to: '/exports', icon: IoDownload, label: 'Exports' },
   { to: '/settings', icon: IoSettings, label: 'Settings' },
   { to: '/ads', icon: IoImage, label: 'Ads' },
 ]

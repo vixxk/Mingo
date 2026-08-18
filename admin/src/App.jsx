@@ -17,6 +17,7 @@ import ProfileApprovals from './pages/ProfileApprovals'
 import BannedMembers from './pages/BannedMembers'
 import BestChoice from './pages/BestChoice'
 import MemberReports from './pages/MemberReports'
+import Exports from './pages/Exports'
 import Activities from './pages/Activities'
 import Ads from './pages/Ads'
 
@@ -72,6 +73,7 @@ export default function App() {
             <Route path="banned" element={<BannedMembers />} />
             <Route path="best-choice" element={<BestChoice />} />
             <Route path="reports" element={<MemberReports />} />
+            <Route path="exports" element={<Exports />} />
             <Route path="activities" element={<Activities />} />
             <Route path="ads" element={<Ads />} />
           </Route>

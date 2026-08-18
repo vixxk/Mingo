@@ -409,16 +409,17 @@ export default function ListenerDetailModal({ visible, listener, onClose, onBan,
     <>
       <div className="modal-overlay" style={{
         position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-        backgroundColor: 'rgba(0,0,0,0.9)',
-        zIndex: 1000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+        backgroundColor: 'rgba(0,0,0,0.85)',
+        zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '20px', overflowY: 'auto',
       }} onClick={onClose}>
-        <div className="modal-content" style={{
-          width: '100%', maxWidth: 500,
-          backgroundColor: 'var(--bg-secondary)', borderTopLeftRadius: 32, borderTopRightRadius: 32,
-          padding: '20px 20px 0',
-          border: '1px solid var(--border)',
-          maxHeight: '85vh', overflowY: 'auto',
-          display: 'flex', flexDirection: 'column', alignItems: 'center',
+        <div className="modal-content listener-modal-box" style={{
+          width: '100%', maxWidth: 720,
+          backgroundColor: 'var(--bg-secondary)', borderRadius: 16,
+          padding: 24, border: '1px solid var(--border)',
+          maxHeight: '90vh', overflowY: 'auto',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+          position: 'relative',
         }} onClick={e => e.stopPropagation()}>
           <button className="modal-close-btn" onClick={onClose} style={{
             position: 'absolute', top: 16, right: 20, width: 32, height: 32,

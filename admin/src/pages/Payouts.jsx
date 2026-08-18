@@ -350,20 +350,21 @@ export default function Payouts() {
         onClick={handleCloseDetail}
         style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 9999,
+          backgroundColor: 'rgba(0,0,0,0.75)', zIndex: 9999,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: 'var(--page-padding)', overflowY: 'auto',
+          padding: '20px', overflowY: 'auto',
         }}
       >
-        <div className="modal-content"
+        <div className="modal-content payout-modal-box"
           onClick={e => e.stopPropagation()}
           style={{
-            backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border)',
-            padding: 'var(--card-padding)', maxWidth: 420, width: '100%', maxHeight: '90vh',
-            overflowY: 'auto',
+            backgroundColor: 'var(--bg-secondary)', borderRadius: 16, border: '1px solid var(--border)',
+            padding: 24, maxWidth: 680, width: '100%', maxHeight: '90vh',
+            overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, pb: 12, borderBottom: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               {getStatusIcon(p.status)}
               <h2 style={{ fontSize: 18, fontWeight: 900, color: '#fff', margin: 0 }}>Payout Details</h2>
@@ -379,168 +380,205 @@ export default function Payouts() {
             </button>
           </div>
 
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <span style={{ color: '#fff', fontWeight: 800, fontSize: 16 }}>{p.listenerName}</span>
-              {getStatusBadge(p.status)}
-            </div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 4 }}>
-              {p.listenerPhone}
-            </div>
-            <div style={{ color: 'var(--accent)', fontWeight: 900, fontSize: 22, marginTop: 8 }}>
-              ₹{p.amount?.toLocaleString?.() || p.amount}
-            </div>
-
-            {(p.tdsAmount > 0 || p.netAmount > 0) && (
+          {/* 2-Column Responsive Body */}
+          <div style={{
+            display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: 16, marginBottom: 20,
+          }}>
+            {/* Column 1: Listener & Amount Info */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Listener Profile with Avatar */}
               <div style={{
-                marginTop: 12, padding: '10px 12px', borderRadius: 10,
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: 14, backgroundColor: 'var(--bg-tertiary)', borderRadius: 12,
+                border: '1px solid var(--border)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{
+                    width: 46, height: 46, borderRadius: 23, flexShrink: 0,
+                    border: '2px solid var(--accent)',
+                    background: p.listenerId?.avatarUrl
+                      ? `url(${p.listenerId.avatarUrl}) center/cover`
+                      : 'linear-gradient(135deg, #A855F7, #8B5CF6, #EC4899)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#fff', fontWeight: 800, fontSize: 16,
+                  }}>
+                    {!p.listenerId?.avatarUrl && (p.listenerName ? p.listenerName.slice(0, 2).toUpperCase() : '?')}
+                  </div>
+                  <div>
+                    <span style={{ color: '#fff', fontWeight: 800, fontSize: 15, display: 'block' }}>{p.listenerName}</span>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{p.listenerPhone}</span>
+                  </div>
+                </div>
+                {getStatusBadge(p.status)}
+              </div>
+
+              {/* Amount Breakdown */}
+              <div style={{
+                padding: 14, borderRadius: 12,
                 backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>Gross Amount</span>
-                  <span style={{ fontSize: 13, color: '#fff', fontWeight: 700 }}>₹{p.amount?.toLocaleString?.() || p.amount}</span>
+                <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, marginBottom: 4 }}>
+                  Requested Amount
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>TDS Deduction ({p.tdsRate || 0}%)</span>
-                  <span style={{ fontSize: 13, color: '#F87171', fontWeight: 700 }}>− ₹{p.tdsAmount?.toLocaleString?.() || p.tdsAmount}</span>
+                <div style={{ color: 'var(--accent)', fontWeight: 900, fontSize: 24, marginBottom: 12 }}>
+                  ₹{p.amount?.toLocaleString?.() || p.amount}
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8, borderTop: '1px solid var(--border)' }}>
-                  <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 700 }}>Net Amount (credited)</span>
-                  <span style={{ fontSize: 14, color: '#34D399', fontWeight: 800 }}>₹{p.netAmount?.toLocaleString?.() || p.netAmount}</span>
+
+                {(p.tdsAmount > 0 || p.netAmount > 0) && (
+                  <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>Gross Amount</span>
+                      <span style={{ fontSize: 13, color: '#fff', fontWeight: 700 }}>₹{p.amount?.toLocaleString?.() || p.amount}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>TDS Deduction ({p.tdsRate || 0}%)</span>
+                      <span style={{ fontSize: 13, color: '#F87171', fontWeight: 700 }}>− ₹{p.tdsAmount?.toLocaleString?.() || p.tdsAmount}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                      <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 700 }}>Net Amount (credited)</span>
+                      <span style={{ fontSize: 14, color: '#34D399', fontWeight: 800 }}>₹{p.netAmount?.toLocaleString?.() || p.netAmount}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Credit Timeline (SLA) */}
+              <div style={{
+                padding: '12px 14px', borderRadius: 12,
+                backgroundColor: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.3)',
+                display: 'flex', alignItems: 'center', gap: 10,
+              }}>
+                <IoHourglass size={18} color="#60A5FA" style={{ flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>Credit Timeline (SLA)</span>
+                    <span style={{ fontSize: 13, color: '#60A5FA', fontWeight: 800, whiteSpace: 'nowrap' }}>
+                      {getTimelineText(p)}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
+                    Credited within {getTimelineText(p)} of approval
+                  </div>
                 </div>
               </div>
-            )}
+            </div>
 
-            {/* Credit Timeline (SLA) */}
-            <div style={{
-              marginTop: 12, padding: '10px 12px', borderRadius: 10,
-              backgroundColor: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.3)',
-              display: 'flex', alignItems: 'center', gap: 10,
-            }}>
-              <IoHourglass size={16} color="#60A5FA" style={{ flexShrink: 0 }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>Credit Timeline (SLA)</span>
-                  <span style={{ fontSize: 13, color: '#60A5FA', fontWeight: 800, whiteSpace: 'nowrap' }}>
-                    {getTimelineText(p)}
+            {/* Column 2: Bank Details & Inputs */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Bank Details Card */}
+              <div style={{
+                backgroundColor: 'var(--bg-tertiary)', borderRadius: 12, border: '1px solid var(--border)',
+                padding: 14,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <h3 style={{ fontSize: 13.5, fontWeight: 700, color: '#fff', margin: 0 }}>
+                    Bank Details
+                  </h3>
+                  <button
+                    onClick={() => setRevealSensitive(v => !v)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      padding: '4px 8px', borderRadius: 6,
+                      backgroundColor: revealSensitive ? 'rgba(168,85,247,0.15)' : 'var(--bg-secondary)',
+                      border: '1px solid ' + (revealSensitive ? 'rgba(168,85,247,0.4)' : 'var(--border)'),
+                      color: revealSensitive ? '#C084FC' : 'var(--text-secondary)',
+                      fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                    }}
+                  >
+                    <IoEyeOutline size={13} />
+                    {revealSensitive ? 'Hide' : 'Show Details'}
+                  </button>
+                </div>
+
+                {[['Bank Name', p.bankName], ['Account Number', p.accountNumber], ['IFSC Code', p.bankIfscCode || p.ifscCode]].map(([label, val]) => (
+                  <div key={label} style={{ marginBottom: 8 }}>
+                    <span style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 2 }}>
+                      {label}
+                    </span>
+                    <span style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>
+                      {revealSensitive ? (val || '—') : (label === 'Bank Name' ? (val || '—') : maskSensitive(val))}
+                    </span>
+                  </div>
+                ))}
+
+                <div style={{ marginBottom: 8 }}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 2 }}>
+                    Phone Number
                   </span>
+                  <span style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>{p.phone || '—'}</span>
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
-                  Credited within {getTimelineText(p)} of approval
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <span style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 2 }}>
+                      PAN Number (TDS)
+                    </span>
+                    <span style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>
+                      {revealSensitive ? (p.panNumber || '—') : (p.panNumber ? maskSensitive(p.panNumber, 4) : '—')}
+                    </span>
+                  </div>
+                  {p.panNumber && (
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                      padding: '3px 8px', borderRadius: 6,
+                      backgroundColor: 'rgba(239,68,68,0.12)', color: '#FCA5A5',
+                      fontSize: 10, fontWeight: 700,
+                    }}>
+                      <IoDocumentText size={12} />
+                      For TDS
+                    </span>
+                  )}
                 </div>
               </div>
+
+              {/* Transaction ID & Admin Notes */}
+              {(() => {
+                const isReadOnly = ['approved', 'rejected', 'paid', 'cancelled'].includes(p.status)
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div>
+                      <label style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>
+                        Transaction ID
+                      </label>
+                      <input
+                        value={transactionId}
+                        onChange={e => setTransactionId(e.target.value)}
+                        placeholder={isReadOnly ? 'No transaction ID' : 'Enter transaction ID...'}
+                        disabled={isReadOnly}
+                        style={{
+                          width: '100%', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+                          borderRadius: 8, color: isReadOnly ? 'var(--text-secondary)' : '#fff', padding: '8px 12px', fontSize: 13,
+                          outline: 'none', boxSizing: 'border-box',
+                          opacity: isReadOnly ? 0.7 : 1, cursor: isReadOnly ? 'not-allowed' : 'text',
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>
+                        Admin Notes {!isReadOnly && <span style={{ color: '#EF4444', fontSize: 11, fontWeight: 500 }}>* (Required for rejection)</span>}
+                      </label>
+                      <textarea
+                        value={adminNotes}
+                        onChange={e => setAdminNotes(e.target.value)}
+                        placeholder={isReadOnly ? 'No admin notes' : 'Add admin notes...'}
+                        rows={2}
+                        disabled={isReadOnly}
+                        style={{
+                          width: '100%', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+                          borderRadius: 8, color: isReadOnly ? 'var(--text-secondary)' : '#fff', padding: '8px 12px', fontSize: 13,
+                          outline: 'none', boxSizing: 'border-box', resize: 'vertical',
+                          fontFamily: 'inherit', lineHeight: 1.4,
+                          opacity: isReadOnly ? 0.7 : 1, cursor: isReadOnly ? 'not-allowed' : 'text',
+                        }}
+                      />
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
           </div>
-
-          <div style={{
-            backgroundColor: 'var(--bg-tertiary)', borderRadius: 12, border: '1px solid var(--border)',
-            padding: 'var(--card-padding)', marginBottom: 20,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#fff', margin: 0 }}>
-                Bank Details
-              </h3>
-              <button
-                onClick={() => setRevealSensitive(v => !v)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 5,
-                  padding: '5px 10px', borderRadius: 8,
-                  backgroundColor: revealSensitive ? 'rgba(168,85,247,0.15)' : 'var(--bg-secondary)',
-                  border: '1px solid ' + (revealSensitive ? 'rgba(168,85,247,0.4)' : 'var(--border)'),
-                  color: revealSensitive ? '#C084FC' : 'var(--text-secondary)',
-                  fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                }}
-              >
-                <IoEyeOutline size={14} />
-                {revealSensitive ? 'Hide Details' : 'Show Details'}
-              </button>
-            </div>
-
-            {[['Bank Name', p.bankName], ['Account Number', p.accountNumber], ['IFSC Code', p.bankIfscCode || p.ifscCode]].map(([label, val]) => (
-              <div key={label} style={{ marginBottom: 10 }}>
-                <span style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 3 }}>
-                  {label}
-                </span>
-                <span style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>
-                  {revealSensitive ? (val || '—') : (label === 'Bank Name' ? (val || '—') : maskSensitive(val))}
-                </span>
-              </div>
-            ))}
-
-            <div style={{ marginBottom: 10 }}>
-              <span style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 3 }}>
-                Phone Number
-              </span>
-              <span style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>{p.phone || '—'}</span>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <span style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 3 }}>
-                  PAN Number (TDS)
-                </span>
-                <span style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>
-                  {revealSensitive ? (p.panNumber || '—') : (p.panNumber ? maskSensitive(p.panNumber, 4) : '—')}
-                </span>
-              </div>
-              {p.panNumber && (
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                  padding: '3px 8px', borderRadius: 6,
-                  backgroundColor: 'rgba(239,68,68,0.12)', color: '#FCA5A5',
-                  fontSize: 10, fontWeight: 700,
-                }}>
-                  <IoDocumentText size={12} />
-                  For TDS
-                </span>
-              )}
-            </div>
-          </div>
-
-          {(() => {
-            const isReadOnly = ['approved', 'rejected', 'paid', 'cancelled'].includes(p.status)
-            return (
-              <>
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>
-                    Transaction ID
-                  </label>
-                  <input
-                    value={transactionId}
-                    onChange={e => setTransactionId(e.target.value)}
-                    placeholder={isReadOnly ? 'No transaction ID' : 'Enter transaction ID...'}
-                    disabled={isReadOnly}
-                    style={{
-                      width: '100%', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
-                      borderRadius: 10, color: isReadOnly ? 'var(--text-secondary)' : '#fff', padding: '10px 14px', fontSize: 14,
-                      outline: 'none', boxSizing: 'border-box',
-                      opacity: isReadOnly ? 0.7 : 1, cursor: isReadOnly ? 'not-allowed' : 'text',
-                    }}
-                  />
-                </div>
-
-                <div style={{ marginBottom: 20 }}>
-                  <label style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>
-                    Admin Notes {!isReadOnly && <span style={{ color: '#EF4444', fontSize: 11, fontWeight: 500 }}>* (Required for rejection)</span>}
-                  </label>
-                  <textarea
-                    value={adminNotes}
-                    onChange={e => setAdminNotes(e.target.value)}
-                    placeholder={isReadOnly ? 'No admin notes' : 'Add admin notes (required for rejection, cannot be empty)...'}
-                    rows={3}
-                    disabled={isReadOnly}
-                    style={{
-                      width: '100%', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
-                      borderRadius: 10, color: isReadOnly ? 'var(--text-secondary)' : '#fff', padding: '10px 14px', fontSize: 14,
-                      outline: 'none', boxSizing: 'border-box', resize: 'vertical',
-                      fontFamily: 'inherit', lineHeight: 1.4,
-                      opacity: isReadOnly ? 0.7 : 1, cursor: isReadOnly ? 'not-allowed' : 'text',
-                    }}
-                  />
-                </div>
-              </>
-            )
-          })()}
 
           {!confirmAction ? (
             (() => {
@@ -677,7 +715,7 @@ export default function Payouts() {
             onMouseLeave={e => { if (!exporting) e.currentTarget.style.backgroundColor = 'var(--accent-light)' }}
           >
             <IoDownloadOutline size={16} />
-            {exporting ? 'Exporting...' : 'Export CSV'}
+            {exporting ? 'Exporting...' : 'Export Excel'}
           </button>
         </div>
 

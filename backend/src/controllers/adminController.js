@@ -957,10 +957,14 @@ class AdminController {
 
   static async getReports(req, res, next) {
     try {
-      const { status = 'all', reportType, startDate, endDate, page = 1, limit = 20 } = req.query;
+      const { status = 'all', reportType, role, reporterRole, startDate, endDate, page = 1, limit = 20 } = req.query;
       const filter = {};
       if (status !== 'all') filter.status = status;
       if (reportType && reportType !== 'all') filter.reportType = reportType;
+      const targetRole = role || reporterRole;
+      if (targetRole && targetRole !== 'all') {
+        filter.reporterRole = targetRole.toLowerCase();
+      }
 
       // Period filter — day-precision; endDate covers the whole day. Reports
       // are matched on their createdAt, mirroring the other admin filters.

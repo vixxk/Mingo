@@ -103,16 +103,17 @@ export default function UserDetailModal({ visible, user, onClose, onDelete, onBa
     <>
       <div className="modal-overlay" style={{
         position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-        backgroundColor: 'rgba(0,0,0,0.9)',
-        zIndex: 1000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+        backgroundColor: 'rgba(0,0,0,0.85)',
+        zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '20px', overflowY: 'auto',
       }} onClick={onClose}>
-        <div className="modal-content" style={{
-          width: '100%', maxWidth: 500,
-          backgroundColor: 'var(--bg-secondary)', borderTopLeftRadius: 32, borderTopRightRadius: 32,
-          padding: '20px 20px 0',
-          border: '1px solid var(--border)',
-          maxHeight: '85vh', overflowY: 'auto',
-          display: 'flex', flexDirection: 'column', alignItems: 'center',
+        <div className="modal-content user-modal-box" style={{
+          width: '100%', maxWidth: 680,
+          backgroundColor: 'var(--bg-secondary)', borderRadius: 16,
+          padding: 24, border: '1px solid var(--border)',
+          maxHeight: '90vh', overflowY: 'auto',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+          position: 'relative',
         }} onClick={e => e.stopPropagation()}>
           <button className="modal-close-btn" onClick={onClose} style={{
             position: 'absolute', top: 16, right: 20, width: 32, height: 32,
@@ -123,205 +124,220 @@ export default function UserDetailModal({ visible, user, onClose, onDelete, onBa
             <IoClose size={22} />
           </button>
 
-          <img src={getAvatarUrl(user.gender, user.avatarIndex)}
-            style={{ width: 80, height: 80, borderRadius: 40, border: '3px solid var(--accent)', marginBottom: 10 }}
-            alt="avatar"
-          />
+          {/* 2-Column Responsive Body */}
           <div style={{
-            fontSize: 22, fontWeight: 800, color: 'var(--text-primary)',
-            fontFamily: 'var(--font-display)',
+            display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: 20, marginTop: 10,
           }}>
-            {user.name}
-          </div>
-          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>{user.phone}</div>
-          <div style={{
-            padding: '4px 12px', borderRadius: 12, marginTop: 8, marginBottom: 12,
-            backgroundColor: user.isBanned ? 'var(--error-light)' : user.isOnline ? 'var(--success-light)' : 'rgba(107,114,128,0.15)',
-          }}>
-            <span style={{
-              fontSize: 12, fontWeight: 700,
-              color: user.isBanned ? 'var(--error)' : user.isOnline ? 'var(--success)' : 'var(--text-muted)',
-            }}>
-              {user.isBanned ? 'Banned' : user.isOnline ? 'Online' : 'Offline'}
-            </span>
-          </div>
-
-          {/* Stats */}
-          <div style={{ display: 'flex', width: '100%', gap: 4, marginBottom: 16 }}>
-            {[
-              { label: 'App Opens', value: user.appOpens || 0 },
-              { label: 'Time Spent', value: user.totalTimeSpent || '0h 0m' },
-              { label: 'Calls', value: user.totalCalls || 0 },
-            ].map((s, i) => (
-              <div key={i} style={{
-                flex: 1, textAlign: 'center', backgroundColor: 'var(--bg-tertiary)',
-                borderRadius: 16, padding: '12px 4px', border: '1px solid var(--border)',
+            {/* Left Column: Avatar & Profile Summary & Actions */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <img src={getAvatarUrl(user.gender, user.avatarIndex)}
+                style={{ width: 80, height: 80, borderRadius: 40, border: '3px solid var(--accent)', marginBottom: 10 }}
+                alt="avatar"
+              />
+              <div style={{
+                fontSize: 20, fontWeight: 800, color: 'var(--text-primary)',
+                fontFamily: 'var(--font-display)', textAlign: 'center',
               }}>
-                <div style={{
-                  fontSize: 18, fontWeight: 800, color: 'var(--text-primary)',
-                  fontFamily: 'var(--font-display)',
-                }}>
-                  {s.value}
-                </div>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{s.label}</div>
+                {user.name}
               </div>
-            ))}
-          </div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>{user.phone}</div>
+              <div style={{
+                padding: '4px 12px', borderRadius: 12, marginTop: 8, marginBottom: 16,
+                backgroundColor: user.isBanned ? 'var(--error-light)' : user.isOnline ? 'var(--success-light)' : 'rgba(107,114,128,0.15)',
+              }}>
+                <span style={{
+                  fontSize: 12, fontWeight: 700,
+                  color: user.isBanned ? 'var(--error)' : user.isOnline ? 'var(--success)' : 'var(--text-muted)',
+                }}>
+                  {user.isBanned ? 'Banned' : user.isOnline ? 'Online' : 'Offline'}
+                </span>
+              </div>
 
-          {/* Details */}
-          <div style={{
-            width: '100%', backgroundColor: 'var(--bg-tertiary)', borderRadius: 18,
-            border: '1px solid var(--border)', marginBottom: 16,
-          }}>
-            {[
-              { label: 'Gender', value: user.gender || 'Not specified', icon: IoPersonOutline },
-              { 
-                label: 'Date of Birth', 
-                value: user.dob 
-                  ? `${new Date(user.dob).toLocaleDateString()} (${user.age !== undefined && user.age !== null ? user.age : Math.floor((new Date() - new Date(user.dob)) / 31557600000)} yrs) - 🔞 18+ Verified`
-                  : 'Not specified', 
-                icon: IoCalendarOutline 
-              },
-              { label: 'Language', value: user.language || 'English', icon: IoGlobeOutline },
-              { label: 'Coins', value: `🪙 ${user.coins || 0}`, icon: IoWalletOutline },
-              { label: 'Joined', value: user.joinDate || (user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Unknown'), icon: IoCalendarOutline },
-              { label: 'Last Active', value: user.lastActive || 'Recently', icon: IoTimeOutline },
-              ...(user.isDeleted ? [{ label: 'Reason for Deletion', value: user.deletionReason || 'Not specified', icon: IoTrash }] : []),
-            ].map((item, i, arr) => {
-              const Icon = item.icon
-              return (
-                <div key={i}>
-                  <div style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    padding: '11px 16px',
+              {/* Stats */}
+              <div style={{ display: 'flex', width: '100%', gap: 6, marginBottom: 16 }}>
+                {[
+                  { label: 'App Opens', value: user.appOpens || 0 },
+                  { label: 'Time Spent', value: user.totalTimeSpent || '0h 0m' },
+                  { label: 'Calls', value: user.totalCalls || 0 },
+                ].map((s, i) => (
+                  <div key={i} style={{
+                    flex: 1, textAlign: 'center', backgroundColor: 'var(--bg-tertiary)',
+                    borderRadius: 12, padding: '10px 4px', border: '1px solid var(--border)',
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Icon size={16} color="var(--text-muted)" />
-                      <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{item.label}</span>
+                    <div style={{
+                      fontSize: 16, fontWeight: 800, color: 'var(--text-primary)',
+                      fontFamily: 'var(--font-display)',
+                    }}>
+                      {s.value}
                     </div>
-                    <span style={{
-                      fontSize: 13, color: item.label === 'Reason for Deletion' ? 'var(--warning)' : 'var(--text-secondary)',
-                      fontWeight: 700,
-                    }}>{item.value}</span>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{s.label}</div>
                   </div>
-                  {i < arr.length - 1 && <div style={{ height: 1, backgroundColor: 'var(--border)', margin: '0 16px' }} />}
-                </div>
-              )
-            })}
-          </div>
+                ))}
+              </div>
 
-          {/* Interests */}
-          <div style={{ width: '100%', marginBottom: 20 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <span style={{ fontSize: 14, color: 'var(--text-secondary)', fontWeight: 700 }}>Interests</span>
-              {!isEditingInterests ? (
-                <button onClick={() => setIsEditingInterests(true)}
-                  style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                  Edit
-                </button>
-              ) : (
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={handleSaveInterests} disabled={savingInterests}
-                    style={{ background: 'none', border: 'none', color: 'var(--success)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                    {savingInterests ? 'Saving...' : 'Save'}
+              {/* Actions */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+                <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+                  <button onClick={triggerBanConfirm}
+                    style={{
+                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      padding: '10px 0', borderRadius: 10, border: 'none', cursor: 'pointer',
+                      backgroundColor: isBanned ? 'var(--success-light)' : 'var(--error-light)',
+                      color: isBanned ? 'var(--success)' : 'var(--error)', fontSize: 13, fontWeight: 700,
+                    }}>
+                    <IoBan size={16} />
+                    {isBanned ? 'Unban User' : 'Ban User'}
                   </button>
-                  <button onClick={() => { setIsEditingInterests(false); setLocalInterests(user.interests || []) }}
-                    style={{ background: 'none', border: 'none', color: 'var(--error)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                    Cancel
+                  <button onClick={() => setIsMessaging(true)}
+                    style={{
+                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      padding: '10px 0', borderRadius: 10, border: 'none', cursor: 'pointer',
+                      backgroundColor: 'var(--accent-light)', color: 'var(--accent)', fontSize: 13, fontWeight: 700,
+                    }}>
+                    <IoChatbubble size={16} />
+                    Message
                   </button>
                 </div>
-              )}
+
+                <button onClick={() => setShowBlockedModal(true)}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    padding: '10px 0', borderRadius: 10, border: 'none', cursor: 'pointer',
+                    backgroundColor: 'rgba(168, 85, 247, 0.12)', color: '#C084FC', fontSize: 13, fontWeight: 700,
+                  }}>
+                  <IoBan size={16} />
+                  View Blocked List
+                </button>
+
+                <button onClick={triggerDeleteConfirm}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    padding: '10px 0', borderRadius: 10, border: 'none', cursor: 'pointer',
+                    backgroundColor: 'var(--error-light)', color: 'var(--error)', fontSize: 13, fontWeight: 700,
+                  }}>
+                  <IoTrashOutline size={16} />
+                  Delete User Permanently
+                </button>
+              </div>
             </div>
 
-            {isEditingInterests && (
-              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                <input
-                  value={newInterest}
-                  onChange={e => setNewInterest(e.target.value)}
-                  placeholder="Add new interest..."
-                  onKeyDown={e => e.key === 'Enter' && handleAddInterest()}
-                  style={{
-                    flex: 1, backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
-                    borderRadius: 12, color: 'var(--text-primary)', padding: '0 12px', height: 40,
-                    fontSize: 13, outline: 'none',
-                  }}
-                />
-                <button onClick={handleAddInterest}
-                  style={{
-                    width: 40, height: 40, borderRadius: 12, backgroundColor: 'var(--accent)',
-                    border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    cursor: 'pointer', color: '#fff',
-                  }}>
-                  <IoAdd size={20} />
-                </button>
+            {/* Right Column: User Details List & Interests */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Details List Card */}
+              <div style={{
+                width: '100%', backgroundColor: 'var(--bg-tertiary)', borderRadius: 14,
+                border: '1px solid var(--border)',
+              }}>
+                {[
+                  { label: 'Gender', value: user.gender || 'Not specified', icon: IoPersonOutline },
+                  { 
+                    label: 'Date of Birth', 
+                    value: user.dob 
+                      ? `${new Date(user.dob).toLocaleDateString()} (${user.age !== undefined && user.age !== null ? user.age : Math.floor((new Date() - new Date(user.dob)) / 31557600000)} yrs) - 🔞 18+ Verified`
+                      : 'Not specified', 
+                    icon: IoCalendarOutline 
+                  },
+                  { label: 'Language', value: user.language || 'English', icon: IoGlobeOutline },
+                  { label: 'Coins', value: `🪙 ${user.coins || 0}`, icon: IoWalletOutline },
+                  { label: 'Joined', value: user.joinDate || (user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Unknown'), icon: IoCalendarOutline },
+                  { label: 'Last Active', value: user.lastActive || 'Recently', icon: IoTimeOutline },
+                  ...(user.isDeleted ? [{ label: 'Reason for Deletion', value: user.deletionReason || 'Not specified', icon: IoTrash }] : []),
+                ].map((item, i, arr) => {
+                  const Icon = item.icon
+                  return (
+                    <div key={i}>
+                      <div style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        padding: '10px 14px',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <Icon size={15} color="var(--text-muted)" />
+                          <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{item.label}</span>
+                        </div>
+                        <span style={{
+                          fontSize: 12.5, color: item.label === 'Reason for Deletion' ? 'var(--warning)' : 'var(--text-secondary)',
+                          fontWeight: 700,
+                        }}>{item.value}</span>
+                      </div>
+                      {i < arr.length - 1 && <div style={{ height: 1, backgroundColor: 'var(--border)', margin: '0 14px' }} />}
+                    </div>
+                  )
+                })}
               </div>
-            )}
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {localInterests.map((interest, i) => (
-                <div key={i} style={{
-                  backgroundColor: '#1F2937', padding: '5px 12px', borderRadius: 14,
-                  border: '1px solid #374151', display: 'flex', alignItems: 'center', gap: 4,
-                }}>
-                  <span style={{ fontSize: 12, color: '#D1D5DB' }}>{interest}</span>
-                  {isEditingInterests && (
-                    <button onClick={() => handleRemoveInterest(i)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--error)', padding: 0, display: 'flex' }}>
-                      <IoClose size={14} />
+              {/* Interests */}
+              <div style={{
+                width: '100%', backgroundColor: 'var(--bg-tertiary)', borderRadius: 14,
+                border: '1px solid var(--border)', padding: 14,
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <span style={{ fontSize: 13, color: '#fff', fontWeight: 700 }}>Interests</span>
+                  {!isEditingInterests ? (
+                    <button onClick={() => setIsEditingInterests(true)}
+                      style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                      Edit
                     </button>
+                  ) : (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={handleSaveInterests} disabled={savingInterests}
+                        style={{ background: 'none', border: 'none', color: 'var(--success)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                        {savingInterests ? 'Saving...' : 'Save'}
+                      </button>
+                      <button onClick={() => { setIsEditingInterests(false); setLocalInterests(user.interests || []) }}
+                        style={{ background: 'none', border: 'none', color: 'var(--error)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                        Cancel
+                      </button>
+                    </div>
                   )}
                 </div>
-              ))}
-              {localInterests.length === 0 && (
-                <span style={{ color: 'var(--text-muted)', fontSize: 13, fontStyle: 'italic' }}>No interests listed</span>
-              )}
+
+                {isEditingInterests && (
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                    <input
+                      value={newInterest}
+                      onChange={e => setNewInterest(e.target.value)}
+                      placeholder="Add new interest..."
+                      onKeyDown={e => e.key === 'Enter' && handleAddInterest()}
+                      style={{
+                        flex: 1, backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                        borderRadius: 8, color: 'var(--text-primary)', padding: '0 10px', height: 36,
+                        fontSize: 12.5, outline: 'none',
+                      }}
+                    />
+                    <button onClick={handleAddInterest}
+                      style={{
+                        width: 36, height: 36, borderRadius: 8, backgroundColor: 'var(--accent)',
+                        border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: 'pointer', color: '#fff',
+                      }}>
+                      <IoAdd size={18} />
+                    </button>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {localInterests.map((interest, i) => (
+                    <div key={i} style={{
+                      backgroundColor: 'var(--bg-secondary)', padding: '4px 10px', borderRadius: 10,
+                      border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 4,
+                    }}>
+                      <span style={{ fontSize: 11.5, color: '#D1D5DB' }}>{interest}</span>
+                      {isEditingInterests && (
+                        <button onClick={() => handleRemoveInterest(i)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--error)', padding: 0, display: 'flex' }}>
+                          <IoClose size={13} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {localInterests.length === 0 && (
+                    <span style={{ color: 'var(--text-muted)', fontSize: 12, fontStyle: 'italic' }}>No interests listed</span>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
-
-          {/* Actions */}
-          <div style={{ display: 'flex', gap: 12, width: '100%' }}>
-            <button onClick={triggerBanConfirm}
-              style={{
-                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                padding: '13px 0', borderRadius: 16, border: 'none', cursor: 'pointer',
-                backgroundColor: isBanned ? 'var(--success-light)' : 'var(--error-light)',
-                color: isBanned ? 'var(--success)' : 'var(--error)', fontSize: 14, fontWeight: 700,
-              }}>
-              <IoBan size={18} />
-              {isBanned ? 'Unban User' : 'Ban User'}
-            </button>
-            <button onClick={() => setIsMessaging(true)}
-              style={{
-                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                padding: '13px 0', borderRadius: 16, border: 'none', cursor: 'pointer',
-                backgroundColor: 'var(--accent-light)', color: 'var(--accent)', fontSize: 14, fontWeight: 700,
-              }}>
-              <IoChatbubble size={18} />
-              Message
-            </button>
-          </div>
-
-          <button onClick={() => setShowBlockedModal(true)}
-            style={{
-              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              padding: '13px 0', borderRadius: 16, border: 'none', cursor: 'pointer', marginTop: 8,
-              backgroundColor: 'rgba(168, 85, 247, 0.12)', color: '#C084FC', fontSize: 14, fontWeight: 700,
-            }}>
-            <IoBan size={18} />
-            View Blocked List
-          </button>
-
-          <button onClick={triggerDeleteConfirm}
-            style={{
-              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              padding: '13px 0', borderRadius: 16, border: 'none', cursor: 'pointer', marginTop: 8,
-              backgroundColor: 'var(--error-light)', color: 'var(--error)', fontSize: 14, fontWeight: 700,
-            }}>
-            <IoTrashOutline size={18} />
-            Delete User Permanently
-          </button>
-
-          <div style={{ height: 40 }} />
         </div>
       </div>
 

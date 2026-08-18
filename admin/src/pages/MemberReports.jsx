@@ -16,6 +16,12 @@ const FILTERS = [
   { key: 'dismissed', label: 'Dismissed', color: 'var(--text-muted)' },
 ]
 
+const ROLE_FILTERS = [
+  { key: 'all', label: 'All Members' },
+  { key: 'user', label: 'Users' },
+  { key: 'listener', label: 'Listeners' },
+]
+
 const STATUS_BADGE = {
   pending: { label: 'Pending', bg: 'rgba(245,158,11,0.12)', color: '#F59E0B' },
   resolved: { label: 'Resolved', bg: 'rgba(16,185,129,0.12)', color: '#10B981' },
@@ -54,6 +60,7 @@ export default function MemberReports() {
   const [reports, setReports] = useState([])
   const [loading, setLoading] = useState(true)
   const [activeFilter, setActiveFilter] = useState('all')
+  const [roleFilter, setRoleFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -65,25 +72,31 @@ export default function MemberReports() {
   const [totalReports, setTotalReports] = useState(0)
   const [counts, setCounts] = useState({})
 
-  const filteredReports = search
-    ? reports.filter(r => {
-        const q = search.toLowerCase()
-        return (r.reporterName?.toLowerCase() || '').includes(q)
-          || (r.reportedName?.toLowerCase() || '').includes(q)
-          || (r.reporterPhone?.toLowerCase() || '').includes(q)
-          || (r.reportedPhone?.toLowerCase() || '').includes(q)
-      })
-    : reports
+  const filteredReports = reports.filter(r => {
+    if (roleFilter !== 'all') {
+      const rRole = (r.reporterRole || (r.reportType === 'listener_report' ? 'listener' : 'user')).toLowerCase()
+      if (rRole !== roleFilter) return false
+    }
+    if (search) {
+      const q = search.toLowerCase()
+      return (r.reporterName?.toLowerCase() || '').includes(q)
+        || (r.reportedName?.toLowerCase() || '').includes(q)
+        || (r.reporterPhone?.toLowerCase() || '').includes(q)
+        || (r.reportedPhone?.toLowerCase() || '').includes(q)
+    }
+    return true
+  })
 
   useEffect(() => {
     loadReports()
-  }, [activeFilter, page, startDate, endDate])
+  }, [activeFilter, roleFilter, page, startDate, endDate])
 
   const loadReports = async () => {
     setLoading(true)
     try {
       const params = { page, limit: 20 }
       if (activeFilter !== 'all') params.status = activeFilter
+      if (roleFilter !== 'all') params.role = roleFilter
       if (startDate) params.startDate = startDate
       if (endDate) params.endDate = endDate
 
@@ -202,22 +215,23 @@ export default function MemberReports() {
         onClick={handleCloseDetail}
         style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 9999,
+          backgroundColor: 'rgba(0,0,0,0.75)', zIndex: 9999,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: 'var(--page-padding)', overflowY: 'auto',
+          padding: '20px', overflowY: 'auto',
         }}
       >
-        <div className="modal-content"
+        <div className="modal-content report-modal-box"
           onClick={e => e.stopPropagation()}
           style={{
-            backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border)',
-            padding: 'var(--card-padding)', maxWidth: 420, width: '100%', maxHeight: '90vh',
-            overflowY: 'auto',
+            backgroundColor: 'var(--bg-secondary)', borderRadius: 16, border: '1px solid var(--border)',
+            padding: 24, maxWidth: 680, width: '100%', maxHeight: '90vh',
+            overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, pb: 12, borderBottom: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <IoFlag size={18} color="var(--accent)" />
+              <IoFlag size={20} color="var(--accent)" />
               <h2 style={{ fontSize: 18, fontWeight: 900, color: '#fff', margin: 0 }}>Report Details</h2>
             </div>
             <button
@@ -231,103 +245,113 @@ export default function MemberReports() {
             </button>
           </div>
 
-          <div className="report-detail-section" style={{ marginBottom: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-              <div>
-                <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, marginBottom: 2 }}>Reporter</div>
-                <div style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>{r.reporterName || 'Unknown'}</div>
-                <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{r.reporterPhone || '—'}</div>
+          {/* 2-Column Desktop Layout */}
+          <div style={{
+            display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: 16, marginBottom: 20,
+          }}>
+            {/* Column 1: Reporter & Reported Info */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Reporter Box */}
+              <div style={{
+                backgroundColor: 'var(--bg-tertiary)', borderRadius: 12, border: '1px solid var(--border)',
+                padding: 14,
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                  <div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, marginBottom: 2 }}>Reporter</div>
+                    <div style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>{r.reporterName || 'Unknown'}</div>
+                    <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{r.reporterPhone || '—'}</div>
+                  </div>
+                  <StatusBadge status={r.status} />
+                </div>
               </div>
-              <StatusBadge status={r.status} />
-            </div>
-          </div>
 
-<div className="report-detail-section" style={{
-             backgroundColor: 'var(--bg-tertiary)', borderRadius: 12, border: '1px solid var(--border)',
-             padding: 16, marginBottom: 16,
-           }}>
-             <h3 style={{ fontSize: 14, fontWeight: 700, color: '#fff', margin: '0 0 12px' }}>
-               {r.reportType === 'general' ? 'Issue Reported By' : 'Reported Member'}
-             </h3>
-             <div style={{ color: '#fff', fontWeight: 600, fontSize: 14, marginBottom: 2 }}>
-               {r.reportType === 'general' ? (r.reporterName || 'Unknown') : (r.reportedName || 'Unknown')}
-             </div>
-             <div style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 2 }}>
-               {r.reportType === 'general' ? (r.reporterPhone || '—') : (r.reportedPhone || '—')}
-             </div>
-             <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-               ID: {r.reportType === 'general' ? (r.reporterId || r.reportedId || '—') : (r.reportedId || '—')}
-             </div>
-           </div>
-
-          {r.reportType !== 'general' && (
-            <div className="report-detail-section" style={{
-              backgroundColor: 'var(--bg-tertiary)', borderRadius: 12, border: '1px solid var(--border)',
-              padding: 'var(--card-padding)', marginBottom: 16,
-            }}>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, marginBottom: 4 }}>Reason / Category</div>
-                <div style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>{r.reason || '—'}</div>
+              {/* Reported Member Box */}
+              <div style={{
+                backgroundColor: 'var(--bg-tertiary)', borderRadius: 12, border: '1px solid var(--border)',
+                padding: 14,
+              }}>
+                <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  {r.reportType === 'general' ? 'Issue Reported By' : 'Reported Member'}
+                </h3>
+                <div style={{ color: '#fff', fontWeight: 700, fontSize: 15, marginBottom: 2 }}>
+                  {r.reportType === 'general' ? (r.reporterName || 'Unknown') : (r.reportedName || 'Unknown')}
+                </div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 4 }}>
+                  {r.reportType === 'general' ? (r.reporterPhone || '—') : (r.reportedPhone || '—')}
+                </div>
+                <div style={{ color: 'var(--text-muted)', fontSize: 11.5 }}>
+                  ID: {r.reportType === 'general' ? (r.reporterId || r.reportedId || '—') : (r.reportedId || '—')}
+                </div>
               </div>
             </div>
-          )}
 
-          <div className="report-detail-section" style={{
-            backgroundColor: 'var(--bg-tertiary)', borderRadius: 12, border: '1px solid var(--border)',
-            padding: 'var(--card-padding)', marginBottom: 16,
-          }}
-        >
-          <div>
-            <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, marginBottom: 4 }}>Description</div>
-            <div style={{ color: '#D1D5DB', fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-              {r.description || 'No description provided'}
+            {/* Column 2: Reason & Description */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {r.reportType !== 'general' && (
+                <div style={{
+                  backgroundColor: 'var(--bg-tertiary)', borderRadius: 12, border: '1px solid var(--border)',
+                  padding: 14,
+                }}>
+                  <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, marginBottom: 4 }}>Reason / Category</div>
+                  <div style={{ color: '#fff', fontSize: 14, fontWeight: 700 }}>{r.reason || '—'}</div>
+                </div>
+              )}
+
+              <div style={{
+                backgroundColor: 'var(--bg-tertiary)', borderRadius: 12, border: '1px solid var(--border)',
+                padding: 14, flex: 1, display: 'flex', flexDirection: 'column',
+              }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, marginBottom: 4 }}>Description</div>
+                <div style={{ color: '#D1D5DB', fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap', flex: 1 }}>
+                  {r.description || 'No description provided'}
+                </div>
+                <div style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 12, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                  Reported on {formatDate(r.createdAt)}
+                </div>
+              </div>
             </div>
           </div>
-        </div>
 
-          <div style={{ color: 'var(--text-muted)', fontSize: 11, marginBottom: 20 }}>
-            Reported on {formatDate(r.createdAt)}
-          </div>
-
+          {/* Action Footer Buttons */}
           {isPending ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <button
-                  onClick={handleResolve}
-                  disabled={actionLoading}
-                  style={{
-                    padding: '12px 0', borderRadius: 10, border: 'none',
-                    cursor: actionLoading ? 'not-allowed' : 'pointer',
-                    backgroundColor: actionLoading ? 'var(--text-muted)' : '#10B981',
-                    color: '#fff', fontSize: 13, fontWeight: 700,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                    opacity: actionLoading ? 0.6 : 1,
-                  }}
-                >
-                  <IoCheckmarkCircle size={16} />
-                  Resolve
-                </button>
-                <button
-                  onClick={handleDismiss}
-                  disabled={actionLoading}
-                  style={{
-                    padding: '12px 0', borderRadius: 10, border: 'none',
-                    cursor: actionLoading ? 'not-allowed' : 'pointer',
-                    backgroundColor: actionLoading ? 'var(--text-muted)' : 'var(--text-muted)',
-                    color: '#fff', fontSize: 13, fontWeight: 700,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                    opacity: actionLoading ? 0.6 : 1,
-                  }}
-                >
-                  <IoCloseCircle size={16} />
-                  Dismiss
-                </button>
-              </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                onClick={handleResolve}
+                disabled={actionLoading}
+                style={{
+                  flex: 1, minWidth: 120, padding: '12px 0', borderRadius: 10, border: 'none',
+                  cursor: actionLoading ? 'not-allowed' : 'pointer',
+                  backgroundColor: actionLoading ? 'var(--text-muted)' : '#10B981',
+                  color: '#fff', fontSize: 13, fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  opacity: actionLoading ? 0.6 : 1,
+                }}
+              >
+                <IoCheckmarkCircle size={16} />
+                Resolve
+              </button>
+              <button
+                onClick={handleDismiss}
+                disabled={actionLoading}
+                style={{
+                  flex: 1, minWidth: 120, padding: '12px 0', borderRadius: 10, border: 'none',
+                  cursor: actionLoading ? 'not-allowed' : 'pointer',
+                  backgroundColor: 'var(--text-muted)',
+                  color: '#fff', fontSize: 13, fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  opacity: actionLoading ? 0.6 : 1,
+                }}
+              >
+                <IoCloseCircle size={16} />
+                Dismiss
+              </button>
               {isPending && selectedReport?.reportType !== 'general' && (
                 <button
                   onClick={handleBan}
                   style={{
-                    width: '100%', padding: '12px 0', borderRadius: 10, border: 'none',
+                    flex: 1, minWidth: 160, padding: '12px 0', borderRadius: 10, border: 'none',
                     cursor: 'pointer',
                     backgroundColor: '#EF4444',
                     color: '#fff', fontSize: 13, fontWeight: 700,
@@ -450,39 +474,101 @@ export default function MemberReports() {
           </div>
         </div>
 
-        <div className="filter-tabs tabs-scroll" style={{ display: 'flex', gap: 8, marginBottom: 20, overflowX: 'auto' }}>
-          {FILTERS.map(filter => {
-            const isActive = activeFilter === filter.key
-            const count = getFilterCount(filter.key)
-            return (
-              <button
-                key={filter.key}
-                onClick={() => handleFilterChange(filter.key)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '8px 16px', borderRadius: 20,
-                  fontSize: 13, fontWeight: 700, cursor: 'pointer',
-                  whiteSpace: 'nowrap', flexShrink: 0,
-                  backgroundColor: isActive ? filter.color : 'var(--bg-tertiary)',
-                  color: isActive ? '#fff' : 'var(--text-secondary)',
-                  border: isActive ? 'none' : '1px solid var(--border)',
-                }}
-              >
-                {filter.label}
-                {count > 0 && (
-                  <span style={{
-                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                    minWidth: 18, height: 18, borderRadius: 9,
-                    backgroundColor: isActive ? 'rgba(255,255,255,0.2)' : 'var(--accent-light)',
-                    color: isActive ? '#fff' : 'var(--accent)',
-                    fontSize: 10, fontWeight: 800, padding: '0 4px',
-                  }}>
-                    {count}
-                  </span>
-                )}
-              </button>
-            )
-          })}
+        <style>{`
+          .reports-filters-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 20px;
+          }
+          .reports-role-tabs {
+            order: 1;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            overflow-x: auto;
+          }
+          .reports-status-tabs {
+            order: 2;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            overflow-x: auto;
+          }
+          @media (min-width: 768px) {
+            .reports-filters-container {
+              flex-direction: row;
+              align-items: center;
+              justify-content: space-between;
+            }
+            .reports-status-tabs {
+              order: 1;
+            }
+            .reports-role-tabs {
+              order: 2;
+            }
+          }
+        `}</style>
+
+        <div className="reports-filters-container">
+          <div className="reports-status-tabs tabs-scroll">
+            {FILTERS.map(filter => {
+              const isActive = activeFilter === filter.key
+              const count = getFilterCount(filter.key)
+              return (
+                <button
+                  key={filter.key}
+                  onClick={() => handleFilterChange(filter.key)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '8px 16px', borderRadius: 20,
+                    fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                    whiteSpace: 'nowrap', flexShrink: 0,
+                    backgroundColor: isActive ? filter.color : 'var(--bg-tertiary)',
+                    color: isActive ? '#fff' : 'var(--text-secondary)',
+                    border: isActive ? 'none' : '1px solid var(--border)',
+                  }}
+                >
+                  {filter.label}
+                  {count > 0 && (
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      minWidth: 18, height: 18, borderRadius: 9,
+                      backgroundColor: isActive ? 'rgba(255,255,255,0.2)' : 'var(--accent-light)',
+                      color: isActive ? '#fff' : 'var(--accent)',
+                      fontSize: 10, fontWeight: 800, padding: '0 4px',
+                    }}>
+                      {count}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="reports-role-tabs tabs-scroll">
+            {ROLE_FILTERS.map(role => {
+              const isActive = roleFilter === role.key
+              return (
+                <button
+                  key={role.key}
+                  onClick={() => { setRoleFilter(role.key); setPage(1) }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '8px 16px', borderRadius: 20,
+                    fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                    whiteSpace: 'nowrap', flexShrink: 0,
+                    backgroundColor: isActive ? 'var(--accent)' : 'var(--bg-tertiary)',
+                    color: isActive ? '#fff' : 'var(--text-secondary)',
+                    border: isActive ? 'none' : '1px solid var(--border)',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  {role.label}
+                </button>
+              )
+            })}
+          </div>
         </div>
       </div>
 
