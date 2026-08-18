@@ -810,6 +810,25 @@ export default function ListenerHomeScreen() {
             <Text style={styles.earningsLabel}>Total Chats</Text>
             <Text style={styles.earningsCallsValue}>{String(earningsStats ? earningsStats.totalChats : totalChats).padStart(2, '0')} Chats</Text>
           </View>
+
+          {}
+          <View style={styles.cardDivider} />
+          <TouchableOpacity
+            style={styles.payoutCta}
+            activeOpacity={0.7}
+            onPress={() => router.push('/(listener)/payout')}
+          >
+            <View style={styles.payoutCtaLeft}>
+              <View style={styles.payoutCtaIcon}>
+                <Ionicons name="wallet-outline" size={16} color="#C084FC" />
+              </View>
+              <View>
+                <Text style={styles.payoutCtaTitle}>Request Payout</Text>
+                <Text style={styles.payoutCtaSub}>Withdraw your earnings securely</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#6B7280" />
+          </TouchableOpacity>
         </View>
       </ScrollView>
 
@@ -841,10 +860,12 @@ const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: wp(2),
   },
   logoImage: {
-    width: s(100),
-    height: vs(40),
+    width: wp(38),
+    height: hp(5),
+    marginLeft: -wp(6),
   },
   headerRight: {
     flexDirection: 'row',
@@ -1212,6 +1233,40 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_700Bold',
   },
 
+  // Payout CTA
+  payoutCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: vs(6),
+  },
+  payoutCtaLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(10),
+  },
+  payoutCtaIcon: {
+    width: s(32),
+    height: s(32),
+    borderRadius: s(10),
+    backgroundColor: 'rgba(168, 85, 247, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(168, 85, 247, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  payoutCtaTitle: {
+    fontSize: ms(13, 0.3),
+    color: '#E5E7EB',
+    fontFamily: 'Inter_700Bold',
+  },
+  payoutCtaSub: {
+    fontSize: ms(10.5, 0.3),
+    color: '#6B7280',
+    fontFamily: 'Inter_400Regular',
+    marginTop: 1,
+  },
+
   // FAB & Random Styles
   floatingRandomWrapper: {
     position: 'absolute',
@@ -1273,8 +1328,9 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   skeletonLogo: {
-    width: s(100),
-    height: vs(32),
+    width: wp(38),
+    height: hp(5),
+    marginLeft: -wp(6),
     backgroundColor: '#1F1F1F',
     borderRadius: 8,
   },

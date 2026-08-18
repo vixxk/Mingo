@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { IoClose, IoChatbubble, IoTrashOutline, IoBan, IoCheckmarkCircle, IoPersonOutline, IoGlobeOutline, IoWalletOutline, IoCalendarOutline, IoTimeOutline, IoTrashOutline as IoTrash, IoAdd } from 'react-icons/io5'
 import { adminAPI } from '../../utils/api'
 import ToastNotification from '../shared/ToastNotification'
+import BlockedListModal from './BlockedListModal'
 
 const CLOUDFRONT_URL = 'https://d3arutsevouzgm.cloudfront.net';
 const getAvatarUrl = (gender, index) => {
@@ -22,6 +23,7 @@ export default function UserDetailModal({ visible, user, onClose, onDelete, onBa
 
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' })
   const [confirmAction, setConfirmAction] = useState(null)
+  const [showBlockedModal, setShowBlockedModal] = useState(false)
 
   useEffect(() => {
     if (user && user.interests) {
@@ -299,6 +301,16 @@ export default function UserDetailModal({ visible, user, onClose, onDelete, onBa
             </button>
           </div>
 
+          <button onClick={() => setShowBlockedModal(true)}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              padding: '13px 0', borderRadius: 16, border: 'none', cursor: 'pointer', marginTop: 8,
+              backgroundColor: 'rgba(168, 85, 247, 0.12)', color: '#C084FC', fontSize: 14, fontWeight: 700,
+            }}>
+            <IoBan size={18} />
+            View Blocked List
+          </button>
+
           <button onClick={triggerDeleteConfirm}
             style={{
               width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
@@ -434,6 +446,13 @@ export default function UserDetailModal({ visible, user, onClose, onDelete, onBa
         message={toast.message}
         type={toast.type}
         onDismiss={() => setToast(prev => ({ ...prev, visible: false }))}
+      />
+
+      <BlockedListModal
+        visible={showBlockedModal}
+        userId={user.id || user._id}
+        userName={user.name}
+        onClose={() => setShowBlockedModal(false)}
       />
     </>
   )

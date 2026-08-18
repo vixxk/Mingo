@@ -934,7 +934,7 @@ export default function AudioCallScreen() {
               onPress={(e) => { e.stopPropagation?.(); setShowRecharge(true); }}
               activeOpacity={0.8}
             >
-              <Ionicons name="wallet-outline" size={22} color="#10B981" />
+              <Ionicons name="wallet-outline" size={24} color="#10B981" />
               <Text style={[styles.floatingRechargeText, { color: '#10B981' }]}>Recharge</Text>
             </TouchableOpacity>
 
@@ -943,7 +943,7 @@ export default function AudioCallScreen() {
               onPress={(e) => { e.stopPropagation?.(); setShowGiftPopup(true); }}
               activeOpacity={0.8}
             >
-              <Ionicons name="gift-outline" size={22} color="#10B981" />
+              <Ionicons name="gift-outline" size={24} color="#10B981" />
               <Text style={[styles.floatingRechargeText, { color: '#10B981' }]}>Gift</Text>
             </TouchableOpacity>
           </View>
@@ -956,7 +956,7 @@ export default function AudioCallScreen() {
           activeOpacity={0.8}
           accessibilityLabel="Open safety guidance"
         >
-          <Ionicons name="shield-checkmark" size={22} color="#4ADE80" />
+          <Ionicons name="shield-checkmark" size={26} color="#4ADE80" />
         </TouchableOpacity>
       </Animated.View>
 
@@ -978,11 +978,11 @@ export default function AudioCallScreen() {
               },
               {
                 id: 'speaker',
-                icon: 'volume-high',
-                iconActive: 'volume-mute',
+                icon: 'volume-off',
+                iconActive: 'volume-high',
                 label: 'Speaker',
                 active: isSpeaker,
-                activeColor: '#EF4444',
+                activeColor: '#22C55E',
                 onPress: toggleSpeaker,
               },
               {
@@ -1160,13 +1160,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: s(12),
     top: '50%',
-    marginTop: -wp(6.25),
-    width: wp(12.5),
-    height: wp(12.5),
-    borderRadius: wp(6.25),
-    backgroundColor: 'rgba(34, 197, 94, 0.14)',
+    marginTop: -s(27),
+    width: s(54),
+    height: s(54),
+    borderRadius: s(27),
+    backgroundColor: 'rgba(34, 197, 94, 0.18)',
     borderWidth: 1.5,
-    borderColor: 'rgba(34, 197, 94, 0.4)',
+    borderColor: 'rgba(34, 197, 94, 0.5)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 999,
@@ -1185,24 +1185,24 @@ const styles = StyleSheet.create({
     top: hp(8),
     right: s(12),
     alignItems: 'flex-end',
-    gap: vs(8),
+    gap: vs(10),
     zIndex: 999,
   },
   floatingRechargeGift: {
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    borderRadius: 25,
-    paddingHorizontal: s(14),
-    paddingVertical: vs(8),
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    borderRadius: 28,
+    paddingHorizontal: s(16),
+    paddingVertical: vs(10),
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: 'rgba(255,255,255,0.25)',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: s(6),
+    gap: s(8),
     zIndex: 999,
   },
   floatingRechargeText: {
     color: '#fff',
-    fontSize: ms(12, 0.3),
+    fontSize: ms(13.5, 0.3),
     fontFamily: 'Inter_600SemiBold',
   },
 });

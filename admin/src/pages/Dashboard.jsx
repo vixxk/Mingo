@@ -42,6 +42,11 @@ const formatCurrency = (n) => {
   return Math.round(n).toLocaleString() + ' coins'
 }
 
+const formatINR = (n) => {
+  if (!n && n !== 0) return '₹0'
+  return '₹' + Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 })
+}
+
 const getRelativeTime = (dateStr) => {
   if (!dateStr) return ''
   const now = Date.now()
@@ -102,7 +107,7 @@ function AnimatedNumber({ value, format, duration = 1200 }) {
 const modules = [
   { label: 'Sessions', icon: IoCall, path: '/sessions', color: '#A855F7', badgeKey: null },
   { label: 'Approvals', icon: IoShieldCheckmark, path: '/approvals', color: '#7C6FF7', badgeKey: 'pendingApprovals' },
-  { label: 'Payouts', icon: IoCash, path: '/payouts', color: '#8B5CF6', badgeKey: 'pendingPayout' },
+  { label: 'Payouts', icon: IoCash, path: '/payouts', color: '#8B5CF6', badgeKey: 'pendingPayoutsCount' },
   { label: 'Analytics', icon: IoStatsChart, path: '/analytics', color: '#EC4899', badgeKey: null },
   { label: 'Wallet', icon: IoWallet, path: '/wallet', color: '#F59E0B', badgeKey: null },
   { label: 'Campaigns', icon: IoMegaphone, path: '/notifications', color: '#F97316', badgeKey: null },
@@ -256,6 +261,25 @@ export default function Dashboard() {
   const sessionRate = totalUsers ? totalSessions / totalUsers : 0
   const revenuePerUser = totalUsers ? totalRevenue / totalUsers : 0
   const userGrowth = dailyRegistrations.reduce((a, b) => a + b.count, 0)
+
+  // Payout summary — derived from per-status aggregation returned by the backend
+  const payoutSummary = s.payoutSummary || {}
+  const pendingPayout = payoutSummary.pending || { count: 0, amount: 0 }
+  const approvedPayout = payoutSummary.approved || { count: 0, amount: 0 }
+  const onHoldPayout = payoutSummary.on_hold || { count: 0, amount: 0 }
+  const paidPayout = payoutSummary.paid || { count: 0, amount: 0 }
+  const rejectedPayout = payoutSummary.rejected || { count: 0, amount: 0 }
+  const payoutSegments = [
+    { label: 'Pending', count: pendingPayout.count, amount: pendingPayout.amount, color: '#F59E0B' },
+    { label: 'Approved', count: approvedPayout.count, amount: approvedPayout.amount, color: '#3B82F6' },
+    { label: 'On Hold', count: onHoldPayout.count, amount: onHoldPayout.amount, color: '#A78BFA' },
+    { label: 'Paid', count: paidPayout.count, amount: paidPayout.amount, color: '#10B981' },
+    { label: 'Rejected', count: rejectedPayout.count, amount: rejectedPayout.amount, color: '#EF4444' },
+  ]
+  const totalPayoutAmount = payoutSegments.reduce((acc, seg) => acc + seg.amount, 0)
+  const totalPayoutRequests = payoutSegments.reduce((acc, seg) => acc + seg.count, 0)
+  const inReviewAmount = approvedPayout.amount + onHoldPayout.amount
+  const inReviewCount = approvedPayout.count + onHoldPayout.count
 
   const audienceData = [
     { name: 'Listeners', value: totalListeners, color: '#A855F7' },
@@ -711,6 +735,108 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+      {/* Payout Summary */}
+      <div style={sectionStyle(0.28)}>
+        <div className="section-card" style={{
+          backgroundColor: 'var(--bg-secondary)',
+          borderRadius: 'var(--radius-xl)',
+          border: '1px solid var(--border)',
+          padding: 'var(--card-padding)',
+          marginBottom: 'var(--section-gap)',
+          borderTop: '3px solid #F59E0B',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{
+                width: 34, height: 34, borderRadius: 10,
+                background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.3)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}>
+                <IoCash size={17} color="#F59E0B" />
+              </div>
+              <SectionTitle>Payout Summary</SectionTitle>
+            </div>
+            <button
+              onClick={() => navigateTo(navigate, '/payouts')}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 4,
+                padding: '6px 14px', borderRadius: 'var(--radius-sm)',
+                backgroundColor: 'var(--accent-light)', border: '1px solid var(--accent)',
+                cursor: 'pointer', color: 'var(--accent)',
+                fontSize: 11, fontWeight: 600,
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--accent-mid)'}
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = 'var(--accent-light)'}
+            >
+              View All <IoArrowForward size={12} />
+            </button>
+          </div>
+
+          <div className="payout-summary-grid" style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
+            gap: 12,
+          }}>
+            <PayoutStat
+              label="Pending Requests"
+              value={String(pendingPayout.count)}
+              subtext={pendingPayout.count === 1 ? 'request awaiting review' : 'requests awaiting review'}
+              accent="#F59E0B"
+              onClick={() => navigateTo(navigate, '/payouts')}
+            />
+            <PayoutStat
+              label="Pending Amount"
+              value={formatINR(pendingPayout.amount)}
+              subtext="Total ₹ to be processed"
+              accent="#EF4444"
+              onClick={() => navigateTo(navigate, '/payouts')}
+            />
+            <PayoutStat
+              label="In Review Pipeline"
+              value={formatINR(inReviewAmount)}
+              subtext={`${inReviewCount} request${inReviewCount === 1 ? '' : 's'} (approved + on hold)`}
+              accent="#3B82F6"
+              onClick={() => navigateTo(navigate, '/payouts')}
+            />
+          </div>
+
+          {totalPayoutAmount > 0 && (
+            <>
+              <div style={{
+                marginTop: 16,
+                display: 'flex', gap: 3, height: 8,
+                borderRadius: 4, overflow: 'hidden',
+                backgroundColor: 'var(--bg-tertiary)',
+              }}>
+                {payoutSegments.map(seg => seg.count > 0 && seg.amount > 0 && (
+                  <div
+                    key={seg.label}
+                    title={`${seg.label}: ${formatINR(seg.amount)} (${seg.count})`}
+                    style={{ width: `${(seg.amount / totalPayoutAmount) * 100}%`, backgroundColor: seg.color, minWidth: 3 }}
+                  />
+                ))}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 18px', marginTop: 12 }}>
+                {payoutSegments.filter(seg => seg.count > 0).map(seg => (
+                  <div key={seg.label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-muted)' }}>
+                    <span style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: seg.color, flexShrink: 0 }} />
+                    <span style={{ fontWeight: 700, color: 'var(--text-secondary)' }}>{seg.label}</span>
+                    <span>{seg.count} • {formatINR(seg.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {totalPayoutRequests === 0 && (
+            <div style={{ marginTop: 12, padding: '14px 16px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: 12, textAlign: 'center' }}>
+              No payout requests yet. Listeners can request payouts once they add bank details and cross the minimum payout amount.
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Momentum Dashboard section separator */}
       <div style={sectionStyle(0.3)}>
         <div className="section-card" style={{
@@ -944,5 +1070,50 @@ function PulseStat({ label, value, accent, subtext, compact }) {
         </div>
       )}
     </div>
+  )
+}
+
+function PayoutStat({ label, value, subtext, accent, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        gap: 4,
+        padding: '14px 16px',
+        borderRadius: 'var(--radius-md)',
+        backgroundColor: 'var(--bg-tertiary)',
+        border: '1px solid var(--border)',
+        cursor: 'pointer',
+        textAlign: 'left',
+        fontFamily: 'var(--font-body)',
+        transition: 'all 0.2s',
+        minWidth: 0,
+      }}
+      onMouseEnter={e => {
+        e.currentTarget.style.borderColor = accent + '50'
+        e.currentTarget.style.backgroundColor = '#232323'
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.borderColor = 'var(--border)'
+        e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'
+      }}
+    >
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        fontSize: 10, color: 'var(--text-muted)', fontWeight: 700,
+        textTransform: 'uppercase', letterSpacing: '0.7px',
+        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%',
+      }}>
+        <span style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: accent, flexShrink: 0 }} />
+        {label}
+      </div>
+      <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-display)', letterSpacing: '-0.3px', marginTop: 2 }}>
+        {value}
+      </div>
+      {subtext && <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{subtext}</div>}
+    </button>
   )
 }

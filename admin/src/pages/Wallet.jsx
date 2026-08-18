@@ -12,7 +12,7 @@ import { Skeleton } from '../components/admin/Skeleton'
 export default function Wallet() {
   const navigate = useNavigate()
   const [packages, setPackages] = useState([])
-  const [walletSettings, setWalletSettings] = useState({ coinsPerDiamond: '10', diamondsPerUnit: '1', minWithdrawal: '' })
+  const [walletSettings, setWalletSettings] = useState({ coinsPerDiamond: '10', diamondsPerUnit: '1', minWithdrawal: '', tdsRate: '10', creditMin: '3', creditMax: '7' })
   const [earningRates, setEarningRates] = useState({ videoPayoutRate: '', audioPayoutRate: '', chatPayoutRate: '' })
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' })
@@ -50,6 +50,9 @@ export default function Wallet() {
         coinsPerDiamond: String(Math.round(ratio * 10) / 10 || 10),
         diamondsPerUnit: '1',
         minWithdrawal: String(settingsData.minWithdrawalLimit ?? settingsData.minWithdraw ?? ''),
+        tdsRate: String(settingsData.tdsRate ?? 10),
+        creditMin: String(settingsData.payoutCreditDaysMin ?? 3),
+        creditMax: String(settingsData.payoutCreditDaysMax ?? 7),
       })
 
       setEarningRates({
@@ -193,6 +196,21 @@ export default function Wallet() {
       showToast('All wallet settings fields are required', 'error')
       return
     }
+    const tds = Number(walletSettings.tdsRate)
+    if (isNaN(tds) || tds < 0 || tds > 100) {
+      showToast('TDS rate must be between 0 and 100', 'error')
+      return
+    }
+    const creditMin = Number(walletSettings.creditMin)
+    const creditMax = Number(walletSettings.creditMax)
+    if (isNaN(creditMin) || isNaN(creditMax) || creditMin < 1 || creditMax < 1) {
+      showToast('Credit timeline days must be at least 1', 'error')
+      return
+    }
+    if (creditMin > creditMax) {
+      showToast('Minimum credit days cannot be greater than maximum', 'error')
+      return
+    }
     setSaving(true)
     try {
       const coins = Number(walletSettings.coinsPerDiamond)
@@ -201,6 +219,9 @@ export default function Wallet() {
       await adminAPI.updateWalletSettings({
         coinToDiamondRatio: ratio,
         minWithdrawalLimit: Number(walletSettings.minWithdrawal),
+        tdsRate: tds,
+        payoutCreditDaysMin: creditMin,
+        payoutCreditDaysMax: creditMax,
       })
       showToast('Wallet settings saved')
     } catch (e) {
@@ -624,10 +645,10 @@ export default function Wallet() {
             </div>
           </div>
 
-          {/* Min Withdrawal */}
+          {/* Min Payout Request Amount */}
           <div style={{ marginBottom: 20 }}>
             <label style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>
-              Min Withdrawal Amount ({'\u20B9'})
+              Minimum Payout Request Amount ({'\u20B9'})
             </label>
             <input
               value={walletSettings.minWithdrawal}
@@ -640,6 +661,85 @@ export default function Wallet() {
                 outline: 'none', boxSizing: 'border-box',
               }}
             />
+            <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>
+              Listeners must earn at least this amount before they can request a payout. This value is shown to listeners as the minimum payout amount.
+            </div>
+          </div>
+
+          {/* TDS Rate */}
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>
+              TDS Rate (%)
+            </label>
+            <div className="wallet-tds-row" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                value={walletSettings.tdsRate}
+                onChange={e => setWalletSettings({ ...walletSettings, tdsRate: e.target.value })}
+                placeholder="e.g. 10"
+                type="number"
+                min="0"
+                max="100"
+                style={{
+                  flex: 1, backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+                  borderRadius: 10, color: '#fff', padding: '12px 14px', fontSize: 14,
+                  outline: 'none', boxSizing: 'border-box',
+                }}
+              />
+              <span style={{
+                padding: '10px 14px', borderRadius: 10,
+                backgroundColor: 'rgba(239,68,68,0.12)', color: '#FCA5A5',
+                fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
+              }}>
+                deducted from payouts
+              </span>
+            </div>
+            <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>
+              Tax deducted at source on every listener payout (TDS compliance). Listeners see this deduction as a preview before submitting a request.
+            </div>
+          </div>
+
+          {/* Payout Credit Timeline */}
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>
+              Payout Credit Timeline (days)
+            </label>
+            <div className="wallet-timeline-row" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                value={walletSettings.creditMin}
+                onChange={e => setWalletSettings({ ...walletSettings, creditMin: e.target.value })}
+                placeholder="e.g. 3"
+                type="number"
+                min="1"
+                style={{
+                  flex: 1, backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+                  borderRadius: 10, color: '#fff', padding: '12px 14px', fontSize: 14,
+                  outline: 'none', boxSizing: 'border-box',
+                }}
+              />
+              <span style={{ color: 'var(--text-muted)', fontSize: 14, fontWeight: 700 }}>to</span>
+              <input
+                value={walletSettings.creditMax}
+                onChange={e => setWalletSettings({ ...walletSettings, creditMax: e.target.value })}
+                placeholder="e.g. 7"
+                type="number"
+                min="1"
+                style={{
+                  flex: 1, backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+                  borderRadius: 10, color: '#fff', padding: '12px 14px', fontSize: 14,
+                  outline: 'none', boxSizing: 'border-box',
+                }}
+              />
+              <span style={{
+                padding: '10px 14px', borderRadius: 10,
+                backgroundColor: 'var(--accent-light)', color: 'var(--accent)',
+                fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
+              }}>
+                days
+              </span>
+            </div>
+            <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>
+              The credit window shown to listeners ("Amount will be credited within X–Y days"). Use the same value in both fields for a fixed day.
+            </div>
           </div>
           <button
             onClick={handleSaveWalletSettings}

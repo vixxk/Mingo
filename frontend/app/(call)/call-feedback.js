@@ -22,7 +22,8 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { ms, s, vs } from '../../utils/responsive';
 
-import { ratingAPI, walletAPI } from '../../utils/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ratingAPI, walletAPI, userAPI } from '../../utils/api';
 import StatusPopup from '../../components/shared/StatusPopup';
 import CenteredOfferPopup from '../../components/shared/CenteredOfferPopup';
 
@@ -104,10 +105,101 @@ export default function CallFeedbackScreen() {
   });
   const allowNavigationRef = useRef(false);
 
+  const [isFavorite, setIsFavorite] = useState(false);
+  const favBusyRef = useRef(false);
+  const favoriteScale = useRef(new Animated.Value(1)).current;
+
   const tier = getTier(rating);
   const tierInfo = TIERS[tier];
   const tagsAnim = useRef(new Animated.Value(1)).current;
   const prevTierRef = useRef(tier);
+
+  useEffect(() => {
+    if (!listenerId) return;
+
+    let isMounted = true;
+    const checkFavoriteStatus = async () => {
+      try {
+        const userData = await AsyncStorage.getItem('user');
+        if (userData && isMounted) {
+          const user = JSON.parse(userData);
+          const favs = (user.favouriteListeners || []).map((f) => String(f._id || f));
+          if (favs.includes(String(listenerId))) {
+            setIsFavorite(true);
+          }
+        }
+
+        const favRes = await userAPI.getFavourites();
+        if (favRes?.data && isMounted) {
+          const favIds = (favRes.data || []).map((f) => String(f._id || f.userId?._id || f));
+          setIsFavorite(favIds.includes(String(listenerId)));
+        }
+      } catch (err) {
+        console.log('Error checking favourite status:', err);
+      }
+    };
+
+    checkFavoriteStatus();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [listenerId]);
+
+  const handleToggleFavorite = async () => {
+    if (!listenerId || favBusyRef.current) return;
+
+    favBusyRef.current = true;
+
+    Animated.sequence([
+      Animated.spring(favoriteScale, { toValue: 1.3, friction: 3, tension: 200, useNativeDriver: true }),
+      Animated.spring(favoriteScale, { toValue: 1, friction: 3, tension: 200, useNativeDriver: true }),
+    ]).start();
+
+    const previousState = isFavorite;
+    const nextState = !previousState;
+    setIsFavorite(nextState);
+
+    try {
+      const res = await userAPI.toggleFavourite(listenerId);
+
+      const isNowFav = res?.data?.isFavourite;
+      if (typeof isNowFav === 'boolean') {
+        setIsFavorite(isNowFav);
+      }
+
+      try {
+        const userData = await AsyncStorage.getItem('user');
+        if (userData) {
+          const user = JSON.parse(userData);
+          let favs = (user.favouriteListeners || []).map((f) => String(f._id || f));
+          const targetIdStr = String(listenerId);
+          const shouldBeFav = typeof isNowFav === 'boolean' ? isNowFav : nextState;
+
+          if (shouldBeFav) {
+            if (!favs.includes(targetIdStr)) favs.push(listenerId);
+          } else {
+            favs = favs.filter((id) => id !== targetIdStr);
+          }
+          user.favouriteListeners = favs;
+          await AsyncStorage.setItem('user', JSON.stringify(user));
+        }
+      } catch (e) {
+        console.log('Failed to update local user fav cache:', e);
+      }
+    } catch (err) {
+      console.error('Toggle favorite failed:', err);
+      setIsFavorite(previousState);
+      setPopup({
+        visible: true,
+        type: 'error',
+        title: 'Action Failed',
+        message: 'Could not update favorites. Please try again.',
+      });
+    } finally {
+      favBusyRef.current = false;
+    }
+  };
 
   useEffect(() => {
     if (prevTierRef.current !== tier) {
@@ -328,6 +420,26 @@ export default function CallFeedbackScreen() {
           </View>
 
           <TouchableOpacity
+            style={[
+              styles.favoriteBtn,
+              isFavorite && styles.favoriteBtnActive,
+            ]}
+            activeOpacity={0.8}
+            onPress={handleToggleFavorite}
+          >
+            <Animated.View style={{ transform: [{ scale: favoriteScale }], flexDirection: 'row', alignItems: 'center', gap: s(8) }}>
+              <Ionicons
+                name={isFavorite ? 'heart' : 'heart-outline'}
+                size={ms(18, 0.3)}
+                color={isFavorite ? '#EF4444' : '#E5E7EB'}
+              />
+              <Text style={[styles.favoriteText, isFavorite && styles.favoriteTextActive]}>
+                {isFavorite ? 'Added to Favorites' : 'Add to Favorites'}
+              </Text>
+            </Animated.View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
             style={[styles.submitBtn, isSubmitting && { opacity: 0.7 }]}
             activeOpacity={0.85}
             onPress={handleSubmit}
@@ -438,6 +550,31 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     textAlign: 'right',
     marginTop: vs(4),
+  },
+
+  favoriteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+    borderRadius: 20,
+    paddingHorizontal: s(22),
+    paddingVertical: vs(9),
+    marginBottom: vs(16),
+  },
+  favoriteBtnActive: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderColor: 'rgba(239, 68, 68, 0.5)',
+  },
+  favoriteText: {
+    fontSize: ms(13, 0.3),
+    color: '#E5E7EB',
+    fontFamily: 'Inter_600SemiBold',
+  },
+  favoriteTextActive: {
+    color: '#F87171',
   },
 
   submitBtn: {

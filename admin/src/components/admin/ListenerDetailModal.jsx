@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   IoClose, IoChatbubble, IoTrashOutline, IoBan,
   IoCheckmarkCircle, IoAlertCircle, IoPersonOutline,
@@ -6,9 +7,20 @@ import {
   IoTimeOutline, IoStar, IoShieldCheckmark, IoMic,
   IoPlay, IoPause, IoEllipsisVertical, IoDownload,
   IoDocumentText, IoCloudUploadOutline, IoFolderOpenOutline,
+  IoCashOutline, IoArrowForward,
 } from 'react-icons/io5'
 import { adminAPI } from '../../utils/api'
 import ToastNotification from '../shared/ToastNotification'
+import BlockedListModal from './BlockedListModal'
+
+const PAYOUT_STATUS = {
+  pending: { label: 'Pending', color: '#F59E0B', bg: 'rgba(245,158,11,0.12)' },
+  approved: { label: 'Approved', color: '#3B82F6', bg: 'rgba(59,130,246,0.12)' },
+  on_hold: { label: 'On Hold', color: '#A78BFA', bg: 'rgba(139,92,246,0.12)' },
+  paid: { label: 'Paid', color: '#10B981', bg: 'rgba(16,185,129,0.12)' },
+  rejected: { label: 'Rejected', color: '#EF4444', bg: 'rgba(239,68,68,0.12)' },
+  cancelled: { label: 'Cancelled', color: '#6B7280', bg: 'rgba(107,114,128,0.12)' },
+}
 
 const STATUS_MAP = {
   pending: { label: 'Pending', color: '#F59E0B', bg: '#1A150B' },
@@ -56,11 +68,13 @@ function formatDate(dateStr) {
 }
 
 export default function ListenerDetailModal({ visible, listener, onClose, onBan, onDelete, onRefresh }) {
+  const navigate = useNavigate()
   const [isMessaging, setIsMessaging] = useState(false)
   const [messageText, setMessageText] = useState('')
   const [sendingMessage, setSendingMessage] = useState(false)
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' })
   const [confirmAction, setConfirmAction] = useState(null)
+  const [showBlockedModal, setShowBlockedModal] = useState(false)
   const [localListener, setLocalListener] = useState(null)
   const [playing, setPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
@@ -76,6 +90,9 @@ export default function ListenerDetailModal({ visible, listener, onClose, onBan,
   const [docsLoading, setDocsLoading] = useState(false)
   const [uploadingDoc, setUploadingDoc] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(null)
+  const [payouts, setPayouts] = useState([])
+  const [payoutsSummary, setPayoutsSummary] = useState({ count: 0, totalPaid: 0, pending: 0, pendingAmount: 0 })
+  const [payoutsLoading, setPayoutsLoading] = useState(false)
 
   useEffect(() => {
     if (listener) {
@@ -86,8 +103,26 @@ export default function ListenerDetailModal({ visible, listener, onClose, onBan,
       setAudioLoaded(false)
       setPlaybackRate(1)
       setMenuOpen(false)
+      loadPayouts(listener)
     }
   }, [listener])
+
+  const loadPayouts = async (target) => {
+    const listenerId = target?._id || target?.id
+    if (!listenerId) return
+    setPayoutsLoading(true)
+    try {
+      const res = await adminAPI.getListenerPayouts(listenerId)
+      const data = res.data || res || {}
+      setPayouts(Array.isArray(data.payouts) ? data.payouts : [])
+      setPayoutsSummary(data.summary || { count: 0, totalPaid: 0, pending: 0, pendingAmount: 0 })
+    } catch {
+      setPayouts([])
+      setPayoutsSummary({ count: 0, totalPaid: 0, pending: 0, pendingAmount: 0 })
+    } finally {
+      setPayoutsLoading(false)
+    }
+  }
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -458,7 +493,7 @@ export default function ListenerDetailModal({ visible, listener, onClose, onBan,
             {[
               { label: 'Rating', value: l.avgRating != null ? `${l.avgRating.toFixed(1)} ⭐` : '—' },
               { label: 'Sessions', value: l.totalSessions ?? l.sessionCount ?? 0 },
-              { label: 'Earnings', value: l.totalEarnings != null ? `$${l.totalEarnings.toLocaleString()}` : '—' },
+              { label: 'Earnings', value: l.totalEarnings != null ? `₹${l.totalEarnings.toLocaleString('en-IN')}` : '—' },
             ].map((s, i) => (
               <div key={i} style={{
                 flex: 1, textAlign: 'center', backgroundColor: 'var(--bg-tertiary)',
@@ -703,6 +738,126 @@ export default function ListenerDetailModal({ visible, listener, onClose, onBan,
             <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleFileInput} />
           </div>
 
+          {/* Payout History */}
+          <div style={{ width: '100%', marginBottom: 16 }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              marginBottom: 8,
+            }}>
+              <div style={{
+                fontSize: 14, color: 'var(--text-secondary)', fontWeight: 700,
+                display: 'flex', alignItems: 'center', gap: 6,
+              }}>
+                <IoCashOutline size={16} />
+                Payout History
+                {payouts.length > 0 && (
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 10,
+                    color: '#A78BFA', backgroundColor: '#A78BFA1a', border: '1px solid #A78BFA33',
+                  }}>
+                    {payouts.length}
+                  </span>
+                )}
+              </div>
+              {payouts.length > 0 && (
+                <button onClick={() => navigate('/payouts')}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 3,
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--accent)', fontSize: 11.5, fontWeight: 700,
+                  }}>
+                  View All <IoArrowForward size={12} />
+                </button>
+              )}
+            </div>
+
+            {payoutsLoading ? (
+              <div style={{
+                padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13,
+                backgroundColor: 'var(--bg-tertiary)', borderRadius: 14, border: '1px solid var(--border)',
+              }}>
+                Loading payout history...
+              </div>
+            ) : payouts.length === 0 ? (
+              <div style={{
+                padding: '16px 14px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13,
+                backgroundColor: 'var(--bg-tertiary)', borderRadius: 14, border: '1px dashed var(--border)',
+              }}>
+                <IoCashOutline size={24} color="var(--border)" style={{ marginBottom: 6 }} />
+                <div>No payout requests yet.</div>
+                <div style={{ fontSize: 11, marginTop: 4 }}>This listener hasn't requested a payout.</div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {/* Summary chips */}
+                {(payoutsSummary.totalPaid > 0 || payoutsSummary.pending > 0) && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 2 }}>
+                    {payoutsSummary.totalPaid > 0 && (
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                        fontSize: 10.5, fontWeight: 700, padding: '4px 10px', borderRadius: 10,
+                        color: '#10B981', backgroundColor: '#10B9811a', border: '1px solid #10B98133',
+                      }}>
+                        Paid ₹{payoutsSummary.totalPaid.toLocaleString('en-IN')}
+                      </span>
+                    )}
+                    {payoutsSummary.pending > 0 && (
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                        fontSize: 10.5, fontWeight: 700, padding: '4px 10px', borderRadius: 10,
+                        color: '#F59E0B', backgroundColor: '#F59E0B1a', border: '1px solid #F59E0B33',
+                      }}>
+                        Pending ₹{payoutsSummary.pendingAmount.toLocaleString('en-IN')} ({payoutsSummary.pending})
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {payouts.map(p => {
+                  const conf = PAYOUT_STATUS[p.status] || PAYOUT_STATUS.pending
+                  return (
+                    <div key={p._id} style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      backgroundColor: 'var(--bg-tertiary)', borderRadius: 14,
+                      padding: '10px 12px', border: '1px solid var(--border)',
+                    }}>
+                      <div style={{
+                        width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                        backgroundColor: conf.bg, color: conf.color,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <IoCashOutline size={18} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 13.5, fontWeight: 800, color: '#fff' }}>
+                            ₹{p.amount.toLocaleString('en-IN')}
+                          </span>
+                          {p.tdsAmount > 0 && (
+                            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                              net ₹{p.netAmount.toLocaleString('en-IN')}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                          {formatDate(p.createdAt)}
+                          {p.transactionId ? ` · ${p.transactionId}` : ''}
+                        </div>
+                      </div>
+                      <span style={{
+                        flexShrink: 0, fontSize: 10, fontWeight: 700,
+                        padding: '3px 9px', borderRadius: 9,
+                        backgroundColor: conf.bg, color: conf.color,
+                      }}>
+                        {conf.label}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
           {/* Action Buttons */}
           <div style={{ display: 'flex', gap: 12, width: '100%' }}>
             <button onClick={handleToggleBan}
@@ -725,6 +880,16 @@ export default function ListenerDetailModal({ visible, listener, onClose, onBan,
               Message
             </button>
           </div>
+
+          <button onClick={() => setShowBlockedModal(true)}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              padding: '13px 0', borderRadius: 16, border: 'none', cursor: 'pointer', marginTop: 8,
+              backgroundColor: 'rgba(168, 85, 247, 0.12)', color: '#C084FC', fontSize: 14, fontWeight: 700,
+            }}>
+            <IoBan size={18} />
+            View Blocked List
+          </button>
 
           {/* Status-specific & Toggle actions */}
           <div style={{ display: 'flex', gap: 8, width: '100%', marginTop: 8 }}>
@@ -1038,6 +1203,13 @@ export default function ListenerDetailModal({ visible, listener, onClose, onBan,
         message={toast.message}
         type={toast.type}
         onDismiss={() => setToast(prev => ({ ...prev, visible: false }))}
+      />
+
+      <BlockedListModal
+        visible={showBlockedModal}
+        userId={l.userId || l._id || l.id}
+        userName={l.displayName || l.name}
+        onClose={() => setShowBlockedModal(false)}
       />
     </>
   )

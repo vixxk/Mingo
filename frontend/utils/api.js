@@ -444,6 +444,38 @@ export const giftsAPI = {
   },
 };
 
+export const payoutAPI = {
+  getDashboard: async () => {
+    return apiRequest('/listener/payout/dashboard');
+  },
+
+  saveBankDetails: async (data) => {
+    return apiRequest('/listener/payout/bank-details', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  submitRequest: async (amount) => {
+    return apiRequest('/listener/payout/request', {
+      method: 'POST',
+      body: JSON.stringify({ amount }),
+    });
+  },
+
+  getRequests: async (page = 1, limit = 20) => {
+    return apiRequest(`/listener/payout/requests?page=${page}&limit=${limit}`);
+  },
+
+  getNotifications: async (limit = 10) => {
+    return apiRequest(`/listener/payout/notifications?limit=${limit}`);
+  },
+
+  markAllNotificationsRead: async () => {
+    return apiRequest('/listener/payout/notifications/read-all', { method: 'PATCH' });
+  },
+};
+
 export const notificationAPI = {
   getNotifications: async (page = 1, limit = 20) => {
     return apiRequest(`/notifications?page=${page}&limit=${limit}`);

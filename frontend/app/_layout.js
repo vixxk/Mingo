@@ -503,6 +503,9 @@ function RootLayout() {
           } catch (roleErr) {
             router.push('/(listener)');
           }
+        } else if (data?.type === 'payout') {
+          // Payout update notification — open the listener Payout screen
+          router.push('/(listener)/payout');
         } else if (data?.conversationId) {
           // Chat message notification — navigate to the chat screen
           router.push({

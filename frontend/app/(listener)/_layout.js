@@ -200,6 +200,20 @@ export default function ListenerLayout() {
             ),
           }}
         />
+        <Tabs.Screen
+          name="payout"
+          options={{
+            title: 'Payout',
+            href: null,
+            tabBarIcon: ({ color }) => (
+              <Ionicons
+                name="wallet-outline"
+                size={22}
+                color={color}
+              />
+            ),
+          }}
+        />
       </Tabs>
 
     </View>

@@ -8,10 +8,12 @@ const ADMIN_ROLES = ['ADMIN', 'SUPPORT_ADMIN', 'FINANCE_ADMIN', 'MODERATOR_ADMIN
 router.use(authenticate, authorize(...ADMIN_ROLES));
 
 router.get('/stats', AdminController.getStats);
+router.get('/badges', AdminController.getBadgeCounts);
 router.get('/export-data', AdminController.getExportData);
 router.get('/users', AdminController.getUsers);
 router.get('/listeners', AdminController.getListeners);
 router.get('/listeners/:id', AdminController.getListenerDetail);
+router.get('/listeners/:id/payouts', AdminController.getListenerPayouts);
 router.post('/listeners/:id/docs/upload-url', AdminController.getListenerDocUploadUrl);
 router.post('/listeners/:id/docs', AdminController.addListenerDoc);
 router.get('/listeners/:id/docs', AdminController.getListenerDocs);
@@ -21,6 +23,7 @@ router.patch('/listeners/:id/reject', AdminController.rejectListener);
 router.patch('/listeners/:id/best-choice', AdminController.toggleBestChoice);
 router.patch('/listeners/:id/verify', AdminController.toggleVerified);
 router.patch('/users/:id/ban', AdminController.toggleBanUser);
+router.get('/users/:id/blocked', AdminController.getUserBlockedList);
 router.post('/users/:id/message', AdminController.sendAdminMessage);
 router.patch('/users/:id/interests', AdminController.updateUserInterests);
 router.delete('/users/:id', AdminController.deleteUser);
@@ -39,6 +42,7 @@ router.delete('/coin-packages/:id', AdminController.deleteCoinPackage);
 
 // Payouts
 router.get('/payouts', AdminController.getPayouts);
+router.get('/payouts/export', AdminController.getPayoutsExport);
 router.patch('/payouts/:id', AdminController.updatePayoutStatus);
 
 // Settings

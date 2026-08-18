@@ -27,6 +27,7 @@ import ConfirmSwitchRolePopup from '../../components/shared/ConfirmSwitchRolePop
 import { restartApp } from '../../utils/restartApp';
 
 const MENU_ITEMS = [
+  { id: '17', label: 'Payout', icon: 'wallet-outline', route: '/(listener)/payout' },
   { id: '2', label: 'Transactions', icon: 'receipt-outline', route: '/transactions' },
   { id: '3', label: 'Language Settings', icon: 'globe-outline', route: '/language?fromSettings=true' },
   { id: '5', label: 'Help & Support', icon: 'headset-outline', route: '/help-support' },
@@ -34,7 +35,7 @@ const MENU_ITEMS = [
   { id: '8', label: 'Edit Public Profile', icon: 'id-card-outline', route: '/(listener)/edit-public-profile' },
   { id: '13', label: 'Become a User', icon: 'people-outline', action: 'become-user' },
   { id: '14', label: 'Blocked Users', icon: 'ban-outline', route: '/blocked-users' },
-  { id: '6', label: 'Account Settings', icon: 'person-outline', route: '/edit-profile' },
+  { id: '6', label: 'Account Settings', icon: 'person-outline', route: '/edit-profile?from=listener' },
   { id: '16', label: 'Billing Address', icon: 'location-outline', route: '/billing-address' },
   { id: '10', label: 'Privacy Policy', icon: 'shield-checkmark-outline', action: 'privacy' },
   { id: '11', label: 'Terms & Conditions', icon: 'document-text-outline', action: 'terms' },
@@ -294,7 +295,7 @@ export default function ListenerProfileScreen() {
       >
         {}
         <View style={styles.profileCard}>
-          <TouchableOpacity style={styles.editBtn} activeOpacity={0.7} onPress={() => router.push('/edit-profile')}>
+          <TouchableOpacity style={styles.editBtn} activeOpacity={0.7} onPress={() => router.push('/edit-profile?from=listener')}>
             <Ionicons name="pencil-outline" size={18} color="#9CA3AF" />
           </TouchableOpacity>
 

@@ -350,6 +350,7 @@ export default function VideoCallScreen() {
   const [receivedGift, setReceivedGift] = useState(null);
   const [myAvatarUrl, setMyAvatarUrl] = useState('');
   const [isMuted, setIsMuted] = useState(false);
+  const [isSpeaker, setIsSpeaker] = useState(true);
   const [isCameraOff, setIsCameraOff] = useState(false);
   const [currentCoins, setCurrentCoins] = useState(null);
   const [lowBalanceMessage, setLowBalanceMessage] = useState('');
@@ -765,6 +766,12 @@ export default function VideoCallScreen() {
     if (agoraRef.current) agoraRef.current.mute(next);
   }, [isMuted]);
 
+  const toggleSpeaker = useCallback(() => {
+    const next = !isSpeaker;
+    setIsSpeaker(next);
+    if (agoraRef.current) agoraRef.current.setSpeaker(next);
+  }, [isSpeaker]);
+
   const toggleCamera = useCallback(() => {
     setIsCameraOff(prev => {
       const next = !prev;
@@ -910,7 +917,7 @@ export default function VideoCallScreen() {
                 onPress={(e) => { e.stopPropagation?.(); setShowRecharge(true); }}
                 activeOpacity={0.8}
               >
-                <Ionicons name="wallet-outline" size={22} color="#10B981" />
+                <Ionicons name="wallet-outline" size={24} color="#10B981" />
                 <Text style={[styles.floatingRechargeText, { color: '#10B981' }]}>Recharge</Text>
               </TouchableOpacity>
             )}
@@ -921,7 +928,7 @@ export default function VideoCallScreen() {
                 onPress={(e) => { e.stopPropagation?.(); setShowGiftPopup(true); }}
                 activeOpacity={0.8}
               >
-                <Ionicons name="gift-outline" size={22} color="#10B981" />
+                <Ionicons name="gift-outline" size={24} color="#10B981" />
                 <Text style={[styles.floatingRechargeText, { color: '#10B981' }]}>Gift</Text>
               </TouchableOpacity>
             )}
@@ -934,7 +941,7 @@ export default function VideoCallScreen() {
             activeOpacity={0.8}
             accessibilityLabel="Open safety guidance"
           >
-            <Ionicons name="shield-checkmark" size={22} color="#4ADE80" />
+            <Ionicons name="shield-checkmark" size={26} color="#4ADE80" />
           </TouchableOpacity>
         </Animated.View>
 
@@ -958,6 +965,15 @@ export default function VideoCallScreen() {
                   labelActive: 'Unmute',
                   active: isMuted,
                   onPress: toggleMute,
+                },
+                {
+                  id: 'speaker',
+                  icon: 'volume-off',
+                  iconActive: 'volume-high',
+                  label: 'Speaker',
+                  active: isSpeaker,
+                  activeColor: '#22C55E',
+                  onPress: toggleSpeaker,
                 },
                 {
                   id: 'camera',
@@ -1073,7 +1089,7 @@ export default function VideoCallScreen() {
             onPress={(e) => { e.stopPropagation?.(); setShowRecharge(true); }}
             activeOpacity={0.8}
           >
-            <Ionicons name="wallet-outline" size={20} color="#10B981" />
+            <Ionicons name="wallet-outline" size={24} color="#10B981" />
             <Text style={[styles.floatingRechargeText, { color: '#10B981' }]}>Recharge</Text>
           </TouchableOpacity>
 
@@ -1082,7 +1098,7 @@ export default function VideoCallScreen() {
             onPress={(e) => { e.stopPropagation?.(); setShowGiftPopup(true); }}
             activeOpacity={0.8}
           >
-            <Ionicons name="gift-outline" size={20} color="#10B981" />
+            <Ionicons name="gift-outline" size={24} color="#10B981" />
             <Text style={[styles.floatingRechargeText, { color: '#10B981' }]}>Gift</Text>
           </TouchableOpacity>
         </View>
@@ -1138,7 +1154,7 @@ export default function VideoCallScreen() {
           activeOpacity={0.8}
           accessibilityLabel="Open safety guidance"
         >
-          <Ionicons name="shield-checkmark" size={22} color="#4ADE80" />
+          <Ionicons name="shield-checkmark" size={26} color="#4ADE80" />
         </TouchableOpacity>
       </Animated.View>
 
@@ -1156,6 +1172,15 @@ export default function VideoCallScreen() {
                 labelActive: 'Unmute',
                 active: isMuted,
                 onPress: () => setIsMuted(!isMuted),
+              },
+              {
+                id: 'speaker',
+                icon: 'volume-off',
+                iconActive: 'volume-high',
+                label: 'Speaker',
+                active: isSpeaker,
+                activeColor: '#22C55E',
+                onPress: toggleSpeaker,
               },
               {
                 id: 'camera',
@@ -1365,13 +1390,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: s(12),
     top: '50%',
-    marginTop: -wp(6.25),
-    width: wp(12.5),
-    height: wp(12.5),
-    borderRadius: wp(6.25),
-    backgroundColor: 'rgba(34, 197, 94, 0.14)',
+    marginTop: -s(27),
+    width: s(54),
+    height: s(54),
+    borderRadius: s(27),
+    backgroundColor: 'rgba(34, 197, 94, 0.18)',
     borderWidth: 1.5,
-    borderColor: 'rgba(34, 197, 94, 0.4)',
+    borderColor: 'rgba(34, 197, 94, 0.5)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 999,
@@ -1387,19 +1412,19 @@ const styles = StyleSheet.create({
     top: hp(16),
     right: s(12),
     alignItems: 'flex-end',
-    gap: vs(8),
+    gap: vs(10),
     zIndex: 999,
   },
   floatingRechargeGift: {
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    borderRadius: 25,
-    paddingHorizontal: s(14),
-    paddingVertical: vs(8),
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    borderRadius: 28,
+    paddingHorizontal: s(16),
+    paddingVertical: vs(10),
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: 'rgba(255,255,255,0.25)',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: s(6),
+    gap: s(8),
     zIndex: 999,
   },
 
@@ -1409,28 +1434,28 @@ const styles = StyleSheet.create({
     top: SH * 0.08,
     right: s(12),
     alignItems: 'flex-end',
-    gap: vs(8),
+    gap: vs(10),
     zIndex: 999,
   },
   coinsBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: s(10),
-    paddingVertical: vs(4),
-    borderRadius: 16,
-    gap: s(4),
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    paddingHorizontal: s(14),
+    paddingVertical: vs(6),
+    borderRadius: 20,
+    gap: s(6),
     borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.3)',
+    borderColor: 'rgba(245, 158, 11, 0.4)',
   },
   coinsBadgeText: {
     color: '#F59E0B',
-    fontSize: ms(13, 0.3),
+    fontSize: ms(14, 0.3),
     fontFamily: 'Inter_700Bold',
   },
   floatingRechargeText: {
     color: '#fff',
-    fontSize: ms(12, 0.3),
+    fontSize: ms(13.5, 0.3),
     fontFamily: 'Inter_600SemiBold',
   },
 

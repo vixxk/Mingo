@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   IoChevronBack, IoChevronForward, IoSearch, IoWallet, IoCopy, IoCheckmarkCircle,
-  IoCloseCircle, IoHourglass, IoBan,
+  IoCloseCircle, IoHourglass, IoBan, IoEyeOutline, IoDocumentText, IoDownloadOutline,
 } from 'react-icons/io5'
 import { adminAPI } from '../utils/api'
 import ToastNotification from '../components/shared/ToastNotification'
@@ -12,20 +12,25 @@ import { DateRangeFilterBar } from '../components/admin/DateRangeFilter'
 const FILTERS = [
   { key: 'all', label: 'All', color: 'var(--text-muted)' },
   { key: 'pending', label: 'Pending', color: '#F59E0B' },
+  { key: 'approved', label: 'Approved', color: '#3B82F6' },
+  { key: 'on_hold', label: 'On Hold', color: '#A78BFA' },
   { key: 'paid', label: 'Paid', color: '#10B981' },
   { key: 'rejected', label: 'Rejected', color: '#EF4444' },
+  { key: 'cancelled', label: 'Cancelled', color: 'var(--text-muted)' },
 ]
 
 const STATUS_BADGES = {
   pending: { label: 'Pending', bg: 'rgba(245,158,11,0.12)', color: '#F59E0B' },
+  approved: { label: 'Approved', bg: 'rgba(59,130,246,0.12)', color: '#3B82F6' },
   paid: { label: 'Paid', bg: 'rgba(16,185,129,0.12)', color: '#10B981' },
   rejected: { label: 'Rejected', bg: 'rgba(239,68,68,0.12)', color: '#EF4444' },
-  hold: { label: 'On Hold', bg: 'rgba(107,114,128,0.12)', color: 'var(--text-muted)' },
-  cancelled: { label: 'Cancelled', bg: 'rgba(239,68,68,0.08)', color: 'var(--text-muted)' },
+  on_hold: { label: 'On Hold', bg: 'rgba(139,92,246,0.12)', color: '#A78BFA' },
+  cancelled: { label: 'Cancelled', bg: 'rgba(107,114,128,0.12)', color: 'var(--text-muted)' },
 }
 
 const ACTION_COLORS = {
   paid: { bg: '#10B981', label: 'Mark as Paid' },
+  approve: { bg: '#3B82F6', label: 'Approve' },
   reject: { bg: '#EF4444', label: 'Reject' },
   hold: { bg: '#F59E0B', label: 'On Hold' },
   cancel: { bg: 'var(--text-muted)', label: 'Cancel' },
@@ -33,9 +38,42 @@ const ACTION_COLORS = {
 
 const CONFIRM_MESSAGES = {
   paid: 'Are you sure you want to mark this payout as paid?',
+  approve: 'Are you sure you want to approve this payout?',
   reject: 'Are you sure you want to reject this payout?',
   hold: 'Are you sure you want to put this payout on hold?',
   cancel: 'Are you sure you want to cancel this payout?',
+}
+
+const STATUS_LABELS = {
+  pending: 'Pending',
+  approved: 'Approved',
+  on_hold: 'On Hold',
+  paid: 'Paid',
+  rejected: 'Rejected',
+  cancelled: 'Cancelled',
+}
+
+const EXPORT_HEADERS = [
+  'Request ID', 'Listener Name', 'Listener Phone', 'Amount (₹)', 'TDS Rate (%)', 'TDS Amount (₹)', 'Net Amount (₹)',
+  'Credit Timeline (days)', 'Diamonds',
+  'Bank Name', 'Account Number', 'IFSC Code', 'PAN Number', 'Status',
+  'Requested At', 'Processed At', 'Transaction ID', 'Admin Notes',
+]
+
+const getTimelineText = (p) => {
+  const min = Math.max(1, Number(p.creditDaysMin) || 3)
+  const max = Math.max(min, Number(p.creditDaysMax) || 7)
+  return min === max ? `${min} day${min === 1 ? '' : 's'}` : `${min}–${max} days`
+}
+
+const csvEscape = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
+
+const formatCsvDate = (d) => {
+  if (!d) return ''
+  const date = new Date(d)
+  if (isNaN(date.getTime())) return ''
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
 function formatDate(dateStr) {
@@ -70,6 +108,15 @@ export default function Payouts() {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
+  const [revealSensitive, setRevealSensitive] = useState(false)
+  const [exporting, setExporting] = useState(false)
+
+  const maskSensitive = (value, keep = 4) => {
+    if (!value) return '—'
+    const str = String(value)
+    if (str.length <= keep) return '•'.repeat(str.length)
+    return '•'.repeat(Math.max(str.length - keep, 4)) + str.slice(-keep)
+  }
 
   useEffect(() => {
     loadPayouts()
@@ -132,6 +179,67 @@ export default function Payouts() {
     setPage(1)
   }
 
+  const handleExportCSV = async () => {
+    if (exporting) return
+    setExporting(true)
+    try {
+      const params = {}
+      if (activeFilter !== 'all') params.status = activeFilter
+      if (startDate) params.startDate = startDate
+      if (endDate) params.endDate = endDate
+      if (search) params.search = search
+
+      const res = await adminAPI.exportPayouts(params)
+      const rows = res.data?.payouts || []
+      if (!rows.length) {
+        showToast('No payouts found for the current filters', 'error')
+        return
+      }
+
+      const lines = [EXPORT_HEADERS.map(csvEscape).join(',')]
+      rows.forEach(r => {
+        lines.push([
+          r.requestId,
+          r.listenerName,
+          r.listenerPhone,
+          r.amount,
+          r.tdsRate,
+          r.tdsAmount,
+          r.netAmount,
+          r.creditDaysMin && r.creditDaysMax ? `${r.creditDaysMin}-${r.creditDaysMax}` : '3-7',
+          r.diamonds,
+          r.bankName,
+          r.accountNumber,
+          r.ifscCode,
+          r.panNumber,
+          STATUS_LABELS[r.status] || r.status,
+          formatCsvDate(r.createdAt),
+          formatCsvDate(r.processedAt),
+          r.transactionId,
+          r.adminNotes,
+        ].map(csvEscape).join(','))
+      })
+
+      // BOM so Excel opens UTF-8 (₹ symbol) correctly
+      const csv = '\uFEFF' + lines.join('\n')
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `payouts-export-${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      showToast(`Exported ${rows.length} payout request${rows.length === 1 ? '' : 's'}`)
+    } catch (e) {
+      console.error('Export failed:', e)
+      showToast(e.message || 'Failed to export payouts', 'error')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const getFilterCount = (key) => {
     if (key === 'all') return totalPayouts
     return counts[key] ?? 0
@@ -142,6 +250,7 @@ export default function Payouts() {
     setTransactionId(payout.transactionId || '')
     setAdminNotes(payout.adminNotes || '')
     setConfirmAction(null)
+    setRevealSensitive(false)
   }
 
   const handleCloseDetail = () => {
@@ -159,7 +268,7 @@ export default function Payouts() {
     try {
       let status = confirmAction
       if (status === 'cancel') status = 'cancelled'
-      if (status === 'hold') status = 'hold'
+      if (status === 'hold') status = 'on_hold'
 
       const payload = { status }
       if (transactionId && confirmAction === 'paid') {
@@ -206,9 +315,10 @@ export default function Payouts() {
   const getStatusIcon = (status) => {
     switch (status) {
       case 'paid': return <IoCheckmarkCircle size={18} color="#10B981" />
+      case 'approved': return <IoCheckmarkCircle size={18} color="#3B82F6" />
       case 'rejected':
       case 'cancelled': return <IoCloseCircle size={18} color="#EF4444" />
-      case 'hold': return <IoHourglass size={18} color="#F59E0B" />
+      case 'on_hold': return <IoHourglass size={18} color="#F59E0B" />
       default: return <IoWallet size={18} color="#F59E0B" />
     }
   }
@@ -275,28 +385,110 @@ export default function Payouts() {
             <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 2 }}>
               {p.diamonds || 0} diamonds
             </div>
+
+            {(p.tdsAmount > 0 || p.netAmount > 0) && (
+              <div style={{
+                marginTop: 12, padding: '10px 12px', borderRadius: 10,
+                backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>Gross Amount</span>
+                  <span style={{ fontSize: 13, color: '#fff', fontWeight: 700 }}>₹{p.amount?.toLocaleString?.() || p.amount}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>TDS Deduction ({p.tdsRate || 0}%)</span>
+                  <span style={{ fontSize: 13, color: '#F87171', fontWeight: 700 }}>− ₹{p.tdsAmount?.toLocaleString?.() || p.tdsAmount}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 700 }}>Net Amount (credited)</span>
+                  <span style={{ fontSize: 14, color: '#34D399', fontWeight: 800 }}>₹{p.netAmount?.toLocaleString?.() || p.netAmount}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Credit Timeline (SLA) */}
+            <div style={{
+              marginTop: 12, padding: '10px 12px', borderRadius: 10,
+              backgroundColor: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.3)',
+              display: 'flex', alignItems: 'center', gap: 10,
+            }}>
+              <IoHourglass size={16} color="#60A5FA" style={{ flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>Credit Timeline (SLA)</span>
+                  <span style={{ fontSize: 13, color: '#60A5FA', fontWeight: 800, whiteSpace: 'nowrap' }}>
+                    {getTimelineText(p)}
+                  </span>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
+                  Credited within {getTimelineText(p)} of approval
+                </div>
+              </div>
+            </div>
           </div>
 
           <div style={{
             backgroundColor: 'var(--bg-tertiary)', borderRadius: 12, border: '1px solid var(--border)',
             padding: 'var(--card-padding)', marginBottom: 20,
           }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#fff', margin: '0 0 12px' }}>
-              Payment Details
-            </h3>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#fff', margin: 0 }}>
+                Bank Details
+              </h3>
+              <button
+                onClick={() => setRevealSensitive(v => !v)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  padding: '5px 10px', borderRadius: 8,
+                  backgroundColor: revealSensitive ? 'rgba(168,85,247,0.15)' : 'var(--bg-secondary)',
+                  border: '1px solid ' + (revealSensitive ? 'rgba(168,85,247,0.4)' : 'var(--border)'),
+                  color: revealSensitive ? '#C084FC' : 'var(--text-secondary)',
+                  fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                }}
+              >
+                <IoEyeOutline size={14} />
+                {revealSensitive ? 'Hide Details' : 'Show Details'}
+              </button>
+            </div>
+
+            {[['Bank Name', p.bankName], ['Account Number', p.accountNumber], ['IFSC Code', p.bankIfscCode || p.ifscCode]].map(([label, val]) => (
+              <div key={label} style={{ marginBottom: 10 }}>
+                <span style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 3 }}>
+                  {label}
+                </span>
+                <span style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>
+                  {revealSensitive ? (val || '—') : (label === 'Bank Name' ? (val || '—') : maskSensitive(val))}
+                </span>
+              </div>
+            ))}
+
             <div style={{ marginBottom: 10 }}>
               <span style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 3 }}>
-                UPI ID
+                Phone Number
               </span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>{p.upiId || '—'}</span>
-              </div>
+              <span style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>{p.phone || '—'}</span>
             </div>
-            <div>
-              <span style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 3 }}>
-                Bank Account
-              </span>
-              <span style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>{p.bankAccount || '—'}</span>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <span style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 3 }}>
+                  PAN Number (TDS)
+                </span>
+                <span style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>
+                  {revealSensitive ? (p.panNumber || '—') : (p.panNumber ? maskSensitive(p.panNumber, 4) : '—')}
+                </span>
+              </div>
+              {p.panNumber && (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  padding: '3px 8px', borderRadius: 6,
+                  backgroundColor: 'rgba(239,68,68,0.12)', color: '#FCA5A5',
+                  fontSize: 10, fontWeight: 700,
+                }}>
+                  <IoDocumentText size={12} />
+                  For TDS
+                </span>
+              )}
             </div>
           </div>
 
@@ -340,8 +532,10 @@ export default function Payouts() {
                 {Object.entries(ACTION_COLORS).map(([key, config]) => {
                   if (key === 'cancel' && p.status === 'cancelled') return null
                   if (key === 'paid' && p.status === 'paid') return null
-                  if (key === 'reject' && p.status === 'rejected') return null
-                  if (key === 'hold' && p.status === 'hold') return null
+                  if (key === 'approve' && p.status === 'approved') return null
+                  if (key === 'reject' && (p.status === 'rejected' || p.status === 'cancelled')) return null
+                  if (key === 'hold' && p.status === 'on_hold') return null
+                  if (key === 'hold' && (p.status === 'paid' || p.status === 'cancelled')) return null
                   return (
                     <button
                       key={key}
@@ -445,6 +639,26 @@ export default function Payouts() {
               <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--accent)' }}>{totalPayouts}</span>
             </div>
           </div>
+          <button
+            onClick={handleExportCSV}
+            disabled={exporting}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '8px 14px', borderRadius: 10,
+              backgroundColor: exporting ? 'var(--bg-tertiary)' : 'var(--accent-light)',
+              border: '1px solid ' + (exporting ? 'var(--border)' : 'var(--accent)'),
+              color: exporting ? 'var(--text-muted)' : 'var(--accent)',
+              fontSize: 12.5, fontWeight: 700,
+              cursor: exporting ? 'not-allowed' : 'pointer',
+              marginLeft: 'auto', whiteSpace: 'nowrap', flexShrink: 0,
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={e => { if (!exporting) e.currentTarget.style.backgroundColor = 'var(--accent-mid)' }}
+            onMouseLeave={e => { if (!exporting) e.currentTarget.style.backgroundColor = 'var(--accent-light)' }}
+          >
+            <IoDownloadOutline size={16} />
+            {exporting ? 'Exporting...' : 'Export CSV'}
+          </button>
         </div>
 
         {/* Date Period Filter */}
@@ -576,8 +790,12 @@ export default function Payouts() {
                   </div>
                 </div>
               </div>
-              <div style={{ color: 'var(--text-muted)', fontSize: 11, borderTop: '1px solid var(--border)', paddingTop: 8, marginTop: 4 }}>
-                {formatDate(payout.createdAt)}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, color: 'var(--text-muted)', fontSize: 11, borderTop: '1px solid var(--border)', paddingTop: 8, marginTop: 4 }}>
+                <span>{formatDate(payout.createdAt)}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                  <IoHourglass size={11} color="#60A5FA" />
+                  <span style={{ color: '#60A5FA', fontWeight: 700 }}>{getTimelineText(payout)}</span>
+                </span>
               </div>
             </div>
           ))

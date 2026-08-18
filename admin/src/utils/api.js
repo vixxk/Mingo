@@ -117,6 +117,10 @@ export const adminAPI = {
     return apiRequest(`/admin/stats?${query}`)
   },
 
+  getBadgeCounts: async () => {
+    return apiRequest('/admin/badges')
+  },
+
   getExportData: async (params = {}) => {
     const query = new URLSearchParams(params).toString()
     return apiRequest(`/admin/export-data?${query}`)
@@ -154,6 +158,10 @@ export const adminAPI = {
 
   toggleBanUser: async (id) => {
     return apiRequest(`/admin/users/${id}/ban`, { method: 'PATCH' })
+  },
+
+  getUserBlockedList: async (id) => {
+    return apiRequest(`/admin/users/${id}/blocked`)
   },
 
   deleteUser: async (id) => {
@@ -228,6 +236,11 @@ export const adminAPI = {
   getPayouts: async (params = {}) => {
     const query = new URLSearchParams(params).toString()
     return apiRequest(`/admin/payouts?${query}`)
+  },
+
+  exportPayouts: async (params = {}) => {
+    const query = new URLSearchParams(params).toString()
+    return apiRequest(`/admin/payouts/export?${query}`)
   },
 
   updatePayoutStatus: async (id, data) => {
@@ -309,6 +322,10 @@ export const adminAPI = {
   // Listeners
   getListenerDetail: async (id) => {
     return apiRequest(`/admin/listeners/${id}`)
+  },
+
+  getListenerPayouts: async (id) => {
+    return apiRequest(`/admin/listeners/${id}/payouts`)
   },
 
   toggleBanListener: async (id) => {

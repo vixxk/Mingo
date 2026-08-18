@@ -799,6 +799,11 @@
     padding: 12px !important;
   }
 
+  /* Payout summary grid — stack cards on small screens */
+  .payout-summary-grid {
+    grid-template-columns: 1fr !important;
+  }
+
   /* Notifications */
   .notif-history-item {
     padding: var(--card-padding) !important;

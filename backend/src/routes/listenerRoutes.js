@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const ListenerController = require('../controllers/listenerController');
+const PayoutController = require('../controllers/payoutController');
 const { authenticate, authorize } = require('../middlewares/auth');
 
 // Online/Offline management
@@ -17,6 +18,14 @@ router.post('/public-profile/submit', authenticate, authorize('LISTENER'), Liste
 
 // Earnings reconciliation (ledger-backed dashboard stats)
 router.get('/earnings-stats', authenticate, authorize('LISTENER'), ListenerController.getEarningsStats);
+
+// Payouts (earnings withdrawal flow)
+router.get('/payout/dashboard', authenticate, authorize('LISTENER'), PayoutController.getDashboard);
+router.post('/payout/bank-details', authenticate, authorize('LISTENER'), PayoutController.saveBankDetails);
+router.post('/payout/request', authenticate, authorize('LISTENER'), PayoutController.createRequest);
+router.get('/payout/requests', authenticate, authorize('LISTENER'), PayoutController.getRequests);
+router.get('/payout/notifications', authenticate, authorize('LISTENER'), PayoutController.getNotifications);
+router.patch('/payout/notifications/read-all', authenticate, authorize('LISTENER'), PayoutController.markAllNotificationsRead);
 
 // Media upload
 router.post('/upload-media', authenticate, authorize('LISTENER'), ListenerController.getMediaUploadUrls);

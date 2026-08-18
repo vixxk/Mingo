@@ -9,6 +9,9 @@ class UserController {
     try {
       const { name, username, gender, dob, language, avatarIndex, interests, billingAddress } = req.body;
       const { calculateAge } = require('../utils/ageHelper');
+      const currentUser = await User.findById(req.user.id);
+      if (!currentUser) throw new AppError('User not found', 404);
+
       const update = {};
       if (name !== undefined) update.name = name;
       if (gender !== undefined) update.gender = gender;
@@ -18,6 +21,13 @@ class UserController {
       if (billingAddress !== undefined) update.billingAddress = billingAddress;
 
       if (dob !== undefined) {
+        if (currentUser.role === 'LISTENER' && currentUser.dob) {
+          const existingDobStr = new Date(currentUser.dob).toISOString().split('T')[0];
+          const newDobStr = new Date(dob).toISOString().split('T')[0];
+          if (existingDobStr !== newDobStr) {
+            throw new AppError('Date of Birth cannot be changed after registration for listeners', 400);
+          }
+        }
         if (!dob) {
           throw new AppError('Date of Birth is required for 18+ verification', 400);
         }

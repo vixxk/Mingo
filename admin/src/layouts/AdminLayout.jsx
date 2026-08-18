@@ -1,12 +1,12 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext'
 import LogoutPopup from '../components/shared/LogoutPopup'
-import { authAPI } from '../utils/api'
+import { authAPI, adminAPI } from '../utils/api'
 import {
   IoGrid, IoPeople, IoHeadset, IoCall, IoShieldCheckmark,
   IoSettings, IoLogOut, IoMenu, IoChevronForward, IoClose, IoChevronBack, IoImage,
-  IoChatbubble,
+  IoChatbubble, IoCash,
 } from 'react-icons/io5'
 
 const navItems = [
@@ -16,6 +16,7 @@ const navItems = [
   { to: '/sessions', icon: IoCall, label: 'Sessions' },
   { to: '/chat-logs', icon: IoChatbubble, label: 'Chat Logs' },
   { to: '/approvals', icon: IoShieldCheckmark, label: 'Approvals' },
+  { to: '/payouts', icon: IoCash, label: 'Payouts', badgeKey: 'pendingPayouts' },
   { to: '/settings', icon: IoSettings, label: 'Settings' },
   { to: '/ads', icon: IoImage, label: 'Ads' },
 ]
@@ -61,6 +62,27 @@ export default function AdminLayout() {
   })
   const [hoveredItem, setHoveredItem] = useState(null)
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
+  const [badges, setBadges] = useState({ pendingPayouts: 0, pendingApprovals: 0, pendingReports: 0 })
+
+  const fetchBadges = useCallback(async () => {
+    try {
+      const res = await adminAPI.getBadgeCounts()
+      if (res?.data) setBadges(res.data)
+    } catch {
+      // Non-critical — sidebar badges fail silently
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchBadges()
+    const interval = setInterval(fetchBadges, 60000)
+    return () => clearInterval(interval)
+  }, [fetchBadges])
+
+  // Refresh badges whenever the route changes (payout/approval statuses may have changed)
+  useEffect(() => {
+    fetchBadges()
+  }, [location.pathname, fetchBadges])
 
   useEffect(() => {
     const handleResize = () => setIsDesktop(window.innerWidth >= 768)
@@ -390,6 +412,37 @@ export default function AdminLayout() {
                   }}>
                     {item.label}
                   </span>
+                  )}
+
+                  {/* Count badge (e.g. pending payouts) */}
+                  {item.badgeKey && badges[item.badgeKey] > 0 && (
+                    collapsed ? (
+                      <div
+                        title={`${item.label}: ${badges[item.badgeKey]} pending`}
+                        style={{
+                          position: 'absolute',
+                          top: 6, right: 6,
+                          width: 8, height: 8, borderRadius: 4,
+                          backgroundColor: '#EF4444',
+                          boxShadow: '0 0 6px rgba(239, 68, 68, 0.6)',
+                        }}
+                      />
+                    ) : (
+                      <span style={{
+                        position: 'absolute',
+                        right: 10, top: '50%',
+                        transform: 'translateY(-50%)',
+                        minWidth: 20, height: 20, borderRadius: 10,
+                        backgroundColor: '#EF4444',
+                        color: '#fff',
+                        fontSize: 10, fontWeight: 800,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        padding: '0 5px',
+                        boxShadow: '0 0 8px rgba(239, 68, 68, 0.4)',
+                      }}>
+                        {badges[item.badgeKey] > 99 ? '99+' : badges[item.badgeKey]}
+                      </span>
+                    )
                   )}
                 </div>
               </NavLink>

@@ -35,6 +35,22 @@ const systemSettingsSchema = new mongoose.Schema(
       type: Number,
       default: 500,
     },
+    tdsRate: {
+      type: Number,
+      default: 10, // TDS % deducted from listener payouts (PAN/TDS compliance)
+      min: 0,
+      max: 100,
+    },
+    payoutCreditDaysMin: {
+      type: Number,
+      default: 3, // Earliest day a payout can be credited (shown to listeners)
+      min: 1,
+    },
+    payoutCreditDaysMax: {
+      type: Number,
+      default: 7, // Latest day a payout can be credited (shown to listeners)
+      min: 1,
+    },
     audioPayoutRate: {
       type: Number,
       default: 1.00,

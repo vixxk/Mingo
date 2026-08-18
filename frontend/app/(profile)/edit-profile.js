@@ -13,7 +13,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, SCREEN_WIDTH } from '../../utils/responsive';
 import { userAPI, authAPI } from '../../utils/api';
@@ -35,6 +35,8 @@ const INTERESTS = [
 export default function EditProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const [userRole, setUserRole] = useState('USER');
   const [selectedAvatar, setSelectedAvatar] = useState('0');
   const [username, setUsername] = useState('Userid1234');
   const [selectedInterests, setSelectedInterests] = useState([]);
@@ -45,6 +47,8 @@ export default function EditProfileScreen() {
   const monthRef = useRef(null);
   const yearRef = useRef(null);
   const [focusedDobField, setFocusedDobField] = useState(null);
+
+  const isListener = userRole === 'LISTENER' || params?.from === 'listener';
 
   const calculateAge = () => {
     if (!dobDay || !dobMonth || !dobYear) return null;
@@ -65,6 +69,7 @@ export default function EditProfileScreen() {
   const calculatedAge = calculateAge();
 
   const handleDayChange = (text) => {
+    if (isListener) return;
     const cleaned = text.replace(/[^0-9]/g, '');
     if (!cleaned) {
       setDobDay('');
@@ -87,6 +92,7 @@ export default function EditProfileScreen() {
   };
 
   const handleDayBlur = () => {
+    if (isListener) return;
     setFocusedDobField(null);
     if (!dobDay) return;
     let num = parseInt(dobDay, 10);
@@ -102,6 +108,7 @@ export default function EditProfileScreen() {
   };
 
   const handleMonthChange = (text) => {
+    if (isListener) return;
     const cleaned = text.replace(/[^0-9]/g, '');
     if (!cleaned) {
       setDobMonth('');
@@ -124,6 +131,7 @@ export default function EditProfileScreen() {
   };
 
   const handleMonthBlur = () => {
+    if (isListener) return;
     setFocusedDobField(null);
     if (!dobMonth) return;
     let num = parseInt(dobMonth, 10);
@@ -142,6 +150,7 @@ export default function EditProfileScreen() {
   };
 
   const handleYearChange = (text) => {
+    if (isListener) return;
     const cleaned = text.replace(/[^0-9]/g, '');
     if (!cleaned) {
       setDobYear('');
@@ -157,6 +166,7 @@ export default function EditProfileScreen() {
   };
 
   const handleYearBlur = () => {
+    if (isListener) return;
     setFocusedDobField(null);
     if (!dobYear) return;
     const currentYear = new Date().getFullYear();
@@ -203,6 +213,7 @@ export default function EditProfileScreen() {
         const userStr = await AsyncStorage.getItem('user');
         if (userStr) {
           const userObj = JSON.parse(userStr);
+          if (userObj.role) setUserRole(userObj.role);
           if (userObj.gender) {
             const normalizedGender = userObj.gender.charAt(0).toUpperCase() + userObj.gender.slice(1).toLowerCase();
             setGender(normalizedGender);
@@ -226,6 +237,7 @@ export default function EditProfileScreen() {
         const res = await authAPI.me();
         if (res?.data) {
           const userObj = res.data;
+          if (userObj.role) setUserRole(userObj.role);
           
           // Normalize gender, properly falling back to AsyncStorage if backend is missing it
           const localGender = await AsyncStorage.getItem('userGender');
@@ -290,7 +302,7 @@ export default function EditProfileScreen() {
     }
 
     const dobStr = getFormattedDob();
-    if (dobStr) {
+    if (!isListener && dobStr) {
       const birthDate = new Date(dobStr);
       const today = new Date();
       let age = today.getFullYear() - birthDate.getFullYear();
@@ -483,7 +495,7 @@ export default function EditProfileScreen() {
           )}
         </View>
 
-        <View style={styles.dobContainer}>
+        <View style={[styles.dobContainer, isListener && { opacity: 0.6 }]}>
           {/* Day Segment */}
           <View style={styles.dobSegment}>
             <Text style={styles.dobSubLabel}>DAY</Text>
@@ -500,7 +512,8 @@ export default function EditProfileScreen() {
                 keyboardType="number-pad"
                 maxLength={2}
                 value={dobDay}
-                onFocus={() => setFocusedDobField('day')}
+                editable={!isListener}
+                onFocus={() => !isListener && setFocusedDobField('day')}
                 onBlur={handleDayBlur}
                 onChangeText={handleDayChange}
               />
@@ -526,7 +539,8 @@ export default function EditProfileScreen() {
                 keyboardType="number-pad"
                 maxLength={2}
                 value={dobMonth}
-                onFocus={() => setFocusedDobField('month')}
+                editable={!isListener}
+                onFocus={() => !isListener && setFocusedDobField('month')}
                 onBlur={handleMonthBlur}
                 onChangeText={handleMonthChange}
               />
@@ -552,14 +566,17 @@ export default function EditProfileScreen() {
                 keyboardType="number-pad"
                 maxLength={4}
                 value={dobYear}
-                onFocus={() => setFocusedDobField('year')}
+                editable={!isListener}
+                onFocus={() => !isListener && setFocusedDobField('year')}
                 onBlur={handleYearBlur}
                 onChangeText={handleYearChange}
               />
             </View>
           </View>
         </View>
-        <Text style={styles.fieldHint}>Must be 18 years or older to update profile.</Text>
+        <Text style={styles.fieldHint}>
+          {isListener ? 'Date of Birth cannot be changed after registration.' : 'Must be 18 years or older to update profile.'}
+        </Text>
 
         {}
         <Text style={styles.fieldLabel}>Select Your Interests</Text>

@@ -96,6 +96,10 @@ export async function initializeOneSignal(userId, role) {
               socketService.triggerLocalEvent('incoming_call', data);
             }
             router.push('/(listener)');
+          } else if (data?.type === 'payout') {
+            // Payout update (submitted/approved/paid/rejected...) — open the Payout screen
+            console.log('[OneSignal] User tapped payout notification — opening Payout screen');
+            router.push('/(listener)/payout');
           } else if (data?.conversationId) {
             router.push({
               pathname: '/chat',

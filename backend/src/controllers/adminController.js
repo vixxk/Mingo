@@ -96,8 +96,7 @@ class AdminController {
         activeListenersPeriod,
         coinsPurchasedPeriodAgg,
         diamondsGeneratedPeriodAgg,
-        pendingPayoutAgg,
-        pendingPayoutsCount,
+        payoutStatusAgg,
         activeChats,
         pendingUsersCount,
         pendingListenersCount
@@ -125,16 +124,24 @@ class AdminController {
           { $group: { _id: null, total: { $sum: '$listenerEarnings' } } }
         ]),
         PayoutRequest.aggregate([
-          { $match: { status: 'pending' } }, 
-          { $group: { _id: null, total: { $sum: '$amount' } } }
+          { $group: { _id: '$status', total: { $sum: '$amount' }, count: { $sum: 1 } } }
         ]),
-        PayoutRequest.countDocuments({ status: 'pending' }),
         Session.countDocuments({ callType: 'chat' }),
         Listener.countDocuments({ status: 'pending' }),
         Listener.countDocuments({ status: 'approved', profileStatus: 'pending' })
       ]);
 
       const pendingApprovals = pendingUsersCount + pendingListenersCount;
+
+      // Payout summary — amount + count grouped by status
+      const payoutByStatus = {};
+      for (const row of payoutStatusAgg) {
+        payoutByStatus[row._id] = { amount: row.total || 0, count: row.count || 0 };
+      }
+      const statusAmount = (key) => payoutByStatus[key]?.amount || 0;
+      const statusCount = (key) => payoutByStatus[key]?.count || 0;
+      const pendingPayoutAmount = statusAmount('pending');
+      const pendingPayoutsCount = statusCount('pending');
 
       const revenueAgg = await Transaction.aggregate([
         { $match: { type: 'purchase', status: 'completed' } },
@@ -143,7 +150,6 @@ class AdminController {
       const totalRevenue = revenueAgg.length > 0 ? revenueAgg[0].total : 0;
       const coinsPurchasedPeriod = coinsPurchasedPeriodAgg.length > 0 ? coinsPurchasedPeriodAgg[0].total : 0;
       const diamondsGeneratedPeriod = diamondsGeneratedPeriodAgg.length > 0 ? diamondsGeneratedPeriodAgg[0].total : 0;
-      const pendingPayoutAmount = pendingPayoutAgg.length > 0 ? pendingPayoutAgg[0].total : 0;
 
       // Gift-specific stats
       const [
@@ -315,6 +321,14 @@ class AdminController {
         coinsPurchasedPeriod,
         diamondsGeneratedPeriod,
         pendingPayoutAmount,
+        payoutSummary: {
+          pending: { count: statusCount('pending'), amount: statusAmount('pending') },
+          approved: { count: statusCount('approved'), amount: statusAmount('approved') },
+          on_hold: { count: statusCount('on_hold'), amount: statusAmount('on_hold') },
+          paid: { count: statusCount('paid'), amount: statusAmount('paid') },
+          rejected: { count: statusCount('rejected'), amount: statusAmount('rejected') },
+          cancelled: { count: statusCount('cancelled'), amount: statusAmount('cancelled') },
+        },
         activeChats,
         pendingUsers: pendingUsersCount,
         pendingListeners: pendingListenersCount,
@@ -842,6 +856,55 @@ class AdminController {
     }
   }
 
+  /**
+   * GET /admin/listeners/:id/payouts
+   * Payout request history for a listener (resolves the profile id to the
+   * underlying user id used as listenerId on PayoutRequest).
+   */
+  static async getListenerPayouts(req, res, next) {
+    try {
+      const listener = await Listener.findById(req.params.id).select('userId displayName');
+      if (!listener) throw new AppError('Listener not found', 404);
+
+      const PayoutRequest = require('../models/PayoutRequest');
+      const payouts = await PayoutRequest.find({ listenerId: listener.userId })
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .lean();
+
+      const rows = payouts.map((p) => ({
+        _id: p._id,
+        amount: p.amount || 0,
+        tdsRate: p.tdsRate || 0,
+        tdsAmount: p.tdsAmount || 0,
+        netAmount: p.netAmount || 0,
+        status: p.status || 'pending',
+        createdAt: p.createdAt,
+        processedAt: p.processedAt || null,
+        transactionId: p.transactionId || '',
+        adminNotes: p.adminNotes || '',
+      }));
+
+      let totalPaid = 0;
+      let pending = 0;
+      let pendingAmount = 0;
+      for (const r of rows) {
+        if (r.status === 'paid') totalPaid += r.netAmount || r.amount;
+        if (r.status === 'pending') {
+          pending += 1;
+          pendingAmount += r.amount;
+        }
+      }
+
+      return ApiResponse.success(res, {
+        payouts: rows,
+        summary: { count: rows.length, totalPaid, pending, pendingAmount },
+      }, 'Listener payouts retrieved');
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async toggleBestChoice(req, res, next) {
     try {
       const listener = await Listener.findById(req.params.id);
@@ -1142,22 +1205,46 @@ class AdminController {
         .skip((page - 1) * limit)
         .limit(parseInt(limit));
 
+      // Flatten listener info + bank details for the admin UI
+      const enrichedPayouts = payouts.map((p) => {
+        const obj = p.toObject ? p.toObject() : { ...p };
+        return {
+          ...obj,
+          listenerName: p.listenerId?.name || 'Unknown',
+          listenerPhone: p.listenerId?.phone || '',
+          upiId: p.paymentDetails?.upiId || '',
+          bankAccount: p.paymentDetails?.bankAccount || p.accountNumber || '',
+          ifscCode: p.paymentDetails?.ifscCode || p.bankIfscCode || '',
+        };
+      });
+
       const total = await PayoutRequest.countDocuments(filter);
 
       // Status tab counts are scoped to the same period + search filters as the
       // list — not global totals — so the badges stay meaningful.
       const countsFilter = { ...filter };
       delete countsFilter.status;
-      const [pendingCount, paidCount, rejectedCount] = await Promise.all([
+      const [pendingCount, approvedCount, onHoldCount, paidCount, rejectedCount, cancelledCount] = await Promise.all([
         PayoutRequest.countDocuments({ ...countsFilter, status: 'pending' }),
+        PayoutRequest.countDocuments({ ...countsFilter, status: 'approved' }),
+        PayoutRequest.countDocuments({ ...countsFilter, status: 'on_hold' }),
         PayoutRequest.countDocuments({ ...countsFilter, status: 'paid' }),
         PayoutRequest.countDocuments({ ...countsFilter, status: 'rejected' }),
+        PayoutRequest.countDocuments({ ...countsFilter, status: 'cancelled' }),
       ]);
 
       return ApiResponse.success(res, {
-        payouts,
+        payouts: enrichedPayouts,
         total,
-        counts: { pending: pendingCount, paid: paidCount, rejected: rejectedCount },
+        totalPages: Math.ceil(total / parseInt(limit)),
+        counts: {
+          pending: pendingCount,
+          approved: approvedCount,
+          on_hold: onHoldCount,
+          paid: paidCount,
+          rejected: rejectedCount,
+          cancelled: cancelledCount,
+        },
         page: parseInt(page),
         limit: parseInt(limit),
       }, 'Payouts retrieved');
@@ -1176,7 +1263,7 @@ class AdminController {
       payout.status = status;
       if (adminNotes) payout.adminNotes = adminNotes;
       if (transactionId) payout.transactionId = transactionId;
-      if (status === 'paid' || status === 'approved' || status === 'rejected') {
+      if (status === 'paid' || status === 'approved' || status === 'rejected' || status === 'cancelled') {
         payout.processedAt = new Date();
       }
 
@@ -1187,10 +1274,153 @@ class AdminController {
         action: `Updated payout status to ${status} for request ${payout._id}`,
         type: 'admin',
         icon: 'cash',
-        color: status === 'paid' ? '#10B981' : '#F59E0B',
+        color: status === 'paid' ? '#10B981' : status === 'rejected' ? '#EF4444' : '#F59E0B',
       });
 
+      // Notify the listener about the payout status change
+      try {
+        const Notification = require('../models/Notification');
+        const PushService = require('../services/pushService');
+        const SystemSettings = require('../models/SystemSettings');
+        const settings = await SystemSettings.getSettings();
+        const creditMin = Math.max(1, settings.payoutCreditDaysMin ?? 3);
+        const creditMax = Math.max(creditMin, settings.payoutCreditDaysMax ?? 7);
+        const timelineText = creditMin === creditMax ? `within ${creditMin} days` : `within ${creditMin}–${creditMax} days`;
+        let title, body;
+        const grossStr = `₹${payout.amount}`;
+        const netStr = payout.netAmount != null && payout.netAmount > 0 ? `₹${payout.netAmount}` : grossStr;
+        const tdsNote = payout.tdsAmount > 0 ? ` (after ${payout.tdsRate || 0}% TDS)` : '';
+
+        switch (status) {
+          case 'paid':
+            title = 'Payout Credited 🎉';
+            body = `Your payout of ${netStr}${tdsNote} has been credited. Thanks for being part of Mingo!`;
+            break;
+          case 'approved':
+            title = 'Payout Approved ✅';
+            body = `Your payout request of ${grossStr} has been approved. ${netStr}${tdsNote} will be credited ${timelineText}.`;
+            break;
+          case 'rejected':
+            title = 'Payout Rejected ⚠️';
+            body = `Your payout request of ${grossStr} was not approved${adminNotes ? `: ${adminNotes}` : '. Please contact support for more details.'}`;
+            break;
+          case 'cancelled':
+            title = 'Payout Cancelled';
+            body = `Your payout request of ${grossStr} was cancelled. The amount is available again for withdrawal.`;
+            break;
+          case 'on_hold':
+            title = 'Payout On Hold ⏳';
+            body = `Your payout request of ${grossStr} is on hold${adminNotes ? `: ${adminNotes}` : '. Our team is reviewing it.'}`;
+            break;
+          default:
+            title = null;
+        }
+
+        if (title) {
+          await Notification.create({
+            recipient: payout.listenerId,
+            title,
+            body,
+            type: 'payment',
+            data: { type: 'payout', payoutId: payout._id, status, amount: payout.amount },
+          });
+          await PushService.sendPushNotification(payout.listenerId.toString(), {
+            title,
+            body,
+            data: { type: 'payout', payoutId: payout._id.toString(), status, amount: payout.amount, url: '/(listener)/payout' },
+          });
+        }
+      } catch (notifErr) {
+        console.error('Failed to send payout status notification:', notifErr.message);
+      }
+
       return ApiResponse.success(res, payout, 'Payout status updated');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * GET /admin/payouts/export
+   * Returns all payout requests (respecting the same filters as the Payouts
+   * list) flattened into reconciliation-friendly rows for CSV export.
+   */
+  static async getPayoutsExport(req, res, next) {
+    try {
+      const PayoutRequest = require('../models/PayoutRequest');
+      const { status, search, startDate, endDate } = req.query;
+      const filter = {};
+      if (status && status !== 'all') filter.status = status;
+
+      // Period filter — day-precision; endDate covers the whole day.
+      if (startDate || endDate) {
+        filter.createdAt = {};
+        if (startDate) filter.createdAt.$gte = new Date(startDate);
+        if (endDate) filter.createdAt.$lte = new Date(endDate + 'T23:59:59.999');
+      }
+
+      // Search — scope to the listener's name / phone (mirrors getPayouts).
+      if (search) {
+        const matchingUsers = await User.find({
+          $or: [
+            { name: { $regex: search, $options: 'i' } },
+            { username: { $regex: search, $options: 'i' } },
+            { phone: { $regex: search, $options: 'i' } },
+          ],
+        }).select('_id');
+        filter.listenerId = { $in: matchingUsers.map((u) => u._id) };
+      }
+
+      const payouts = await PayoutRequest.find(filter)
+        .populate('listenerId', 'name username phone')
+        .sort({ createdAt: -1 })
+        .limit(5000);
+
+      const rows = payouts.map((p) => ({
+        requestId: p._id.toString(),
+        listenerName: p.listenerId?.name || 'Unknown',
+        listenerPhone: p.listenerId?.phone || '',
+        amount: p.amount || 0,
+        tdsRate: p.tdsRate || 0,
+        tdsAmount: p.tdsAmount || 0,
+        netAmount: p.netAmount || 0,
+        creditDaysMin: p.creditDaysMin || 3,
+        creditDaysMax: p.creditDaysMax || 7,
+        diamonds: p.diamonds || 0,
+        bankName: p.bankName || '',
+        accountNumber: p.accountNumber || p.paymentDetails?.bankAccount || '',
+        ifscCode: p.bankIfscCode || p.paymentDetails?.ifscCode || '',
+        phone: p.phone || '',
+        panNumber: p.panNumber || '',
+        status: p.status || '',
+        createdAt: p.createdAt,
+        processedAt: p.processedAt || null,
+        transactionId: p.transactionId || '',
+        adminNotes: p.adminNotes || '',
+      }));
+
+      return ApiResponse.success(res, { payouts: rows, total: rows.length }, 'Payouts export data retrieved');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * GET /admin/badges
+   * Lightweight counts for sidebar/nav badges (pending payouts, approvals,
+   * reports). Kept intentionally cheap — simple countDocuments only.
+   */
+  static async getBadgeCounts(req, res, next) {
+    try {
+      const PayoutRequest = require('../models/PayoutRequest');
+      const Listener = require('../models/listenerModel');
+      const MemberReport = require('../models/MemberReport');
+      const [pendingPayouts, pendingApprovals, pendingReports] = await Promise.all([
+        PayoutRequest.countDocuments({ status: 'pending' }),
+        Listener.countDocuments({ status: 'approved', profileStatus: 'pending' }),
+        MemberReport.countDocuments({ status: 'pending' }),
+      ]);
+      return ApiResponse.success(res, { pendingPayouts, pendingApprovals, pendingReports }, 'Badge counts retrieved');
     } catch (err) {
       next(err);
     }
@@ -1212,8 +1442,32 @@ class AdminController {
       const SystemSettings = require('../models/SystemSettings');
       const settings = await SystemSettings.getSettings();
 
-      const numericFields = ['coinToDiamondRatio', 'diamondToInrRatio', 'commissionPercentage', 'minWithdrawalLimit', 'audioPayoutRate', 'videoPayoutRate', 'chatPayoutRate', 'activePackagesCount'];
+      const numericFields = ['coinToDiamondRatio', 'diamondToInrRatio', 'commissionPercentage', 'minWithdrawalLimit', 'tdsRate', 'payoutCreditDaysMin', 'payoutCreditDaysMax', 'audioPayoutRate', 'videoPayoutRate', 'chatPayoutRate', 'activePackagesCount'];
       const booleanFields = ['maintenanceMode'];
+
+      // TDS rate must stay within 0–100%
+      if (req.body.tdsRate !== undefined) {
+        const val = Number(req.body.tdsRate);
+        if (isNaN(val) || val < 0 || val > 100) {
+          throw new AppError('tdsRate must be between 0 and 100', 400);
+        }
+      }
+
+      // Payout credit timeline: both bounds >= 1 and min <= max
+      if (req.body.payoutCreditDaysMin !== undefined || req.body.payoutCreditDaysMax !== undefined) {
+        const min = req.body.payoutCreditDaysMin !== undefined
+          ? Number(req.body.payoutCreditDaysMin)
+          : (settings.payoutCreditDaysMin ?? 3);
+        const max = req.body.payoutCreditDaysMax !== undefined
+          ? Number(req.body.payoutCreditDaysMax)
+          : (settings.payoutCreditDaysMax ?? 7);
+        if (isNaN(min) || isNaN(max) || min < 1 || max < 1) {
+          throw new AppError('Payout credit days must be at least 1', 400);
+        }
+        if (min > max) {
+          throw new AppError('Minimum credit days cannot be greater than maximum credit days', 400);
+        }
+      }
 
       let hasChanges = false;
 
@@ -2257,6 +2511,36 @@ class AdminController {
       next(err);
     }
   }
- }
 
- module.exports = AdminController;
+  /**
+   * GET /admin/users/:id/blocked
+   * Returns list of accounts/users blocked by a specific user or listener.
+   */
+  static async getUserBlockedList(req, res, next) {
+    try {
+      const { id } = req.params;
+      let user = await User.findById(id).populate({
+        path: 'blockedUsers',
+        select: 'name username phone gender avatarIndex role isBanned createdAt',
+      });
+
+      if (!user) {
+        const listener = await Listener.findById(id);
+        if (listener && listener.userId) {
+          user = await User.findById(listener.userId).populate({
+            path: 'blockedUsers',
+            select: 'name username phone gender avatarIndex role isBanned createdAt',
+          });
+        }
+      }
+
+      if (!user) throw new AppError('User/Listener not found', 404);
+
+      return ApiResponse.success(res, user.blockedUsers || [], 'Blocked accounts retrieved');
+    } catch (err) {
+      next(err);
+    }
+  }
+}
+
+module.exports = AdminController;
