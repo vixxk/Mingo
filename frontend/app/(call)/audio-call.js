@@ -346,7 +346,7 @@ function AudioCallScreenComponent() {
   const [permissionsResolved, setPermissionsResolved] = useState(false);
   const [isListener, setIsListener] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
-  const [remoteJoined, setRemoteJoined] = useState(false);
+  const [remoteJoined, setRemoteJoined] = useState(true);
   const [myAvatarUrl, setMyAvatarUrl] = useState('');
   const [callCancelledMessage, setCallCancelledMessage] = useState(
     'The call was cancelled by the user.'
@@ -357,7 +357,7 @@ function AudioCallScreenComponent() {
   const agoraRef = useRef(null);
   const callEndedRef = useRef(false);
   const cancelledExitTimerRef = useRef(null);
-  const remoteJoinedRef = useRef(false);
+  const remoteJoinedRef = useRef(true);
   const upgradeNavigatedRef = useRef(false);
   const isListenerRef = useRef(false);
 
@@ -1069,11 +1069,11 @@ function AudioCallScreenComponent() {
             <View
               style={[
                 styles.statusDot,
-                { backgroundColor: (remoteJoined || canUseZego) ? '#22C55E' : '#F59E0B' },
+                { backgroundColor: '#22C55E' },
               ]}
             />
             <Text style={styles.statusText}>
-              {(remoteJoined || canUseZego) ? 'Audio Call in Progress' : 'Connecting...'}
+              Audio Call in Progress
             </Text>
           </View>
         </View>

@@ -280,6 +280,24 @@ const AgoraVideoView = forwardRef(
               // old Zego config so "no audio" is never mistaken for a failure.
               try { engine.setEnableSpeakerphone(true); } catch (e) {}
               ensureLocalPreview();
+
+              // Camera off and back on toggle for clean hardware self view initialization
+              setTimeout(() => {
+                if (!active || !engineRef.current) return;
+                try {
+                  engineRef.current.stopPreview();
+                  engineRef.current.enableLocalVideo(false);
+                } catch (e) {}
+                setTimeout(() => {
+                  if (!active || !engineRef.current) return;
+                  try {
+                    engineRef.current.enableLocalVideo(true);
+                    engineRef.current.startPreview();
+                    engineRef.current.muteLocalVideoStream(false);
+                  } catch (e) {}
+                }, 150);
+              }, 200);
+
               if (onJoinSuccessRef.current) onJoinSuccessRef.current();
             },
             onUserJoined: (connection, uid) => {
@@ -462,7 +480,7 @@ function VideoCallScreenComponent() {
   const [cameraError, setCameraError] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [remoteVideoActive, setRemoteVideoActive] = useState(false);
-  const [remoteJoined, setRemoteJoined] = useState(false);
+  const [remoteJoined, setRemoteJoined] = useState(true);
   const [callCancelledMessage, setCallCancelledMessage] = useState(
     'The call was cancelled by the user.'
   );
@@ -473,7 +491,7 @@ function VideoCallScreenComponent() {
   const agoraRef = useRef(null);
   const callEndedRef = useRef(false);
   const cancelledExitTimerRef = useRef(null);
-  const remoteJoinedRef = useRef(false);
+  const remoteJoinedRef = useRef(true);
   // Agora credentials — the backend mints a session-scoped token for video
   // calls (agoraAppId + agoraToken). Falls back to the bundled App ID only
   // when the server did not attach one.
@@ -944,15 +962,11 @@ function VideoCallScreenComponent() {
             <View
               style={[
                 styles.statusDot,
-                { backgroundColor: remoteJoined ? '#22C55E' : '#F59E0B' },
+                { backgroundColor: '#22C55E' },
               ]}
             />
             <Text style={styles.statusText}>
-              {!remoteJoined
-                ? 'Connecting...'
-                : remoteVideoActive
-                  ? 'Video Call in Progress'
-                  : 'Call in Progress'}
+              {remoteVideoActive ? 'Video Call in Progress' : 'Call in Progress'}
             </Text>
           </View>
         </Animated.View>
