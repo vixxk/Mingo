@@ -17,6 +17,7 @@ import ProfileApprovals from './pages/ProfileApprovals'
 import BannedMembers from './pages/BannedMembers'
 import BestChoice from './pages/BestChoice'
 import MemberReports from './pages/MemberReports'
+import Transactions from './pages/Transactions'
 import Exports from './pages/Exports'
 import Activities from './pages/Activities'
 import Ads from './pages/Ads'
@@ -64,6 +65,7 @@ export default function App() {
             <Route path="sessions" element={<Sessions />} />
             <Route path="chat-logs" element={<ChatLogs />} />
             <Route path="chat-logs/:id" element={<ChatLogDetail />} />
+            <Route path="transactions" element={<Transactions />} />
             <Route path="wallet" element={<Wallet />} />
             <Route path="payouts" element={<Payouts />} />
             <Route path="analytics" element={<Analytics />} />

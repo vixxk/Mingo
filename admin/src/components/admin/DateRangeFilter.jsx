@@ -106,9 +106,9 @@ export function CalendarDatePicker({ value, onChange, placeholder }) {
         onClick={() => setIsOpen(!isOpen)}
         style={{
           backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-sm)', padding: '6px 10px', color: '#fff',
-          fontSize: 12, outline: 'none', fontFamily: 'var(--font-body)',
-          cursor: 'pointer', width: 140,
+          borderRadius: 'var(--radius-sm)', padding: '6px 8px', color: '#fff',
+          fontSize: 11.5, outline: 'none', fontFamily: 'var(--font-body)',
+          cursor: 'pointer', width: '100%', maxWidth: 115, minWidth: 92,
         }}
       />
       {isOpen && (
@@ -184,8 +184,8 @@ export function DateRangeFilterBar({ startDate, endDate, onStartChange, onEndCha
       flexWrap: 'wrap',
     }}>
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 6,
-      }}>
+        display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', maxWidth: '100%', paddingBottom: 2
+      }} className="tabs-scroll">
         <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>
           Period:
         </span>
@@ -195,32 +195,34 @@ export function DateRangeFilterBar({ startDate, endDate, onStartChange, onEndCha
         <button onClick={() => onPreset(90)} style={presetBtnStyle(false)}>Last 90d</button>
         <button onClick={() => onPreset('all')} style={presetBtnStyle(!startDate && !endDate)}>All Time</button>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+
+      {/* Custom dates and clear button in ONE row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', maxWidth: '100%' }}>
         <CalendarDatePicker
           value={startDate}
           onChange={onStartChange}
           placeholder="Start date"
         />
-        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>to</span>
+        <span style={{ fontSize: 11.5, color: 'var(--text-muted)', flexShrink: 0 }}>to</span>
         <CalendarDatePicker
           value={endDate}
           onChange={onEndChange}
           placeholder="End date"
         />
+        {showClear && (
+          <button
+            onClick={onClear}
+            style={{
+              padding: '6px 10px', borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border)', backgroundColor: 'var(--bg-tertiary)',
+              color: 'var(--text-muted)', fontSize: 11.5, fontWeight: 600,
+              cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+            }}
+          >
+            Clear Filters
+          </button>
+        )}
       </div>
-      {showClear && (
-        <button
-          onClick={onClear}
-          style={{
-            padding: '6px 12px', borderRadius: 'var(--radius-sm)',
-            border: '1px solid var(--border)', backgroundColor: 'var(--bg-tertiary)',
-            color: 'var(--text-muted)', fontSize: 12, fontWeight: 600,
-            cursor: 'pointer', whiteSpace: 'nowrap',
-          }}
-        >
-          Clear Filters
-        </button>
-      )}
     </div>
   )
 }

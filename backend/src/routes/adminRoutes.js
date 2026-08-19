@@ -33,6 +33,7 @@ router.patch('/reports/:id', AdminController.updateReport);
 router.get('/banned', AdminController.getBannedMembers);
 
 // Wallet & Coins
+router.get('/transactions', AdminController.getTransactions);
 router.get('/coin-packages', AdminController.getCoinPackages);
 router.put('/coin-packages', AdminController.updateCoinPackages);
 router.post('/coin-packages', AdminController.addCoinPackage);

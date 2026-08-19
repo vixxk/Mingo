@@ -6,7 +6,7 @@ import { authAPI, adminAPI } from '../utils/api'
 import {
   IoGrid, IoPeople, IoHeadset, IoCall, IoShieldCheckmark,
   IoSettings, IoLogOut, IoMenu, IoChevronForward, IoClose, IoChevronBack, IoImage,
-  IoChatbubble, IoCash, IoFlag, IoDownload,
+  IoChatbubble, IoCash, IoFlag, IoDownload, IoReceipt,
 } from 'react-icons/io5'
 
 const navItems = [
@@ -15,6 +15,7 @@ const navItems = [
   { to: '/listeners', icon: IoHeadset, label: 'Listeners' },
   { to: '/sessions', icon: IoCall, label: 'Sessions' },
   { to: '/chat-logs', icon: IoChatbubble, label: 'Chat Logs' },
+  { to: '/transactions', icon: IoReceipt, label: 'Transactions' },
   { to: '/approvals', icon: IoShieldCheckmark, label: 'Approvals' },
   { to: '/reports', icon: IoFlag, label: 'Reports', badgeKey: 'pendingReports' },
   { to: '/payouts', icon: IoCash, label: 'Payouts', badgeKey: 'pendingPayouts' },
@@ -331,8 +332,20 @@ export default function AdminLayout() {
                 style={{ display: 'block', textDecoration: 'none' }}
               >
                 <div
-                  onMouseEnter={(e) => handleMouseEnterNavItem(item.label, e)}
-                  onMouseLeave={handleMouseLeaveNavItem}
+                  onMouseEnter={(e) => {
+                    handleMouseEnterNavItem(item.label, e)
+                    if (!active) {
+                      e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'
+                      e.currentTarget.style.color = 'var(--text-secondary)'
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    handleMouseLeaveNavItem()
+                    if (!active) {
+                      e.currentTarget.style.backgroundColor = 'transparent'
+                      e.currentTarget.style.color = 'var(--text-muted)'
+                    }
+                  }}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -353,18 +366,6 @@ export default function AdminLayout() {
                     position: 'relative',
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
-                  }}
-                  onMouseEnter={e => {
-                    if (!active) {
-                      e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'
-                      e.currentTarget.style.color = 'var(--text-secondary)'
-                    }
-                  }}
-                  onMouseLeave={e => {
-                    if (!active) {
-                      e.currentTarget.style.backgroundColor = 'transparent'
-                      e.currentTarget.style.color = 'var(--text-muted)'
-                    }
                   }}
                 >
                   {/* Active indicator bar (collapsed) */}

@@ -121,6 +121,11 @@ export const adminAPI = {
     return apiRequest('/admin/badges')
   },
 
+  getTransactions: async (params = {}) => {
+    const query = new URLSearchParams(params).toString()
+    return apiRequest(`/admin/transactions?${query}`)
+  },
+
   getExportData: async (params = {}) => {
     const query = new URLSearchParams(params).toString()
     return apiRequest(`/admin/export-data?${query}`)

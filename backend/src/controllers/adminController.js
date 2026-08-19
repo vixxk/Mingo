@@ -2554,6 +2554,126 @@ class AdminController {
       next(err);
     }
   }
+
+  /**
+   * GET /admin/transactions
+   * Retrieves transaction logs (coin purchases, call debits/credits, gift sends, refunds, bonus)
+   */
+  static async getTransactions(req, res, next) {
+    try {
+      const { type, status, search, startDate, endDate, page = 1, limit = 50 } = req.query;
+      const filter = {};
+
+      if (type && type !== 'all') {
+        if (type === 'coins_bought' || type === 'purchase') {
+          filter.type = 'purchase';
+        } else if (type === 'coins_spent') {
+          filter.type = { $in: ['call_debit', 'chat_debit', 'gift_send'] };
+        } else {
+          filter.type = type;
+        }
+      }
+
+      if (status && status !== 'all') {
+        filter.status = status;
+      }
+
+      if (startDate || endDate) {
+        filter.createdAt = {};
+        if (startDate) filter.createdAt.$gte = new Date(startDate);
+        if (endDate) filter.createdAt.$lte = new Date(endDate + 'T23:59:59.999');
+      }
+
+      if (search) {
+        const matchingUsers = await User.find({
+          $or: [
+            { name: { $regex: search, $options: 'i' } },
+            { username: { $regex: search, $options: 'i' } },
+            { phone: { $regex: search, $options: 'i' } },
+            { email: { $regex: search, $options: 'i' } },
+          ],
+        }).select('_id');
+        const userIds = matchingUsers.map(u => u._id);
+
+        filter.$or = [
+          { userId: { $in: userIds } },
+          { description: { $regex: search, $options: 'i' } }
+        ];
+      }
+
+      const transactions = await Transaction.find(filter)
+        .populate('userId', 'name username phone email role avatarIndex')
+        .sort({ createdAt: -1 })
+        .skip((Math.max(parseInt(page), 1) - 1) * parseInt(limit))
+        .limit(parseInt(limit));
+
+      const total = await Transaction.countDocuments(filter);
+
+      // Compute stats for overview cards
+      const statsAgg = await Transaction.aggregate([
+        { $match: startDate || endDate ? { createdAt: filter.createdAt } : {} },
+        {
+          $group: {
+            _id: '$type',
+            totalCoins: { $sum: '$coins' },
+            totalAmount: { $sum: '$amount' },
+            count: { $sum: 1 },
+          }
+        }
+      ]);
+
+      let totalCoinsBought = 0;
+      let totalCoinsSpent = 0;
+      let totalRevenue = 0;
+      let totalCount = 0;
+
+      const counts = { all: total, purchase: 0, call_debit: 0, chat_debit: 0, gift_send: 0, signup_bonus: 0, refund: 0 };
+
+      statsAgg.forEach(row => {
+        totalCount += row.count;
+        if (counts[row._id] !== undefined) {
+          counts[row._id] = row.count;
+        }
+        if (row._id === 'purchase') {
+          totalCoinsBought += row.totalCoins || 0;
+          totalRevenue += row.totalAmount || 0;
+        } else if (['call_debit', 'chat_debit', 'gift_send'].includes(row._id)) {
+          totalCoinsSpent += Math.abs(row.totalCoins || 0);
+        }
+      });
+
+      return ApiResponse.success(res, {
+        transactions: transactions.map(t => ({
+          id: t._id,
+          userId: t.userId?._id,
+          userName: t.userId?.name || 'Unknown',
+          userPhone: t.userId?.phone || '',
+          userEmail: t.userId?.email || '',
+          userRole: t.userId?.role || 'USER',
+          avatarIndex: t.userId?.avatarIndex || 0,
+          type: t.type,
+          amount: t.amount,
+          coins: t.coins,
+          description: t.description,
+          status: t.status,
+          metadata: t.metadata,
+          createdAt: t.createdAt,
+        })),
+        total,
+        counts,
+        stats: {
+          totalCoinsBought,
+          totalCoinsSpent,
+          totalRevenue,
+          totalCount,
+        },
+        page: parseInt(page),
+        limit: parseInt(limit),
+      }, 'Transactions retrieved');
+    } catch (err) {
+      next(err);
+    }
+  }
 }
 
 module.exports = AdminController;
