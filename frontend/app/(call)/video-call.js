@@ -23,22 +23,18 @@ import { ms, s, vs, SCREEN_WIDTH, hp, wp } from '../../utils/responsive';
 import { getAvatarUrl } from '../../utils/avatars';
 
 const { height: SH } = Dimensions.get('window');
-// Expo Go cannot host the native Agora module, so the SDK is only loaded
-// outside it. `executionEnvironment` is 'storeClient' ONLY in Expo Go — the
-// old `appOwnership === 'expo'` check also matched development builds, which
-// silently disabled the real video call everywhere except standalone builds.
-const isExpoGo = Constants.executionEnvironment === 'storeClient';
-
 // Agora RTC SDK — native module, only available on dev/native builds.
+// We try to load the native module regardless of the execution environment; it
+// is only unavailable inside Expo Go (which lacks native module support). Dev
+// client builds CAN load native modules even though executionEnvironment may
+// still report 'storeClient'.
 let AgoraSDK = null;
+let isExpoGo = false;
 try {
-  if (!isExpoGo) {
-    AgoraSDK = require('react-native-agora');
-  } else {
-    console.log('Skipping Agora SDK load in Expo Go mode');
-  }
+  AgoraSDK = require('react-native-agora');
 } catch (e) {
-  console.log('Agora SDK not available (Expo Go mode):', e.message);
+  isExpoGo = true;
+  console.log('Agora SDK not available (likely Expo Go):', e.message);
 }
 
 const {
@@ -394,6 +390,20 @@ export default function VideoCallScreen() {
     !!agoraToken &&
     !!roomId &&
     canJoinRealCall;
+
+  // ── Diagnostic: log every factor that decides whether Agora can start ──
+  useEffect(() => {
+    console.log('[VideoCall] ── Agora readiness check ──');
+    console.log('[VideoCall]   isExpoGo:', isExpoGo);
+    console.log('[VideoCall]   AgoraSDK loaded:', !!AgoraSDK);
+    console.log('[VideoCall]   resolvedAppId:', resolvedAppId ? resolvedAppId.substring(0, 8) + '...' : '(empty)');
+    console.log('[VideoCall]   hasPlaceholderAppId:', hasPlaceholderAppId);
+    console.log('[VideoCall]   agoraToken:', agoraToken ? agoraToken.substring(0, 12) + '...' : '(empty)');
+    console.log('[VideoCall]   roomId:', roomId || '(empty)');
+    console.log('[VideoCall]   permission.camera:', permission.camera, 'mic:', permission.mic);
+    console.log('[VideoCall]   canUseAgora:', canUseAgora);
+    console.log('[VideoCall]   callId:', callId);
+  }, [canUseAgora, permissionsResolved]);
 
   // ─── Unified end-of-call teardown (both roles) ─────────────────
   // Every way a call ends funnels through here so the USER and LISTENER sides

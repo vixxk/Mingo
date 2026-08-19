@@ -23,23 +23,19 @@ import { AGORA_APP_ID } from '../../utils/agoraConfig';
 import { ms, s, vs, SCREEN_WIDTH, hp, wp } from '../../utils/responsive';
 import { getAvatarUrl } from '../../utils/avatars';
 
-// Expo Go cannot host the native Agora module, so the SDK is only loaded
-// outside it. `executionEnvironment` is 'storeClient' ONLY in Expo Go — the
-// old `appOwnership === 'expo'` check also matched development builds, which
-// silently disabled the real call everywhere except standalone builds.
-const isExpoGo = Constants.executionEnvironment === 'storeClient';
-
 // Agora RTC SDK — native module, only available on dev/native builds. Audio
 // calls run on the same Agora engine as video calls now (Zego was removed).
+// We try to load the native module regardless of the execution environment; it
+// is only unavailable inside Expo Go (which lacks native module support). Dev
+// client builds CAN load native modules even though executionEnvironment may
+// still report 'storeClient'.
 let AgoraSDK = null;
+let isExpoGo = false;
 try {
-  if (!isExpoGo) {
-    AgoraSDK = require('react-native-agora');
-  } else {
-    console.log('Skipping Agora SDK load in Expo Go mode');
-  }
+  AgoraSDK = require('react-native-agora');
 } catch (e) {
-  console.log('Agora SDK not available (Expo Go mode):', e.message);
+  isExpoGo = true;
+  console.log('Agora SDK not available (likely Expo Go):', e.message);
 }
 
 const {
@@ -277,6 +273,20 @@ export default function AudioCallScreen() {
     !!agoraToken &&
     !!roomId &&
     canJoinRealCall;
+
+  // ── Diagnostic: log every factor that decides whether Agora can start ──
+  useEffect(() => {
+    console.log('[AudioCall] ── Agora readiness check ──');
+    console.log('[AudioCall]   isExpoGo:', isExpoGo);
+    console.log('[AudioCall]   AgoraSDK loaded:', !!AgoraSDK);
+    console.log('[AudioCall]   resolvedAppId:', resolvedAppId ? resolvedAppId.substring(0, 8) + '...' : '(empty)');
+    console.log('[AudioCall]   hasPlaceholderAppId:', hasPlaceholderAppId);
+    console.log('[AudioCall]   agoraToken:', agoraToken ? agoraToken.substring(0, 12) + '...' : '(empty)');
+    console.log('[AudioCall]   roomId:', roomId || '(empty)');
+    console.log('[AudioCall]   permission.mic:', permission.mic);
+    console.log('[AudioCall]   canUseAgora:', canUseAgora);
+    console.log('[AudioCall]   callId:', callId);
+  }, [canUseAgora, permissionsResolved]);
 
   // ─── Unified end-of-call teardown (both roles) ─────────────────
   // Every way a call ends funnels through here so the USER and LISTENER sides
