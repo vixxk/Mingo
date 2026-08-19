@@ -54,6 +54,67 @@ const {
 // so it renders inside the view hierarchy without SurfaceFlinger occlusion or black rectangle issues.
 const LocalVideoView = (Platform.OS === 'android' && RtcTextureView) ? RtcTextureView : RtcSurfaceView;
 
+const SafeLocalVideoView = (props) => {
+  const Comp = LocalVideoView || RtcSurfaceView || RtcTextureView;
+  if (!Comp) return <View style={[props.style, { backgroundColor: '#111' }]} />;
+  try {
+    return <Comp {...props} />;
+  } catch (e) {
+    console.error('[VideoCall] Error rendering LocalVideoView:', e);
+    return <View style={[props.style, { backgroundColor: '#111' }]} />;
+  }
+};
+
+const SafeRemoteVideoView = (props) => {
+  const Comp = RtcSurfaceView || RtcTextureView || LocalVideoView;
+  if (!Comp) return <View style={[props.style, { backgroundColor: '#000' }]} />;
+  try {
+    return <Comp {...props} />;
+  } catch (e) {
+    console.error('[VideoCall] Error rendering RtcSurfaceView:', e);
+    return <View style={[props.style, { backgroundColor: '#000' }]} />;
+  }
+};
+
+class CallErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('[CallErrorBoundary] Caught error in VideoCallScreen:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={{ flex: 1, backgroundColor: '#050101', justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <Ionicons name="alert-circle-outline" size={64} color="#EF4444" style={{ marginBottom: 16 }} />
+          <Text style={{ color: '#FFF', fontSize: 20, fontWeight: 'bold', marginBottom: 8, textAlign: 'center' }}>
+            Video Call Failed
+          </Text>
+          <Text style={{ color: '#9CA3AF', fontSize: 14, textAlign: 'center', marginBottom: 24, lineHeight: 20 }}>
+            {this.state.error?.message || 'An unexpected initialization error occurred. Please try starting the call again.'}
+          </Text>
+          <TouchableOpacity
+            style={{ backgroundColor: '#EF4444', paddingHorizontal: 32, paddingVertical: 14, borderRadius: 24 }}
+            onPress={() => this.props.onDismiss ? this.props.onDismiss() : this.setState({ hasError: false })}
+            activeOpacity={0.8}
+          >
+            <Text style={{ color: '#FFF', fontSize: 15, fontWeight: '700' }}>Close & Exit Call</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 /**
  * Owns the Agora engine for the duration of the video call and renders the
  * remote participant's video surface. Controls are exposed imperatively via
@@ -313,7 +374,7 @@ const AgoraVideoView = forwardRef(
     return (
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         {remoteUid != null && remoteVideoActive && (
-          <RtcSurfaceView
+          <SafeRemoteVideoView
             canvas={{ uid: remoteUid, renderMode: RenderModeType.RenderModeHidden }}
             zOrderMediaOverlay={Platform.OS === 'android'}
             style={StyleSheet.absoluteFill}
@@ -324,7 +385,7 @@ const AgoraVideoView = forwardRef(
   }
 );
 
-export default function VideoCallScreen() {
+function VideoCallScreenComponent() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const {
@@ -386,6 +447,7 @@ export default function VideoCallScreen() {
   const canUseAgora =
     !isExpoGo &&
     !!AgoraSDK &&
+    typeof createAgoraRtcEngine === 'function' &&
     !hasPlaceholderAppId &&
     !!agoraToken &&
     !!roomId &&
@@ -886,7 +948,7 @@ export default function VideoCallScreen() {
         <View style={styles.selfPreview} pointerEvents="none">
           <View style={styles.selfCamera}>
             {showCamera && !!AgoraSDK ? (
-              <LocalVideoView
+              <SafeLocalVideoView
                 key="agora-local"
                 canvas={{
                   uid: 0,
@@ -1516,3 +1578,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
   },
 });
+
+export default function VideoCallScreen(props) {
+  const router = useRouter();
+  return (
+    <CallErrorBoundary onDismiss={() => router.back()}>
+      <VideoCallScreenComponent {...props} />
+    </CallErrorBoundary>
+  );
+}

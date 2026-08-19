@@ -252,7 +252,46 @@ const AgoraAudioEngine = forwardRef(
   }
 );
 
-export default function AudioCallScreen() {
+class CallErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('[CallErrorBoundary] Caught error in AudioCallScreen:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={{ flex: 1, backgroundColor: '#050101', justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <Ionicons name="alert-circle-outline" size={64} color="#EF4444" style={{ marginBottom: 16 }} />
+          <Text style={{ color: '#FFF', fontSize: 20, fontWeight: 'bold', marginBottom: 8, textAlign: 'center' }}>
+            Audio Call Failed
+          </Text>
+          <Text style={{ color: '#9CA3AF', fontSize: 14, textAlign: 'center', marginBottom: 24, lineHeight: 20 }}>
+            {this.state.error?.message || 'An unexpected initialization error occurred. Please try starting the call again.'}
+          </Text>
+          <TouchableOpacity
+            style={{ backgroundColor: '#EF4444', paddingHorizontal: 32, paddingVertical: 14, borderRadius: 24 }}
+            onPress={() => this.props.onDismiss ? this.props.onDismiss() : this.setState({ hasError: false })}
+            activeOpacity={0.8}
+          >
+            <Text style={{ color: '#FFF', fontSize: 15, fontWeight: '700' }}>Close & Exit Call</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function AudioCallScreenComponent() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const {
@@ -320,6 +359,7 @@ export default function AudioCallScreen() {
     !canUseZego &&
     !isExpoGo &&
     !!AgoraSDK &&
+    typeof createAgoraRtcEngine === 'function' &&
     !hasPlaceholderAppId &&
     !!agoraToken &&
     !!roomId &&
@@ -1284,3 +1324,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
   },
 });
+
+export default function AudioCallScreen(props) {
+  const router = useRouter();
+  return (
+    <CallErrorBoundary onDismiss={() => router.back()}>
+      <AudioCallScreenComponent {...props} />
+    </CallErrorBoundary>
+  );
+}

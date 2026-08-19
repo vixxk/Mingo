@@ -64,6 +64,15 @@ const apiRequest = async (endpoint, options = {}) => {
     }
 
     if (!response.ok) {
+      if (response.status === 401 && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/register')) {
+        console.warn('[apiRequest] Received 401 Unauthorized for endpoint:', endpoint, '— session expired.');
+        AsyncStorage.multiRemove(['token', 'user', 'userRole']).catch(() => {});
+        setTimeout(() => {
+          try {
+            router.replace('/(auth)/login');
+          } catch (e) {}
+        }, 100);
+      }
       const error = new Error(data.message || 'API request failed');
       error.status = response.status;
       error.data = data;

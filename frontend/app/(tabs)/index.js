@@ -876,20 +876,28 @@ export default function HomeScreen() {
     }
 
     if (listener) {
+      const listenerId = String(listener.id || listener._id || listener.userId || '');
+      const name = listener.name || listener.displayName || 'Listener';
+      const avatarIndex = String(listener.avatarIndex !== undefined && listener.avatarIndex !== null ? listener.avatarIndex : '0');
+      const gender = String(listener.gender || 'Female');
+
+      console.log('[HomeScreen] Initiating direct call:', { listenerId, name, callType, avatarIndex, gender });
+
       // Direct call
       router.push({
         pathname: '/(call)/connecting',
         params: {
-          name: listener.name,
+          name,
           callType,
           callId: `call_${Date.now()}`,
           roomId: `room_${Date.now()}`,
-          listenerId: listener.id,
-          avatarIndex: listener.avatarIndex,
-          gender: listener.gender
+          listenerId,
+          avatarIndex,
+          gender
         }
       });
     } else {
+      console.log('[HomeScreen] Initiating random call:', { callType });
       // Random call — show the dedicated matching screen first
       router.push({
         pathname: '/(call)/finding-listener',

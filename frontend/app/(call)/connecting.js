@@ -35,6 +35,7 @@ export default function ConnectingScreen() {
     roomId: initialRoomId,
     listenerId,
     avatarIndex,
+    gender,
     zegoAppId,
     zegoAppSign,
     agoraAppId,
