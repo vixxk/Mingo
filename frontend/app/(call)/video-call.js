@@ -76,6 +76,18 @@ const SafeRemoteVideoView = (props) => {
   }
 };
 
+const SafeCameraView = (props) => {
+  if (!CameraView || (typeof CameraView !== 'function' && typeof CameraView !== 'object')) {
+    return <View style={[props.style, { backgroundColor: '#111' }]} />;
+  }
+  try {
+    return <CameraView {...props} />;
+  } catch (e) {
+    console.error('[VideoCall] Error rendering CameraView:', e);
+    return <View style={[props.style, { backgroundColor: '#111' }]} />;
+  }
+};
+
 class CallErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -1198,7 +1210,7 @@ function VideoCallScreenComponent() {
       <View style={styles.selfPreview} pointerEvents="none">
         <View style={styles.selfCamera}>
           {showCamera ? (
-            <CameraView
+            <SafeCameraView
               key="front"
               style={StyleSheet.absoluteFill}
               facing="front"

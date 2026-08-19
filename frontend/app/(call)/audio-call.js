@@ -299,6 +299,7 @@ function AudioCallScreenComponent() {
     callId = '',
     roomId = '',
     listenerId = '',
+    userId: paramUserId = '',
     avatarIndex = '0',
     gender = 'Female',
     zegoAppId,
@@ -307,7 +308,7 @@ function AudioCallScreenComponent() {
     agoraToken,
   } = useLocalSearchParams();
 
-  const [userID, setUserID] = useState('');
+  const [userID, setUserID] = useState(paramUserId || '');
   const [userName, setUserName] = useState('');
   const [showSafety, setShowSafety] = useState(false);
   const [showEndCallPopup, setShowEndCallPopup] = useState(false);
@@ -966,10 +967,10 @@ function AudioCallScreenComponent() {
         <ZegoCallWrapper
           appId={resolvedZegoAppId}
           appSign={resolvedZegoAppSign}
-          userId={userID || 'user'}
+          userId={userID || `user_${listenerId || Date.now()}`}
           userName={userName || 'User'}
           roomId={roomId}
-          onCallEnd={handleEndCall}
+          onCallEnd={finishAndExit}
           listenerAvatarUrl={getAvatarUrl(gender, avatarIndex)}
         />
       ) : (

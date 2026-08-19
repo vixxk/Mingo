@@ -14,6 +14,7 @@ import {
   Alert,
   Modal,
   Linking,
+  BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -118,6 +119,20 @@ export default function LoginScreen() {
     }
     return () => clearInterval(interval);
   }, [showOtpStep, countdown]);
+
+  // Intercept Android hardware back press when on OTP step to prevent exiting the page (e.g. from Truecaller popups)
+  useEffect(() => {
+    const onBackPress = () => {
+      if (showOtpStep) {
+        setShowOtpStep(false);
+        setOtp('');
+        return true; // Handled — do not exit the login page
+      }
+      return false; // Standard navigation
+    };
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [showOtpStep]);
 
   // Validation
   const validateForm = (isOtpVerification = false) => {
@@ -341,10 +356,17 @@ export default function LoginScreen() {
         </View>
       </Modal>
       
-      {}
+      {/* Top Header Back Button */}
       <TouchableOpacity 
         style={[styles.backButton, { top: insets.top + 10 }]} 
-        onPress={() => router.back()}
+        onPress={() => {
+          if (showOtpStep) {
+            setShowOtpStep(false);
+            setOtp('');
+          } else {
+            router.back();
+          }
+        }}
         activeOpacity={0.7}
       >
         <Ionicons name="chevron-back" size={24} color="#fff" />
