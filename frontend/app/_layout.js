@@ -216,8 +216,19 @@ function RootLayout() {
         });
       });
 
-    // Notify caller we accepted
-    socketService.emit('call_accepted', { userId: callerId, sessionId: callId, roomId });
+    // Notify caller we accepted — include session-scoped credentials so the
+    // user's connecting screen has the latest Zego/Agora tokens (they may
+    // differ from the initial startCall response if the backend regenerated
+    // them).
+    socketService.emit('call_accepted', {
+      userId: callerId,
+      sessionId: callId,
+      roomId,
+      ...(session?.zegoAppId ? { zegoAppId: session.zegoAppId } : {}),
+      ...(session?.zegoAppSign ? { zegoAppSign: session.zegoAppSign } : {}),
+      ...(session?.agoraAppId ? { agoraAppId: session.agoraAppId } : {}),
+      ...(session?.agoraToken ? { agoraToken: session.agoraToken } : {}),
+    });
 
     setIncomingCalls([]);
 
@@ -233,9 +244,11 @@ function RootLayout() {
         callId,
         roomId,
         // For a listener, listenerId is their OWN id (us); for a user, the
-        // caller is the listener they're joining.
+        // caller is the listener they're joining. userId is always the
+        // CURRENT participant's own id — used as the Zego/Agora uid so both
+        // sides always have unique ids in the call channel.
         ...(myRole === 'LISTENER'
-          ? { listenerId: myUserId, userId: callerId }
+          ? { listenerId: myUserId, userId: myUserId }
           : { listenerId: callerId }),
         avatarIndex,
         gender,

@@ -54,14 +54,35 @@ const {
 // so it renders inside the view hierarchy without SurfaceFlinger occlusion or black rectangle issues.
 const LocalVideoView = (Platform.OS === 'android' && RtcTextureView) ? RtcTextureView : RtcSurfaceView;
 
-const SafeLocalVideoView = (props) => {
+const SafeLocalVideoView = ({ canvas, style, fallbackAvatarUrl, zOrderMediaOverlay, zOrderOnTop }) => {
   const Comp = LocalVideoView || RtcSurfaceView || RtcTextureView;
-  if (!Comp) return <View style={[props.style, { backgroundColor: '#111' }]} />;
+  if (!Comp) {
+    return fallbackAvatarUrl ? (
+      <Image source={{ uri: fallbackAvatarUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+    ) : (
+      <View style={[style, { backgroundColor: '#1F2937', justifyContent: 'center', alignItems: 'center' }]}>
+        <Ionicons name="videocam-off" size={28} color="#9CA3AF" />
+      </View>
+    );
+  }
+
+  const compProps = { canvas, style };
+  if (Comp === RtcSurfaceView && Platform.OS === 'android') {
+    if (zOrderMediaOverlay !== undefined) compProps.zOrderMediaOverlay = zOrderMediaOverlay;
+    if (zOrderOnTop !== undefined) compProps.zOrderOnTop = zOrderOnTop;
+  }
+
   try {
-    return <Comp {...props} />;
+    return <Comp {...compProps} />;
   } catch (e) {
     console.error('[VideoCall] Error rendering LocalVideoView:', e);
-    return <View style={[props.style, { backgroundColor: '#111' }]} />;
+    return fallbackAvatarUrl ? (
+      <Image source={{ uri: fallbackAvatarUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+    ) : (
+      <View style={[style, { backgroundColor: '#1F2937', justifyContent: 'center', alignItems: 'center' }]}>
+        <Ionicons name="videocam-off" size={28} color="#9CA3AF" />
+      </View>
+    );
   }
 };
 
@@ -233,7 +254,13 @@ const AgoraVideoView = forwardRef(
           engine = createAgoraRtcEngine();
           engineRef.current = engine;
 
-          engine.initialize({ appId });
+          const initRet = engine.initialize({ appId });
+          console.log('[Agora] initialize result:', initRet);
+          if (initRet !== 0) {
+            console.error('[Agora] Engine initialize failed with code:', initRet);
+            if (onEngineErrorRef.current) onEngineErrorRef.current(initRet, 'Engine initialize failed');
+            return;
+          }
           engine.setChannelProfile(ChannelProfileType.ChannelProfileCommunication);
           engine.setClientRole(ClientRoleType.ClientRoleBroadcaster);
           engine.enableVideo();
@@ -241,8 +268,8 @@ const AgoraVideoView = forwardRef(
           // Start local camera capture preview
           try {
             const previewRet = engine.startPreview();
-            if (previewRet !== 0) console.log('[Agora] startPreview result:', previewRet);
-          } catch (e) {}
+            console.log('[Agora] startPreview result:', previewRet);
+          } catch (e) { console.log('[Agora] startPreview error:', e.message); }
 
           engine.registerEventHandler({
             onJoinChannelSuccess: () => {
@@ -259,6 +286,7 @@ const AgoraVideoView = forwardRef(
               if (!active) return;
               console.log('[Agora] Remote user joined:', uid);
               setRemoteUid(uid);
+              setRemoteActive(true);
               setRemoteJoined(true);
             },
             onUserOffline: (connection, uid, reason) => {
@@ -280,12 +308,11 @@ const AgoraVideoView = forwardRef(
             },
             onRemoteVideoStateChanged: (connection, uid, state) => {
               if (!active) return;
-              // Decoding (2) → video playing. Stopped (0) → camera off/black —
-              // fade back to the avatar, mirroring Zego's avatarBuilder.
-              const decoded = state === RemoteVideoState.RemoteVideoStateDecoding;
-              console.log('[Agora] Remote video state:', uid, state, 'decoded:', decoded);
+              // state 0 = Stopped, 1 = Starting, 2 = Decoding, 3 = Frozen, 4 = Failed
+              const isPlaying = state !== 0 && state !== RemoteVideoState?.RemoteVideoStateStopped;
+              console.log('[Agora] Remote video state:', uid, state, 'isPlaying:', isPlaying);
               setRemoteUid(uid);
-              setRemoteActive(decoded);
+              setRemoteActive(isPlaying);
               setRemoteJoined(true);
             },
             onRemoteAudioStateChanged: (connection, uid, state) => {
@@ -328,7 +355,11 @@ const AgoraVideoView = forwardRef(
             autoSubscribeAudio: true,
             autoSubscribeVideo: true,
           });
-          console.log('[Agora] joinChannel result:', ret);
+          console.log('[Agora] joinChannel result:', ret, '(token:', token ? token.substring(0, 12) + '...' : 'null', ', channel:', channelName, ', camera:', !!cameraEnabled, ')');
+          if (ret !== 0) {
+            console.error('[Agora] joinChannel failed with code:', ret);
+            if (onFailedToConnectRef.current) onFailedToConnectRef.current();
+          }
         } catch (e) {
           console.log('[Agora] Engine setup failed:', e.message);
           if (onEngineErrorRef.current) onEngineErrorRef.current(-1, e.message);
@@ -385,11 +416,10 @@ const AgoraVideoView = forwardRef(
 
     return (
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        {remoteUid != null && remoteVideoActive && (
+        {remoteUid != null && (
           <SafeRemoteVideoView
             canvas={{ uid: remoteUid, renderMode: RenderModeType.RenderModeHidden }}
-            zOrderMediaOverlay={Platform.OS === 'android'}
-            style={StyleSheet.absoluteFill}
+            style={[StyleSheet.absoluteFill, !remoteVideoActive && { opacity: 0 }]}
           />
         )}
       </View>
@@ -423,7 +453,7 @@ function VideoCallScreenComponent() {
   const [isCameraOff, setIsCameraOff] = useState(false);
   const [currentCoins, setCurrentCoins] = useState(null);
   const [lowBalanceMessage, setLowBalanceMessage] = useState('');
-  const [permission, setPermission] = useState({ camera: false, mic: false });
+  const [permission, setPermission] = useState({ camera: true, mic: true });
   // True once the permission prompts have finished (granted or denied). The
   // real-call verdict below must wait for this — otherwise a fresh screen
   // would be misread as "permissions denied" while the prompts are pending.
@@ -477,6 +507,7 @@ function VideoCallScreenComponent() {
     console.log('[VideoCall]   permission.camera:', permission.camera, 'mic:', permission.mic);
     console.log('[VideoCall]   canUseAgora:', canUseAgora);
     console.log('[VideoCall]   callId:', callId);
+    console.log('[VideoCall]   isListener:', isListener);
   }, [canUseAgora, permissionsResolved]);
 
   // ─── Unified end-of-call teardown (both roles) ─────────────────
@@ -587,16 +618,21 @@ function VideoCallScreenComponent() {
         if (userData) {
           const user = JSON.parse(userData);
           setIsListener(user.role === 'LISTENER');
-          // Build my own avatar URL the same way the profile screen does.
-          const rawGender = user.gender || 'Male';
-          const normalizedGender = rawGender.charAt(0).toUpperCase() + rawGender.slice(1).toLowerCase();
-          const avatarIndex = user.avatarIndex !== undefined && user.avatarIndex !== null ? String(user.avatarIndex) : '0';
-          setMyAvatarUrl(getAvatarUrl(normalizedGender, avatarIndex));
+          let url = user.avatarUrl || user.profileImage;
+          if (!url) {
+            const rawGender = user.gender || 'Male';
+            const normalizedGender = rawGender.charAt(0).toUpperCase() + rawGender.slice(1).toLowerCase();
+            const avatarIdx = user.avatarIndex !== undefined && user.avatarIndex !== null ? String(user.avatarIndex) : '0';
+            url = getAvatarUrl(normalizedGender, avatarIdx);
+          }
+          setMyAvatarUrl(url);
         } else {
           setIsListener(false);
+          setMyAvatarUrl(getAvatarUrl('Male', '0'));
         }
       } catch {
         setIsListener(false);
+        setMyAvatarUrl(getAvatarUrl('Male', '0'));
       }
     };
     loadUser();
@@ -934,13 +970,20 @@ function VideoCallScreenComponent() {
           onFailedToConnect={handleAgoraFailedToConnect}
           onEngineError={(err, msg) => console.log('[Agora] Engine error:', err, msg)}
           onJoinSuccess={() => {
-            // Toggle camera off then on immediately when call connects for both users and listeners
+            console.log('[VideoCall] Agora joinChannel succeeded — local user is in the channel');
+
+            // Fallback: if onUserJoined / onRemoteAudioStateChanged never fires
+            // (can happen on certain builds where Agora callbacks are delayed or
+            // swallowed), mark remote as joined after a short grace period so the
+            // UI transitions from "Connecting…" to "Call in Progress". Without
+            // this the user sees "Connecting…" indefinitely even though both
+            // participants are in the channel.
             setTimeout(() => {
-              toggleCamera();
-              setTimeout(() => {
-                toggleCamera();
-              }, 300);
-            }, 100);
+              if (!remoteJoinedRef.current && !callEndedRef.current) {
+                console.log('[VideoCall] Fallback: onUserJoined never fired — marking remote as joined');
+                setRemoteJoined(true);
+              }
+            }, 8000);
           }}
         />
 
@@ -955,8 +998,7 @@ function VideoCallScreenComponent() {
           )}
         </View>
 
-        {/* Self-view preview — my own live camera in the bottom-right corner.
-            Like the main video feeds, this is NOT toggled by the tap gesture. */}
+        {/* Self-view preview — my own live camera in the bottom-right corner. */}
         <View style={styles.selfPreview} pointerEvents="none">
           <View style={styles.selfCamera}>
             {showCamera && !!AgoraSDK ? (
@@ -964,19 +1006,25 @@ function VideoCallScreenComponent() {
                 key="agora-local"
                 canvas={{
                   uid: 0,
-                  // Fill (crop) so the camera covers the whole self-view with
-                  // no black bars on the left/right, matching the container.
                   renderMode: RenderModeType.RenderModeHidden,
                   mirrorMode: VideoMirrorModeType.VideoMirrorModeEnabled,
                 }}
+                style={StyleSheet.absoluteFill}
                 zOrderMediaOverlay={Platform.OS === 'android'}
                 zOrderOnTop={Platform.OS === 'android'}
-                style={StyleSheet.absoluteFill}
+                fallbackAvatarUrl={myAvatarUrl}
               />
             ) : myAvatarUrl ? (
-              <Image source={{ uri: myAvatarUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+              <View style={StyleSheet.absoluteFill}>
+                <Image source={{ uri: myAvatarUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0, 0, 0, 0.35)', justifyContent: 'center', alignItems: 'center' }]}>
+                  <Ionicons name="videocam-off" size={24} color="rgba(255, 255, 255, 0.85)" />
+                </View>
+              </View>
             ) : (
-              <Ionicons name="videocam-off" size={32} color="#6B7280" />
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: '#1F2937', justifyContent: 'center', alignItems: 'center' }]}>
+                <Ionicons name="videocam-off" size={28} color="#9CA3AF" />
+              </View>
             )}
           </View>
         </View>
