@@ -35,7 +35,9 @@ module.exports = {
 
   test: {
     adminPhone: process.env.TEST_ADMIN_PHONE,
-    adminOtp: process.env.TEST_ADMIN_OTP,
+    adminEmail: process.env.ADMIN_EMAIL || process.env.TEST_ADMIN_EMAIL || 'admin@mingo.com',
+    adminOtp: process.env.ADMIN_PASSCODE || process.env.TEST_ADMIN_OTP || '0000',
+    adminPasscode: process.env.ADMIN_PASSCODE || process.env.TEST_ADMIN_OTP || '0000',
     listenerPhone: process.env.TEST_LISTENER_PHONE,
     listenerOtp: process.env.TEST_LISTENER_OTP,
   },

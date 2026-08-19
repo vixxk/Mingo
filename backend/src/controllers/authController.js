@@ -34,8 +34,8 @@ class AuthController {
 
     static async login(req, res, next) {
     try {
-      const { phone, otp } = req.body;
-      const result = await AuthService.login({ phone, otp });
+      const { phone, email, otp } = req.body;
+      const result = await AuthService.login({ phone, email, otp });
       return ApiResponse.success(res, result, 'Login successful');
     } catch (err) {
       next(err);

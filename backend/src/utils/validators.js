@@ -43,14 +43,17 @@ const signupValidation = [
 ];
 
 const loginValidation = [
-  body('phone')
-    .trim()
-    .notEmpty().withMessage('Phone number is required')
-    .isMobilePhone().withMessage('Invalid phone number'),
+  body().custom((value, { req }) => {
+    const identifier = req.body.email || req.body.phone;
+    if (!identifier || typeof identifier !== 'string' || !identifier.trim()) {
+      throw new Error('Email or phone number is required');
+    }
+    return true;
+  }),
   body('otp')
     .trim()
-    .notEmpty().withMessage('OTP is required')
-    .isLength({ min: 4, max: 6 }).withMessage('OTP must be 4 to 6 digits'),
+    .notEmpty().withMessage('OTP or passcode is required')
+    .isLength({ min: 4, max: 20 }).withMessage('OTP or passcode must be 4 to 20 characters'),
   validate,
 ];
 

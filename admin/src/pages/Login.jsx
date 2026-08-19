@@ -6,17 +6,17 @@ import { authAPI } from '../utils/api'
 export default function Login() {
   const navigate = useNavigate()
   const { login } = useAuth()
-  const [digits, setDigits] = useState('')
+  const [email, setEmail] = useState('')
   const [passcode, setPasscode] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   const handleLogin = async () => {
-    if (!digits || !passcode) return
+    if (!email || !passcode) return
     setLoading(true)
     setError('')
     try {
-      const res = await authAPI.login({ phone: digits, otp: passcode })
+      const res = await authAPI.login({ email, phone: email, otp: passcode })
       const userData = res.data?.user
       const token = res.data?.token
 
@@ -123,7 +123,7 @@ export default function Login() {
             fontSize: 14,
             margin: 0,
           }}>
-            Enter the digits and passcode to sign in
+            Enter admin email and passcode to sign in
           </p>
         </div>
 
@@ -152,13 +152,13 @@ export default function Login() {
           textTransform: 'uppercase',
           letterSpacing: '0.5px',
         }}>
-          Enter the digits
+          Admin Email
         </label>
         <input
-          value={digits}
-          onChange={e => setDigits(e.target.value)}
-          placeholder="Phone number or username"
-          type="text"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          placeholder="Enter admin email"
+          type="email"
           autoFocus
           onKeyDown={e => e.key === 'Enter' && handleLogin()}
           style={{
@@ -211,20 +211,20 @@ export default function Login() {
 
         <button
           onClick={handleLogin}
-          disabled={loading || !digits || !passcode}
+          disabled={loading || !email || !passcode}
           style={{
             width: '100%',
             border: 'none',
             borderRadius: 'var(--radius-md)',
-            cursor: loading || !digits || !passcode ? 'not-allowed' : 'pointer',
-            background: loading || !digits || !passcode ? 'var(--bg-tertiary)' : 'var(--accent-gradient)',
+            cursor: loading || !email || !passcode ? 'not-allowed' : 'pointer',
+            background: loading || !email || !passcode ? 'var(--bg-tertiary)' : 'var(--accent-gradient)',
             padding: '14px 0',
-            color: loading || !digits || !passcode ? 'var(--text-muted)' : '#fff',
+            color: loading || !email || !passcode ? 'var(--text-muted)' : '#fff',
             fontSize: 15,
             fontWeight: 700,
             fontFamily: 'var(--font-display)',
             transition: 'opacity 0.2s',
-            opacity: loading || !digits || !passcode ? 0.6 : 1,
+            opacity: loading || !email || !passcode ? 0.6 : 1,
           }}>
           {loading ? (
             <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
