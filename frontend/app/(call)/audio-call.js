@@ -678,9 +678,8 @@ export default function AudioCallScreen() {
       message =
         "Audio call couldn't connect — the server isn't configured for calls yet. Please try again later.";
     } else {
-      // Everything looks configured but the call still can't start — leave the
-      // screen up so the user can retry manually; don't force an exit.
-      return;
+      message =
+        "Audio call connection unavailable. Please check your network and permissions and try again.";
     }
 
     console.log('[AudioCall] Real call unavailable, ending:', message);

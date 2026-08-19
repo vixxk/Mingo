@@ -710,9 +710,8 @@ export default function VideoCallScreen() {
       message =
         "Video call couldn't connect — the server isn't configured for video calls yet. Please try again later.";
     } else {
-      // Everything looks configured but the call still can't start — leave the
-      // screen up so the user can retry manually; don't force an exit.
-      return;
+      message =
+        "Video call connection unavailable. Please check your network and permissions and try again.";
     }
 
     console.log('[VideoCall] Real call unavailable, ending:', message);

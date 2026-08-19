@@ -47,7 +47,6 @@ function buildAgoraRtcToken(channelName) {
     channelName,
     0, // any uid may join with this token
     RtcRole.PUBLISHER,
-    expireTime,
     expireTime
   );
 }

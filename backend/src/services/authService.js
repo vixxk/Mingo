@@ -38,15 +38,9 @@ class AuthService {
       return { message: 'OTP sent successfully (Test Mock Mode)' };
     }
 
-    // Rate limiting: maximum 5 OTPs per hour per phone number
+    // Rate limiting: disabled
     const now = Date.now();
     const limitKey = `otp_limit:${phone}`;
-    const oneHourAgo = now - 3600 * 1000;
-    await redis.zremrangebyscore(limitKey, 0, oneHourAgo);
-    const otpCount = await redis.zcard(limitKey);
-    if (otpCount >= 5) {
-      throw new AppError('Too many OTP requests. You can only request up to 5 OTPs per hour.', 429);
-    }
 
     try {
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -83,8 +77,10 @@ class AuthService {
         console.log(`========================================\n`);
       }
 
-      await redis.zadd(limitKey, now, now);
-      await redis.expire(limitKey, 3600);
+      if (process.env.NODE_ENV === 'production') {
+        await redis.zadd(limitKey, now, now);
+        await redis.expire(limitKey, 3600);
+      }
 
       return { 
         message: 'OTP sent successfully',

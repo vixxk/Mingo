@@ -72,8 +72,7 @@ function RootLayout() {
         const p = pathname || '';
         if (/welcome|login|signup|role-selection|gender|language|onboarding|voice-id|verification|banned/i.test(p)) return;
 
-        // Claim the flag so it shows once per login, then display it
-        await AsyncStorage.removeItem('pendingWelcomePopup');
+        // Display the mandatory popup (flag is cleared in handleWelcomeAgree once agreed)
         setShowWelcomePopup(true);
       } catch (e) {
         console.log('[RootLayout] Welcome popup check error:', e);
@@ -118,6 +117,7 @@ function RootLayout() {
 
   const handleWelcomeAgree = useCallback(async () => {
     setShowWelcomePopup(false);
+    await AsyncStorage.removeItem('pendingWelcomePopup');
     // Preserve the existing flow: after agreeing, users with an empty wallet
     // get the coins offer on the home screen.
     let balance = 0;

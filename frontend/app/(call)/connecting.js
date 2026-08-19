@@ -260,6 +260,8 @@ export default function ConnectingScreen() {
           }
           stopRingtone();
           const targetScreen = callType === 'video' ? '/(call)/video-call' : '/(call)/audio-call';
+          const agoraAppIdVal = data.agoraAppId || agoraAppIdRef.current;
+          const agoraTokenVal = data.agoraToken || agoraTokenRef.current;
           router.replace({ 
             pathname: targetScreen, 
             params: { 
@@ -269,10 +271,8 @@ export default function ConnectingScreen() {
               listenerId: partnerListenerIdRef.current, 
               avatarIndex: partnerAvatarIndexRef.current, 
               gender: partnerGenderRef.current, 
-              ...(zegoAppIdRef.current ? { zegoAppId: String(zegoAppIdRef.current) } : {}),
-              ...(zegoAppSignRef.current ? { zegoAppSign: String(zegoAppSignRef.current) } : {}),
-              ...(agoraAppIdRef.current ? { agoraAppId: String(agoraAppIdRef.current) } : {}),
-              ...(agoraTokenRef.current ? { agoraToken: String(agoraTokenRef.current) } : {}),
+              ...(agoraAppIdVal ? { agoraAppId: String(agoraAppIdVal) } : {}),
+              ...(agoraTokenVal ? { agoraToken: String(agoraTokenVal) } : {}),
               callType 
             } 
           });

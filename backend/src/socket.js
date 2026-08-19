@@ -698,10 +698,13 @@ const initSocket = (server) => {
           return;
         }
 
-        // Check if the caller (user) is still online/connected to the socket
+        // Check if the caller (user) is offline (only fail if offline for > 15 seconds)
         const callerRooms = io.sockets.adapter.rooms.get(`user_${userId}`);
-        if (!callerRooms || callerRooms.size === 0) {
-          console.log(`[Socket] Call accept failed: User ${userId} is offline/disconnected.`);
+        const offlineTime = userOfflineSince[userId.toString()];
+        const isPersistentlyOffline = (!callerRooms || callerRooms.size === 0) && offlineTime && (Date.now() - offlineTime > 15000);
+
+        if (isPersistentlyOffline) {
+          console.log(`[Socket] Call accept failed: User ${userId} is persistently offline.`);
           session.status = 'cancelled';
           await session.save();
           
@@ -719,7 +722,8 @@ const initSocket = (server) => {
           return;
         }
 
-        io.to(`user_${userId}`).emit('call_accepted', { sessionId, roomId });
+        const agoraPayload = CallService.getAgoraCallPayload(roomId, session.callType);
+        io.to(`user_${userId}`).emit('call_accepted', { sessionId, roomId, ...agoraPayload });
       } catch (err) {
         console.error('[Socket] Error in call_accepted validation:', err.message);
         socket.emit('call_validation_failed', { sessionId, reason: 'error', message: err.message });
@@ -1171,39 +1175,52 @@ const initSocket = (server) => {
             // (swiped from RAM) it never reconnects, and the timer marks them
             // offline automatically (see step 4 below).
 
-            // 2. Auto-end active calls (immediately) - only audio and video calls, not chat sessions
+            // 2. Auto-end active calls only after a 10s grace timer (to tolerate transient socket drops during screen navigation)
             const activeCall = await Session.findOne({
               $or: [{ userId: disconnectedUserId }, { listenerId: disconnectedUserId }],
               status: 'active',
               callType: { $in: ['audio', 'video'] }
             });
             if (activeCall) {
-              console.log(`[Socket] Auto-ending active call ${activeCall._id} on participant disconnect: ${disconnectedUserId}`);
-              activeCall.status = 'completed';
-              activeCall.endTime = new Date();
-              await activeCall.save();
-              stopCallBillingTimer(activeCall._id.toString());
-              stopCallBillingTimer(activeCall.roomId);
+              const callIdStr = activeCall._id.toString();
+              console.log(`[Socket] Active call ${callIdStr} found for disconnected user ${disconnectedUserId}. Scheduling 10s disconnect grace timer.`);
+              setTimeout(async () => {
+                try {
+                  const checkSockets = io ? io.sockets.adapter.rooms.get(`user_${disconnectedUserId}`) : null;
+                  if (checkSockets && checkSockets.size > 0) {
+                    console.log(`[Socket] User ${disconnectedUserId} reconnected within grace timer. Keeping active call ${callIdStr} running.`);
+                    return;
+                  }
+                  const freshCall = await Session.findById(callIdStr);
+                  if (freshCall && freshCall.status === 'active') {
+                    console.log(`[Socket] Auto-ending active call ${callIdStr} after participant disconnect grace period expired: ${disconnectedUserId}`);
+                    freshCall.status = 'completed';
+                    freshCall.endTime = new Date();
+                    await freshCall.save();
+                    stopCallBillingTimer(callIdStr);
+                    stopCallBillingTimer(freshCall.roomId);
 
-              // Increment listener call counters
-              await CallService.incrementListenerCounters(activeCall.listenerId, activeCall.callType);
+                    await CallService.incrementListenerCounters(freshCall.listenerId, freshCall.callType);
 
-              // Notify both participants
-              io.to(`user_${activeCall.userId}`).emit('call_ended', { sessionId: activeCall._id.toString() });
-              io.to(`user_${activeCall.listenerId}`).emit('call_ended', { sessionId: activeCall._id.toString() });
-              
-              // Reset listener busy status and release lock
-              const listenerIdStr = activeCall.listenerId.toString();
-              await Listener.findOneAndUpdate({ userId: listenerIdStr }, { isBusy: false, busySince: null });
-              const listenerDoc = await Listener.findOne({ userId: listenerIdStr }).select('isOnline');
-              const listenerIsOnline = listenerDoc ? listenerDoc.isOnline : true;
-              io.emit('listener_status_changed', { userId: listenerIdStr, isOnline: listenerIsOnline, isBusy: false });
-              const sseService = require('./services/sseService');
-              sseService.broadcastListenerStatus(listenerIdStr, listenerIsOnline, false, null);
-              if (listenerIsOnline) {
-                await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, listenerIdStr);
-              }
-              await redis.del(REDIS_KEYS.LOCK(listenerIdStr));
+                    io.to(`user_${freshCall.userId}`).emit('call_ended', { sessionId: callIdStr });
+                    io.to(`user_${freshCall.listenerId}`).emit('call_ended', { sessionId: callIdStr });
+
+                    const listenerIdStr = freshCall.listenerId.toString();
+                    await Listener.findOneAndUpdate({ userId: listenerIdStr }, { isBusy: false, busySince: null });
+                    const listenerDoc = await Listener.findOne({ userId: listenerIdStr }).select('isOnline');
+                    const listenerIsOnline = listenerDoc ? listenerDoc.isOnline : true;
+                    io.emit('listener_status_changed', { userId: listenerIdStr, isOnline: listenerIsOnline, isBusy: false });
+                    const sseService = require('./services/sseService');
+                    sseService.broadcastListenerStatus(listenerIdStr, listenerIsOnline, false, null);
+                    if (listenerIsOnline) {
+                      await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, listenerIdStr);
+                    }
+                    await redis.del(REDIS_KEYS.LOCK(listenerIdStr));
+                  }
+                } catch (graceErr) {
+                  console.error('[Socket] Error in call disconnect grace timer:', graceErr.message);
+                }
+              }, 10000);
             }
 
             // 3. Notify other participant that user went offline
