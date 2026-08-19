@@ -38,16 +38,14 @@ function getAgoraCredentials() {
 function buildAgoraRtcToken(channelName) {
   const { appId, appCertificate } = getAgoraCredentials();
 
-  const currentTimestamp = Math.floor(Date.now() / 1000);
-  const expireTime = currentTimestamp + TOKEN_EXPIRATION_SECONDS;
-
   return RtcTokenBuilder.buildTokenWithUid(
     appId,
     appCertificate,
     channelName,
     0, // any uid may join with this token
     RtcRole.PUBLISHER,
-    expireTime
+    TOKEN_EXPIRATION_SECONDS,
+    TOKEN_EXPIRATION_SECONDS
   );
 }
 

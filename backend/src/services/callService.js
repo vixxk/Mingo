@@ -21,18 +21,25 @@ const PushService = require('./pushService');
  */
 function getAgoraCallPayload(roomId, callType) {
   if (callType === 'chat') return {};
+  const config = require('../config/env');
+  const payload = {};
+
+  if (config.zego.appId && config.zego.appSign) {
+    payload.zegoAppId = config.zego.appId;
+    payload.zegoAppSign = config.zego.appSign;
+  }
+
   try {
     const { appId } = getAgoraCredentials();
     const token = buildAgoraRtcToken(roomId);
-    return {
-      agoraAppId: appId,
-      agoraToken: token,
-      agoraChannel: roomId,
-    };
+    payload.agoraAppId = appId;
+    payload.agoraToken = token;
+    payload.agoraChannel = roomId;
   } catch (e) {
-    console.log('[CallService] Agora credentials unavailable (video call will use fallback UI):', e.message);
-    return {};
+    console.log('[CallService] Agora credentials unavailable:', e.message);
   }
+
+  return payload;
 }
 
 class CallService {

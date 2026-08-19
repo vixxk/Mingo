@@ -20,15 +20,26 @@ import VideoUpgradeModal from '../../components/call/VideoUpgradeModal';
 import { callAPI, walletAPI } from '../../utils/api';
 import { socketService } from '../../utils/socket';
 import { AGORA_APP_ID } from '../../utils/agoraConfig';
+import { ZEGO_APP_ID, ZEGO_APP_SIGN } from '../../utils/zegoConfig';
 import { ms, s, vs, SCREEN_WIDTH, hp, wp } from '../../utils/responsive';
 import { getAvatarUrl } from '../../utils/avatars';
 
-// Agora RTC SDK — native module, only available on dev/native builds. Audio
-// calls run on the same Agora engine as video calls now (Zego was removed).
-// We try to load the native module regardless of the execution environment; it
-// is only unavailable inside Expo Go (which lacks native module support). Dev
-// client builds CAN load native modules even though executionEnvironment may
-// still report 'storeClient'.
+// ZegoCloud Prebuilt Call SDK for Audio Calls
+let ZegoUIKitPrebuiltCall = null;
+let ONE_ON_ONE_VOICE_CALL_CONFIG = null;
+let ZegoMenuBarButtonName = null;
+let canUseZegoSDK = false;
+try {
+  const zegoModule = require('@zegocloud/zego-uikit-prebuilt-call-rn');
+  ZegoUIKitPrebuiltCall = zegoModule.ZegoUIKitPrebuiltCall;
+  ZegoMenuBarButtonName = zegoModule.ZegoMenuBarButtonName;
+  ONE_ON_ONE_VOICE_CALL_CONFIG = zegoModule.ONE_ON_ONE_VOICE_CALL_CONFIG;
+  canUseZegoSDK = !!ZegoUIKitPrebuiltCall;
+} catch (e) {
+  console.log('[AudioCall] ZegoCloud SDK not available:', e.message);
+}
+
+// Agora RTC SDK — native module fallback for audio calls
 let AgoraSDK = null;
 let isExpoGo = false;
 try {
@@ -46,12 +57,48 @@ const {
   RemoteAudioState,
 } = AgoraSDK || {};
 
-// Video calls bill at this rate per minute (keep in sync with
-// VIDEO_COINS_PER_MIN in backend/src/socket.js). The payer needs at least one
-// video minute to convert an audio call — otherwise the backend refuses the
-// upgrade (call_upgrade_failed → insufficient_balance) and the frontend
-// prompts to recharge instead of converting and auto-ending a minute later.
 const VIDEO_UPGRADE_MIN_COINS = 40;
+
+const ZegoCallWrapper = React.memo(({ appId, appSign, userId, userName, roomId, onCallEnd, myAvatarUrl, listenerAvatarUrl }) => {
+  if (!ZegoUIKitPrebuiltCall) return null;
+
+  const menuBar = ONE_ON_ONE_VOICE_CALL_CONFIG?.bottomMenuBarConfig;
+  const safeButtons = Array.isArray(menuBar?.buttons)
+    ? menuBar.buttons.filter((b) => b !== ZegoMenuBarButtonName?.hangUpButton)
+    : undefined;
+
+  return (
+    <ZegoUIKitPrebuiltCall
+      appID={appId}
+      appSign={appSign}
+      userID={userId}
+      userName={userName}
+      callID={roomId}
+      config={{
+        ...ONE_ON_ONE_VOICE_CALL_CONFIG,
+        ...(safeButtons ? { bottomMenuBarConfig: { ...menuBar, buttons: safeButtons } } : {}),
+        onCallEnd: onCallEnd,
+        onHangUp: onCallEnd,
+        onOnlySelfInRoom: onCallEnd,
+        turnOnCameraWhenJoining: false,
+        turnOnMicrophoneWhenJoining: true,
+        useSpeakerWhenJoining: true,
+        avatarBuilder: (userInfo) => {
+          const isMe = String(userInfo?.userID) === String(userId);
+          const uri = isMe ? myAvatarUrl : listenerAvatarUrl;
+          if (!uri) return null;
+          return (
+            <Image
+              source={{ uri }}
+              style={styles.zegoAvatar}
+              resizeMode="cover"
+            />
+          );
+        },
+      }}
+    />
+  );
+});
 
 /**
  * Owns the Agora engine for the duration of the audio call. Controls are
@@ -215,10 +262,14 @@ export default function AudioCallScreen() {
     listenerId = '',
     avatarIndex = '0',
     gender = 'Female',
+    zegoAppId,
+    zegoAppSign,
     agoraAppId,
     agoraToken,
   } = useLocalSearchParams();
 
+  const [userID, setUserID] = useState('');
+  const [userName, setUserName] = useState('');
   const [showSafety, setShowSafety] = useState(false);
   const [showEndCallPopup, setShowEndCallPopup] = useState(false);
   const [showCallCancelled, setShowCallCancelled] = useState(false);
@@ -230,16 +281,10 @@ export default function AudioCallScreen() {
   const [upgradeModalVisible, setUpgradeModalVisible] = useState(false);
   const [upgradeModalMode, setUpgradeModalMode] = useState('request');
   const [pendingUpgradeState, setPendingUpgradeState] = useState(null); // null | 'incoming' | 'pending'
-  // True while the cancelled-call popup is showing a plain notice (upgrade
-  // declined, other side short on balance, ...) rather than a real call
-  // cancellation. Closing a notice must NOT end the ongoing audio call.
   const [callCancelledNotice, setCallCancelledNotice] = useState(false);
   const [currentCoins, setCurrentCoins] = useState(null);
   const [lowBalanceMessage, setLowBalanceMessage] = useState('');
   const [permission, setPermission] = useState({ mic: false });
-  // True once the permission prompts have finished (granted or denied). The
-  // real-call verdict below must wait for this — otherwise a fresh screen
-  // would be misread as "permissions denied" while the prompts are pending.
   const [permissionsResolved, setPermissionsResolved] = useState(false);
   const [isListener, setIsListener] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
@@ -255,18 +300,24 @@ export default function AudioCallScreen() {
   const cancelledExitTimerRef = useRef(null);
   const remoteJoinedRef = useRef(false);
   const upgradeNavigatedRef = useRef(false);
-  // Live role value for socket handlers registered once inside the billing
-  // effect — reading the isListener state directly there would be stale.
   const isListenerRef = useRef(false);
-  // Agora credentials — the backend mints a session-scoped token for audio
-  // calls (agoraAppId + agoraToken). Falls back to the bundled App ID only
-  // when the server did not attach one.
+
+  const resolvedZegoAppId = zegoAppId ? Number(zegoAppId) : ZEGO_APP_ID;
+  const resolvedZegoAppSign = zegoAppSign || ZEGO_APP_SIGN;
   const resolvedAppId = agoraAppId || AGORA_APP_ID;
 
   const canJoinRealCall = permission.mic;
 
+  const canUseZego =
+    canUseZegoSDK &&
+    !!resolvedZegoAppId &&
+    !!resolvedZegoAppSign &&
+    !!roomId &&
+    canJoinRealCall;
+
   const hasPlaceholderAppId = !resolvedAppId || /your_agora|placeholder|change_me/i.test(resolvedAppId);
   const canUseAgora =
+    !canUseZego &&
     !isExpoGo &&
     !!AgoraSDK &&
     !hasPlaceholderAppId &&
@@ -387,6 +438,8 @@ export default function AudioCallScreen() {
         if (userData) {
           const user = JSON.parse(userData);
           setIsListener(user.role === 'LISTENER');
+          setUserID(user.id || user._id || '');
+          setUserName(user.name || user.username || 'User');
         } else {
           setIsListener(false);
         }
@@ -868,18 +921,30 @@ export default function AudioCallScreen() {
         style={StyleSheet.absoluteFill}
       />
 
-      {/* Agora audio engine — active only when the real call can start */}
-      {canUseAgora && (
-        <AgoraAudioEngine
-          ref={agoraRef}
-          appId={resolvedAppId}
-          token={agoraToken}
-          channelName={roomId}
-          onRemoteJoinedChange={setRemoteJoined}
-          onRemoteLeft={handleRemoteLeft}
-          onFailedToConnect={handleAgoraFailedToConnect}
-          onEngineError={(err, msg) => console.log('[Agora] Engine error:', err, msg)}
+      {/* Primary Engine: ZegoCloud Audio Call; Fallback: Agora RTC */}
+      {canUseZego ? (
+        <ZegoCallWrapper
+          appId={resolvedZegoAppId}
+          appSign={resolvedZegoAppSign}
+          userId={userID || 'user'}
+          userName={userName || 'User'}
+          roomId={roomId}
+          onCallEnd={handleEndCall}
+          listenerAvatarUrl={getAvatarUrl(gender, avatarIndex)}
         />
+      ) : (
+        canUseAgora && (
+          <AgoraAudioEngine
+            ref={agoraRef}
+            appId={resolvedAppId}
+            token={agoraToken}
+            channelName={roomId}
+            onRemoteJoinedChange={setRemoteJoined}
+            onRemoteLeft={handleRemoteLeft}
+            onFailedToConnect={handleAgoraFailedToConnect}
+            onEngineError={(err, msg) => console.log('[Agora] Engine error:', err, msg)}
+          />
+        )
       )}
 
       {/* Call duration timer — always visible, with a generous gap below the
@@ -1080,6 +1145,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
+  },
+  zegoAvatar: {
+    width: '100%',
+    height: '100%',
   },
 
   topBar: {

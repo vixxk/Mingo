@@ -35,7 +35,6 @@ export default function ConnectingScreen() {
     roomId: initialRoomId,
     listenerId,
     avatarIndex,
-    gender,
     zegoAppId,
     zegoAppSign,
     agoraAppId,
@@ -68,13 +67,9 @@ export default function ConnectingScreen() {
   const realCallIdRef = useRef(initialCallId);
   const realRoomIdRef = useRef(initialRoomId);
 
-  // Zego credentials resolved from the backend session (falls back to route
-  // params, then to the config defaults in the call screen).
+  // Zego credentials (audio calls) & Agora credentials (video calls) resolved from the backend session
   const zegoAppIdRef = useRef(zegoAppId);
   const zegoAppSignRef = useRef(zegoAppSign);
-
-  // Agora credentials (video calls) resolved from the backend session — the
-  // token is session-scoped so both participants join the same channel.
   const agoraAppIdRef = useRef(agoraAppId);
   const agoraTokenRef = useRef(agoraToken);
   
@@ -260,6 +255,8 @@ export default function ConnectingScreen() {
           }
           stopRingtone();
           const targetScreen = callType === 'video' ? '/(call)/video-call' : '/(call)/audio-call';
+          const zegoAppIdVal = data.zegoAppId || zegoAppIdRef.current;
+          const zegoAppSignVal = data.zegoAppSign || zegoAppSignRef.current;
           const agoraAppIdVal = data.agoraAppId || agoraAppIdRef.current;
           const agoraTokenVal = data.agoraToken || agoraTokenRef.current;
           router.replace({ 
@@ -271,6 +268,8 @@ export default function ConnectingScreen() {
               listenerId: partnerListenerIdRef.current, 
               avatarIndex: partnerAvatarIndexRef.current, 
               gender: partnerGenderRef.current, 
+              ...(zegoAppIdVal ? { zegoAppId: String(zegoAppIdVal) } : {}),
+              ...(zegoAppSignVal ? { zegoAppSign: String(zegoAppSignVal) } : {}),
               ...(agoraAppIdVal ? { agoraAppId: String(agoraAppIdVal) } : {}),
               ...(agoraTokenVal ? { agoraToken: String(agoraTokenVal) } : {}),
               callType 
@@ -324,7 +323,6 @@ export default function ConnectingScreen() {
               // participants always join the same Zego app.
               if (sessionRes.data?.zegoAppId) zegoAppIdRef.current = sessionRes.data.zegoAppId;
               if (sessionRes.data?.zegoAppSign) zegoAppSignRef.current = sessionRes.data.zegoAppSign;
-              // Agora credentials (video calls) — session-scoped token.
               if (sessionRes.data?.agoraAppId) agoraAppIdRef.current = sessionRes.data.agoraAppId;
               if (sessionRes.data?.agoraToken) agoraTokenRef.current = sessionRes.data.agoraToken;
 
@@ -438,11 +436,8 @@ export default function ConnectingScreen() {
               setPartnerListenerId(finalListenerId);
             }
 
-            // Use the backend's session-scoped Zego credentials so both
-            // participants always join the same Zego app.
             if (sessionRes.data?.zegoAppId) zegoAppIdRef.current = sessionRes.data.zegoAppId;
             if (sessionRes.data?.zegoAppSign) zegoAppSignRef.current = sessionRes.data.zegoAppSign;
-            // Agora credentials (video calls) — session-scoped token.
             if (sessionRes.data?.agoraAppId) agoraAppIdRef.current = sessionRes.data.agoraAppId;
             if (sessionRes.data?.agoraToken) agoraTokenRef.current = sessionRes.data.agoraToken;
             

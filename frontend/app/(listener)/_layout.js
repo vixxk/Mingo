@@ -78,10 +78,9 @@ export default function ListenerLayout() {
                 gender: session.userId?.gender || 'Female',
                 callType: session.callType,
                 isIncoming: 'true',
-                // getActiveSession response carries the session's Zego creds
+                // Session-scoped credentials (Zego for audio, Agora for video)
                 ...(session.zegoAppId ? { zegoAppId: String(session.zegoAppId) } : {}),
                 ...(session.zegoAppSign ? { zegoAppSign: String(session.zegoAppSign) } : {}),
-                // getActiveSession response carries the session's Agora creds
                 ...(session.agoraAppId ? { agoraAppId: String(session.agoraAppId) } : {}),
                 ...(session.agoraToken ? { agoraToken: String(session.agoraToken) } : {}),
               }

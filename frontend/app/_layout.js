@@ -241,10 +241,9 @@ function RootLayout() {
         gender,
         callType,
         isIncoming: 'true',
-        // Session-scoped Zego credentials — both sides must join the same app
+        // Session-scoped credentials (Zego for audio calls, Agora for video calls)
         ...(session?.zegoAppId ? { zegoAppId: String(session.zegoAppId) } : {}),
         ...(session?.zegoAppSign ? { zegoAppSign: String(session.zegoAppSign) } : {}),
-        // Session-scoped Agora credentials for video calls
         ...(session?.agoraAppId ? { agoraAppId: String(session.agoraAppId) } : {}),
         ...(session?.agoraToken ? { agoraToken: String(session.agoraToken) } : {}),
       },
