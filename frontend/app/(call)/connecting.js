@@ -302,6 +302,22 @@ export default function ConnectingScreen() {
           }
         });
 
+        // Listen for validation failure — the backend could not relay the
+        // acceptance to us (session cancelled, caller offline, etc.)
+        socketService.on('call_validation_failed', (data) => {
+          console.log('Call validation failed:', data.reason);
+          if (callTimeoutRef.current) {
+            clearTimeout(callTimeoutRef.current);
+            callTimeoutRef.current = null;
+          }
+          stopRingtone();
+          setErrorModal({
+            visible: true,
+            title: 'Call Unavailable',
+            message: data.message || 'This call is no longer available. Please try again.',
+          });
+        });
+
         if (isRandom === 'true') {
           // RANDOM CALL FLOW
 
@@ -366,6 +382,7 @@ export default function ConnectingScreen() {
               callTimeoutRef.current = setTimeout(() => {
                 socketService.off('call_accepted');
                 socketService.off('call_rejected');
+                socketService.off('call_validation_failed');
                 stopRingtone();
                 socketService.emit('call_cancelled', { 
                   userId: targetListenerId, 
@@ -502,6 +519,7 @@ export default function ConnectingScreen() {
           callTimeoutRef.current = setTimeout(() => {
             socketService.off('call_accepted');
             socketService.off('call_rejected');
+            socketService.off('call_validation_failed');
             stopRingtone();
             socketService.emit('call_cancelled', { 
               userId: listenerId, 
@@ -526,6 +544,7 @@ export default function ConnectingScreen() {
       stopRingtone();
       socketService.off('call_accepted');
       socketService.off('call_rejected');
+      socketService.off('call_validation_failed');
       socketService.off('random_match_found');
       socketService.off('searching_random');
       socketService.off('random_search_timeout');

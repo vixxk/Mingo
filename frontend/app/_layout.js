@@ -389,6 +389,16 @@ function RootLayout() {
       incomingCallNative.stopIncomingCall();
     };
 
+    const handleCallValidationFailed = (data) => {
+      const cid = data?.sessionId;
+      console.log('[RootLayout] Call validation failed:', data.reason, cid);
+      // If we already navigated to the call screen, finishAndExit will handle it.
+      // If we're still on the layout, remove the incoming call and notify the user.
+      if (cid) handledCallIdsRef.current.add(cid);
+      setIncomingCalls(prev => (cid ? prev.filter(c => c.callId !== cid) : []));
+      incomingCallNative.stopIncomingCall();
+    };
+
     const handleAccountBanned = (data) => {
       console.log('[RootLayout] Account banned event received:', data);
       Alert.alert('Account Suspended', data.message || 'Your account has been suspended.', [
@@ -419,6 +429,7 @@ function RootLayout() {
 
       socketService.on('incoming_call', handleIncomingCall);
       socketService.on('call_cancelled', handleCallCancelled);
+      socketService.on('call_validation_failed', handleCallValidationFailed);
       socketService.on('account_banned', handleAccountBanned);
       socketService.on('accept_incoming_call', handleAcceptLocal);
       socketService.on('reject_incoming_call', handleRejectLocal);
@@ -456,6 +467,7 @@ function RootLayout() {
     return () => {
       socketService.off('incoming_call', handleIncomingCall);
       socketService.off('call_cancelled', handleCallCancelled);
+      socketService.off('call_validation_failed', handleCallValidationFailed);
       socketService.off('account_banned', handleAccountBanned);
       socketService.off('accept_incoming_call', handleAcceptLocal);
       socketService.off('reject_incoming_call', handleRejectLocal);

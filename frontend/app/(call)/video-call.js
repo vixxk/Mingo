@@ -665,11 +665,8 @@ function VideoCallScreenComponent() {
   useEffect(() => {
     const setupBilling = async () => {
       await socketService.connect();
-
-      // Tell the server to start per-minute billing for this session
-      if (callId && callId !== 'demo_zego_call' && callId !== 'test_call_id') {
-        socketService.emit('start_call_billing', { sessionId: callId });
-      }
+      // Billing is started AFTER Agora connects (in onJoinSuccess) so the
+      // user is only charged once both participants can actually talk.
     };
 
     const handleBalanceUpdate = (data) => {
@@ -985,6 +982,11 @@ function VideoCallScreenComponent() {
           onEngineError={(err, msg) => console.log('[Agora] Engine error:', err, msg)}
           onJoinSuccess={() => {
             console.log('[VideoCall] Agora joinChannel succeeded — local user is in the channel');
+
+            // Start billing NOW that we're actually connected and can talk.
+            if (callId && callId !== 'demo_zego_call' && callId !== 'test_call_id') {
+              socketService.emit('start_call_billing', { sessionId: callId });
+            }
 
             // Fallback: if onUserJoined / onRemoteAudioStateChanged never fires
             // (can happen on certain builds where Agora callbacks are delayed or

@@ -689,12 +689,15 @@ const initSocket = (server) => {
 
     socket.on('call_accepted', async (data) => {
       const { userId, sessionId, roomId } = data;
-      console.log(`[Socket] call_accepted event received for session: ${sessionId}, user: ${userId}`);
+      const listenerUserId = socket.userId;
+      console.log(`[Socket] call_accepted event received for session: ${sessionId}, user: ${userId}, listener: ${listenerUserId}`);
       try {
         const session = await Session.findById(sessionId);
         if (!session || session.status === 'cancelled' || session.status === 'completed') {
           console.log(`[Socket] Call accept failed: Session ${sessionId} is ${session?.status || 'not found'}`);
-          socket.emit('call_validation_failed', { sessionId, reason: 'cancelled' });
+          // Notify BOTH caller and listener so neither side hangs
+          io.to(`user_${userId}`).emit('call_validation_failed', { sessionId, reason: 'cancelled' });
+          if (listenerUserId) io.to(`user_${listenerUserId}`).emit('call_validation_failed', { sessionId, reason: 'cancelled' });
           return;
         }
 
@@ -708,7 +711,6 @@ const initSocket = (server) => {
           session.status = 'cancelled';
           await session.save();
           
-          let listenerUserId = socket.userId || session.listenerId;
           if (listenerUserId) {
             await Listener.findOneAndUpdate({ userId: listenerUserId }, { isBusy: false, busySince: null });
             io.emit('listener_status_changed', { userId: listenerUserId, isOnline: true, isBusy: false });
@@ -718,15 +720,32 @@ const initSocket = (server) => {
             await redis.del(REDIS_KEYS.LOCK(listenerUserId.toString()));
           }
           
-          socket.emit('call_validation_failed', { sessionId, reason: 'user_offline' });
+          // Notify BOTH parties
+          io.to(`user_${userId}`).emit('call_validation_failed', { sessionId, reason: 'user_offline' });
+          if (listenerUserId) io.to(`user_${listenerUserId}`).emit('call_validation_failed', { sessionId, reason: 'user_offline' });
           return;
         }
 
+        // Mark the session as active so billing and status checks know the call is live
+        if (session.status !== 'active') {
+          session.status = 'active';
+          await session.save();
+        }
+
         const agoraPayload = CallService.getAgoraCallPayload(roomId, session.callType);
+
+        // Notify the caller with the Agora/Zego credentials to join the channel
         io.to(`user_${userId}`).emit('call_accepted', { sessionId, roomId, ...agoraPayload });
+
+        // Also confirm to the listener that the backend successfully relayed the acceptance
+        if (listenerUserId) {
+          io.to(`user_${listenerUserId}`).emit('call_accepted', { sessionId, roomId, ...agoraPayload });
+        }
       } catch (err) {
         console.error('[Socket] Error in call_accepted validation:', err.message);
-        socket.emit('call_validation_failed', { sessionId, reason: 'error', message: err.message });
+        // Notify BOTH parties on error
+        io.to(`user_${userId}`).emit('call_validation_failed', { sessionId, reason: 'error', message: err.message });
+        if (listenerUserId) io.to(`user_${listenerUserId}`).emit('call_validation_failed', { sessionId, reason: 'error', message: err.message });
       }
     });
 
