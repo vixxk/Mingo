@@ -9,20 +9,22 @@ const transactionSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['purchase', 'call_debit', 'call_credit', 'signup_bonus', 'refund', 'gift_send', 'gift_receive'],
+      enum: ['purchase', 'call_debit', 'call_credit', 'signup_bonus', 'refund', 'gift_send', 'gift_receive', 'DEBIT', 'CREDIT', 'debit', 'credit'],
       required: true,
     },
     amount: {
       type: Number,
+      default: 0,
       required: true,
     },
     coins: {
       type: Number,
+      default: 0,
       required: true,
     },
     description: {
       type: String,
-      default: '',
+      default: 'Transaction record',
     },
     status: {
       type: String,
@@ -30,21 +32,29 @@ const transactionSchema = new mongoose.Schema(
       default: 'completed',
     },
     metadata: {
-      packageId: String,
-      sessionId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Session',
-      },
-      discount: Number,
-      originalPrice: Number,
-      isFirstPurchase: Boolean,
-      purchaseToken: String,
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
     },
   },
   {
     timestamps: true,
   }
 );
+
+transactionSchema.pre('validate', function (next) {
+  if (this.type === 'DEBIT') {
+    this.type = 'call_debit';
+  } else if (this.type === 'CREDIT') {
+    this.type = 'call_credit';
+  }
+  if (this.coins === undefined || this.coins === null) {
+    this.coins = 0;
+  }
+  if (this.amount === undefined || this.amount === null) {
+    this.amount = 0;
+  }
+  next();
+});
 
 transactionSchema.index({ userId: 1 });
 transactionSchema.index({ type: 1 });

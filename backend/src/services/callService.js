@@ -386,6 +386,26 @@ class CallService {
 
     await session.save();
 
+    // Ensure transaction record exists for call billing summary
+    try {
+      if (session.coinsDeducted && session.coinsDeducted > 0) {
+        const existingTx = await Transaction.findOne({ 'metadata.sessionId': session._id, type: 'call_debit' });
+        if (!existingTx) {
+          await Transaction.create({
+            userId: session.userId,
+            type: 'call_debit',
+            amount: 0,
+            coins: -session.coinsDeducted,
+            description: `${session.callType || 'audio'} call session (${session.duration || 1} min)`,
+            status: 'completed',
+            metadata: { sessionId: session._id },
+          });
+        }
+      }
+    } catch (txErr) {
+      console.error('[CallService] Error processing end-call transaction:', txErr.message);
+    }
+
     // Update listener call counters (earnings already credited per-minute by billing timer)
     await CallService.incrementListenerCounters(session.listenerId, session.callType);
 
