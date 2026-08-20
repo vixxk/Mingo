@@ -40,9 +40,14 @@ class CallController {
     }
   }
 
-    static async getSession(req, res, next) {
+  static async getSession(req, res, next) {
     try {
-      const session = await CallService.getSession(req.params.sessionId);
+      const { sessionId } = req.params;
+      const mongoose = require('mongoose');
+      if (!sessionId || sessionId === 'undefined' || sessionId === 'null' || !mongoose.Types.ObjectId.isValid(sessionId)) {
+        throw new AppError('Invalid or missing session ID', 400);
+      }
+      const session = await CallService.getSession(sessionId);
       return ApiResponse.success(res, session, 'Session details retrieved');
     } catch (err) {
       next(err);

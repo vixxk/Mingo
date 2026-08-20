@@ -752,9 +752,20 @@ const initSocket = (server) => {
     socket.on('call_rejected', async (data) => {
       const { userId, sessionId, reason } = data;
       console.log(`[Socket] call_rejected received from listener. Caller user: ${userId}, Session: ${sessionId}`);
+      
+      try {
+        if (sessionId && mongoose.Types.ObjectId.isValid(sessionId)) {
+          const session = await Session.findById(sessionId);
+          if (session && session.status === 'active') {
+            console.log(`[Socket] Ignoring call_rejected for session ${sessionId} because session is already active`);
+            return;
+          }
+        }
+      } catch (e) {}
+
       io.to(`user_${userId}`).emit('call_rejected', { reason: reason || 'rejected' });
       try {
-        if (sessionId) {
+        if (sessionId && mongoose.Types.ObjectId.isValid(sessionId)) {
           // Nobody answered (listener's incoming-call card timed out) — record
           // it as a missed call so it shows up in both sides' history.
           const isNoAnswer = reason === 'timeout' || reason === 'no_answer';

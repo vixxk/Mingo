@@ -142,7 +142,12 @@ function RootLayout() {
 
   const handleAcceptCall = useCallback(async (acceptedCall) => {
     if (!acceptedCall) return;
-    if (acceptedCall.callId) handledCallIdsRef.current.add(acceptedCall.callId);
+    const callId = acceptedCall.callId || acceptedCall.sessionId || acceptedCall.id || acceptedCall._id;
+    if (!callId) {
+      console.log('[RootLayout] Cannot accept call — missing callId/sessionId in acceptedCall payload:', acceptedCall);
+      return;
+    }
+    handledCallIdsRef.current.add(callId);
 
     // Ensure socket is connected before emitting events
     await socketService.connect();
@@ -151,7 +156,7 @@ function RootLayout() {
     // background/killed card) — dismiss it and the shade notification.
     incomingCallNative.stopIncomingCall();
 
-    const { callerId, callerName, callType, callId, roomId, avatarIndex, gender } = acceptedCall;
+    const { callerId, callerName, callType, roomId, avatarIndex, gender } = acceptedCall;
 
     let session;
     try {
@@ -160,13 +165,13 @@ function RootLayout() {
       session = sessionRes?.data;
       if (!session || session.status === 'cancelled' || session.status === 'completed') {
         setCallCancelledVisible(true);
-        setIncomingCalls(prev => prev.filter(c => c.callId !== callId));
+        setIncomingCalls(prev => prev.filter(c => (c.callId || c.sessionId || c.id || c._id) !== callId));
         return;
       }
     } catch (err) {
       console.log('Error validating session before accept:', err);
       Alert.alert('Call Unavailable', 'This call is no longer available.', [{ text: 'OK' }]);
-      setIncomingCalls(prev => prev.filter(c => c.callId !== callId));
+      setIncomingCalls(prev => prev.filter(c => (c.callId || c.sessionId || c.id || c._id) !== callId));
       return;
     }
 
@@ -199,21 +204,29 @@ function RootLayout() {
           sessionId: callId,
           reason: 'insufficient_balance',
         });
-        setIncomingCalls(prev => prev.filter(c => c.callId !== callId));
+        setIncomingCalls(prev => prev.filter(c => (c.callId || c.sessionId || c.id || c._id) !== callId));
         setRechargeGate({ callerName, callType, minCoins, balance });
         return;
       }
     }
 
-    // Automatically reject all other active requests
+    // Automatically reject all other active requests (excluding current call and current caller)
     incomingCallsRef.current
-      .filter(c => c.callId !== callId)
+      .filter(c => {
+        const otherId = c.callId || c.sessionId || c.id || c._id;
+        const isSameCall = otherId === callId;
+        const isSameCaller = c.callerId === callerId;
+        return !isSameCall && !isSameCaller;
+      })
       .forEach(otherCall => {
-        socketService.emit('call_rejected', {
-          userId: otherCall.callerId,
-          sessionId: otherCall.callId,
-          reason: 'busy',
-        });
+        const otherId = otherCall.callId || otherCall.sessionId || otherCall.id || otherCall._id;
+        if (otherCall.callerId && otherId) {
+          socketService.emit('call_rejected', {
+            userId: otherCall.callerId,
+            sessionId: otherId,
+            reason: 'busy',
+          });
+        }
       });
 
     // Notify caller we accepted — include session-scoped credentials so the
@@ -265,17 +278,18 @@ function RootLayout() {
 
   const handleRejectCall = useCallback(async (rejectedCall) => {
     if (!rejectedCall) return;
-    if (rejectedCall.callId) handledCallIdsRef.current.add(rejectedCall.callId);
+    const callId = rejectedCall.callId || rejectedCall.sessionId || rejectedCall.id || rejectedCall._id;
+    if (callId) handledCallIdsRef.current.add(callId);
     // Ensure socket is connected so the rejection reaches the caller
     await socketService.connect();
     // Dismiss any native card/notification still ringing
     incomingCallNative.stopIncomingCall();
     socketService.emit('call_rejected', {
       userId: rejectedCall.callerId,
-      sessionId: rejectedCall.callId,
+      sessionId: callId,
       reason: 'busy',
     });
-    setIncomingCalls(prev => prev.filter(c => c.callId !== rejectedCall.callId));
+    setIncomingCalls(prev => prev.filter(c => (c.callId || c.sessionId || c.id || c._id) !== callId));
   }, []);
 
   // Refs so the once-registered socket handlers always call the latest ones
