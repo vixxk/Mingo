@@ -270,8 +270,14 @@ class CallService {
     };
   }
 
-    static async endCall(sessionId, userId) {
-    const session = await Session.findById(sessionId);
+  static async endCall(sessionId, userId) {
+    let session = null;
+    if (sessionId && mongoose.Types.ObjectId.isValid(sessionId)) {
+      session = await Session.findById(sessionId);
+    }
+    if (!session && sessionId) {
+      session = await Session.findOne({ roomId: sessionId });
+    }
     if (!session) {
       throw new AppError('Session not found', 404);
     }
@@ -286,7 +292,12 @@ class CallService {
     }
 
     if (session.status !== 'active') {
-      // Already ended (possibly by the billing timer auto-end)
+      // Already ended — ensure both socket rooms receive call_ended so clients exit
+      try {
+        const { getIo } = require('../socket');
+        getIo().to(`user_${sessionUserIdStr}`).emit('call_ended', { sessionId, roomId: session.roomId });
+        getIo().to(`user_${sessionListenerIdStr}`).emit('call_ended', { sessionId, roomId: session.roomId });
+      } catch (e) {}
       return {
         sessionId: session._id,
         roomId: session.roomId,
@@ -500,6 +511,7 @@ class CallService {
 
       const session = await Session.findOne({
         status: 'active',
+        isAccepted: { $ne: true },
         callType: { $in: ['audio', 'video'] },
         listenerId: userIdStr,
         lastDeductionTime: { $exists: false },

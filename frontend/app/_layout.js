@@ -141,13 +141,16 @@ function RootLayout() {
   }, [incomingCalls]);
 
   const handleAcceptCall = useCallback(async (acceptedCall) => {
-    if (!acceptedCall) return;
-    const callId = acceptedCall.callId || acceptedCall.sessionId || acceptedCall.id || acceptedCall._id;
+    const callId = String(acceptedCall.callId || acceptedCall.sessionId || acceptedCall.id || acceptedCall._id || '');
     if (!callId) {
       console.log('[RootLayout] Cannot accept call — missing callId/sessionId in acceptedCall payload:', acceptedCall);
       return;
     }
     handledCallIdsRef.current.add(callId);
+    if (acceptedCall.callId) handledCallIdsRef.current.add(String(acceptedCall.callId));
+    if (acceptedCall.sessionId) handledCallIdsRef.current.add(String(acceptedCall.sessionId));
+    if (acceptedCall.roomId) handledCallIdsRef.current.add(String(acceptedCall.roomId));
+    setIncomingCalls([]);
 
     // Ensure socket is connected before emitting events
     await socketService.connect();
@@ -229,6 +232,11 @@ function RootLayout() {
         }
       });
 
+    const zegoAppIdVal = session?.zegoAppId || acceptedCall?.zegoAppId;
+    const zegoAppSignVal = session?.zegoAppSign || acceptedCall?.zegoAppSign;
+    const agoraAppIdVal = session?.agoraAppId || acceptedCall?.agoraAppId;
+    const agoraTokenVal = session?.agoraToken || acceptedCall?.agoraToken;
+
     // Notify caller we accepted — include session-scoped credentials so the
     // user's connecting screen has the latest Zego/Agora tokens (they may
     // differ from the initial startCall response if the backend regenerated
@@ -237,10 +245,10 @@ function RootLayout() {
       userId: callerId,
       sessionId: callId,
       roomId,
-      ...(session?.zegoAppId ? { zegoAppId: session.zegoAppId } : {}),
-      ...(session?.zegoAppSign ? { zegoAppSign: session.zegoAppSign } : {}),
-      ...(session?.agoraAppId ? { agoraAppId: session.agoraAppId } : {}),
-      ...(session?.agoraToken ? { agoraToken: session.agoraToken } : {}),
+      ...(zegoAppIdVal ? { zegoAppId: zegoAppIdVal } : {}),
+      ...(zegoAppSignVal ? { zegoAppSign: zegoAppSignVal } : {}),
+      ...(agoraAppIdVal ? { agoraAppId: agoraAppIdVal } : {}),
+      ...(agoraTokenVal ? { agoraToken: agoraTokenVal } : {}),
     });
 
     setIncomingCalls([]);
@@ -268,10 +276,10 @@ function RootLayout() {
         callType,
         isIncoming: 'true',
         // Session-scoped credentials (Zego for audio calls, Agora for video calls)
-        ...(session?.zegoAppId ? { zegoAppId: String(session.zegoAppId) } : {}),
-        ...(session?.zegoAppSign ? { zegoAppSign: String(session.zegoAppSign) } : {}),
-        ...(session?.agoraAppId ? { agoraAppId: String(session.agoraAppId) } : {}),
-        ...(session?.agoraToken ? { agoraToken: String(session.agoraToken) } : {}),
+        ...(zegoAppIdVal ? { zegoAppId: String(zegoAppIdVal) } : {}),
+        ...(zegoAppSignVal ? { zegoAppSign: String(zegoAppSignVal) } : {}),
+        ...(agoraAppIdVal ? { agoraAppId: String(agoraAppIdVal) } : {}),
+        ...(agoraTokenVal ? { agoraToken: String(agoraTokenVal) } : {}),
       },
     });
   }, [router]);
@@ -347,16 +355,15 @@ function RootLayout() {
     return unsubscribe;
   }, []);
 
-  // Sync active incoming call from REST API (in case socket was slow or app opened mid-ring)
   const syncActiveIncomingCall = useCallback(async () => {
     try {
       const res = await callAPI.getActiveIncomingCall();
       if (res?.data?.hasIncomingCall && res.data.callData) {
-        const cid = res.data.callData.callId;
-        if (handledCallIdsRef.current.has(cid)) return;
+        const cid = String(res.data.callData.callId || res.data.callData.sessionId || '');
+        if (!cid || handledCallIdsRef.current.has(cid)) return;
         console.log('[RootLayout] Found active incoming call from REST sync:', res.data.callData);
         setIncomingCalls(prev => {
-          if (prev.some(c => c.callId === cid)) return prev;
+          if (prev.some(c => String(c.callId || c.sessionId || c.id || c._id) === cid)) return prev;
           return [...prev, res.data.callData];
         });
       }
@@ -378,16 +385,34 @@ function RootLayout() {
     return () => subscription.remove();
   }, [syncActiveIncomingCall]);
 
+  const isInCallScreen = !!(pathname && (
+    pathname.includes('/(call)') ||
+    pathname.includes('audio-call') ||
+    pathname.includes('video-call') ||
+    pathname.includes('connecting')
+  ));
+
   // Global socket listeners — show the incoming-call popup on every screen
   useEffect(() => {
     const handleIncomingCall = (callData) => {
-      if (!callData?.callId || handledCallIdsRef.current.has(callData.callId)) {
-        console.log('[RootLayout] Ignoring incoming_call for already handled call:', callData?.callId);
+      const cid = callData?.callId || callData?.sessionId || callData?._id || callData?.id;
+      if (!cid || handledCallIdsRef.current.has(String(cid))) {
+        console.log('[RootLayout] Ignoring incoming_call for already handled call:', cid);
+        return;
+      }
+      if (isInCallScreen) {
+        console.log('[RootLayout] User is already in call screen, auto-rejecting incoming call:', cid);
+        handledCallIdsRef.current.add(String(cid));
+        socketService.emit('call_rejected', {
+          userId: callData.callerId,
+          sessionId: cid,
+          reason: 'busy',
+        });
         return;
       }
       console.log('[RootLayout] Incoming call received:', callData);
       setIncomingCalls((prev) => {
-        if (prev.some(c => c.callId === callData.callId)) return prev;
+        if (prev.some(c => (c.callId || c.sessionId || c.id || c._id) === cid)) return prev;
         return [...prev, callData];
       });
       if (AppState.currentState !== 'active') {
@@ -395,21 +420,22 @@ function RootLayout() {
       }
     };
 
-    const handleCallCancelled = (data) => {
-      const cid = data?.callId || data?.sessionId;
-      if (cid) handledCallIdsRef.current.add(cid);
-      console.log('[RootLayout] Call cancelled by caller:', data);
-      setIncomingCalls(prev => (cid ? prev.filter(c => c.callId !== cid) : []));
-      incomingCallNative.stopIncomingCall();
-    };
-
-    const handleCallValidationFailed = (data) => {
-      const cid = data?.sessionId;
-      console.log('[RootLayout] Call validation failed:', data.reason, cid);
-      // If we already navigated to the call screen, finishAndExit will handle it.
-      // If we're still on the layout, remove the incoming call and notify the user.
-      if (cid) handledCallIdsRef.current.add(cid);
-      setIncomingCalls(prev => (cid ? prev.filter(c => c.callId !== cid) : []));
+    const dismissCallGlobal = (data) => {
+      const cid = String(data?.callId || data?.sessionId || data?.id || data?._id || data?.roomId || '');
+      console.log('[RootLayout] Dismiss call event received:', data, 'cid:', cid);
+      if (cid) {
+        handledCallIdsRef.current.add(cid);
+        if (data?.callId) handledCallIdsRef.current.add(String(data.callId));
+        if (data?.sessionId) handledCallIdsRef.current.add(String(data.sessionId));
+        if (data?.roomId) handledCallIdsRef.current.add(String(data.roomId));
+      }
+      setIncomingCalls(prev => {
+        if (!cid) return [];
+        return prev.filter(c => {
+          const id = String(c.callId || c.sessionId || c.id || c._id || c.roomId || '');
+          return id !== cid;
+        });
+      });
       incomingCallNative.stopIncomingCall();
     };
 
@@ -442,8 +468,11 @@ function RootLayout() {
       await socketService.connect();
 
       socketService.on('incoming_call', handleIncomingCall);
-      socketService.on('call_cancelled', handleCallCancelled);
-      socketService.on('call_validation_failed', handleCallValidationFailed);
+      socketService.on('call_cancelled', dismissCallGlobal);
+      socketService.on('call_ended', dismissCallGlobal);
+      socketService.on('call_rejected', dismissCallGlobal);
+      socketService.on('call_auto_ended', dismissCallGlobal);
+      socketService.on('call_validation_failed', dismissCallGlobal);
       socketService.on('account_banned', handleAccountBanned);
       socketService.on('accept_incoming_call', handleAcceptLocal);
       socketService.on('reject_incoming_call', handleRejectLocal);
@@ -480,8 +509,11 @@ function RootLayout() {
 
     return () => {
       socketService.off('incoming_call', handleIncomingCall);
-      socketService.off('call_cancelled', handleCallCancelled);
-      socketService.off('call_validation_failed', handleCallValidationFailed);
+      socketService.off('call_cancelled', dismissCallGlobal);
+      socketService.off('call_ended', dismissCallGlobal);
+      socketService.off('call_rejected', dismissCallGlobal);
+      socketService.off('call_auto_ended', dismissCallGlobal);
+      socketService.off('call_validation_failed', dismissCallGlobal);
       socketService.off('account_banned', handleAccountBanned);
       socketService.off('accept_incoming_call', handleAcceptLocal);
       socketService.off('reject_incoming_call', handleRejectLocal);
@@ -594,12 +626,14 @@ function RootLayout() {
           }}
         />
 
-        {/* Global overlays — visible on every screen */}
-        <IncomingCallPopup
-          calls={incomingCalls}
-          onAccept={handleAcceptCall}
-          onReject={handleRejectCall}
-        />
+        {/* Global overlays — visible on every screen except active call screens */}
+        {!isInCallScreen && (
+          <IncomingCallPopup
+            calls={incomingCalls}
+            onAccept={handleAcceptCall}
+            onReject={handleRejectCall}
+          />
+        )}
 
         <CallCancelledPopup
           visible={callCancelledVisible}

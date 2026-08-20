@@ -93,6 +93,10 @@ const sessionSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    isAccepted: {
+      type: Boolean,
+      default: false,
+    },
     status: {
       type: String,
       enum: ['active', 'completed', 'cancelled', 'missed'],

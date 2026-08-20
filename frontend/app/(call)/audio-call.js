@@ -312,10 +312,9 @@ class CallErrorBoundary extends React.Component {
 function AudioCallScreenComponent() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const rawParams = useLocalSearchParams();
   const {
     name = 'Listener',
-    callId = '',
-    roomId = '',
     listenerId = '',
     userId: paramUserId = '',
     avatarIndex = '0',
@@ -324,7 +323,10 @@ function AudioCallScreenComponent() {
     zegoAppSign,
     agoraAppId,
     agoraToken,
-  } = useLocalSearchParams();
+  } = rawParams;
+
+  const callId = String(rawParams.callId || rawParams.sessionId || rawParams.id || rawParams._id || '');
+  const roomId = String(rawParams.roomId || '');
 
   const [userID, setUserID] = useState(paramUserId || '');
   const [userName, setUserName] = useState('');
@@ -361,9 +363,33 @@ function AudioCallScreenComponent() {
   const upgradeNavigatedRef = useRef(false);
   const isListenerRef = useRef(false);
 
+  const [currentAgoraToken, setCurrentAgoraToken] = useState(agoraToken || '');
+  const [currentAgoraAppId, setCurrentAgoraAppId] = useState(agoraAppId || '');
+
+  useEffect(() => {
+    if (agoraToken) setCurrentAgoraToken(agoraToken);
+    if (agoraAppId) setCurrentAgoraAppId(agoraAppId);
+  }, [agoraToken, agoraAppId]);
+
+  useEffect(() => {
+    const handleCallAccepted = (data) => {
+      if ((data.sessionId && data.sessionId === callId) || (data.roomId && data.roomId === roomId)) {
+        if (data.agoraToken) setCurrentAgoraToken(data.agoraToken);
+        if (data.agoraAppId) setCurrentAgoraAppId(data.agoraAppId);
+      }
+    };
+    socketService.on('call_accepted', handleCallAccepted);
+    return () => {
+      socketService.off('call_accepted', handleCallAccepted);
+    };
+  }, [callId, roomId]);
+
+  const effectiveAgoraToken = currentAgoraToken || agoraToken;
+  const effectiveAgoraAppId = currentAgoraAppId || agoraAppId;
+
   const resolvedZegoAppId = zegoAppId ? Number(zegoAppId) : ZEGO_APP_ID;
   const resolvedZegoAppSign = zegoAppSign || ZEGO_APP_SIGN;
-  const resolvedAppId = agoraAppId || AGORA_APP_ID;
+  const resolvedAppId = effectiveAgoraAppId || AGORA_APP_ID;
 
   const canJoinRealCall = permission.mic;
 
@@ -393,7 +419,7 @@ function AudioCallScreenComponent() {
     !!AgoraSDK &&
     typeof createAgoraRtcEngine === 'function' &&
     !hasPlaceholderAppId &&
-    !!agoraToken &&
+    !!effectiveAgoraToken &&
     !!roomId &&
     canJoinRealCall;
 
@@ -444,11 +470,12 @@ function AudioCallScreenComponent() {
     // is safe when the socket handler (or the other side) already ended the
     // session.
     try {
-      if (callId && callId !== 'demo_zego_call' && callId !== 'test_call_id') {
-        socketService.emit('stop_call_billing', { sessionId: callId });
-        // Also emit call_ended via socket as belt-and-suspenders
-        socketService.emit('call_ended', { sessionId: callId, roomId });
-        callAPI.endCall(callId).catch((error) => {
+      const activeId = callId || roomId;
+      if (activeId && activeId !== 'demo_zego_call' && activeId !== 'test_call_id') {
+        socketService.emit('stop_call_billing', { sessionId: activeId, roomId });
+        // Emit call_ended via socket to instantly disconnect both parties
+        socketService.emit('call_ended', { sessionId: activeId, roomId });
+        callAPI.endCall(activeId).catch((error) => {
           console.log('Failed to end call on backend:', error);
         });
       }
@@ -476,7 +503,7 @@ function AudioCallScreenComponent() {
       } else {
         router.replace({
           pathname: '/(call)/call-feedback',
-          params: { name, sessionId: callId, listenerId, callType: 'audio' },
+          params: { name, sessionId: callId || roomId, listenerId, callType: 'audio' },
         });
       }
     }, 800);
@@ -568,7 +595,10 @@ function AudioCallScreenComponent() {
     };
 
     const handleCallEnded = async (data) => {
-      if (data.sessionId === callId) {
+      console.log('[AudioCall] Received call_ended socket event:', data);
+      const incId = String(data?.sessionId || data?.callId || data?.id || '');
+      const curId = String(callId || '');
+      if (!incId || !curId || incId === curId || (data?.roomId && data.roomId === roomId)) {
         await finishAndExit();
       }
     };
@@ -1026,7 +1056,7 @@ function AudioCallScreenComponent() {
           <AgoraAudioEngine
             ref={agoraRef}
             appId={resolvedAppId}
-            token={agoraToken}
+            token={effectiveAgoraToken}
             channelName={roomId}
             onRemoteJoinedChange={setRemoteJoined}
             onRemoteLeft={handleRemoteLeft}

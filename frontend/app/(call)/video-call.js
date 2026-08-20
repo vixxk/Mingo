@@ -67,9 +67,9 @@ const SafeLocalVideoView = ({ canvas, style, fallbackAvatarUrl, zOrderMediaOverl
   }
 
   const compProps = { canvas, style };
-  if (Comp === RtcSurfaceView && Platform.OS === 'android') {
-    if (zOrderMediaOverlay !== undefined) compProps.zOrderMediaOverlay = zOrderMediaOverlay;
-    if (zOrderOnTop !== undefined) compProps.zOrderOnTop = zOrderOnTop;
+  if (Platform.OS === 'android') {
+    compProps.zOrderMediaOverlay = zOrderMediaOverlay !== undefined ? zOrderMediaOverlay : true;
+    compProps.zOrderOnTop = zOrderOnTop !== undefined ? zOrderOnTop : true;
   }
 
   try {
@@ -281,23 +281,6 @@ const AgoraVideoView = forwardRef(
               try { engine.setEnableSpeakerphone(true); } catch (e) {}
               ensureLocalPreview();
 
-              // Camera off and back on toggle for clean hardware self view initialization
-              setTimeout(() => {
-                if (!active || !engineRef.current) return;
-                try {
-                  engineRef.current.stopPreview();
-                  engineRef.current.enableLocalVideo(false);
-                } catch (e) {}
-                setTimeout(() => {
-                  if (!active || !engineRef.current) return;
-                  try {
-                    engineRef.current.enableLocalVideo(true);
-                    engineRef.current.startPreview();
-                    engineRef.current.muteLocalVideoStream(false);
-                  } catch (e) {}
-                }, 150);
-              }, 200);
-
               if (onJoinSuccessRef.current) onJoinSuccessRef.current();
             },
             onUserJoined: (connection, uid) => {
@@ -448,16 +431,18 @@ const AgoraVideoView = forwardRef(
 function VideoCallScreenComponent() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const rawParams = useLocalSearchParams();
   const {
     name = 'Listener',
-    callId = '',
-    roomId = '',
     listenerId = '',
     avatarIndex = '0',
     gender = 'Female',
     agoraAppId,
     agoraToken,
-  } = useLocalSearchParams();
+  } = rawParams;
+
+  const callId = String(rawParams.callId || rawParams.sessionId || rawParams.id || rawParams._id || '');
+  const roomId = String(rawParams.roomId || '');
 
   const [showSafety, setShowSafety] = useState(false);
   const [showEndCallPopup, setShowEndCallPopup] = useState(false);
@@ -492,10 +477,42 @@ function VideoCallScreenComponent() {
   const callEndedRef = useRef(false);
   const cancelledExitTimerRef = useRef(null);
   const remoteJoinedRef = useRef(true);
+  const [currentAgoraToken, setCurrentAgoraToken] = useState(agoraToken || '');
+  const [currentAgoraAppId, setCurrentAgoraAppId] = useState(agoraAppId || '');
+
+  useEffect(() => {
+    if (agoraToken) setCurrentAgoraToken(agoraToken);
+    if (agoraAppId) setCurrentAgoraAppId(agoraAppId);
+  }, [agoraToken, agoraAppId]);
+
+  useEffect(() => {
+    const handleCallAccepted = (data) => {
+      if ((data.sessionId && data.sessionId === callId) || (data.roomId && data.roomId === roomId)) {
+        if (data.agoraToken) setCurrentAgoraToken(data.agoraToken);
+        if (data.agoraAppId) setCurrentAgoraAppId(data.agoraAppId);
+      }
+    };
+    socketService.on('call_accepted', handleCallAccepted);
+    return () => {
+      socketService.off('call_accepted', handleCallAccepted);
+    };
+  }, [callId, roomId]);
+
+  useEffect(() => {
+    Animated.timing(remoteAvatarOpacity, {
+      toValue: remoteVideoActive ? 0 : 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, [remoteVideoActive, remoteAvatarOpacity]);
+
+  const effectiveAgoraToken = currentAgoraToken || agoraToken;
+  const effectiveAgoraAppId = currentAgoraAppId || agoraAppId;
+
   // Agora credentials — the backend mints a session-scoped token for video
   // calls (agoraAppId + agoraToken). Falls back to the bundled App ID only
   // when the server did not attach one.
-  const resolvedAppId = agoraAppId || AGORA_APP_ID;
+  const resolvedAppId = effectiveAgoraAppId || AGORA_APP_ID;
 
   // Live camera (fallback path) only needs the camera permission. The Agora
   // path joins the real call when EITHER camera or mic is granted, so a
@@ -509,7 +526,7 @@ function VideoCallScreenComponent() {
     !!AgoraSDK &&
     typeof createAgoraRtcEngine === 'function' &&
     !hasPlaceholderAppId &&
-    !!agoraToken &&
+    !!effectiveAgoraToken &&
     !!roomId &&
     canJoinRealCall;
 
@@ -556,11 +573,12 @@ function VideoCallScreenComponent() {
     // is safe when the socket handler (or the other side) already ended the
     // session.
     try {
-      if (callId && callId !== 'demo_zego_call' && callId !== 'test_call_id') {
-        socketService.emit('stop_call_billing', { sessionId: callId });
-        // Also emit call_ended via socket as belt-and-suspenders
-        socketService.emit('call_ended', { sessionId: callId, roomId });
-        callAPI.endCall(callId).catch((error) => {
+      const activeId = callId || roomId;
+      if (activeId && activeId !== 'demo_zego_call' && activeId !== 'test_call_id') {
+        socketService.emit('stop_call_billing', { sessionId: activeId, roomId });
+        // Emit call_ended via socket to instantly disconnect both parties
+        socketService.emit('call_ended', { sessionId: activeId, roomId });
+        callAPI.endCall(activeId).catch((error) => {
           console.log('Failed to end call on backend:', error);
         });
       }
@@ -588,11 +606,39 @@ function VideoCallScreenComponent() {
       } else {
         router.replace({
           pathname: '/(call)/call-feedback',
-          params: { name, sessionId: callId, listenerId, callType: 'video' },
+          params: { name, sessionId: callId || roomId, listenerId, callType: 'video' },
         });
       }
     }, 800);
   }, [callId, name, listenerId, roomId, router]);
+
+  // When both participants successfully connect, turn the self camera view off and then back on after a gap
+  const cameraRestartDoneRef = useRef(false);
+  useEffect(() => {
+    if (remoteJoined && !cameraRestartDoneRef.current) {
+      cameraRestartDoneRef.current = true;
+      console.log('[VideoCall] Both participants connected. Scheduling camera off-then-on refresh with gap...');
+
+      // Initial gap of 1.5 seconds after connection is confirmed
+      const timer1 = setTimeout(() => {
+        console.log('[VideoCall] Turning self camera OFF...');
+        if (agoraRef.current) {
+          try { agoraRef.current.setCameraEnabled(false); } catch (e) {}
+        }
+        // Gap of 800ms while camera is off
+        const timer2 = setTimeout(() => {
+          console.log('[VideoCall] Turning self camera back ON...');
+          if (agoraRef.current) {
+            try { agoraRef.current.setCameraEnabled(true); } catch (e) {}
+          }
+        }, 800);
+
+        return () => clearTimeout(timer2);
+      }, 1500);
+
+      return () => clearTimeout(timer1);
+    }
+  }, [remoteJoined]);
 
   // The remote avatar fades out once the remote camera feed actually decodes.
   // "Joined" (audio or video) is tracked separately so the UI never falls back
@@ -692,7 +738,10 @@ function VideoCallScreenComponent() {
     };
 
     const handleCallEnded = async (data) => {
-      if (data.sessionId === callId) {
+      console.log('[VideoCall] Received call_ended socket event:', data);
+      const incId = String(data?.sessionId || data?.callId || data?.id || '');
+      const curId = String(callId || '');
+      if (!incId || !curId || incId === curId || (data?.roomId && data.roomId === roomId)) {
         await finishAndExit();
       }
     };
@@ -942,37 +991,11 @@ function VideoCallScreenComponent() {
           style={StyleSheet.absoluteFill}
         />
 
-        {/* Remote participant — the avatar stands in until their live camera
-            feed decodes (and whenever they turn their camera off). */}
-        <Animated.View
-          style={[styles.remoteAvatarLayer, { opacity: remoteAvatarOpacity }]}
-          pointerEvents="none"
-        >
-          <Animated.View style={[styles.avatarContainer, { transform: [{ scale: pulseAnim }] }]}>
-            <Image
-              source={{ uri: getAvatarUrl(gender, avatarIndex) }}
-              style={styles.mainAvatar}
-            />
-          </Animated.View>
-          <Text style={styles.callerName}>{name}</Text>
-          <View style={styles.statusRow}>
-            <View
-              style={[
-                styles.statusDot,
-                { backgroundColor: '#22C55E' },
-              ]}
-            />
-            <Text style={styles.statusText}>
-              {remoteVideoActive ? 'Video Call in Progress' : 'Call in Progress'}
-            </Text>
-          </View>
-        </Animated.View>
-
         {/* Agora engine + remote video surface */}
         <AgoraVideoView
           ref={agoraRef}
           appId={resolvedAppId}
-          token={agoraToken}
+          token={effectiveAgoraToken}
           channelName={roomId}
           cameraEnabled={showCamera}
           onRemoteVideoActiveChange={setRemoteVideoActive}
@@ -1002,6 +1025,32 @@ function VideoCallScreenComponent() {
             }, 8000);
           }}
         />
+
+        {/* Remote participant — the avatar stands in until their live camera
+            feed decodes (and whenever they turn their camera off). */}
+        <Animated.View
+          style={[styles.remoteAvatarLayer, { opacity: remoteAvatarOpacity }]}
+          pointerEvents={remoteVideoActive ? 'none' : 'auto'}
+        >
+          <Animated.View style={[styles.avatarContainer, { transform: [{ scale: pulseAnim }] }]}>
+            <Image
+              source={{ uri: getAvatarUrl(gender, avatarIndex) }}
+              style={styles.mainAvatar}
+            />
+          </Animated.View>
+          <Text style={styles.callerName}>{name}</Text>
+          <View style={styles.statusRow}>
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: '#22C55E' },
+              ]}
+            />
+            <Text style={styles.statusText}>
+              {remoteVideoActive ? 'Video Call in Progress' : 'Call in Progress'}
+            </Text>
+          </View>
+        </Animated.View>
 
         {/* Call duration timer — centered near the top with enough clearance
             below the status bar / notch. Always visible while the call is

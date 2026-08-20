@@ -726,11 +726,12 @@ const initSocket = (server) => {
           return;
         }
 
-        // Mark the session as active so billing and status checks know the call is live
+        // Mark the session as active and accepted so REST sync doesn't treat it as incoming
+        session.isAccepted = true;
         if (session.status !== 'active') {
           session.status = 'active';
-          await session.save();
         }
+        await session.save();
 
         const agoraPayload = CallService.getAgoraCallPayload(roomId, session.callType);
 
@@ -875,39 +876,57 @@ const initSocket = (server) => {
     });
 
     socket.on('call_ended', async (data) => {
-      const { roomId, sessionId } = data;
-      // Broadcast to room
-      if (roomId) io.to(roomId).emit('call_ended', data);
+      const { roomId, sessionId } = data || {};
+      console.log(`[Socket] call_ended received for sessionId: ${sessionId}, roomId: ${roomId}`);
       
-      // Also try to end session properly if sessionId provided
-      if (sessionId) {
-        try {
-          const session = await Session.findById(sessionId);
-          if (session && session.status === 'active') {
+      try {
+        let session = null;
+        if (sessionId && mongoose.Types.ObjectId.isValid(sessionId)) {
+          session = await Session.findById(sessionId);
+        }
+        if (!session && (sessionId || roomId)) {
+          const target = roomId || sessionId;
+          session = await Session.findOne({
+            $or: [
+              { roomId: target },
+              ...(mongoose.Types.ObjectId.isValid(target) ? [{ _id: target }] : [])
+            ]
+          });
+        }
+
+        if (session) {
+          const sId = session._id.toString();
+          const rId = session.roomId || roomId;
+          const uId = session.userId.toString();
+          const lId = session.listenerId.toString();
+
+          if (session.status === 'active') {
             session.status = 'completed';
             session.endTime = new Date();
             await session.save();
-            stopCallBillingTimer(sessionId);
-            if (session.roomId) stopCallBillingTimer(session.roomId);
+            stopCallBillingTimer(sId);
+            if (rId) stopCallBillingTimer(rId);
 
-            // Increment listener call counters
             await CallService.incrementListenerCounters(session.listenerId, session.callType);
-
-            // Notify both user rooms
-            io.to(`user_${session.userId}`).emit('call_ended', { sessionId });
-            io.to(`user_${session.listenerId}`).emit('call_ended', { sessionId });
-            
-            // Reset listener busy status
             await Listener.findOneAndUpdate({ userId: session.listenerId }, { isBusy: false, busySince: null });
-            io.emit('listener_status_changed', { userId: session.listenerId.toString(), isOnline: true, isBusy: false });
+            io.emit('listener_status_changed', { userId: lId, isOnline: true, isBusy: false });
             const sseService = require('./services/sseService');
-            sseService.broadcastListenerStatus(session.listenerId.toString(), true, false, null);
-            await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, session.listenerId.toString());
-            await redis.del(REDIS_KEYS.LOCK(session.listenerId.toString()));
+            sseService.broadcastListenerStatus(lId, true, false, null);
+            await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, lId);
+            await redis.del(REDIS_KEYS.LOCK(lId));
           }
-        } catch (err) {
-          console.error('[Socket] Error handling call_ended:', err.message);
+
+          // Always notify BOTH participant socket rooms so neither side stays stuck in call
+          console.log(`[Socket] Broadcasting call_ended to user_${uId} and user_${lId}`);
+          io.to(`user_${uId}`).emit('call_ended', { sessionId: sId, roomId: rId });
+          io.to(`user_${lId}`).emit('call_ended', { sessionId: sId, roomId: rId });
         }
+      } catch (err) {
+        console.error('[Socket] Error handling call_ended:', err.message);
+      }
+
+      if (roomId) {
+        io.to(roomId).emit('call_ended', data);
       }
     });
 

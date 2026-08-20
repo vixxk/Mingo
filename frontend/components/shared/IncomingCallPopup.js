@@ -96,12 +96,18 @@ const IncomingCallPopup = ({ calls = [], onAccept, onReject, visible }) => {
 
   useEffect(() => {
     const parentCalls = Array.isArray(calls) ? calls : [];
-    setDismissedCallIds((prev) => prev.filter((id) => parentCalls.some((c) => c.callId === id)));
+    setDismissedCallIds((prev) =>
+      prev.filter((id) =>
+        parentCalls.some((c) => String(c.callId || c.sessionId || c.id || c._id || '') === id)
+      )
+    );
   }, [calls]);
 
-  const activeCalls = (Array.isArray(calls) ? calls : []).filter(
-    (call) => !dismissedCallIds.includes(call.callId)
-  );
+  const activeCalls = (Array.isArray(calls) ? calls : []).filter((call) => {
+    const cid = String(call?.callId || call?.sessionId || call?.id || call?._id || '');
+    if (!cid) return false;
+    return !dismissedCallIds.includes(cid);
+  });
 
   useEffect(() => {
     if (activeCalls.length > 0 && appActive) {
