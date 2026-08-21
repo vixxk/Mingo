@@ -899,6 +899,8 @@ function AudioCallScreenComponent() {
   }, [isSpeaker]);
 
   const handleVideoUpgradePress = useCallback(() => {
+    // If the call already ended or we're navigating to video, don't send a stale upgrade request
+    if (callEndedRef.current) return;
     if (pendingUpgradeState === 'incoming') {
       setUpgradeModalMode('incoming');
       setUpgradeModalVisible(true);
@@ -906,10 +908,9 @@ function AudioCallScreenComponent() {
       setUpgradeModalMode('pending');
       setUpgradeModalVisible(true);
     } else {
-      setUpgradeModalMode('request');
-      setUpgradeModalVisible(true);
+      handleSendUpgradeRequest();
     }
-  }, [pendingUpgradeState]);
+  }, [pendingUpgradeState, handleSendUpgradeRequest]);
 
   const handleSendUpgradeRequest = useCallback(async () => {
     // The USER pays for the video minutes — check their balance up front so a

@@ -1053,14 +1053,10 @@ const initSocket = (server) => {
           session.status = 'completed';
           session.endTime = new Date();
 
-          const connectRef = session.connectedAt || session.lastDeductionTime;
-          if (connectRef) {
-            const connectedMs = Math.max(0, session.endTime.getTime() - new Date(connectRef).getTime());
-            const connectedMins = Math.max(1, Math.ceil(connectedMs / 60000));
-            session.duration = Math.max(session.duration || 0, connectedMins);
-          } else {
-            session.duration = Math.max(session.duration || 0, 1);
-          }
+          const connectRef = session.connectedAt || session.lastDeductionTime || session.startTime;
+          const connectedMs = connectRef ? Math.max(0, session.endTime.getTime() - new Date(connectRef).getTime()) : 0;
+          const connectedMins = Math.max(1, Math.ceil(connectedMs / 60000));
+          session.duration = connectedMins;
 
           const audioCoinsPerMin = AUDIO_COINS_PER_MIN;
           let audioPayoutRate = AUDIO_PAYOUT_PER_MIN;
@@ -1328,9 +1324,7 @@ const initSocket = (server) => {
                   const freshCall = await Session.findById(callIdStr);
                   if (freshCall && freshCall.status === 'active') {
                     console.log(`[Socket] Auto-ending active call ${callIdStr} after participant disconnect grace period expired: ${disconnectedUserId}`);
-                    freshCall.status = 'completed';
-                    freshCall.endTime = new Date();
-                    await freshCall.save();
+                    await CallService.endCall(callIdStr, disconnectedUserId);
                     stopCallBillingTimer(callIdStr);
                     stopCallBillingTimer(freshCall.roomId);
 

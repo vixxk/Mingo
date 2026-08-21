@@ -309,7 +309,7 @@ class CallService {
       };
     }
 
-    const hasStarted = session.lastDeductionTime !== null;
+    const hasStarted = session.connectedAt != null || session.lastDeductionTime != null;
 
     if (!hasStarted) {
       // Call never connected or billing never started! Mark as cancelled.
@@ -387,15 +387,11 @@ class CallService {
     session.endTime = endTime;
     session.status = 'completed';
 
-    // Calculate duration from when call was CONNECTED (connectedAt / lastDeductionTime), not dialing startTime!
-    const connectRef = session.connectedAt || session.lastDeductionTime;
-    if (connectRef) {
-      const connectedMs = Math.max(0, endTime.getTime() - new Date(connectRef).getTime());
-      const connectedMins = Math.max(1, Math.ceil(connectedMs / 60000));
-      session.duration = connectedMins;
-    } else {
-      session.duration = Math.max(session.duration || 0, 1);
-    }
+    // Calculate duration strictly in minutes from when call was CONNECTED (connectedAt / lastDeductionTime)
+    const connectRef = session.connectedAt || session.lastDeductionTime || session.startTime;
+    const connectedMs = connectRef ? Math.max(0, endTime.getTime() - new Date(connectRef).getTime()) : 0;
+    const connectedMins = Math.max(1, Math.ceil(connectedMs / 60000));
+    session.duration = connectedMins;
 
     // Ensure coinsDeducted and listenerEarnings are properly calculated if missing/zero on completed call
     const isVideo = session.callType === 'video';

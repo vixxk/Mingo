@@ -20,6 +20,7 @@ const startServer = async () => {
   try {
     const Session = require('./models/sessionModel');
     const Listener = require('./models/listenerModel');
+    const CallService = require('./services/callService');
     const staleThreshold = new Date(Date.now() - 5 * 60 * 1000); // 5 minutes
     const staleSessions = await Session.find({
       status: 'active',
@@ -30,14 +31,19 @@ const startServer = async () => {
       ]
     });
     for (const session of staleSessions) {
-      session.status = 'completed';
-      session.endTime = new Date();
-      await session.save();
-
-      const CallService = require('./services/callService');
-      await CallService.incrementListenerCounters(session.listenerId, session.callType).catch(err => {
-        console.error('[Startup] Error incrementing counters for stale session:', err.message);
-      });
+      const hasStarted = session.connectedAt != null || session.lastDeductionTime != null;
+      if (!hasStarted) {
+        session.status = 'cancelled';
+        session.endTime = new Date();
+        session.duration = 0;
+        session.coinsDeducted = 0;
+        session.listenerEarnings = 0;
+        await session.save();
+      } else {
+        await CallService.endCall(session._id, session.userId).catch(err => {
+          console.error('[Startup] Error ending stale connected session:', err.message);
+        });
+      }
 
       if (session.listenerId) {
         await Listener.findOneAndUpdate(
