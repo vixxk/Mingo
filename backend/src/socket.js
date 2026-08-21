@@ -884,7 +884,7 @@ const initSocket = (server) => {
 
     socket.on('call_ended', async (data) => {
       const { roomId, sessionId } = data || {};
-      console.log(`[Socket] call_ended received for sessionId: ${sessionId}, roomId: ${roomId}`);
+      console.log(`[Socket] call_ended received for sessionId: ${sessionId}, roomId: ${roomId}, socket.userId: ${socket.userId}`);
       
       try {
         let session = null;
@@ -901,6 +901,17 @@ const initSocket = (server) => {
           });
         }
 
+        // Fallback: If target session was not found or is already non-active, look up any active call for socket.userId
+        if ((!session || session.status !== 'active') && socket.userId) {
+          const activeSession = await Session.findOne({
+            $or: [{ userId: socket.userId }, { listenerId: socket.userId }],
+            status: 'active'
+          }).sort({ createdAt: -1 });
+          if (activeSession) {
+            session = activeSession;
+          }
+        }
+
         if (session) {
           await CallService.endCall(session._id.toString(), socket.userId);
         }
@@ -910,6 +921,9 @@ const initSocket = (server) => {
 
       if (roomId) {
         io.to(roomId).emit('call_ended', data);
+      }
+      if (session && session.roomId && session.roomId !== roomId) {
+        io.to(session.roomId).emit('call_ended', { sessionId: session._id.toString(), roomId: session.roomId });
       }
     });
 

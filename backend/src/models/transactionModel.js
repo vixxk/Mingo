@@ -41,7 +41,7 @@ const transactionSchema = new mongoose.Schema(
   }
 );
 
-transactionSchema.pre('validate', function (next) {
+transactionSchema.pre('validate', function () {
   if (this.type === 'DEBIT') {
     this.type = 'call_debit';
   } else if (this.type === 'CREDIT') {
@@ -53,7 +53,6 @@ transactionSchema.pre('validate', function (next) {
   if (this.amount === undefined || this.amount === null) {
     this.amount = 0;
   }
-  next();
 });
 
 transactionSchema.index({ userId: 1 });

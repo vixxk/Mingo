@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const { v4: uuidv4 } = require('uuid');
 const { redis, REDIS_KEYS } = require('../config/redis');
 const Session = require('../models/sessionModel');
@@ -301,24 +302,46 @@ class CallService {
     if (!session && sessionId) {
       session = await Session.findOne({ roomId: sessionId });
     }
+
+    const userIdStr = userId ? userId.toString() : null;
+    let sessionUserIdStr = session?.userId?.toString();
+    let sessionListenerIdStr = session?.listenerId?.toString();
+    const searchUserId = userIdStr || sessionUserIdStr || sessionListenerIdStr;
+
+    // Fallback: If session was not found or is already non-active, look up any active session for the user/listener
+    if ((!session || session.status !== 'active') && searchUserId) {
+      const activeSession = await Session.findOne({
+        $or: [{ userId: searchUserId }, { listenerId: searchUserId }],
+        status: 'active',
+      }).sort({ createdAt: -1 });
+
+      if (activeSession) {
+        console.log(`[CallService.endCall] Switching target from inactive session ${session?._id} to active session ${activeSession._id}`);
+        session = activeSession;
+      }
+    }
+
     if (!session) {
       throw new AppError('Session not found', 404);
     }
 
-    const userIdStr = userId ? userId.toString() : null;
-    const sessionUserIdStr = session.userId.toString();
-    const sessionListenerIdStr = session.listenerId.toString();
+    sessionUserIdStr = session.userId.toString();
+    sessionListenerIdStr = session.listenerId.toString();
 
     if (userIdStr && sessionUserIdStr !== userIdStr && sessionListenerIdStr !== userIdStr) {
       throw new AppError('You are not part of this session', 403);
     }
 
     if (session.status !== 'active') {
-      // Already ended — ensure both socket rooms receive call_ended so clients exit
+      // Already ended — ensure listener is marked free and locks/events are cleaned up idempotently
+      await Listener.findOneAndUpdate({ userId: sessionListenerIdStr }, { isBusy: false, busySince: null }).catch(() => {});
+      await MatchingService.releaseLock(sessionListenerIdStr).catch(() => {});
+      await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, sessionListenerIdStr).catch(() => {});
       try {
         const { getIo } = require('../socket');
         getIo().to(`user_${sessionUserIdStr}`).emit('call_ended', { sessionId: session._id.toString(), roomId: session.roomId });
         getIo().to(`user_${sessionListenerIdStr}`).emit('call_ended', { sessionId: session._id.toString(), roomId: session.roomId });
+        getIo().emit('listener_status_changed', { userId: sessionListenerIdStr, isOnline: true, isBusy: false });
       } catch (e) {}
       return {
         sessionId: session._id,
