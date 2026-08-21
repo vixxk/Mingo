@@ -500,12 +500,14 @@ class CallService {
     const userIdStr = userId.toString();
     const session = await Session.findOne({
       status: 'active',
+      isConverted: { $ne: true },
       callType: { $in: ['audio', 'video', 'chat'] },
       $or: [
         { userId: userIdStr },
         { listenerId: userIdStr }
       ]
-    }).populate('userId', 'name username avatarIndex gender')
+    }).sort({ createdAt: -1 })
+      .populate('userId', 'name username avatarIndex gender')
       .populate('listenerId', 'name username avatarIndex gender');
     if (!session) return null;
 

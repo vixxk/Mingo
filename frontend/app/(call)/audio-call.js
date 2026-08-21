@@ -607,6 +607,9 @@ function AudioCallScreenComponent() {
           try { agoraRef.current.leave(); } catch (e) {}
         }
 
+        // Clear registered audio call ID so global handlers don't track the converted audio session
+        socketService.triggerLocalEvent('register_active_call_id', { callId: null, roomId: null });
+
         // Determine display name and avatar for the video call screen.
         // The user sees the listener's name; the listener sees the user's name.
         let myId = userID;

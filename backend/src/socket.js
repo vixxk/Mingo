@@ -949,10 +949,10 @@ const initSocket = (server) => {
             status: 'active',
           }).sort({ createdAt: -1 });
         }
-        // Fallback: if ongoing session was marked non-active by mistake, find it and restore status
+        // Fallback: if ongoing session was marked non-active by mistake, find it and restore status (unless already completed or converted)
         if (!session && sessionId && mongoose.Types.ObjectId.isValid(sessionId)) {
           session = await Session.findById(sessionId);
-          if (session && session.status !== 'cancelled') {
+          if (session && session.status !== 'cancelled' && session.status !== 'completed' && !session.isConverted) {
             console.log(`[Socket] Restoring session ${session._id} status from '${session.status}' to 'active' for upgrade`);
             session.status = 'active';
             await session.save();
@@ -961,8 +961,9 @@ const initSocket = (server) => {
         if (!session && socket.userId) {
           session = await Session.findOne({
             $or: [{ userId: socket.userId }, { listenerId: socket.userId }],
+            isConverted: { $ne: true },
           }).sort({ createdAt: -1 });
-          if (session && session.status !== 'cancelled') {
+          if (session && session.status !== 'cancelled' && session.status !== 'completed' && !session.isConverted) {
             console.log(`[Socket] Restoring user session ${session._id} status from '${session.status}' to 'active' for upgrade`);
             session.status = 'active';
             await session.save();
@@ -1038,7 +1039,7 @@ const initSocket = (server) => {
         }
         if (!session && sessionId && mongoose.Types.ObjectId.isValid(sessionId)) {
           session = await Session.findById(sessionId);
-          if (session && session.status !== 'cancelled') {
+          if (session && session.status !== 'cancelled' && session.status !== 'completed' && !session.isConverted) {
             session.status = 'active';
             await session.save();
           }
@@ -1046,8 +1047,9 @@ const initSocket = (server) => {
         if (!session && socket.userId) {
           session = await Session.findOne({
             $or: [{ userId: socket.userId }, { listenerId: socket.userId }],
+            isConverted: { $ne: true },
           }).sort({ createdAt: -1 });
-          if (session && session.status !== 'cancelled') {
+          if (session && session.status !== 'cancelled' && session.status !== 'completed' && !session.isConverted) {
             session.status = 'active';
             await session.save();
           }

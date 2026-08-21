@@ -212,7 +212,7 @@ export default function RecentSessionsScreen() {
           const rawDur = (call.duration != null && call.duration > 0)
             ? call.duration
             : (call.status === 'completed' ? 1 : 0);
-          const dur = rawDur > 60 ? Math.ceil(rawDur / 60) : rawDur;
+          const dur = rawDur;
           const rate = isVideo ? 4.00 : 1.00;
           const fallbackEarnings = call.status === 'completed' ? dur * rate : 0;
           const finalEarnings = (call.listenerEarnings && call.listenerEarnings > 0) ? call.listenerEarnings : fallbackEarnings;

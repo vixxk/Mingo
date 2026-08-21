@@ -153,7 +153,7 @@ export default function RecentSessionsScreen() {
             const rawDur = (call.duration != null && call.duration > 0)
               ? call.duration
               : (call.status === 'completed' ? 1 : 0);
-            const dur = rawDur > 60 ? Math.ceil(rawDur / 60) : rawDur;
+            const dur = rawDur;
             const coins = (call.coinsDeducted && call.coinsDeducted > 0)
               ? call.coinsDeducted
               : (call.status === 'completed' ? dur * coinsPerMin : 0);
