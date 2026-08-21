@@ -758,32 +758,69 @@ const initSocket = (server) => {
     });
 
     socket.on('call_rejected', async (data) => {
-      const { userId, sessionId, reason } = data;
-      console.log(`[Socket] call_rejected received from listener. Caller user: ${userId}, Session: ${sessionId}`);
+      const { userId, sessionId, reason } = data || {};
+      console.log(`[Socket] call_rejected received from listener (${socket.userId}). Caller user: ${userId}, Session: ${sessionId}, reason: ${reason}`);
       
       try {
+        let session = null;
         if (sessionId && mongoose.Types.ObjectId.isValid(sessionId)) {
-          const session = await Session.findById(sessionId);
-          if (session && session.status === 'active') {
-            console.log(`[Socket] Ignoring call_rejected for session ${sessionId} because session is already active`);
-            return;
-          }
+          session = await Session.findById(sessionId);
         }
-      } catch (e) {}
+        if (!session && sessionId) {
+          session = await Session.findOne({ roomId: sessionId });
+        }
+        if (!session && socket.userId) {
+          session = await Session.findOne({
+            $or: [{ userId: socket.userId }, { listenerId: socket.userId }],
+            isAccepted: { $ne: true },
+            status: 'active'
+          }).sort({ createdAt: -1 });
+        }
 
-      io.to(`user_${userId}`).emit('call_rejected', { reason: reason || 'rejected' });
-      try {
-        if (sessionId && mongoose.Types.ObjectId.isValid(sessionId)) {
-          // Nobody answered (listener's incoming-call card timed out) — record
-          // it as a missed call so it shows up in both sides' history.
-          const isNoAnswer = reason === 'timeout' || reason === 'no_answer';
-          await Session.findByIdAndUpdate(sessionId, { status: isNoAnswer ? 'missed' : 'cancelled' });
+        // If the session was already accepted and established, do not cancel via call_rejected
+        if (session && session.isAccepted === true && session.status === 'active') {
+          console.log(`[Socket] Ignoring call_rejected for session ${session._id} because session is already accepted`);
+          return;
         }
+
+        let targetCallerId = userId;
         let listenerUserId = socket.userId;
-        if (!listenerUserId && sessionId) {
-          const sess = await Session.findById(sessionId);
-          if (sess) listenerUserId = sess.listenerId;
+
+        if (session) {
+          const isNoAnswer = reason === 'timeout' || reason === 'no_answer';
+          session.status = isNoAnswer ? 'missed' : 'cancelled';
+          session.endTime = new Date();
+          await session.save();
+
+          if (!targetCallerId) targetCallerId = session.userId.toString();
+          if (!listenerUserId) listenerUserId = session.listenerId.toString();
+
+          stopCallBillingTimer(session._id.toString());
+          if (session.roomId) stopCallBillingTimer(session.roomId);
         }
+
+        const resolvedSessionId = session ? session._id.toString() : (sessionId || '');
+        const resolvedRoomId = session ? session.roomId : null;
+        const rejectPayload = { sessionId: resolvedSessionId, roomId: resolvedRoomId, reason: reason || 'rejected' };
+
+        // Emit call_rejected and call_ended to caller so connecting page dismisses instantly
+        if (targetCallerId) {
+          console.log(`[Socket] Emitting call_rejected to caller user_${targetCallerId}`);
+          io.to(`user_${targetCallerId}`).emit('call_rejected', rejectPayload);
+          io.to(`user_${targetCallerId}`).emit('call_ended', { sessionId: resolvedSessionId, roomId: resolvedRoomId });
+        }
+
+        // Emit to listener as well so incoming call popup dismisses cleanly
+        if (listenerUserId) {
+          io.to(`user_${listenerUserId}`).emit('call_rejected', rejectPayload);
+          io.to(`user_${listenerUserId}`).emit('call_ended', { sessionId: resolvedSessionId, roomId: resolvedRoomId });
+        }
+
+        if (resolvedRoomId) {
+          io.to(resolvedRoomId).emit('call_rejected', rejectPayload);
+          io.to(resolvedRoomId).emit('call_ended', { sessionId: resolvedSessionId, roomId: resolvedRoomId });
+        }
+
         if (listenerUserId) {
           await Listener.findOneAndUpdate({ userId: listenerUserId }, { isBusy: false, busySince: null });
           io.emit('listener_status_changed', { userId: listenerUserId, isOnline: true, isBusy: false });
