@@ -20,15 +20,8 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_PRIVATE_KEY }}
           script: |
-            # Navigate to the backend folder inside the repository
-            # Replace 'Mingo' with the exact folder name of your repo on the EC2 instance
             cd ~/Mingo/backend
-            
-            # Pull the latest changes from GitHub
-            git pull origin main
-            
-            # Install any new dependencies
+            git fetch origin main
+            git reset --hard origin/main
             npm install
-            
-            # Restart the Node.js application using PM2
-            pm2 restart mingo-backend
+            pm2 restart all

@@ -128,12 +128,12 @@ class CallService {
         await Listener.findOneAndUpdate({ userId: listenerIdStr }, { isBusy: false, busySince: null });
         listenerProfile.isBusy = false;
         listenerProfile.busySince = null;
-      } else if (existingSession.lastDeductionTime) {
+      } else if (existingSession.lastDeductionTime || existingSession.isAccepted) {
         throw new AppError('Listener is currently unavailable', 409);
       } else {
         const sessionAge = Date.now() - new Date(existingSession.startTime || existingSession.createdAt).getTime();
-        if (sessionAge > 120000) {
-          existingSession.status = 'completed';
+        if (sessionAge > 45000) {
+          existingSession.status = 'missed';
           existingSession.endTime = new Date();
           await existingSession.save();
           await Listener.findOneAndUpdate({ userId: listenerIdStr }, { isBusy: false, busySince: null });
@@ -145,129 +145,152 @@ class CallService {
       }
     }
 
-    const acquired = await redis.set(
+    let acquired = await redis.set(
       REDIS_KEYS.LOCK(listenerIdStr),
       userIdStr,
       'NX',
       'EX',
       20
     );
+
+    if (acquired !== 'OK') {
+      const currentLockHolder = await redis.get(REDIS_KEYS.LOCK(listenerIdStr));
+      if (currentLockHolder === userIdStr) {
+        acquired = 'OK';
+      } else {
+        const activeLockSession = await Session.findOne({
+          $or: [
+            { userId: listenerIdStr },
+            { listenerId: listenerIdStr }
+          ],
+          status: 'active'
+        });
+        if (!activeLockSession) {
+          await redis.set(REDIS_KEYS.LOCK(listenerIdStr), userIdStr, 'EX', 20);
+          acquired = 'OK';
+        }
+      }
+    }
+
     if (acquired !== 'OK') {
       throw new AppError('Listener is currently unavailable', 409);
     }
     matchedListenerId = listenerIdStr;
 
-    // Check if the selected listener is already in an active call session
-    const existingListenerSession = await Session.findOne({
-      $or: [
-        { userId: listenerIdStr },
-        { listenerId: listenerIdStr }
-      ],
-      status: 'active'
-    });
-    if (existingListenerSession) {
-      if (!existingListenerSession.lastDeductionTime) {
-        const sessionAge = Date.now() - new Date(existingListenerSession.startTime || existingListenerSession.createdAt).getTime();
-        if (sessionAge > 120000) {
-          existingListenerSession.status = 'completed';
-          existingListenerSession.endTime = new Date();
-          await existingListenerSession.save();
+    try {
+      // Check if the selected listener is already in an active call session
+      const existingListenerSession = await Session.findOne({
+        $or: [
+          { userId: listenerIdStr },
+          { listenerId: listenerIdStr }
+        ],
+        status: 'active'
+      });
+      if (existingListenerSession) {
+        if (!existingListenerSession.lastDeductionTime && !existingListenerSession.isAccepted) {
+          const sessionAge = Date.now() - new Date(existingListenerSession.startTime || existingListenerSession.createdAt).getTime();
+          if (sessionAge > 45000) {
+            existingListenerSession.status = 'missed';
+            existingListenerSession.endTime = new Date();
+            await existingListenerSession.save();
+            await Listener.findOneAndUpdate({ userId: listenerIdStr }, { isBusy: false, busySince: null });
+          } else {
+            throw new AppError('Listener is currently busy in another call', 400);
+          }
         } else {
           throw new AppError('Listener is currently busy in another call', 400);
         }
-      } else {
-        throw new AppError('Listener is currently busy in another call', 400);
       }
-    }
 
-    
-    const roomId = `call_${uuidv4()}`;
+      const roomId = `call_${uuidv4()}`;
 
-    // Agora credentials are minted per request for both audio and video calls
-    // so both participants get a fresh token for the same channel.
-    const agoraPayload = getAgoraCallPayload(roomId, callType);
+      // Agora credentials are minted per request for both audio and video calls
+      // so both participants get a fresh token for the same channel.
+      const agoraPayload = getAgoraCallPayload(roomId, callType);
 
-    
-    const session = await Session.create({
-      userId,
-      listenerId: matchedListenerId,
-      roomId,
-      callType,
-    });
-
-    
-    // Mark listener as busy in DB
-    const now = new Date();
-    await Listener.findOneAndUpdate({ userId: matchedListenerId }, { isBusy: true, busySince: now });
-
-    try {
-      const { getIo } = require('../socket');
-      getIo().emit('listener_status_changed', { userId: matchedListenerId, isOnline: true, isBusy: true, busySince: now });
-      const sseService = require('./sseService');
-      sseService.broadcastListenerStatus(matchedListenerId, true, true, now);
-    } catch (e) {
-      console.log('Socket or SSE error emitting status changed', e.message);
-    }
-
-    await redis.srem(REDIS_KEYS.LISTENERS_AVAILABLE, matchedListenerId);
-
-    const listenerUser = await User.findById(matchedListenerId).select('name username avatarIndex gender');
-
-    await ActivityLog.create({
-      user: user.name,
-      action: `Started ${callType} call`,
-      type: 'call',
-      icon: callType === 'video' ? 'videocam' : 'call',
-      color: callType === 'video' ? '#3B82F6' : '#10B981',
-    });
-
-    const SystemSettings = require('../models/SystemSettings');
-    const systemSettings = await SystemSettings.getSettings().catch(() => null);
-    const customRingtoneUrl = systemSettings?.customRingtoneUrl || '';
-
-    // Send push notification to listener
-    try {
-      console.log(`[CallService] Sending push notification to listener: ${matchedListenerId}`);
-      PushService.sendPushNotification(matchedListenerId, {
-        title: `Incoming ${callType === 'video' ? 'Video' : 'Audio'} Call`,
-        body: `${user.name || 'Someone'} is calling you. Tap to answer.`,
-        data: {
-          type: 'incoming_call',
-          callId: session._id.toString(),
-          roomId: roomId,
-          callerId: userId.toString(),
-          callerName: user.name || 'User',
-          avatarIndex: (user.avatarIndex || 0).toString(),
-          gender: user.gender || 'Female',
-          // Resolved avatar URL so the native incoming-call card can show the
-          // caller's photo (the card can't run the frontend's getAvatarUrl).
-          callerPhoto: getAvatarUrl(user.gender, user.avatarIndex),
-          callType: callType,
-          customRingtoneUrl: customRingtoneUrl,
-          // Agora credentials for audio/video calls (accepting side / notification path)
-          ...agoraPayload,
-        }
-      }).catch(err => {
-        console.error('[CallService] Push notification promise failed:', err.message);
+      const session = await Session.create({
+        userId,
+        listenerId: matchedListenerId,
+        roomId,
+        callType,
       });
-    } catch (pushErr) {
-      console.error('[CallService] Failed to queue push notification:', pushErr.message);
-    }
 
-    return {
-      sessionId: session._id,
-      roomId,
-      callType,
-      listenerId: matchedListenerId,
-      listenerName: listenerUser?.name || 'Listener',
-      listenerUsername: listenerUser?.username,
-      listenerAvatarIndex: listenerUser?.avatarIndex || 0,
-      listenerGender: listenerUser?.gender,
-      listenerRating: listenerProfile?.rating || 0,
-      customRingtoneUrl: customRingtoneUrl,
-      ...agoraPayload,
-      startTime: session.startTime,
-    };
+      // Mark listener as busy in DB
+      const now = new Date();
+      await Listener.findOneAndUpdate({ userId: matchedListenerId }, { isBusy: true, busySince: now });
+
+      try {
+        const { getIo } = require('../socket');
+        getIo().emit('listener_status_changed', { userId: matchedListenerId, isOnline: true, isBusy: true, busySince: now });
+        const sseService = require('./sseService');
+        sseService.broadcastListenerStatus(matchedListenerId, true, true, now);
+      } catch (e) {
+        console.log('Socket or SSE error emitting status changed', e.message);
+      }
+
+      await redis.srem(REDIS_KEYS.LISTENERS_AVAILABLE, matchedListenerId);
+
+      const listenerUser = await User.findById(matchedListenerId).select('name username avatarIndex gender');
+
+      await ActivityLog.create({
+        user: user.name,
+        action: `Started ${callType} call`,
+        type: 'call',
+        icon: callType === 'video' ? 'videocam' : 'call',
+        color: callType === 'video' ? '#3B82F6' : '#10B981',
+      });
+
+      const SystemSettings = require('../models/SystemSettings');
+      const systemSettings = await SystemSettings.getSettings().catch(() => null);
+      const customRingtoneUrl = systemSettings?.customRingtoneUrl || '';
+
+      // Send push notification to listener
+      try {
+        console.log(`[CallService] Sending push notification to listener: ${matchedListenerId}`);
+        PushService.sendPushNotification(matchedListenerId, {
+          title: `Incoming ${callType === 'video' ? 'Video' : 'Audio'} Call`,
+          body: `${user.name || 'Someone'} is calling you. Tap to answer.`,
+          data: {
+            type: 'incoming_call',
+            callId: session._id.toString(),
+            roomId: roomId,
+            callerId: userId.toString(),
+            callerName: user.name || 'User',
+            avatarIndex: (user.avatarIndex || 0).toString(),
+            gender: user.gender || 'Female',
+            // Resolved avatar URL so the native incoming-call card can show the
+            // caller's photo (the card can't run the frontend's getAvatarUrl).
+            callerPhoto: getAvatarUrl(user.gender, user.avatarIndex),
+            callType: callType,
+            customRingtoneUrl: customRingtoneUrl,
+            // Agora credentials for audio/video calls (accepting side / notification path)
+            ...agoraPayload,
+          }
+        }).catch(err => {
+          console.error('[CallService] Push notification promise failed:', err.message);
+        });
+      } catch (pushErr) {
+        console.error('[CallService] Failed to queue push notification:', pushErr.message);
+      }
+
+      return {
+        sessionId: session._id,
+        roomId,
+        callType,
+        listenerId: matchedListenerId,
+        listenerName: listenerUser?.name || 'Listener',
+        listenerUsername: listenerUser?.username,
+        listenerAvatarIndex: listenerUser?.avatarIndex || 0,
+        listenerGender: listenerUser?.gender,
+        listenerRating: listenerProfile?.rating || 0,
+        customRingtoneUrl: customRingtoneUrl,
+        ...agoraPayload,
+        startTime: session.startTime,
+      };
+    } catch (error) {
+      await redis.del(REDIS_KEYS.LOCK(listenerIdStr)).catch(() => {});
+      throw error;
+    }
   }
 
   static async endCall(sessionId, userId) {
