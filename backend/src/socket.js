@@ -1,4 +1,5 @@
 const { Server } = require('socket.io');
+const mongoose = require('mongoose');
 const Message = require('./models/messageModel');
 const Conversation = require('./models/conversationModel');
 const User = require('./models/userModel');
@@ -950,11 +951,25 @@ const initSocket = (server) => {
     // ─── Call Upgrade (Audio -> Video) ─────────────────────────
     socket.on('request_call_upgrade', async (data) => {
       const { sessionId, roomId } = data;
-      console.log(`[Socket] request_call_upgrade for session: ${sessionId}`);
+      console.log(`[Socket] request_call_upgrade for session: ${sessionId}, roomId: ${roomId}, from socket.userId: ${socket.userId}`);
       try {
-        const session = await Session.findById(sessionId);
-        if (!session || session.status !== 'active') {
-          socket.emit('call_upgrade_failed', { sessionId, reason: 'session_inactive' });
+        // Try finding by sessionId first, fall back to roomId
+        let session = null;
+        if (sessionId && mongoose.Types.ObjectId.isValid(sessionId)) {
+          session = await Session.findById(sessionId);
+        }
+        if (!session && roomId) {
+          session = await Session.findOne({ roomId });
+          console.log(`[Socket] Upgrade: Session lookup by roomId ${roomId} =>`, session ? session._id : 'NOT FOUND');
+        }
+        if (!session) {
+          console.log(`[Socket] Upgrade FAILED: No session found for sessionId=${sessionId}, roomId=${roomId}`);
+          socket.emit('call_upgrade_failed', { sessionId, reason: 'session_not_found' });
+          return;
+        }
+        if (session.status !== 'active') {
+          console.log(`[Socket] Upgrade FAILED: Session ${session._id} status is '${session.status}', not 'active'`);
+          socket.emit('call_upgrade_failed', { sessionId: session._id.toString(), reason: 'session_inactive' });
           return;
         }
 
@@ -965,6 +980,7 @@ const initSocket = (server) => {
         // just be auto-ended on the first video billing tick — prompt the
         // payer to recharge instead.
         const payingUser = await User.findById(session.userId);
+        console.log(`[Socket] Upgrade balance check: payingUser=${session.userId}, coins=${payingUser?.coins}, required=${VIDEO_COINS_PER_MIN}`);
         if (!payingUser || payingUser.coins < VIDEO_COINS_PER_MIN) {
           socket.emit('call_upgrade_failed', {
             sessionId: session._id.toString(),
@@ -983,16 +999,22 @@ const initSocket = (server) => {
           ? session.listenerId.toString()
           : session.userId.toString();
 
-        console.log(`[Socket] Upgrade request from ${callerUserId} to ${recipientId}`);
+        console.log(`[Socket] Upgrade request from ${callerUserId} to ${recipientId} (session.userId=${session.userId}, session.listenerId=${session.listenerId})`);
 
-        io.to(`user_${recipientId}`).emit('call_upgrade_requested', {
+        // Check if the recipient is in their socket room
+        const recipientRoom = `user_${recipientId}`;
+        const recipientSockets = io.sockets.adapter.rooms.get(recipientRoom);
+        console.log(`[Socket] Recipient room ${recipientRoom} has ${recipientSockets ? recipientSockets.size : 0} connected socket(s)`);
+
+        io.to(recipientRoom).emit('call_upgrade_requested', {
           sessionId: session._id.toString(),
           roomId: roomId || session.roomId,
           requestedBy: callerUserId,
           toCallType: 'video'
         });
       } catch (err) {
-        console.error('[Socket] Error in request_call_upgrade:', err.message);
+        console.error('[Socket] Error in request_call_upgrade:', err.message, err.stack);
+        socket.emit('call_upgrade_failed', { sessionId, reason: 'server_error' });
       }
     });
 

@@ -73,7 +73,7 @@ export default function ListenerLayout() {
                 name: session.userId?.name || 'User',
                 callId: session._id,
                 roomId: session.roomId,
-                userId: session.userId?._id || session.userId,
+                listenerId: session.listenerId?._id || session.listenerId || session.userId?._id || session.userId,
                 avatarIndex: session.userId?.avatarIndex || '0',
                 gender: session.userId?.gender || 'Female',
                 callType: session.callType,

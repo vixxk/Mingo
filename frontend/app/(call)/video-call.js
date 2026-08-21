@@ -264,6 +264,13 @@ const AgoraVideoView = forwardRef(
           engine.setChannelProfile(ChannelProfileType.ChannelProfileCommunication);
           engine.setClientRole(ClientRoleType.ClientRoleBroadcaster);
           engine.enableVideo();
+          // Explicitly enable audio — enableVideo() activates the video module
+          // but on some Android builds the audio pipeline needs a separate kick.
+          try { engine.enableAudio(); } catch (e) {}
+          try { engine.enableLocalAudio(true); } catch (e) {}
+          // Boost recording and playback volumes so neither side hears silence.
+          try { engine.adjustRecordingSignalVolume(400); } catch (e) {}
+          try { engine.adjustPlaybackSignalVolume(400); } catch (e) {}
 
           // Start local camera capture preview
           try {
@@ -279,6 +286,10 @@ const AgoraVideoView = forwardRef(
               // Route audio through the loudspeaker by default — mirrors the
               // old Zego config so "no audio" is never mistaken for a failure.
               try { engine.setEnableSpeakerphone(true); } catch (e) {}
+              // Re-assert audio capture & subscription after joining.
+              try { engine.enableLocalAudio(true); } catch (e) {}
+              try { engine.muteLocalAudioStream(false); } catch (e) {}
+              try { engine.muteAllRemoteAudioStreams(false); } catch (e) {}
               ensureLocalPreview();
 
               if (onJoinSuccessRef.current) onJoinSuccessRef.current();
@@ -465,7 +476,7 @@ function VideoCallScreenComponent() {
   const [cameraError, setCameraError] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [remoteVideoActive, setRemoteVideoActive] = useState(false);
-  const [remoteJoined, setRemoteJoined] = useState(true);
+  const [remoteJoined, setRemoteJoined] = useState(false);
   const [callCancelledMessage, setCallCancelledMessage] = useState(
     'The call was cancelled by the user.'
   );
@@ -476,7 +487,7 @@ function VideoCallScreenComponent() {
   const agoraRef = useRef(null);
   const callEndedRef = useRef(false);
   const cancelledExitTimerRef = useRef(null);
-  const remoteJoinedRef = useRef(true);
+  const remoteJoinedRef = useRef(false);
   const [currentAgoraToken, setCurrentAgoraToken] = useState(agoraToken || '');
   const [currentAgoraAppId, setCurrentAgoraAppId] = useState(agoraAppId || '');
 
@@ -612,31 +623,39 @@ function VideoCallScreenComponent() {
     }, 800);
   }, [callId, name, listenerId, roomId, router]);
 
-  // When both participants successfully connect, turn the self camera view off and then back on after a gap
+  // When both participants successfully connect (video call timer starts), toggle camera off and back on after a small gap
   const cameraRestartDoneRef = useRef(false);
   useEffect(() => {
     if (remoteJoined && !cameraRestartDoneRef.current) {
       cameraRestartDoneRef.current = true;
-      console.log('[VideoCall] Both participants connected. Scheduling camera off-then-on refresh with gap...');
+      console.log('[VideoCall] Video call timer started. Scheduling camera toggle (off then back on) after gap...');
 
-      // Initial gap of 1.5 seconds after connection is confirmed
+      let timer2 = null;
+      // Initial gap of 1.5 seconds after timer starts
       const timer1 = setTimeout(() => {
-        console.log('[VideoCall] Turning self camera OFF...');
+        if (callEndedRef.current) return;
+        console.log('[VideoCall] Toggling camera button OFF...');
+        setIsCameraOff(true);
         if (agoraRef.current) {
           try { agoraRef.current.setCameraEnabled(false); } catch (e) {}
         }
-        // Gap of 800ms while camera is off
-        const timer2 = setTimeout(() => {
-          console.log('[VideoCall] Turning self camera back ON...');
+
+        // Small gap of 800ms while camera is off
+        timer2 = setTimeout(() => {
+          if (callEndedRef.current) return;
+          console.log('[VideoCall] Toggling camera button back ON...');
+          setIsCameraOff(false);
+          setCameraError(false);
           if (agoraRef.current) {
             try { agoraRef.current.setCameraEnabled(true); } catch (e) {}
           }
         }, 800);
-
-        return () => clearTimeout(timer2);
       }, 1500);
 
-      return () => clearTimeout(timer1);
+      return () => {
+        clearTimeout(timer1);
+        if (timer2) clearTimeout(timer2);
+      };
     }
   }, [remoteJoined]);
 

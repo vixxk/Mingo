@@ -20,15 +20,10 @@ import VideoUpgradeModal from '../../components/call/VideoUpgradeModal';
 import { callAPI, walletAPI } from '../../utils/api';
 import { socketService } from '../../utils/socket';
 import { AGORA_APP_ID } from '../../utils/agoraConfig';
-import { ZEGO_APP_ID, ZEGO_APP_SIGN } from '../../utils/zegoConfig';
 import { ms, s, vs, SCREEN_WIDTH, hp, wp } from '../../utils/responsive';
 import { getAvatarUrl } from '../../utils/avatars';
 
-// ZegoCloud Prebuilt Call SDK for Audio Calls (Bypassed to use stable Agora RTC engine across all Android versions)
-let ZegoUIKitPrebuiltCall = null;
-let ONE_ON_ONE_VOICE_CALL_CONFIG = null;
-let ZegoMenuBarButtonName = null;
-let canUseZegoSDK = false;
+// ZegoCloud SDK has been fully removed — all audio calls use Agora RTC.
 
 // Agora RTC SDK — native module fallback for audio calls
 let AgoraSDK = null;
@@ -46,63 +41,13 @@ const {
   ClientRoleType,
   ConnectionStateType,
   RemoteAudioState,
+  AudioProfileType,
+  AudioScenarioType,
 } = AgoraSDK || {};
 
 const VIDEO_UPGRADE_MIN_COINS = 40;
 
-const ZegoCallWrapper = React.memo(({ appId, appSign, userId, userName, roomId, onCallEnd, myAvatarUrl, listenerAvatarUrl }) => {
-  const numericAppId = Number(appId);
-  if (
-    !ZegoUIKitPrebuiltCall ||
-    !numericAppId ||
-    isNaN(numericAppId) ||
-    numericAppId <= 0 ||
-    !appSign ||
-    typeof appSign !== 'string' ||
-    !roomId ||
-    !userId
-  ) {
-    console.warn('[ZegoCallWrapper] Invalid parameters, skipping Zego mount:', { appId, roomId, userId });
-    return null;
-  }
-
-  const menuBar = ONE_ON_ONE_VOICE_CALL_CONFIG?.bottomMenuBarConfig;
-  const safeButtons = Array.isArray(menuBar?.buttons)
-    ? menuBar.buttons.filter((b) => b !== ZegoMenuBarButtonName?.hangUpButton)
-    : undefined;
-
-  return (
-    <ZegoUIKitPrebuiltCall
-      appID={numericAppId}
-      appSign={String(appSign)}
-      userID={String(userId)}
-      userName={String(userName || 'User')}
-      callID={String(roomId)}
-      config={{
-        ...ONE_ON_ONE_VOICE_CALL_CONFIG,
-        ...(safeButtons ? { bottomMenuBarConfig: { ...menuBar, buttons: safeButtons } } : {}),
-        onCallEnd: onCallEnd,
-        onHangUp: onCallEnd,
-        onOnlySelfInRoom: onCallEnd,
-        turnOnCameraWhenJoining: false,
-        turnOnMicrophoneWhenJoining: true,
-        useSpeakerWhenJoining: true,
-        avatarBuilder: (userInfo) => {
-          const isMe = String(userInfo?.userID) === String(userId);
-          const uri = isMe ? myAvatarUrl : listenerAvatarUrl;
-          if (!uri) return null;
-          return (
-            <Image
-              source={{ uri }}
-              style={styles.zegoAvatar}
-              resizeMode="cover"
-            />
-          );
-        },
-      }}
-    />
-  );
-});
+// ZegoCallWrapper removed — audio calls use AgoraAudioEngine exclusively.
 
 /**
  * Owns the Agora engine for the duration of the audio call. Controls are
@@ -165,7 +110,29 @@ const AgoraAudioEngine = forwardRef(
           }
           engine.setChannelProfile(ChannelProfileType.ChannelProfileCommunication);
           engine.setClientRole(ClientRoleType.ClientRoleBroadcaster);
+
+          // Set audio profile optimized for voice calls before enabling audio.
+          // SpeechStandard + ChatRoom gives low-latency narrow-band audio ideal
+          // for 1-on-1 voice conversations on Android.
+          try {
+            if (AudioProfileType && AudioScenarioType) {
+              engine.setAudioProfile(
+                AudioProfileType.AudioProfileSpeechStandard,
+                AudioScenarioType.AudioScenarioChatRoom
+              );
+            }
+          } catch (e) {
+            console.log('[Agora] setAudioProfile failed (non-fatal):', e.message);
+          }
+
           engine.enableAudio();
+          // Explicitly enable local audio capture — on some Android builds
+          // enableAudio() alone does not start the microphone.
+          try { engine.enableLocalAudio(true); } catch (e) {}
+          // Ensure recording and playback volumes are at full scale so
+          // neither side hears silence.
+          try { engine.adjustRecordingSignalVolume(400); } catch (e) {}
+          try { engine.adjustPlaybackSignalVolume(400); } catch (e) {}
 
           engine.registerEventHandler({
             onJoinChannelSuccess: () => {
@@ -176,6 +143,11 @@ const AgoraAudioEngine = forwardRef(
               // default routes to the earpiece, which is easily mistaken for
               // no audio at all.
               try { engine.setEnableSpeakerphone(true); } catch (e) {}
+              // Re-assert audio capture & subscription after joining — belt
+              // and suspenders for stubborn devices.
+              try { engine.enableLocalAudio(true); } catch (e) {}
+              try { engine.muteLocalAudioStream(false); } catch (e) {}
+              try { engine.muteAllRemoteAudioStreams(false); } catch (e) {}
               if (onJoinSuccessRef.current) onJoinSuccessRef.current();
             },
             onUserJoined: (connection, uid) => {
@@ -319,8 +291,6 @@ function AudioCallScreenComponent() {
     userId: paramUserId = '',
     avatarIndex = '0',
     gender = 'Female',
-    zegoAppId,
-    zegoAppSign,
     agoraAppId,
     agoraToken,
   } = rawParams;
@@ -348,7 +318,7 @@ function AudioCallScreenComponent() {
   const [permissionsResolved, setPermissionsResolved] = useState(false);
   const [isListener, setIsListener] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
-  const [remoteJoined, setRemoteJoined] = useState(true);
+  const [remoteJoined, setRemoteJoined] = useState(false);
   const [myAvatarUrl, setMyAvatarUrl] = useState('');
   const [callCancelledMessage, setCallCancelledMessage] = useState(
     'The call was cancelled by the user.'
@@ -359,7 +329,7 @@ function AudioCallScreenComponent() {
   const agoraRef = useRef(null);
   const callEndedRef = useRef(false);
   const cancelledExitTimerRef = useRef(null);
-  const remoteJoinedRef = useRef(true);
+  const remoteJoinedRef = useRef(false);
   const upgradeNavigatedRef = useRef(false);
   const isListenerRef = useRef(false);
 
@@ -387,34 +357,14 @@ function AudioCallScreenComponent() {
   const effectiveAgoraToken = currentAgoraToken || agoraToken;
   const effectiveAgoraAppId = currentAgoraAppId || agoraAppId;
 
-  const resolvedZegoAppId = zegoAppId ? Number(zegoAppId) : ZEGO_APP_ID;
-  const resolvedZegoAppSign = zegoAppSign || ZEGO_APP_SIGN;
   const resolvedAppId = effectiveAgoraAppId || AGORA_APP_ID;
 
   const canJoinRealCall = permission.mic;
 
   const hasPlaceholderAppId = !resolvedAppId || /your_agora|placeholder|change_me/i.test(resolvedAppId);
 
-  // ── Audio calls use Zego; only fall back to Agora when Zego is unavailable ──
-  // The backend provides Zego credentials for audio and Agora for video. Even
-  // if an agoraToken is present (e.g. for potential video upgrades), audio
-  // calls must stay on Zego so both participants join the same Zego room.
-  const hasZegoCredentials =
-    canUseZegoSDK &&
-    !!resolvedZegoAppId &&
-    !isNaN(Number(resolvedZegoAppId)) &&
-    Number(resolvedZegoAppId) > 0 &&
-    !!resolvedZegoAppSign;
-
-  const canUseZego =
-    hasZegoCredentials &&
-    !!roomId &&
-    canJoinRealCall;
-
-  // Agora is only used for audio when Zego is completely unavailable (e.g.
-  // missing SDK or invalid Zego credentials).
+  // All audio calls use Agora RTC (Zego has been fully removed).
   const canUseAgora =
-    !canUseZego &&
     !isExpoGo &&
     !!AgoraSDK &&
     typeof createAgoraRtcEngine === 'function' &&
@@ -428,19 +378,14 @@ function AudioCallScreenComponent() {
     console.log('[AudioCall] ── Call engine readiness check ──');
     console.log('[AudioCall]   isExpoGo:', isExpoGo);
     console.log('[AudioCall]   AgoraSDK loaded:', !!AgoraSDK);
-    console.log('[AudioCall]   ZegoSDK loaded:', canUseZegoSDK);
     console.log('[AudioCall]   resolvedAppId:', resolvedAppId ? resolvedAppId.substring(0, 8) + '...' : '(empty)');
     console.log('[AudioCall]   hasPlaceholderAppId:', hasPlaceholderAppId);
-    console.log('[AudioCall]   resolvedZegoAppId:', resolvedZegoAppId || '(empty)');
-    console.log('[AudioCall]   resolvedZegoAppSign:', resolvedZegoAppSign ? '***' : '(empty)');
-    console.log('[AudioCall]   agoraToken:', agoraToken ? agoraToken.substring(0, 12) + '...' : '(empty)');
+    console.log('[AudioCall]   agoraToken:', effectiveAgoraToken ? effectiveAgoraToken.substring(0, 12) + '...' : '(empty)');
     console.log('[AudioCall]   roomId:', roomId || '(empty)');
     console.log('[AudioCall]   permission.mic:', permission.mic);
-    console.log('[AudioCall]   hasZegoCredentials:', hasZegoCredentials);
-    console.log('[AudioCall]   canUseZego:', canUseZego);
     console.log('[AudioCall]   canUseAgora:', canUseAgora);
     console.log('[AudioCall]   callId:', callId);
-  }, [canUseZego, canUseAgora, permissionsResolved]);
+  }, [canUseAgora, permissionsResolved]);
 
   // ─── Unified end-of-call teardown (both roles) ─────────────────
   // Every way a call ends funnels through here so the USER and LISTENER sides
@@ -712,6 +657,16 @@ function AudioCallScreenComponent() {
           );
           setShowRecharge(true);
         }
+      } else {
+        // Handle session_inactive, session_not_found, server_error, etc.
+        const msg = data.reason === 'session_not_found'
+          ? 'Could not find the active session. Please try again.'
+          : data.reason === 'session_inactive'
+          ? 'The session is no longer active. Cannot upgrade to video.'
+          : 'Something went wrong while requesting the video upgrade. Please try again.';
+        setCallCancelledMessage(msg);
+        setCallCancelledNotice(true);
+        setShowCallCancelled(true);
       }
     };
 
@@ -749,14 +704,8 @@ function AudioCallScreenComponent() {
     };
   }, [callId]);
 
-  // Zego path: start billing when the ZegoCallWrapper mounts (Zego manages
-  // its own connection lifecycle internally). Agora path: billing is started
-  // in the onJoinSuccess callback of AgoraAudioEngine.
-  useEffect(() => {
-    if (canUseZego && callId && callId !== 'demo_zego_call' && callId !== 'test_call_id') {
-      socketService.emit('start_call_billing', { sessionId: callId });
-    }
-  }, [canUseZego, callId]);
+  // Billing is started in the onJoinSuccess callback of AgoraAudioEngine
+  // so the user is only charged once both sides are in the channel.
 
   useEffect(() => {
     Animated.loop(
@@ -842,7 +791,7 @@ function AudioCallScreenComponent() {
   // stops. (The remote-join timeout above only applies once Agora is active.)
   const fallbackDiagnosedRef = useRef(false);
   useEffect(() => {
-    if (canUseAgora || canUseZego || !permissionsResolved || fallbackDiagnosedRef.current) return;
+    if (canUseAgora || !permissionsResolved || fallbackDiagnosedRef.current) return;
     if (callEndedRef.current) return;
 
     let message = '';
@@ -855,7 +804,7 @@ function AudioCallScreenComponent() {
     } else if (!permission.mic) {
       message =
         'Microphone access is required for audio calls. Please allow it and start the call again.';
-    } else if (!agoraToken || !roomId || hasPlaceholderAppId) {
+    } else if (!effectiveAgoraToken || !roomId || hasPlaceholderAppId) {
       message =
         "Audio call couldn't connect — the server isn't configured for calls yet. Please try again later.";
     } else {
@@ -875,7 +824,7 @@ function AudioCallScreenComponent() {
     canUseAgora,
     permissionsResolved,
     permission.mic,
-    agoraToken,
+    effectiveAgoraToken,
     roomId,
     hasPlaceholderAppId,
     isExpoGo,
@@ -1039,50 +988,37 @@ function AudioCallScreenComponent() {
         style={StyleSheet.absoluteFill}
       />
 
-      {/* Primary Engine: ZegoCloud Audio Call; Fallback: Agora RTC */}
-      {canUseZego ? (
-        <ZegoCallWrapper
-          appId={resolvedZegoAppId}
-          appSign={resolvedZegoAppSign}
-          userId={userID || `user_${listenerId || Date.now()}`}
-          userName={userName || 'User'}
-          roomId={roomId}
-          onCallEnd={finishAndExit}
-          myAvatarUrl={myAvatarUrl}
-          listenerAvatarUrl={getAvatarUrl(gender, avatarIndex)}
-        />
-      ) : (
-        canUseAgora && (
-          <AgoraAudioEngine
-            ref={agoraRef}
-            appId={resolvedAppId}
-            token={effectiveAgoraToken}
-            channelName={roomId}
-            onRemoteJoinedChange={setRemoteJoined}
-            onRemoteLeft={handleRemoteLeft}
-            onFailedToConnect={handleAgoraFailedToConnect}
-            onEngineError={(err, msg) => console.log('[Agora] Engine error:', err, msg)}
-            onJoinSuccess={() => {
-              console.log('[AudioCall] Agora joinChannel succeeded — local user is in the audio channel');
+      {/* Agora RTC Audio Engine */}
+      {canUseAgora && (
+        <AgoraAudioEngine
+          ref={agoraRef}
+          appId={resolvedAppId}
+          token={effectiveAgoraToken}
+          channelName={roomId}
+          onRemoteJoinedChange={setRemoteJoined}
+          onRemoteLeft={handleRemoteLeft}
+          onFailedToConnect={handleAgoraFailedToConnect}
+          onEngineError={(err, msg) => console.log('[Agora] Engine error:', err, msg)}
+          onJoinSuccess={() => {
+            console.log('[AudioCall] Agora joinChannel succeeded — local user is in the audio channel');
 
-              // Start billing NOW that we're actually connected and can talk.
-              if (callId && callId !== 'demo_zego_call' && callId !== 'test_call_id') {
-                socketService.emit('start_call_billing', { sessionId: callId });
+            // Start billing NOW that we're actually connected and can talk.
+            if (callId && callId !== 'demo_zego_call' && callId !== 'test_call_id') {
+              socketService.emit('start_call_billing', { sessionId: callId });
+            }
+
+            // Fallback: if onUserJoined / onRemoteAudioStateChanged never fires
+            // (can happen on certain builds where Agora callbacks are delayed or
+            // swallowed), mark remote as joined after a short grace period so the
+            // UI transitions from "Connecting…" to "Audio Call in Progress".
+            setTimeout(() => {
+              if (!remoteJoinedRef.current && !callEndedRef.current) {
+                console.log('[AudioCall] Fallback: remote never joined callback — marking as connected');
+                setRemoteJoined(true);
               }
-
-              // Fallback: if onUserJoined / onRemoteAudioStateChanged never fires
-              // (can happen on certain builds where Agora callbacks are delayed or
-              // swallowed), mark remote as joined after a short grace period so the
-              // UI transitions from "Connecting…" to "Audio Call in Progress".
-              setTimeout(() => {
-                if (!remoteJoinedRef.current && !callEndedRef.current) {
-                  console.log('[AudioCall] Fallback: remote never joined callback — marking as connected');
-                  setRemoteJoined(true);
-                }
-              }, 8000);
-            }}
-          />
-        )
+            }, 8000);
+          }}
+        />
       )}
 
       {/* Call duration timer — always visible, with a generous gap below the
@@ -1111,11 +1047,11 @@ function AudioCallScreenComponent() {
             <View
               style={[
                 styles.statusDot,
-                { backgroundColor: '#22C55E' },
+                { backgroundColor: remoteJoined ? '#22C55E' : '#F59E0B' },
               ]}
             />
             <Text style={styles.statusText}>
-              Audio Call in Progress
+              {remoteJoined ? 'Audio Call in Progress' : 'Connecting…'}
             </Text>
           </View>
         </View>
@@ -1284,10 +1220,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-  zegoAvatar: {
-    width: '100%',
-    height: '100%',
-  },
+
 
   topBar: {
     flexDirection: 'row',

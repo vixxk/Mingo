@@ -23,7 +23,7 @@ export default function SplashScreenPage() {
       const micStatus = await Camera.getMicrophonePermissionsAsync();
       const cameraStatus = await Camera.getCameraPermissionsAsync();
       
-      let notifGranted = true;
+      let notifGranted = false;
       if (Notifications) {
         const notifStatus = await Notifications.getPermissionsAsync();
         notifGranted = notifStatus.granted;
@@ -50,32 +50,57 @@ export default function SplashScreenPage() {
         return;
       }
 
-      // Request microphone
-      const micReq = await Camera.requestMicrophonePermissionsAsync();
+      // 1. Request microphone (Audio)
+      let micGranted = false;
+      const micStatus = await Camera.getMicrophonePermissionsAsync();
+      if (micStatus.granted) {
+        micGranted = true;
+      } else {
+        const micReq = await Camera.requestMicrophonePermissionsAsync();
+        micGranted = micReq.granted;
+      }
       
-      // Request camera
-      const cameraReq = await Camera.requestCameraPermissionsAsync();
-
-      // Request notifications
-      let notifGranted = true;
-      if (Notifications) {
-        const notifReq = await Notifications.requestPermissionsAsync();
-        notifGranted = notifReq.granted;
+      // 2. Request camera (Video)
+      let cameraGranted = false;
+      const cameraStatus = await Camera.getCameraPermissionsAsync();
+      if (cameraStatus.granted) {
+        cameraGranted = true;
+      } else {
+        const cameraReq = await Camera.requestCameraPermissionsAsync();
+        cameraGranted = cameraReq.granted;
       }
 
-      const allGranted = micReq.granted && cameraReq.granted && notifGranted;
+      // 3. Request notifications
+      let notifGranted = false;
+      if (Notifications) {
+        const notifStatus = await Notifications.getPermissionsAsync();
+        if (notifStatus.granted) {
+          notifGranted = true;
+        } else {
+          const notifReq = await Notifications.requestPermissionsAsync();
+          notifGranted = notifReq.granted;
+        }
+      }
+
+      try {
+        const OneSignalModule = require('react-native-onesignal');
+        if (OneSignalModule?.OneSignal?.Notifications) {
+          await OneSignalModule.OneSignal.Notifications.requestPermission(true);
+        }
+      } catch (oneErr) {}
+
+      const allGranted = micGranted && cameraGranted && notifGranted;
       if (allGranted) {
         setShowPermissionScreen(false);
         checkAuthAndRedirect();
       } else {
         setShowPermissionScreen(true);
-        // Show user-friendly feedback alert
         Alert.alert(
           "Permissions Required",
-          "Camera, Microphone, and Notification permissions are required to use Mingo. Please enable them in system settings.",
+          "Audio, Video, and Notification permissions are required to use Mingo. Please grant all permissions to proceed.",
           [
             { text: "Open Settings", onPress: handleOpenSettings },
-            { text: "Cancel", style: "cancel" }
+            { text: "Try Again", onPress: () => requestAndVerify() }
           ]
         );
       }
@@ -214,10 +239,10 @@ export default function SplashScreenPage() {
       }),
     ]).start();
 
-    // Request permissions after a short delay so animation can finish smoothly
+    // Request permissions immediately after initial splash mount
     const timer = setTimeout(() => {
       requestAndVerify();
-    }, 1500);
+    }, 300);
 
     return () => clearTimeout(timer);
   }, [_restart]);
