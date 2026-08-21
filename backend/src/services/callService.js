@@ -388,11 +388,34 @@ class CallService {
     session.endTime = endTime;
     session.status = 'completed';
 
-    // Duration is already tracked incrementally by billing timer,
-    // but do a final calculation in case of mismatch
-    if (!session.duration || session.duration === 0) {
-      const durationMs = endTime - session.startTime;
-      session.duration = Math.ceil(durationMs / 60000);
+    // Calculate duration from when call was CONNECTED (connectedAt / lastDeductionTime), not dialing startTime!
+    const connectRef = session.connectedAt || session.lastDeductionTime;
+    if (connectRef) {
+      const connectedMs = Math.max(0, endTime.getTime() - new Date(connectRef).getTime());
+      const connectedMins = Math.max(1, Math.ceil(connectedMs / 60000));
+      session.duration = Math.max(session.duration || 0, connectedMins);
+    } else {
+      session.duration = Math.max(session.duration || 0, 1);
+    }
+
+    // Ensure coinsDeducted and listenerEarnings are properly calculated if missing/zero on completed call
+    const isVideo = session.callType === 'video';
+    const coinsPerMin = isVideo ? 40 : 10;
+    
+    let payoutRate = isVideo ? 4.00 : 1.00;
+    try {
+      const SystemSettings = require('../models/SystemSettings');
+      const settings = await SystemSettings.getSettings().catch(() => null);
+      if (settings) {
+        payoutRate = isVideo ? (settings.videoPayoutRate ?? 4.00) : (settings.audioPayoutRate ?? 1.00);
+      }
+    } catch (e) {}
+
+    if (!session.coinsDeducted || session.coinsDeducted === 0) {
+      session.coinsDeducted = (session.duration || 1) * coinsPerMin;
+    }
+    if (!session.listenerEarnings || session.listenerEarnings === 0) {
+      session.listenerEarnings = (session.duration || 1) * payoutRate;
     }
 
     await session.save();

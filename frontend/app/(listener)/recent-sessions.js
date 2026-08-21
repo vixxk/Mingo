@@ -207,24 +207,31 @@ export default function RecentSessionsScreen() {
       ];
 
       if (res?.data) {
-        setRecentSessions(res.data.map((call, index) => ({
-          id: call._id,
-          userId: call.userId?._id || call.userId,
-          name: call.userId?.name || 'Unknown User',
-          gender: call.userId?.gender || 'Female',
-          avatarIndex: call.userId?.avatarIndex || '0',
-          duration: `${call.duration || 0} mins`,
-          durationLabel: formatSessionDuration(call),
-          type: call.callType || 'audio',
-          typeLabel: formatSessionType(call),
-          time: call.createdAt,
-          earnings: call.listenerEarnings || 0,
-          coinsDeducted: call.coinsDeducted || 0,
-          rating: call.rating,
-          feedback: call.feedback,
-          status: call.status,
-          gradientColors: GRADIENTS[index % GRADIENTS.length],
-        })));
+        setRecentSessions(res.data.map((call, index) => {
+          const isVideo = call.callType === 'video';
+          const rate = isVideo ? 4.00 : 1.00;
+          const fallbackEarnings = call.status === 'completed' ? (call.duration || 1) * rate : 0;
+          const finalEarnings = (call.listenerEarnings && call.listenerEarnings > 0) ? call.listenerEarnings : fallbackEarnings;
+
+          return {
+            id: call._id,
+            userId: call.userId?._id || call.userId,
+            name: call.userId?.name || 'Unknown User',
+            gender: call.userId?.gender || 'Female',
+            avatarIndex: call.userId?.avatarIndex || '0',
+            duration: `${call.duration || 0} mins`,
+            durationLabel: formatSessionDuration(call),
+            type: call.callType || 'audio',
+            typeLabel: formatSessionType(call),
+            time: call.createdAt,
+            earnings: finalEarnings,
+            coinsDeducted: call.coinsDeducted || 0,
+            rating: call.rating,
+            feedback: call.feedback,
+            status: call.status,
+            gradientColors: GRADIENTS[index % GRADIENTS.length],
+          };
+        }));
       }
       
       const balRes = await walletAPI.getBalance();

@@ -396,12 +396,18 @@ function RootLayout() {
   useEffect(() => {
     const handleIncomingCall = (callData) => {
       const cid = callData?.callId || callData?.sessionId || callData?._id || callData?.id;
-      if (!cid || handledCallIdsRef.current.has(String(cid))) {
+      const rid = callData?.roomId;
+      if (!cid || handledCallIdsRef.current.has(String(cid)) || (rid && handledCallIdsRef.current.has(String(rid)))) {
         console.log('[RootLayout] Ignoring incoming_call for already handled call:', cid);
         return;
       }
       if (isInCallScreen) {
-        console.log('[RootLayout] User is already in call screen, auto-rejecting incoming call:', cid);
+        // If the call matches our handled set, do not auto-reject
+        if (handledCallIdsRef.current.has(String(cid)) || (rid && handledCallIdsRef.current.has(String(rid)))) {
+          console.log('[RootLayout] Ignoring incoming_call because cid matches active call:', cid);
+          return;
+        }
+        console.log('[RootLayout] User is already in call screen, auto-rejecting DIFFERENT incoming call:', cid);
         handledCallIdsRef.current.add(String(cid));
         socketService.emit('call_rejected', {
           userId: callData.callerId,
@@ -464,9 +470,17 @@ function RootLayout() {
       handleRejectCallRef.current(callData);
     };
 
+    const handleRegisterActiveCall = (data) => {
+      const cid = String(data?.callId || data?.sessionId || '');
+      const rId = String(data?.roomId || '');
+      if (cid) handledCallIdsRef.current.add(cid);
+      if (rId) handledCallIdsRef.current.add(rId);
+    };
+
     const setup = async () => {
       await socketService.connect();
 
+      socketService.on('register_active_call_id', handleRegisterActiveCall);
       socketService.on('incoming_call', handleIncomingCall);
       socketService.on('call_cancelled', dismissCallGlobal);
       socketService.on('call_ended', dismissCallGlobal);
@@ -508,6 +522,7 @@ function RootLayout() {
     setup();
 
     return () => {
+      socketService.off('register_active_call_id', handleRegisterActiveCall);
       socketService.off('incoming_call', handleIncomingCall);
       socketService.off('call_cancelled', dismissCallGlobal);
       socketService.off('call_ended', dismissCallGlobal);

@@ -119,6 +119,14 @@ export default function ConnectingScreen() {
     }
   }, [name, listenerId, avatarIndex, gender, isRandom]);
 
+  useEffect(() => {
+    const cid = realCallId || initialCallId;
+    const rid = realRoomId || initialRoomId;
+    if (cid || rid) {
+      socketService.triggerLocalEvent('register_active_call_id', { callId: cid, roomId: rid });
+    }
+  }, [realCallId, initialCallId, realRoomId, initialRoomId]);
+
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const dotsAnim = useRef(new Animated.Value(0)).current;
   const callTimeoutRef = useRef(null);

@@ -729,6 +729,9 @@ const initSocket = (server) => {
 
         // Mark the session as active and accepted so REST sync doesn't treat it as incoming
         session.isAccepted = true;
+        if (!session.connectedAt) {
+          session.connectedAt = new Date();
+        }
         if (session.status !== 'active') {
           session.status = 'active';
         }
@@ -962,6 +965,13 @@ const initSocket = (server) => {
           session = await Session.findOne({ roomId });
           console.log(`[Socket] Upgrade: Session lookup by roomId ${roomId} =>`, session ? session._id : 'NOT FOUND');
         }
+        if (!session && socket.userId) {
+          session = await Session.findOne({
+            $or: [{ userId: socket.userId }, { listenerId: socket.userId }],
+            status: 'active',
+          }).sort({ createdAt: -1 });
+          console.log(`[Socket] Upgrade: Session lookup by socket.userId ${socket.userId} =>`, session ? session._id : 'NOT FOUND');
+        }
         if (!session) {
           console.log(`[Socket] Upgrade FAILED: No session found for sessionId=${sessionId}, roomId=${roomId}`);
           socket.emit('call_upgrade_failed', { sessionId, reason: 'session_not_found' });
@@ -1020,10 +1030,25 @@ const initSocket = (server) => {
 
     socket.on('respond_call_upgrade', async (data) => {
       const { sessionId, roomId, accepted } = data;
-      console.log(`[Socket] respond_call_upgrade for session ${sessionId}, accepted: ${accepted}`);
+      console.log(`[Socket] respond_call_upgrade for session ${sessionId}, roomId: ${roomId}, accepted: ${accepted}`);
       try {
-        const session = await Session.findById(sessionId);
-        if (!session || session.status !== 'active') return;
+        let session = null;
+        if (sessionId && mongoose.Types.ObjectId.isValid(sessionId)) {
+          session = await Session.findById(sessionId);
+        }
+        if (!session && roomId) {
+          session = await Session.findOne({ roomId });
+        }
+        if (!session && socket.userId) {
+          session = await Session.findOne({
+            $or: [{ userId: socket.userId }, { listenerId: socket.userId }],
+            status: 'active',
+          }).sort({ createdAt: -1 });
+        }
+        if (!session || session.status !== 'active') {
+          console.log(`[Socket] Upgrade Response FAILED: Session ${sessionId || roomId} not found or not active (status=${session?.status})`);
+          return;
+        }
 
         if (accepted) {
           // Re-check the paying user's balance at ACCEPT time too — it may
@@ -1846,7 +1871,6 @@ async function syncAndResumeChatSession(conversationId) {
 }
 
 // ─── Call Billing Timer Functions ──────────────────────────────
-const mongoose = require('mongoose');
 
 /**
  * Start per-minute billing for an active call session.
@@ -1877,7 +1901,7 @@ async function startCallBillingTimer(sessionId, options = {}) {
   } else {
     session = await Session.findOneAndUpdate(
       { _id: realSessionId, status: 'active', lastDeductionTime: null },
-      { $set: { lastDeductionTime: new Date() } },
+      { $set: { lastDeductionTime: new Date(), connectedAt: new Date() } },
       { new: true }
     );
     if (!session) return;

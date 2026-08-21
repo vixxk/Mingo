@@ -337,6 +337,12 @@ function AudioCallScreenComponent() {
   const [currentAgoraAppId, setCurrentAgoraAppId] = useState(agoraAppId || '');
 
   useEffect(() => {
+    if (callId || roomId) {
+      socketService.triggerLocalEvent('register_active_call_id', { callId, roomId });
+    }
+  }, [callId, roomId]);
+
+  useEffect(() => {
     if (agoraToken) setCurrentAgoraToken(agoraToken);
     if (agoraAppId) setCurrentAgoraAppId(agoraAppId);
   }, [agoraToken, agoraAppId]);

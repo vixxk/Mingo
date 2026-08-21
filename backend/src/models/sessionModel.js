@@ -63,6 +63,10 @@ const sessionSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    connectedAt: {
+      type: Date,
+      default: null,
+    },
     endTime: {
       type: Date,
       default: null,
@@ -131,8 +135,9 @@ sessionSchema.statics.endSession = async function (sessionId) {
   if (!session || session.status !== 'active') return session;
 
   const endTime = new Date();
-  const durationMs = endTime - session.startTime;
-  const durationMinutes = Math.ceil(durationMs / 60000);
+  const startRef = session.connectedAt || session.lastDeductionTime || session.startTime;
+  const durationMs = Math.max(0, endTime - startRef);
+  const durationMinutes = Math.max(1, Math.ceil(durationMs / 60000));
 
   const isVideo = session.callType === 'video';
   
@@ -166,6 +171,7 @@ sessionSchema.statics.endSession = async function (sessionId) {
     {
       endTime,
       status: 'completed',
+      connectedAt: session.connectedAt || startRef,
       duration: durationMinutes,
       coinsDeducted,
       listenerEarnings,
