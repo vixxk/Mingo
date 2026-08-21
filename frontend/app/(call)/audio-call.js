@@ -584,43 +584,59 @@ function AudioCallScreenComponent() {
       }
     };
 
-    const handleUpgradeAccepted = (data) => {
+    const handleUpgradeAccepted = async (data) => {
       console.log('[Socket] handleUpgradeAccepted received:', data);
-      // Guard against duplicate events (user room + Agora room both trigger)
+      // Guard against duplicate events
       if (upgradeNavigatedRef.current) return;
-      const isMatch = !callId || String(data.sessionId) === String(callId) || (data.roomId && data.roomId === roomId);
+      const isMatch = !callId || String(data.sessionId) === String(callId) || (data.roomId && data.roomId === roomId)
+        // The backend now sends a NEW sessionId, so also match if the old session was ours
+        || (data.userId && data.listenerId);
       if (isMatch) {
         upgradeNavigatedRef.current = true;
-        // Mark the audio call as "ended" from this screen's perspective BEFORE
-        // leaving the Agora channel. Two things depend on this:
-        //   1. The beforeRemove guard below blocks router.replace for ANY
-        //      state-changing action (including REPLACE), so unless we flip
-        //      this flag the conversion never navigates to the video screen.
-        //   2. Leaving the channel makes the OTHER participant's engine fire
-        //      onUserOffline → handleRemoteLeft → finishAndExit. With this
-        //      flag set, that teardown is a no-op, so the call isn't ended and
-        //      routed to feedback mid-conversion — the video screen takes over.
+        // The audio session is already ended server-side. Set callEndedRef
+        // so that:
+        //   1. The beforeRemove guard allows navigation
+        //   2. Leaving the Agora channel (onUserOffline) doesn't trigger finishAndExit
+        //   3. No feedback page appears
         callEndedRef.current = true;
         setPendingUpgradeState(null);
         setUpgradeModalVisible(false);
-        // Leave the audio channel before navigating to video
+
+        // Leave the audio Agora channel
         if (agoraRef.current) {
           try { agoraRef.current.leave(); } catch (e) {}
         }
-        // Small delay to let Agora engine release before video-call mounts
+
+        // Determine display name and avatar for the video call screen.
+        // The user sees the listener's name; the listener sees the user's name.
+        let myId = userID;
+        const isMyRoleListener = isListenerRef.current;
+        const videoScreenName = isMyRoleListener
+          ? (data.userName || name)
+          : (data.listenerName || data.name || name);
+        const videoScreenAvatarIndex = isMyRoleListener
+          ? (data.userAvatarIndex || avatarIndex)
+          : (data.avatarIndex || avatarIndex);
+        const videoScreenGender = isMyRoleListener
+          ? (data.userGender || gender)
+          : (data.gender || gender);
+        const videoScreenListenerId = isMyRoleListener
+          ? (data.userId || listenerId)
+          : (data.listenerId || listenerId);
+
+        // Small delay to let Agora audio engine release before video-call mounts
         setTimeout(() => {
           router.replace({
             pathname: '/(call)/video-call',
             params: {
-              name,
-              callId: data.sessionId || callId,
-              roomId: data.roomId || roomId,
-              listenerId,
-              avatarIndex,
-              gender,
+              name: videoScreenName,
+              callId: data.sessionId || data.callId,
+              roomId: data.roomId,
+              listenerId: videoScreenListenerId,
+              avatarIndex: videoScreenAvatarIndex,
+              gender: videoScreenGender,
               agoraAppId: data.agoraAppId || agoraAppId,
               agoraToken: data.agoraToken || agoraToken,
-              isConverted: 'true',
             },
           });
         }, 300);

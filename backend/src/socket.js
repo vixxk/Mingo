@@ -1051,12 +1051,7 @@ const initSocket = (server) => {
         }
 
         if (accepted) {
-          // Re-check the paying user's balance at ACCEPT time too — it may
-          // have dropped below one video minute since the request (billing
-          // tick, gift, balance spent elsewhere). Refuse the conversion so the
-          // call isn't converted and then auto-ended on the first video
-          // minute. The payer gets the recharge prompt, the other side is
-          // informed — and the audio call keeps running.
+          // Re-check the paying user's balance at ACCEPT time
           const payingUser = await User.findById(session.userId);
           if (!payingUser || payingUser.coins < VIDEO_COINS_PER_MIN) {
             const failedPayload = {
@@ -1071,43 +1066,113 @@ const initSocket = (server) => {
             return;
           }
 
-          if (!session.initialCallType) {
-            session.initialCallType = session.callType || 'audio';
+          // ─── Step 1: End the current audio session cleanly ───────────
+          const audioSessionId = session._id.toString();
+          const audioRoomId = session.roomId;
+          const audioUserId = session.userId.toString();
+          const audioListenerId = session.listenerId.toString();
+
+          // Stop audio billing
+          stopCallBillingTimer(audioSessionId);
+          if (audioRoomId) stopCallBillingTimer(audioRoomId);
+
+          // Finalize the audio session
+          session.status = 'completed';
+          session.endTime = new Date();
+
+          const connectRef = session.connectedAt || session.lastDeductionTime;
+          if (connectRef) {
+            const connectedMs = Math.max(0, session.endTime.getTime() - new Date(connectRef).getTime());
+            const connectedMins = Math.max(1, Math.ceil(connectedMs / 60000));
+            session.duration = Math.max(session.duration || 0, connectedMins);
+          } else {
+            session.duration = Math.max(session.duration || 0, 1);
           }
-          session.callType = 'video';
+
+          const audioCoinsPerMin = AUDIO_COINS_PER_MIN;
+          let audioPayoutRate = AUDIO_PAYOUT_PER_MIN;
+          try {
+            const SystemSettings = require('./models/SystemSettings');
+            const settings = await SystemSettings.getSettings().catch(() => null);
+            if (settings) {
+              audioPayoutRate = settings.audioPayoutRate ?? AUDIO_PAYOUT_PER_MIN;
+            }
+          } catch (e) {}
+
+          if (!session.coinsDeducted || session.coinsDeducted === 0) {
+            session.coinsDeducted = (session.duration || 1) * audioCoinsPerMin;
+          }
+          if (!session.listenerEarnings || session.listenerEarnings === 0) {
+            session.listenerEarnings = (session.duration || 1) * audioPayoutRate;
+          }
+
+          // Mark this session was ended due to upgrade (not a regular end)
           session.isConverted = true;
           session.convertedAt = new Date();
           await session.save();
 
-          // Realign billing so the video minute boundaries start at the
-          // conversion moment: the old timer's 60s cadence was anchored to the
-          // call start, which would bill the first video minute up to 60s late
-          // (or never, if the call ends before the next tick). Stopping and
-          // restarting deducts the first video minute immediately and anchors
-          // subsequent ticks at convertedAt.
+          // Increment listener counters for the audio session
+          await CallService.incrementListenerCounters(audioListenerId, 'audio');
+
+          console.log(`[Socket] Audio session ${audioSessionId} ended for upgrade (duration: ${session.duration} min)`);
+
+          // ─── Step 2: Create a brand-new video session ───────────────
+          const { v4: uuidv4 } = require('uuid');
+          const newRoomId = `call_${uuidv4()}`;
+          const agoraPayload = CallService.getAgoraCallPayload(newRoomId, 'video');
+
+          const newSession = await Session.create({
+            userId: audioUserId,
+            listenerId: audioListenerId,
+            roomId: newRoomId,
+            callType: 'video',
+            isAccepted: true,
+            connectedAt: new Date(),
+            status: 'active',
+          });
+
+          console.log(`[Socket] New video session created: ${newSession._id}, room: ${newRoomId}`);
+
+          // Listener stays busy (already marked from the audio call)
+          // Ensure lock is held for the new session
+          await redis.set(
+            REDIS_KEYS.LOCK(audioListenerId),
+            audioUserId,
+            'EX',
+            3600
+          );
+
+          // Start billing for the new video session
           try {
-            stopCallBillingTimer(session._id.toString());
-            if (session.roomId) stopCallBillingTimer(session.roomId);
-            await startCallBillingTimer(session._id.toString(), { restart: true });
+            await startCallBillingTimer(newSession._id.toString());
           } catch (billingErr) {
-            console.error('[Socket] Failed to restart billing after video upgrade:', billingErr.message);
+            console.error('[Socket] Failed to start billing for new video session:', billingErr.message);
           }
 
-          console.log(`[Socket] Session ${sessionId} upgraded to VIDEO!`);
-
-          const agoraPayload = CallService.getAgoraCallPayload(session.roomId, 'video');
+          // ─── Step 3: Emit to both parties with NEW session credentials ─
+          const userDoc = await User.findById(audioUserId).select('name username avatarIndex gender');
+          const listenerDoc = await User.findById(audioListenerId).select('name username avatarIndex gender');
 
           const payload = {
-            sessionId: session._id.toString(),
-            roomId: session.roomId,
+            sessionId: newSession._id.toString(),
+            roomId: newRoomId,
             callType: 'video',
-            isConverted: true,
+            callId: newSession._id.toString(),
+            userId: audioUserId,
+            listenerId: audioListenerId,
+            name: listenerDoc?.name || 'Listener',
+            listenerName: listenerDoc?.name || 'Listener',
+            userName: userDoc?.name || 'User',
+            avatarIndex: listenerDoc?.avatarIndex?.toString() || '0',
+            gender: listenerDoc?.gender || 'Female',
+            userAvatarIndex: userDoc?.avatarIndex?.toString() || '0',
+            userGender: userDoc?.gender || 'Female',
             message: 'Call upgraded to video',
-            ...agoraPayload
+            ...agoraPayload,
           };
 
-          io.to(`user_${session.userId}`).emit('call_upgrade_accepted', payload);
-          io.to(`user_${session.listenerId}`).emit('call_upgrade_accepted', payload);
+          io.to(`user_${audioUserId}`).emit('call_upgrade_accepted', payload);
+          io.to(`user_${audioListenerId}`).emit('call_upgrade_accepted', payload);
         } else {
           const declinerId = socket.userId;
           const callerId = (declinerId && session.userId.toString() === declinerId.toString())
