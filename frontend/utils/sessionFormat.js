@@ -10,17 +10,21 @@
 
 /** e.g. "1 min Audio + 2 mins Video" for converted calls, "3 mins" otherwise. */
 export const formatSessionDuration = (call) => {
-  if (!call.isConverted) return `${call.duration || 0} mins`;
+  if (!call.isConverted) {
+    const d = call.duration || 0;
+    return `${d} min${d === 1 ? '' : 's'}`;
+  }
   const parts = [];
   if ((call.audioDuration || 0) > 0) {
     const a = call.audioDuration;
-    parts.push(`${a} min${a > 1 ? 's' : ''} Audio`);
+    parts.push(`${a} min${a === 1 ? '' : 's'} Audio`);
   }
   if ((call.videoDuration || 0) > 0) {
     const v = call.videoDuration;
-    parts.push(`${v} min${v > 1 ? 's' : ''} Video`);
+    parts.push(`${v} min${v === 1 ? '' : 's'} Video`);
   }
-  return parts.length ? parts.join(' + ') : `${call.duration || 0} mins`;
+  const fallback = call.duration || 0;
+  return parts.length ? parts.join(' + ') : `${fallback} min${fallback === 1 ? '' : 's'}`;
 };
 
 /** e.g. "Audio → Video" for converted calls, "Video" / "Audio" otherwise. */

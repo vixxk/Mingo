@@ -135,8 +135,26 @@ sessionSchema.statics.endSession = async function (sessionId) {
   if (!session || session.status !== 'active') return session;
 
   const endTime = new Date();
-  const startRef = session.connectedAt || session.lastDeductionTime || session.startTime;
-  const durationMs = Math.max(0, endTime - startRef);
+  const connectRef = session.connectedAt || session.lastDeductionTime;
+  
+  if (!connectRef) {
+    return this.findOneAndUpdate(
+      { _id: sessionId, status: 'active' },
+      {
+        endTime,
+        status: 'cancelled',
+        duration: 0,
+        coinsDeducted: 0,
+        listenerEarnings: 0,
+        zegoCost: 0,
+        infraCost: 0,
+        platformProfit: 0,
+      },
+      { new: true }
+    );
+  }
+
+  const durationMs = Math.max(0, endTime - connectRef);
   const durationMinutes = Math.max(1, Math.ceil(durationMs / 60000));
 
   const isVideo = session.callType === 'video';
@@ -171,7 +189,7 @@ sessionSchema.statics.endSession = async function (sessionId) {
     {
       endTime,
       status: 'completed',
-      connectedAt: session.connectedAt || startRef,
+      connectedAt: session.connectedAt || connectRef,
       duration: durationMinutes,
       coinsDeducted,
       listenerEarnings,

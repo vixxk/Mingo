@@ -729,9 +729,6 @@ const initSocket = (server) => {
 
         // Mark the session as active and accepted so REST sync doesn't treat it as incoming
         session.isAccepted = true;
-        if (!session.connectedAt) {
-          session.connectedAt = new Date();
-        }
         if (session.status !== 'active') {
           session.status = 'active';
         }
@@ -899,31 +896,7 @@ const initSocket = (server) => {
         }
 
         if (session) {
-          const sId = session._id.toString();
-          const rId = session.roomId || roomId;
-          const uId = session.userId.toString();
-          const lId = session.listenerId.toString();
-
-          if (session.status === 'active') {
-            session.status = 'completed';
-            session.endTime = new Date();
-            await session.save();
-            stopCallBillingTimer(sId);
-            if (rId) stopCallBillingTimer(rId);
-
-            await CallService.incrementListenerCounters(session.listenerId, session.callType);
-            await Listener.findOneAndUpdate({ userId: session.listenerId }, { isBusy: false, busySince: null });
-            io.emit('listener_status_changed', { userId: lId, isOnline: true, isBusy: false });
-            const sseService = require('./services/sseService');
-            sseService.broadcastListenerStatus(lId, true, false, null);
-            await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, lId);
-            await redis.del(REDIS_KEYS.LOCK(lId));
-          }
-
-          // Always notify BOTH participant socket rooms so neither side stays stuck in call
-          console.log(`[Socket] Broadcasting call_ended to user_${uId} and user_${lId}`);
-          io.to(`user_${uId}`).emit('call_ended', { sessionId: sId, roomId: rId });
-          io.to(`user_${lId}`).emit('call_ended', { sessionId: sId, roomId: rId });
+          await CallService.endCall(session._id.toString(), socket.userId);
         }
       } catch (err) {
         console.error('[Socket] Error handling call_ended:', err.message);

@@ -282,12 +282,11 @@ class CallService {
       throw new AppError('Session not found', 404);
     }
 
-    const userIdStr = userId.toString();
+    const userIdStr = userId ? userId.toString() : null;
     const sessionUserIdStr = session.userId.toString();
     const sessionListenerIdStr = session.listenerId.toString();
 
-    
-    if (sessionUserIdStr !== userIdStr && sessionListenerIdStr !== userIdStr) {
+    if (userIdStr && sessionUserIdStr !== userIdStr && sessionListenerIdStr !== userIdStr) {
       throw new AppError('You are not part of this session', 403);
     }
 
@@ -295,8 +294,8 @@ class CallService {
       // Already ended — ensure both socket rooms receive call_ended so clients exit
       try {
         const { getIo } = require('../socket');
-        getIo().to(`user_${sessionUserIdStr}`).emit('call_ended', { sessionId, roomId: session.roomId });
-        getIo().to(`user_${sessionListenerIdStr}`).emit('call_ended', { sessionId, roomId: session.roomId });
+        getIo().to(`user_${sessionUserIdStr}`).emit('call_ended', { sessionId: session._id.toString(), roomId: session.roomId });
+        getIo().to(`user_${sessionListenerIdStr}`).emit('call_ended', { sessionId: session._id.toString(), roomId: session.roomId });
       } catch (e) {}
       return {
         sessionId: session._id,
@@ -349,8 +348,8 @@ class CallService {
 
       try {
         const { getIo } = require('../socket');
-        getIo().to(`user_${sessionUserIdStr}`).emit('call_ended', { sessionId });
-        getIo().to(`user_${sessionListenerIdStr}`).emit('call_ended', { sessionId });
+        getIo().to(`user_${sessionUserIdStr}`).emit('call_ended', { sessionId: session._id.toString() });
+        getIo().to(`user_${sessionListenerIdStr}`).emit('call_ended', { sessionId: session._id.toString() });
         getIo().emit('listener_status_changed', { userId: sessionListenerIdStr, isOnline: true, isBusy: false });
         const sseService = require('./sseService');
         sseService.broadcastListenerStatus(sessionListenerIdStr, true, false, null);
@@ -393,7 +392,7 @@ class CallService {
     if (connectRef) {
       const connectedMs = Math.max(0, endTime.getTime() - new Date(connectRef).getTime());
       const connectedMins = Math.max(1, Math.ceil(connectedMs / 60000));
-      session.duration = Math.max(session.duration || 0, connectedMins);
+      session.duration = connectedMins;
     } else {
       session.duration = Math.max(session.duration || 0, 1);
     }
@@ -411,12 +410,8 @@ class CallService {
       }
     } catch (e) {}
 
-    if (!session.coinsDeducted || session.coinsDeducted === 0) {
-      session.coinsDeducted = (session.duration || 1) * coinsPerMin;
-    }
-    if (!session.listenerEarnings || session.listenerEarnings === 0) {
-      session.listenerEarnings = (session.duration || 1) * payoutRate;
-    }
+    session.coinsDeducted = (session.duration || 1) * coinsPerMin;
+    session.listenerEarnings = (session.duration || 1) * payoutRate;
 
     await session.save();
 
