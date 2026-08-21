@@ -309,7 +309,7 @@ class CallService {
       };
     }
 
-    const hasStarted = session.connectedAt != null || session.lastDeductionTime != null;
+    const hasStarted = session.connectedAt != null || session.lastDeductionTime != null || session.isAccepted === true;
 
     if (!hasStarted) {
       // Call never connected or billing never started! Mark as cancelled.

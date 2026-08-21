@@ -147,18 +147,31 @@ export default function RecentSessionsScreen() {
       const res = await callAPI.getHistory(5, 0);
       if (res?.data) {
         setSessions(
-          res.data.map((call, index) => ({
-            id: call._id,
-            listenerId: call.listenerId?._id || call.listenerId,
-            name: call.listenerId?.name || 'Unknown',
-            duration: `${call.duration || 0} mins`,
-            durationLabel: formatSessionDuration(call),
-            callType: call.callType || 'audio',
-            typeLabel: formatSessionType(call),
-            callTime: formatCallTime(call.startTime || call.createdAt),
-            diamonds: Math.floor((call.coinsDeducted || 0) / 10),
-            gradientColors: GRADIENTS[index % GRADIENTS.length],
-          }))
+          res.data.map((call, index) => {
+            const isVideo = call.callType === 'video';
+            const coinsPerMin = isVideo ? 40 : 10;
+            const rawDur = (call.duration != null && call.duration > 0)
+              ? call.duration
+              : (call.status === 'completed' ? 1 : 0);
+            const dur = rawDur > 60 ? Math.ceil(rawDur / 60) : rawDur;
+            const coins = (call.coinsDeducted && call.coinsDeducted > 0)
+              ? call.coinsDeducted
+              : (call.status === 'completed' ? dur * coinsPerMin : 0);
+            const diamonds = Math.floor(coins / 10);
+
+            return {
+              id: call._id,
+              listenerId: call.listenerId?._id || call.listenerId,
+              name: call.listenerId?.name || 'Unknown',
+              duration: `${dur} min${dur === 1 ? '' : 's'}`,
+              durationLabel: formatSessionDuration({ ...call, duration: dur }),
+              callType: call.callType || 'audio',
+              typeLabel: formatSessionType(call),
+              callTime: formatCallTime(call.startTime || call.createdAt),
+              diamonds: diamonds,
+              gradientColors: GRADIENTS[index % GRADIENTS.length],
+            };
+          })
         );
       }
     } catch (e) {

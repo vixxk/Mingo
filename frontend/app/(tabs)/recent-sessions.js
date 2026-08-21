@@ -302,16 +302,25 @@ export default function RecentSessionsScreen() {
 
       if (callsRes?.data) {
         setRecentSessions(callsRes.data.map((call, index) => {
-          const coins = call.coinsDeducted || 0;
+          const isVideo = call.callType === 'video';
+          const coinsPerMin = isVideo ? 40 : 10;
+          const rawDur = (call.duration != null && call.duration > 0)
+            ? call.duration
+            : (call.status === 'completed' ? 1 : 0);
+          const dur = rawDur > 60 ? Math.ceil(rawDur / 60) : rawDur;
+          const coins = (call.coinsDeducted && call.coinsDeducted > 0)
+            ? call.coinsDeducted
+            : (call.status === 'completed' ? dur * coinsPerMin : 0);
           const diamonds = Math.floor(coins / 10);
+
           return {
             id: call._id,
             listenerId: call.listenerId?._id || call.listenerId,
             name: call.listenerId?.name || 'Unknown',
             gender: call.listenerId?.gender,
             avatarIndex: call.listenerId?.avatarIndex,
-            duration: `${call.duration || 0} mins`,
-            durationLabel: formatSessionDuration(call),
+            duration: `${dur} min${dur === 1 ? '' : 's'}`,
+            durationLabel: formatSessionDuration({ ...call, duration: dur }),
             callType: call.callType || 'audio',
             callTime: formatCallTime(call.startTime || call.createdAt),
             diamonds: diamonds,

@@ -209,8 +209,12 @@ export default function RecentSessionsScreen() {
       if (res?.data) {
         setRecentSessions(res.data.map((call, index) => {
           const isVideo = call.callType === 'video';
+          const rawDur = (call.duration != null && call.duration > 0)
+            ? call.duration
+            : (call.status === 'completed' ? 1 : 0);
+          const dur = rawDur > 60 ? Math.ceil(rawDur / 60) : rawDur;
           const rate = isVideo ? 4.00 : 1.00;
-          const fallbackEarnings = call.status === 'completed' ? (call.duration || 1) * rate : 0;
+          const fallbackEarnings = call.status === 'completed' ? dur * rate : 0;
           const finalEarnings = (call.listenerEarnings && call.listenerEarnings > 0) ? call.listenerEarnings : fallbackEarnings;
 
           return {
@@ -219,8 +223,8 @@ export default function RecentSessionsScreen() {
             name: call.userId?.name || 'Unknown User',
             gender: call.userId?.gender || 'Female',
             avatarIndex: call.userId?.avatarIndex || '0',
-            duration: `${call.duration || 0} mins`,
-            durationLabel: formatSessionDuration(call),
+            duration: `${dur} min${dur === 1 ? '' : 's'}`,
+            durationLabel: formatSessionDuration({ ...call, duration: dur }),
             type: call.callType || 'audio',
             typeLabel: formatSessionType(call),
             time: call.createdAt,

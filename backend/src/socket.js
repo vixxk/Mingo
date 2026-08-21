@@ -732,6 +732,12 @@ const initSocket = (server) => {
         if (session.status !== 'active') {
           session.status = 'active';
         }
+        if (!session.connectedAt) {
+          session.connectedAt = new Date();
+        }
+        if (!session.lastDeductionTime) {
+          session.lastDeductionTime = new Date();
+        }
         await session.save();
 
         const agoraPayload = CallService.getAgoraCallPayload(roomId, session.callType);
@@ -932,27 +938,39 @@ const initSocket = (server) => {
         // Try finding by sessionId first, fall back to roomId
         let session = null;
         if (sessionId && mongoose.Types.ObjectId.isValid(sessionId)) {
-          session = await Session.findById(sessionId);
+          session = await Session.findOne({ _id: sessionId, status: 'active' });
         }
         if (!session && roomId) {
-          session = await Session.findOne({ roomId });
-          console.log(`[Socket] Upgrade: Session lookup by roomId ${roomId} =>`, session ? session._id : 'NOT FOUND');
+          session = await Session.findOne({ roomId, status: 'active' });
         }
         if (!session && socket.userId) {
           session = await Session.findOne({
             $or: [{ userId: socket.userId }, { listenerId: socket.userId }],
             status: 'active',
           }).sort({ createdAt: -1 });
-          console.log(`[Socket] Upgrade: Session lookup by socket.userId ${socket.userId} =>`, session ? session._id : 'NOT FOUND');
+        }
+        // Fallback: if ongoing session was marked non-active by mistake, find it and restore status
+        if (!session && sessionId && mongoose.Types.ObjectId.isValid(sessionId)) {
+          session = await Session.findById(sessionId);
+          if (session && session.status !== 'cancelled') {
+            console.log(`[Socket] Restoring session ${session._id} status from '${session.status}' to 'active' for upgrade`);
+            session.status = 'active';
+            await session.save();
+          }
+        }
+        if (!session && socket.userId) {
+          session = await Session.findOne({
+            $or: [{ userId: socket.userId }, { listenerId: socket.userId }],
+          }).sort({ createdAt: -1 });
+          if (session && session.status !== 'cancelled') {
+            console.log(`[Socket] Restoring user session ${session._id} status from '${session.status}' to 'active' for upgrade`);
+            session.status = 'active';
+            await session.save();
+          }
         }
         if (!session) {
           console.log(`[Socket] Upgrade FAILED: No session found for sessionId=${sessionId}, roomId=${roomId}`);
           socket.emit('call_upgrade_failed', { sessionId, reason: 'session_not_found' });
-          return;
-        }
-        if (session.status !== 'active') {
-          console.log(`[Socket] Upgrade FAILED: Session ${session._id} status is '${session.status}', not 'active'`);
-          socket.emit('call_upgrade_failed', { sessionId: session._id.toString(), reason: 'session_inactive' });
           return;
         }
 
@@ -1007,10 +1025,10 @@ const initSocket = (server) => {
       try {
         let session = null;
         if (sessionId && mongoose.Types.ObjectId.isValid(sessionId)) {
-          session = await Session.findById(sessionId);
+          session = await Session.findOne({ _id: sessionId, status: 'active' });
         }
         if (!session && roomId) {
-          session = await Session.findOne({ roomId });
+          session = await Session.findOne({ roomId, status: 'active' });
         }
         if (!session && socket.userId) {
           session = await Session.findOne({
@@ -1018,8 +1036,24 @@ const initSocket = (server) => {
             status: 'active',
           }).sort({ createdAt: -1 });
         }
-        if (!session || session.status !== 'active') {
-          console.log(`[Socket] Upgrade Response FAILED: Session ${sessionId || roomId} not found or not active (status=${session?.status})`);
+        if (!session && sessionId && mongoose.Types.ObjectId.isValid(sessionId)) {
+          session = await Session.findById(sessionId);
+          if (session && session.status !== 'cancelled') {
+            session.status = 'active';
+            await session.save();
+          }
+        }
+        if (!session && socket.userId) {
+          session = await Session.findOne({
+            $or: [{ userId: socket.userId }, { listenerId: socket.userId }],
+          }).sort({ createdAt: -1 });
+          if (session && session.status !== 'cancelled') {
+            session.status = 'active';
+            await session.save();
+          }
+        }
+        if (!session) {
+          console.log(`[Socket] Upgrade Response FAILED: Session ${sessionId || roomId} not found`);
           return;
         }
 

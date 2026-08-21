@@ -135,9 +135,9 @@ sessionSchema.statics.endSession = async function (sessionId) {
   if (!session || session.status !== 'active') return session;
 
   const endTime = new Date();
-  const connectRef = session.connectedAt || session.lastDeductionTime;
+  const connectRef = session.connectedAt || session.lastDeductionTime || (session.isAccepted ? session.startTime : null);
   
-  if (!connectRef) {
+  if (!connectRef && !session.isAccepted) {
     return this.findOneAndUpdate(
       { _id: sessionId, status: 'active' },
       {
@@ -154,7 +154,8 @@ sessionSchema.statics.endSession = async function (sessionId) {
     );
   }
 
-  const durationMs = Math.max(0, endTime - connectRef);
+  const anchor = connectRef || session.startTime || endTime;
+  const durationMs = Math.max(0, endTime - anchor);
   const durationMinutes = Math.max(1, Math.ceil(durationMs / 60000));
 
   const isVideo = session.callType === 'video';
