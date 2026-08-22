@@ -305,20 +305,10 @@ export default function ConnectingScreen() {
             callTimeoutRef.current = null;
           }
           stopRingtone();
-          if (data.reason === 'timeout' || data.reason === 'no_answer') {
-            // The listener's card rang its full ring count unanswered — missed call.
-            goToMissedCall(
-              partnerNameRef.current,
-              partnerListenerIdRef.current || listenerId,
-              partnerAvatarIndexRef.current,
-              partnerGenderRef.current
-            );
-          } else {
-            router.replace({
-              pathname: '/(call)/user-busy',
-              params: { name: partnerNameRef.current, reason: data.reason || 'rejected' },
-            });
-          }
+          router.replace({
+            pathname: '/(call)/user-busy',
+            params: { name: partnerNameRef.current, reason: data.reason || 'no_answer' },
+          });
         });
 
         // Listen for validation failure — the backend could not relay the
@@ -408,7 +398,10 @@ export default function ConnectingScreen() {
                   sessionId: finalSessionId,
                   reason: 'timeout',
                 });
-                goToMissedCall(data.partnerName, targetListenerId, data.partnerAvatar, data.partnerGender);
+                router.replace({
+                  pathname: '/(call)/user-busy',
+                  params: { name: data.partnerName, reason: 'no_answer' },
+                });
               }, 30000);
 
             } catch (err) {
@@ -545,7 +538,10 @@ export default function ConnectingScreen() {
               sessionId: realCallIdRef.current || initialCallId,
               reason: 'timeout',
             });
-            goToMissedCall(name, listenerId, avatarIndex, gender);
+            router.replace({
+              pathname: '/(call)/user-busy',
+              params: { name: name || 'User', reason: 'no_answer' },
+            });
           }, 30000);
         }
 

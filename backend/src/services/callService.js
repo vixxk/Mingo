@@ -134,7 +134,7 @@ class CallService {
       } else {
         const sessionAge = Date.now() - new Date(existingSession.startTime || existingSession.createdAt).getTime();
         if (sessionAge > 45000) {
-          existingSession.status = 'missed';
+          existingSession.status = 'cancelled';
           existingSession.endTime = new Date();
           await existingSession.save();
           await Listener.findOneAndUpdate({ userId: listenerIdStr }, { isBusy: false, busySince: null });
@@ -191,7 +191,7 @@ class CallService {
         if (!existingListenerSession.lastDeductionTime && !existingListenerSession.isAccepted) {
           const sessionAge = Date.now() - new Date(existingListenerSession.startTime || existingListenerSession.createdAt).getTime();
           if (sessionAge > 45000) {
-            existingListenerSession.status = 'missed';
+            existingListenerSession.status = 'cancelled';
             existingListenerSession.endTime = new Date();
             await existingListenerSession.save();
             await Listener.findOneAndUpdate({ userId: listenerIdStr }, { isBusy: false, busySince: null });

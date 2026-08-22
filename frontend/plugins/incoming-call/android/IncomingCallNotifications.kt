@@ -208,24 +208,9 @@ object IncomingCallNotifications {
         dismissCard()
     }
 
-    /** Displays a single missed call notification in the system notification shade. */
+    /** Displays a single missed call notification in the system notification shade (NO-OP). */
     fun showMissedCallNotification(context: Context, title: String, body: String) {
-        val manager = NotificationManagerCompat.from(context)
-        val intent = buildMainActivityIntent(context, ACTION_OPEN, JSONObject())
-        val pendingIntent = PendingIntent.getActivity(
-            context, 201, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val builder = NotificationCompat.Builder(context, "default")
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle(title)
-            .setContentText(body)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .setAutoCancel(true)
-            .setContentIntent(pendingIntent)
-
-        try {
-            manager.notify((System.currentTimeMillis() % 100000).toInt(), builder.build())
-        } catch (_: Exception) {}
+        // Disabled completely per system design
     }
 
     /** The listener never answered within the ring count — dismiss the card and
@@ -235,8 +220,6 @@ object IncomingCallNotifications {
      *  server-side instead. */
     fun onRingTimeout(context: Context, payload: JSONObject) {
         stopIncomingCall(context)
-        val callerName = payload.optString("callerName", "Someone")
-        showMissedCallNotification(context, "Missed Call", "Missed call from $callerName")
         if (reactInstanceAlive) {
             emitActionToJs?.invoke(ACTION_TIMEOUT, payload.toString())
         }

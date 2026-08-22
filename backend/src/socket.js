@@ -787,8 +787,7 @@ const initSocket = (server) => {
         let listenerUserId = socket.userId;
 
         if (session) {
-          const isNoAnswer = reason === 'timeout' || reason === 'no_answer';
-          session.status = isNoAnswer ? 'missed' : 'cancelled';
+          session.status = 'cancelled';
           session.endTime = new Date();
           await session.save();
 
@@ -863,7 +862,7 @@ const initSocket = (server) => {
         }
 
         if (session) {
-          session.status = isNoAnswer ? 'missed' : 'cancelled';
+          session.status = 'cancelled';
           await session.save();
           sessionId = session._id.toString();
           if (!userId) userId = session.listenerId?.toString();
@@ -881,30 +880,15 @@ const initSocket = (server) => {
           io.to(`user_${userId}`).emit('call_cancelled', { sessionId });
 
           // Push so the listener's device stops ringing even when the app is
-          // backgrounded/killed — the native incoming-call card dismisses on
-          // this event (see frontend IncomingCallNotificationService).
-          //
-          // A Missed Call notification is displayed ONLY when isNoAnswer is true
-          // (caller ring timer timed out without response). Manual cancellations
-          // dismiss the ringing UI quietly without generating a missed call notification.
-          const isMissed = isNoAnswer;
-          let callerName = 'Someone';
-          if (session?.userId) {
-            try {
-              const User = require('./models/userModel');
-              const callerUser = await User.findById(session.userId).select('name');
-              if (callerUser?.name) callerName = callerUser.name;
-            } catch (e) {}
-          }
-
+          // backgrounded/killed — the native incoming-call card dismisses silently.
           try {
             PushService.sendPushNotification(userId, {
-              title: isMissed ? 'Missed Call' : '',
-              body: isMissed ? `Missed call from ${callerName}` : '',
+              title: '',
+              body: '',
               data: {
                 type: 'call_cancelled',
                 callId: (sessionId || '').toString(),
-                isMissed: isMissed ? 'true' : 'false',
+                isMissed: 'false',
               },
             });
           } catch (pushErr) {
@@ -1424,51 +1408,8 @@ const initSocket = (server) => {
             // (swiped from RAM) it never reconnects, and the timer marks them
             // offline automatically (see step 4 below).
 
-            // 2. Auto-end active calls only after a 10s grace timer (to tolerate transient socket drops during screen navigation)
-            const activeCall = await Session.findOne({
-              $or: [{ userId: disconnectedUserId }, { listenerId: disconnectedUserId }],
-              status: 'active',
-              callType: { $in: ['audio', 'video'] }
-            });
-            if (activeCall) {
-              const callIdStr = activeCall._id.toString();
-              console.log(`[Socket] Active call ${callIdStr} found for disconnected user ${disconnectedUserId}. Scheduling 60s disconnect grace timer.`);
-              setTimeout(async () => {
-                try {
-                  const checkSockets = io ? io.sockets.adapter.rooms.get(`user_${disconnectedUserId}`) : null;
-                  if (checkSockets && checkSockets.size > 0) {
-                    console.log(`[Socket] User ${disconnectedUserId} reconnected within grace timer. Keeping active call ${callIdStr} running.`);
-                    return;
-                  }
-                  const freshCall = await Session.findById(callIdStr);
-                  if (freshCall && freshCall.status === 'active') {
-                    console.log(`[Socket] Auto-ending active call ${callIdStr} after participant disconnect grace period expired: ${disconnectedUserId}`);
-                    await CallService.endCall(callIdStr, disconnectedUserId);
-                    stopCallBillingTimer(callIdStr);
-                    stopCallBillingTimer(freshCall.roomId);
-
-                    await CallService.incrementListenerCounters(freshCall.listenerId, freshCall.callType);
-
-                    io.to(`user_${freshCall.userId}`).emit('call_ended', { sessionId: callIdStr });
-                    io.to(`user_${freshCall.listenerId}`).emit('call_ended', { sessionId: callIdStr });
-
-                    const listenerIdStr = freshCall.listenerId.toString();
-                    await Listener.findOneAndUpdate({ userId: listenerIdStr }, { isBusy: false, busySince: null });
-                    const listenerDoc = await Listener.findOne({ userId: listenerIdStr }).select('isOnline');
-                    const listenerIsOnline = listenerDoc ? listenerDoc.isOnline : true;
-                    io.emit('listener_status_changed', { userId: listenerIdStr, isOnline: listenerIsOnline, isBusy: false });
-                    const sseService = require('./services/sseService');
-                    sseService.broadcastListenerStatus(listenerIdStr, listenerIsOnline, false, null);
-                    if (listenerIsOnline) {
-                      await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, listenerIdStr);
-                    }
-                    await redis.del(REDIS_KEYS.LOCK(listenerIdStr));
-                  }
-                } catch (graceErr) {
-                  console.error('[Socket] Error in call disconnect grace timer:', graceErr.message);
-                }
-              }, 60000);
-            }
+            // Active calls continue running seamlessly in the background via native WebRTC/Agora audio.
+            console.log(`[Socket] Socket disconnected for user ${disconnectedUserId}. Preserving active call session.`);
 
             // 3. Notify other participant that user went offline
             const activeChatConvs = await Conversation.find({
