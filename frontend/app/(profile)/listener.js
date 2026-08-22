@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ms, s, vs, SCREEN_WIDTH, SCREEN_HEIGHT, hp, wp } from '../../utils/responsive';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import FloatingCoin from '../../components/shared/FloatingCoin';
@@ -227,13 +227,13 @@ export default function ListenerScreen() {
       if (soundInstance) { await soundInstance.unloadAsync(); setSoundInstance(null); }
       // Navigate to the new pending page after submission
       setTimeout(() => {
-        router.replace('/(profile)/listener-pending');
+        router.replace(`/(profile)/listener-pending${fromProfile ? '?fromProfile=true' : ''}`);
       }, 1500);
       setShowSuccess(true);
     } catch (e) {
       showToast(e?.message || 'Failed to submit application.', 'error');
     } finally { setUploading(false); }
-  }, [recordingUri, soundInstance]);
+  }, [recordingUri, soundInstance, fromProfile]);
 
   const confirmSwitchRole = async () => {
     setIsSwitching(true);
@@ -256,7 +256,7 @@ export default function ListenerScreen() {
         let role = 'USER';
         if (userStr) { try { const userObj = JSON.parse(userStr); role = userObj.role || 'USER'; } catch (e) {} }
         if (status === 'approved' && role === 'LISTENER') { router.replace('/(listener)'); return; }
-        else if (status === 'pending') { router.replace('/(profile)/listener-pending'); return; }
+        else if (status === 'pending') { router.replace(`/(profile)/listener-pending${fromProfile ? '?fromProfile=true' : ''}`); return; }
         else if (status === 'rejected') {
           let userId = null;
           if (userStr) { try { const user = JSON.parse(userStr); userId = user._id || user.id; } catch (e) {} }
@@ -269,7 +269,7 @@ export default function ListenerScreen() {
       setLoading(false);
     };
     checkStatus();
-  }, []);
+  }, [fromProfile]);
 
   const handleRefresh = async () => {
     try {
@@ -278,7 +278,7 @@ export default function ListenerScreen() {
         const userObj = res.data;
         if (userObj.role === 'LISTENER') { await AsyncStorage.setItem('listenerStatus', 'approved'); await AsyncStorage.setItem('user', JSON.stringify(userObj)); router.replace('/(listener)'); }
         else if (userObj.listener?.status === 'rejected') { await AsyncStorage.setItem('listenerStatus', 'rejected'); await AsyncStorage.setItem('user', JSON.stringify(userObj)); router.replace('/(auth)/verification-failed'); }
-        else if (userObj.listener?.status === 'pending') { router.replace('/(profile)/listener-pending'); }
+        else if (userObj.listener?.status === 'pending') { router.replace(`/(profile)/listener-pending${fromProfile ? '?fromProfile=true' : ''}`); }
         else { if (userObj.listener?.status) { await AsyncStorage.setItem('listenerStatus', userObj.listener.status); setListenerStatus(userObj.listener.status); } showToast('Application still under review.', 'warning'); }
       }
     } catch (err) { showToast('Failed to refresh.', 'error'); }
@@ -295,11 +295,24 @@ export default function ListenerScreen() {
     finally { setLoggingOut(false); }
   };
 
+  const params = useLocalSearchParams();
+  const fromProfile = params?.fromProfile === 'true';
+
+  const handleBack = useCallback(() => {
+    if (fromProfile) {
+      router.replace('/(tabs)/profile');
+    } else if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(auth)/role-selection');
+    }
+  }, [fromProfile, router]);
+
   useEffect(() => {
-    const backAction = () => { router.replace('/(auth)/role-selection'); return true; };
+    const backAction = () => { handleBack(); return true; };
     const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
     return () => backHandler.remove();
-  }, [listenerStatus]);
+  }, [handleBack]);
 
   if (loading) return <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}><StatusBar style="light" /></View>;
 
@@ -316,7 +329,7 @@ export default function ListenerScreen() {
       <View style={[styles.headerContainer, { top: insets.top + vs(6) }]} pointerEvents="box-none">
         <TouchableOpacity
           style={styles.backBtn}
-          onPress={() => router.replace('/(auth)/role-selection')}
+          onPress={handleBack}
           activeOpacity={0.7}
         >
           <><Ionicons name="chevron-back" size={18} color="#fff" /><Text style={styles.backText}>Back</Text></>

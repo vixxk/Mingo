@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useRef } from 'react';
+import { View, Text, TouchableOpacity, Animated, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ms, s, vs } from '../../utils/responsive';
@@ -20,26 +20,64 @@ const hexToRgba = (hex, alpha) => {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
+const AnimatedControlButton = ({ onPress, style, children, activeOpacity = 0.7, accessibilityLabel, hitSlop }) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.86,
+      useNativeDriver: true,
+      friction: 6,
+      tension: 100,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      friction: 4,
+      tension: 80,
+    }).start();
+  };
+
+  return (
+    <TouchableOpacity
+      style={style}
+      onPress={(e) => { e.stopPropagation?.(); onPress?.(); }}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      activeOpacity={activeOpacity}
+      accessibilityLabel={accessibilityLabel}
+      hitSlop={hitSlop}
+    >
+      <Animated.View style={{ transform: [{ scale: scaleAnim }], alignItems: 'center' }}>
+        {children}
+      </Animated.View>
+    </TouchableOpacity>
+  );
+};
+
 const CallControls = ({ buttons = [], onEndCall, onSafety, flat = false }) => (
   <View style={[styles.wrap, flat && styles.wrapFlat]}>
     {onSafety && (
-      <TouchableOpacity
+      <AnimatedControlButton
         style={styles.safetyBtn}
-        onPress={(e) => { e.stopPropagation?.(); onSafety(); }}
+        onPress={onSafety}
         activeOpacity={0.8}
         accessibilityLabel="Open safety guidance"
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
         <Ionicons name="shield-checkmark" size={s(26)} color="#4ADE80" />
-      </TouchableOpacity>
+      </AnimatedControlButton>
     )}
 
     <View style={[styles.dock, flat && styles.dockFlat]}>
       {buttons.map((btn) => (
-        <TouchableOpacity
+        <AnimatedControlButton
           key={btn.id}
           style={styles.control}
-          onPress={(e) => { e.stopPropagation?.(); btn.onPress(); }}
+          onPress={btn.onPress}
           activeOpacity={0.7}
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
@@ -71,13 +109,13 @@ const CallControls = ({ buttons = [], onEndCall, onSafety, flat = false }) => (
           >
             {btn.active && btn.labelActive ? btn.labelActive : btn.label}
           </Text>
-        </TouchableOpacity>
+        </AnimatedControlButton>
       ))}
 
       {onEndCall && (
-        <TouchableOpacity
+        <AnimatedControlButton
           style={styles.control}
-          onPress={(e) => { e.stopPropagation?.(); onEndCall(); }}
+          onPress={onEndCall}
           activeOpacity={0.7}
           accessibilityLabel="End call"
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
@@ -120,7 +158,7 @@ const CallControls = ({ buttons = [], onEndCall, onSafety, flat = false }) => (
               </LinearGradient>
             </View>
           )}
-        </TouchableOpacity>
+        </AnimatedControlButton>
       )}
     </View>
   </View>
@@ -213,8 +251,8 @@ const styles = StyleSheet.create({
   },
   controlLabel: {
     fontSize: ms(11, 0.3),
-    color: '#9CA3AF',
-    fontFamily: 'Inter_500Medium',
+    color: '#F3F4F6',
+    fontFamily: 'Inter_600SemiBold',
     textAlign: 'center',
   },
   controlLabelFlat: {

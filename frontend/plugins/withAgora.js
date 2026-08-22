@@ -36,6 +36,9 @@ const AGORA_ANDROID_PERMISSIONS = [
   'android.permission.BLUETOOTH_CONNECT',
   'android.permission.BLUETOOTH_SCAN',
   'android.permission.READ_PHONE_STATE',
+  'android.permission.FOREGROUND_SERVICE',
+  'android.permission.FOREGROUND_SERVICE_MICROPHONE',
+  'android.permission.WAKE_LOCK',
 ];
 
 const withAgoraAndroidPermissions = (config) => {
@@ -84,6 +87,15 @@ const withAgoraIosPermissions = (config) => {
     if (!config.modResults.NSMicrophoneUsageDescription) {
       config.modResults.NSMicrophoneUsageDescription =
         'Allow Mingo to access your microphone for audio and video calls.';
+    }
+    if (!Array.isArray(config.modResults.UIBackgroundModes)) {
+      config.modResults.UIBackgroundModes = [];
+    }
+    if (!config.modResults.UIBackgroundModes.includes('audio')) {
+      config.modResults.UIBackgroundModes.push('audio');
+    }
+    if (!config.modResults.UIBackgroundModes.includes('voip')) {
+      config.modResults.UIBackgroundModes.push('voip');
     }
     return config;
   });

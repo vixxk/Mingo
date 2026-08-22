@@ -4,20 +4,28 @@ let ringtoneSound = null;
 let incomingSound = null;
 let ringtoneLoading = false;
 let incomingLoading = false;
+let currentIsSpeaker = false; // Default: normal earpiece mode
 
-async function configureAudioMode() {
+async function configureAudioMode(isSpeaker = currentIsSpeaker) {
   try {
+    currentIsSpeaker = !!isSpeaker;
     await Audio.setAudioModeAsync({
       allowsRecordingIOS: false,
       staysActiveInBackground: true,
       playsInSilentModeIOS: true,
       shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: false,
+      playThroughEarpieceAndroid: !currentIsSpeaker,
     });
   } catch (e) {
     console.log('callSounds: Audio mode config error', e);
   }
 }
+
+export async function setAudioOutputMode(isSpeaker) {
+  currentIsSpeaker = !!isSpeaker;
+  await configureAudioMode(currentIsSpeaker);
+}
+
 
 async function loadAndPlay(key, asset, isLooping = true) {
   const existing = key === 'ringtone' ? ringtoneSound : incomingSound;

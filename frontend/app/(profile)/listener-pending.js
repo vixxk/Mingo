@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ms, s, vs, hp, wp, SCREEN_WIDTH } from '../../utils/responsive';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authAPI } from '../../utils/api';
@@ -232,14 +232,21 @@ export default function ListenerPendingScreen() {
     loadUserInfo();
   }, []);
 
+  const params = useLocalSearchParams();
+  const fromProfile = params?.fromProfile === 'true';
+
   useEffect(() => {
     const backAction = () => {
+      if (fromProfile) {
+        router.replace('/(tabs)/profile');
+        return true;
+      }
       setShowLogoutPopup(true);
       return true;
     };
     const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
     return () => backHandler.remove();
-  }, []);
+  }, [fromProfile]);
 
   const statusPopupTypeRef = useRef(null);
 

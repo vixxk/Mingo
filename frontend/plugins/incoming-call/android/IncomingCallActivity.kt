@@ -14,6 +14,7 @@ import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -332,74 +333,54 @@ class IncomingCallActivity : Activity() {
         }
         root.addView(centerCol, centerParams)
 
-        // 3. Bottom Actions Section (Decline Red & Pick Call Green)
-        val actionsRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-        }
-
-        val btnSizePx = (screenWidth * 0.18f).toInt()
-
-        // Red Decline Column
-        val declineCol = LinearLayout(this).apply {
+        // 3. Bottom Actions Section (Swipe Right to Answer & Swipe Left to Decline)
+        val actionsCol = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
         }
-        val declineBtn = buildActionButton("\u2715", 0xFFEF4444.toInt(), btnSizePx)
-        declineBtn.setOnClickListener {
-            IncomingCallNotifications.handleCardAction(this, IncomingCallNotifications.ACTION_DECLINE, payload)
-            finish()
-        }
-        val declineLabel = TextView(this).apply {
-            text = "Decline"
-            setTextColor(0xFFEF4444.toInt())
-            textSize = 14f
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-        }
-        val labelParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = (10 * dp).toInt()
-        }
-        declineCol.addView(declineBtn, LinearLayout.LayoutParams(btnSizePx, btnSizePx))
-        declineCol.addView(declineLabel, labelParams)
 
-        // Green Accept Column
-        val acceptCol = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-        }
-        val acceptIcon = if (isVideo) "\uD83C\uDFA5" else "\uD83D\uDCDE"
-        val acceptBtn = buildActionButton(acceptIcon, 0xFF10B981.toInt(), btnSizePx)
-        acceptBtn.setOnClickListener {
+        val acceptIcon = if (isVideo) "\uD83C\uDFA5" else "\uD83D\uDCDE" // 📹 or 📞
+
+        // Row 1: Swipe Right to Answer (Left to Right)
+        val swipeAnswerView = buildSwipeButton(
+            label = "Swipe right to answer",
+            iconText = acceptIcon,
+            color = 0xFF10B981.toInt(),
+            isLeftDirection = false
+        ) {
             IncomingCallNotifications.handleCardAction(this, IncomingCallNotifications.ACTION_ACCEPT, payload)
             finish()
         }
-        val acceptLabel = TextView(this).apply {
-            text = "Pick Call"
-            setTextColor(0xFF10B981.toInt())
-            textSize = 14f
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-        }
-        acceptCol.addView(acceptBtn, LinearLayout.LayoutParams(btnSizePx, btnSizePx))
-        acceptCol.addView(acceptLabel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = (10 * dp).toInt()
-        })
 
-        val btnSpacing = (screenWidth * 0.18f).toInt()
-        actionsRow.addView(declineCol)
-        actionsRow.addView(acceptCol, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            leftMargin = btnSpacing
-        })
+        // Row 2: Swipe Left to Decline (Right to Left)
+        val swipeDeclineView = buildSwipeButton(
+            label = "Swipe left to decline",
+            iconText = "\u2715", // ✕
+            color = 0xFFEF4444.toInt(),
+            isLeftDirection = true
+        ) {
+            IncomingCallNotifications.handleCardAction(this, IncomingCallNotifications.ACTION_DECLINE, payload)
+            finish()
+        }
+
+        val rowWidthPx = (screenWidth * 0.86f).toInt()
+        val rowHeightPx = (52 * dp).toInt()
+
+        actionsCol.addView(swipeAnswerView, LinearLayout.LayoutParams(rowWidthPx, rowHeightPx))
+
+        val declineParams = LinearLayout.LayoutParams(rowWidthPx, rowHeightPx).apply {
+            topMargin = (16 * dp).toInt()
+        }
+        actionsCol.addView(swipeDeclineView, declineParams)
 
         val actionsParams = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.WRAP_CONTENT
         ).apply {
-            bottomMargin = (screenHeight * 0.08f).toInt()
+            bottomMargin = (screenHeight * 0.05f).toInt()
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
         }
-        root.addView(actionsRow, actionsParams)
+        root.addView(actionsCol, actionsParams)
 
         return root
     }
@@ -445,15 +426,160 @@ class IncomingCallActivity : Activity() {
         return ring
     }
 
-    private fun buildActionButton(label: String, color: Int, sizePx: Int): TextView =
-        TextView(this).apply {
-            text = label
-            textSize = 24f
+    private fun buildSwipeButton(
+        label: String,
+        iconText: String,
+        color: Int,
+        isLeftDirection: Boolean,
+        onSwipeAction: () -> Unit
+    ): View {
+        val dp = resources.displayMetrics.density
+        val screenWidth = resources.displayMetrics.widthPixels
+        val trackWidthPx = (screenWidth * 0.86f).toInt()
+        val trackHeightPx = (52 * dp).toInt()
+        val knobSizePx = (44 * dp).toInt()
+        val marginPx = (4 * dp).toInt()
+        val maxSwipePx = trackWidthPx - knobSizePx - (marginPx * 2)
+
+        // Outer Track Container
+        val track = FrameLayout(this).apply {
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = trackHeightPx / 2f
+                setColor(0xD90A0A0F.toInt())
+                setStroke((1.5f * dp).toInt(), color)
+            }
+        }
+
+        // Dynamic Fill Overlay
+        val fill = View(this).apply {
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = trackHeightPx / 2f
+                setColor(color)
+            }
+            alpha = 0.08f
+        }
+        track.addView(fill, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+
+        // Text & Chevrons Row
+        val textRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
+        }
+
+        val textView = TextView(this).apply {
+            text = label
+            setTextColor(0xFFE5E7EB.toInt())
+            textSize = 14f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+        }
+
+        val chevronsView = TextView(this).apply {
+            text = if (isLeftDirection) "««« " else " »»»"
+            setTextColor(color)
+            textSize = 14f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+        }
+
+        if (isLeftDirection) {
+            textRow.addView(chevronsView)
+            textRow.addView(textView)
+        } else {
+            textRow.addView(textView)
+            textRow.addView(chevronsView)
+        }
+
+        val textParams = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        ).apply {
+            gravity = Gravity.CENTER
+            if (isLeftDirection) {
+                leftMargin = (16 * dp).toInt()
+                rightMargin = (56 * dp).toInt()
+            } else {
+                leftMargin = (56 * dp).toInt()
+                rightMargin = (16 * dp).toInt()
+            }
+        }
+        track.addView(textRow, textParams)
+
+        // Knob Button View
+        val knob = TextView(this).apply {
+            text = iconText
+            textSize = 20f
             setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(color)
             }
         }
+
+        val knobParams = FrameLayout.LayoutParams(knobSizePx, knobSizePx).apply {
+            gravity = Gravity.CENTER_VERTICAL or (if (isLeftDirection) Gravity.END else Gravity.START)
+            if (isLeftDirection) {
+                rightMargin = marginPx
+            } else {
+                leftMargin = marginPx
+            }
+        }
+        track.addView(knob, knobParams)
+
+        // Gesture Handler for Knob Dragging
+        var initialTouchX = 0f
+        var isSwiped = false
+
+        knob.setOnTouchListener { _, event ->
+            if (isSwiped) return@setOnTouchListener true
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    initialTouchX = event.rawX
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = event.rawX - initialTouchX
+                    if (isLeftDirection) {
+                        if (dx < 0) {
+                            val clampedDx = Math.max(dx, -maxSwipePx.toFloat())
+                            knob.translationX = clampedDx
+                            fill.alpha = 0.08f + (Math.abs(clampedDx) / maxSwipePx.toFloat()) * 0.25f
+                        }
+                    } else {
+                        if (dx > 0) {
+                            val clampedDx = Math.min(dx, maxSwipePx.toFloat())
+                            knob.translationX = clampedDx
+                            fill.alpha = 0.08f + (clampedDx / maxSwipePx.toFloat()) * 0.25f
+                        }
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    val dx = event.rawX - initialTouchX
+                    val dragDist = if (isLeftDirection) -dx else dx
+                    if (dragDist >= maxSwipePx * 0.55f) {
+                        isSwiped = true
+                        knob.animate()
+                            .translationX(if (isLeftDirection) -maxSwipePx.toFloat() else maxSwipePx.toFloat())
+                            .setDuration(120)
+                            .withEndAction { onSwipeAction() }
+                            .start()
+                    } else {
+                        knob.animate()
+                            .translationX(0f)
+                            .setDuration(180)
+                            .withEndAction { fill.alpha = 0.08f }
+                            .start()
+                    }
+                    true
+                }
+                else -> false
+            }
+        }
+
+        return track
+    }
 }

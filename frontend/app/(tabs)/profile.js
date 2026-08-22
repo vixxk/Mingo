@@ -192,9 +192,11 @@ export default function ProfileScreen() {
           return;
         }
         if (listenerStatus === 'pending') {
-          router.push('/(profile)/listener-pending');
+          router.push('/(profile)/listener-pending?fromProfile=true');
           return;
         }
+        router.push('/(profile)/listener?fromProfile=true');
+        return;
       }
       router.push(item.route);
     } else {

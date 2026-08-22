@@ -10,16 +10,17 @@ import {
   Alert,
   Dimensions,
   Modal,
+  BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { socketService } from '../../utils/socket';
 import { callAPI, listenersAPI, walletAPI } from '../../utils/api';
-import { playRingtone, stopRingtone } from '../../utils/callSounds';
+import { playRingtone, stopRingtone, setAudioOutputMode } from '../../utils/callSounds';
 import { ms, s, vs, SCREEN_HEIGHT } from '../../utils/responsive';
 import { getAvatarUrl } from '../../utils/avatars';
 import InsufficientBalancePopup from '../../components/shared/InsufficientBalancePopup';
@@ -29,6 +30,16 @@ const { width: SW, height: SH } = Dimensions.get('window');
 export default function ConnectingScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const navigation = useNavigation();
+
+  // Disable hardware back button & swipe back gesture on dialing screen
+  useEffect(() => {
+    navigation.setOptions?.({ gestureEnabled: false });
+    const onBackPress = () => true;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [navigation]);
+
   const { 
     name,
     callId: initialCallId,
@@ -281,7 +292,7 @@ export default function ConnectingScreen() {
               ...(zegoAppSignVal ? { zegoAppSign: String(zegoAppSignVal) } : {}),
               ...(agoraAppIdVal ? { agoraAppId: String(agoraAppIdVal) } : {}),
               ...(agoraTokenVal ? { agoraToken: String(agoraTokenVal) } : {}),
-              callType 
+              callType,
             } 
           });
         });
@@ -602,17 +613,21 @@ export default function ConnectingScreen() {
         )}
       </View>
 
+
+
       <View style={[styles.bottomSection, { paddingBottom: Math.max(insets.bottom + vs(16), vs(32)) }]}>
         <Text style={styles.safetyText}>
           Keep the conversation safe & respectful.
         </Text>
-        <TouchableOpacity
-          style={styles.cancelBtn}
-          activeOpacity={0.8}
-          onPress={handleCancel}
-        >
-          <Text style={styles.cancelText}>Cancel Call</Text>
-        </TouchableOpacity>
+        <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+          <TouchableOpacity
+            style={styles.cancelBtn}
+            activeOpacity={0.8}
+            onPress={handleCancel}
+          >
+            <Text style={styles.cancelText}>Cancel Call</Text>
+          </TouchableOpacity>
+        </Animated.View>
       </View>
 
       {/* Recharge gate — the call cannot proceed without enough coins */}
@@ -845,5 +860,75 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: SW * 0.038,
     fontFamily: 'Inter_700Bold',
+  },
+  audioOutputContainer: {
+    paddingHorizontal: s(24),
+    marginBottom: vs(20),
+    alignItems: 'center',
+    width: '100%',
+  },
+  audioCardsRow: {
+    flexDirection: 'row',
+    gap: s(12),
+    width: '100%',
+    justifyContent: 'center',
+  },
+  audioCard: {
+    flex: 1,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: vs(12),
+    paddingHorizontal: s(10),
+    borderRadius: s(16),
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  audioCardActive: {
+    backgroundColor: '#2D0D1E',
+    borderColor: '#EC4899',
+    shadowColor: '#EC4899',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+  },
+  activeCheckBadge: {
+    position: 'absolute',
+    top: vs(6),
+    right: s(8),
+  },
+  audioIconCircle: {
+    width: s(38),
+    height: s(38),
+    borderRadius: s(19),
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: vs(6),
+  },
+  audioIconCircleActive: {
+    backgroundColor: 'rgba(236, 72, 153, 0.2)',
+  },
+  audioCardTextWrap: {
+    alignItems: 'center',
+  },
+  audioCardTitle: {
+    fontSize: ms(13, 0.3),
+    fontFamily: 'Inter_600SemiBold',
+    color: '#9CA3AF',
+    marginBottom: vs(2),
+  },
+  audioCardTitleActive: {
+    color: '#FFFFFF',
+    fontFamily: 'Inter_700Bold',
+  },
+  audioCardSubtitle: {
+    fontSize: ms(9.5, 0.3),
+    fontFamily: 'Inter_400Regular',
+    color: '#6B7280',
+    textAlign: 'center',
   },
 });

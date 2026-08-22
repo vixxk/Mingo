@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Animated, Dimensions, BackHandler, Pressable, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Animated, Dimensions, BackHandler, Pressable, Platform, AppState } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { Camera, CameraView } from 'expo-camera';
@@ -16,6 +16,7 @@ import CallTimer from '../../components/call/CallTimer';
 import CallCancelledPopup from '../../components/shared/CallCancelledPopup';
 import GiftPopup from '../../components/shared/GiftPopup';
 import GiftAnimationOverlay from '../../components/call/GiftAnimationOverlay';
+import NetworkQualityIndicator from '../../components/call/NetworkQualityIndicator';
 import { callAPI, walletAPI } from '../../utils/api';
 import { socketService } from '../../utils/socket';
 import { AGORA_APP_ID } from '../../utils/agoraConfig';
@@ -165,20 +166,21 @@ const AgoraVideoView = forwardRef(
       token,
       channelName,
       cameraEnabled,
+      initialIsSpeaker = false,
       onRemoteVideoActiveChange,
       onRemoteJoinedChange,
       onRemoteLeft,
       onFailedToConnect,
       onEngineError,
       onJoinSuccess,
+      onNetworkQuality,
+      onConnectionStateChanged,
     },
     ref
   ) => {
     const engineRef = useRef(null);
     const [remoteUid, setRemoteUid] = useState(null);
     const [remoteVideoActive, setRemoteVideoActive] = useState(false);
-    // Live value of the camera toggle so async engine callbacks (join success)
-    // can re-assert the preview without clobbering a user who turned it off.
     const cameraEnabledRef = useRef(cameraEnabled);
 
     const ensureLocalPreview = useCallback(() => {
@@ -214,6 +216,8 @@ const AgoraVideoView = forwardRef(
     const onFailedToConnectRef = useRef(onFailedToConnect);
     const onEngineErrorRef = useRef(onEngineError);
     const onJoinSuccessRef = useRef(onJoinSuccess);
+    const onNetworkQualityRef = useRef(onNetworkQuality);
+    const onConnectionStateChangedRef = useRef(onConnectionStateChanged);
 
     useEffect(() => { onRemoteVideoActiveChangeRef.current = onRemoteVideoActiveChange; });
     useEffect(() => { onRemoteJoinedChangeRef.current = onRemoteJoinedChange; });
@@ -221,6 +225,8 @@ const AgoraVideoView = forwardRef(
     useEffect(() => { onFailedToConnectRef.current = onFailedToConnect; });
     useEffect(() => { onEngineErrorRef.current = onEngineError; });
     useEffect(() => { onJoinSuccessRef.current = onJoinSuccess; });
+    useEffect(() => { onNetworkQualityRef.current = onNetworkQuality; });
+    useEffect(() => { onConnectionStateChangedRef.current = onConnectionStateChanged; });
 
     const setRemoteActive = useCallback((active) => {
       setRemoteVideoActive(active);
@@ -229,10 +235,6 @@ const AgoraVideoView = forwardRef(
       }
     }, []);
 
-    // Remote "joined" is tracked separately from "video active": a participant
-    // who joins but has their camera off (or whose video stalls) is still in
-    // the call, so the caller must not keep showing "Connecting…" or hit the
-    // "remote never joined" timeout.
     const setRemoteJoined = useCallback((joined) => {
       if (onRemoteJoinedChangeRef.current) {
         onRemoteJoinedChangeRef.current(joined);
@@ -244,9 +246,6 @@ const AgoraVideoView = forwardRef(
 
       let engine = null;
       let active = true;
-      // Tracks whether the local user successfully joined — connection failures
-      // before this point mean the channel is unreachable (bad credentials,
-      // blocked network) and the call cannot proceed.
       let joinedSuccessfully = false;
 
       const setup = () => {
@@ -264,15 +263,11 @@ const AgoraVideoView = forwardRef(
           engine.setChannelProfile(ChannelProfileType.ChannelProfileCommunication);
           engine.setClientRole(ClientRoleType.ClientRoleBroadcaster);
           engine.enableVideo();
-          // Explicitly enable audio — enableVideo() activates the video module
-          // but on some Android builds the audio pipeline needs a separate kick.
           try { engine.enableAudio(); } catch (e) {}
           try { engine.enableLocalAudio(true); } catch (e) {}
-          // Boost recording and playback volumes so neither side hears silence.
           try { engine.adjustRecordingSignalVolume(400); } catch (e) {}
           try { engine.adjustPlaybackSignalVolume(400); } catch (e) {}
 
-          // Start local camera capture preview
           try {
             const previewRet = engine.startPreview();
             console.log('[Agora] startPreview result:', previewRet);
@@ -283,9 +278,8 @@ const AgoraVideoView = forwardRef(
               if (!active) return;
               joinedSuccessfully = true;
               console.log('[Agora] Joined channel:', channelName);
-              // Route audio through the loudspeaker by default — mirrors the
-              // old Zego config so "no audio" is never mistaken for a failure.
-              try { engine.setEnableSpeakerphone(true); } catch (e) {}
+              // Route audio through earpiece or speaker according to user preference
+              try { engine.setEnableSpeakerphone(!!initialIsSpeaker); } catch (e) {}
               // Re-assert audio capture & subscription after joining.
               try { engine.enableLocalAudio(true); } catch (e) {}
               try { engine.muteLocalAudioStream(false); } catch (e) {}
@@ -304,12 +298,17 @@ const AgoraVideoView = forwardRef(
             onUserOffline: (connection, uid, reason) => {
               if (!active) return;
               console.log('[Agora] Remote user offline:', uid, 'reason:', reason);
-              setRemoteUid(null);
-              setRemoteActive(false);
-              setRemoteJoined(false);
-              // In a 1-on-1 call the other participant leaving ends the call —
-              // same behavior as Zego's onOnlySelfInRoom.
-              if (onRemoteLeftRef.current) onRemoteLeftRef.current();
+              // Only end the call if the user explicitly quit (reason 0 = UserOfflineReasonQuit).
+              // If dropped due to temporary network or app backgrounding (reason 1 = UserOfflineReasonDropped),
+              // do not end immediately — allow socket call_ended or reconnect to manage session state.
+              if (reason === 0 || reason === UserOfflineReasonType?.UserOfflineReasonQuit) {
+                setRemoteUid(null);
+                setRemoteActive(false);
+                setRemoteJoined(false);
+                if (onRemoteLeftRef.current) onRemoteLeftRef.current();
+              } else {
+                console.log('[Agora] Remote user dropped temporarily (reason:', reason, ') — keeping video call active for reconnect');
+              }
             },
             onFirstRemoteVideoDecoded: (connection, uid) => {
               if (!active) return;
@@ -338,6 +337,20 @@ const AgoraVideoView = forwardRef(
                 setRemoteJoined(true);
               }
             },
+            onNetworkQuality: (connection, uid, txQuality, rxQuality) => {
+              if (!active) return;
+              let targetUid = uid;
+              let tx = txQuality;
+              let rx = rxQuality;
+              if (typeof connection === 'number') {
+                targetUid = connection;
+                tx = uid;
+                rx = txQuality;
+              }
+              if (onNetworkQualityRef.current) {
+                onNetworkQualityRef.current(targetUid, tx, rx);
+              }
+            },
             onTokenPrivilegeWillExpire: () => {
               console.log('[Agora] Token privilege about to expire');
             },
@@ -346,10 +359,11 @@ const AgoraVideoView = forwardRef(
               if (onEngineErrorRef.current) onEngineErrorRef.current(err, msg);
             },
             onConnectionStateChanged: (connection, state, reason) => {
+              if (!active) return;
               console.log('[Agora] Connection state:', state, 'reason:', reason);
-              // If the channel is unreachable before we ever joined, the call
-              // cannot proceed — surface it so the screen ends instead of
-              // showing "Connecting…" forever.
+              if (onConnectionStateChangedRef.current) {
+                onConnectionStateChangedRef.current(state, reason);
+              }
               if (
                 !joinedSuccessfully &&
                 state === ConnectionStateType.ConnectionStateFailed
@@ -420,6 +434,19 @@ const AgoraVideoView = forwardRef(
         if (!engineRef.current) return;
         try { engineRef.current.setEnableSpeakerphone(!!on); } catch (e) {}
       },
+      ensureBackgroundAudio(isMuted) {
+        if (!engineRef.current) return;
+        try {
+          engineRef.current.enableAudio();
+          engineRef.current.enableLocalAudio(true);
+          engineRef.current.muteLocalAudioStream(!!isMuted);
+          engineRef.current.muteAllRemoteAudioStreams(false);
+          engineRef.current.adjustRecordingSignalVolume(400);
+          engineRef.current.adjustPlaybackSignalVolume(400);
+        } catch (e) {
+          console.log('[Agora] Background audio keepalive error:', e.message);
+        }
+      },
       leave() {
         if (!engineRef.current) return;
         try { engineRef.current.leaveChannel(); } catch (e) {}
@@ -462,8 +489,9 @@ function VideoCallScreenComponent() {
   const [showGiftPopup, setShowGiftPopup] = useState(false);
   const [receivedGift, setReceivedGift] = useState(null);
   const [myAvatarUrl, setMyAvatarUrl] = useState('');
+  const initialIsSpeaker = rawParams.isSpeaker ? rawParams.isSpeaker === 'true' : true;
   const [isMuted, setIsMuted] = useState(false);
-  const [isSpeaker, setIsSpeaker] = useState(true);
+  const [isSpeaker, setIsSpeaker] = useState(initialIsSpeaker);
   const [isCameraOff, setIsCameraOff] = useState(false);
   const [currentCoins, setCurrentCoins] = useState(null);
   const [lowBalanceMessage, setLowBalanceMessage] = useState('');
@@ -477,6 +505,55 @@ function VideoCallScreenComponent() {
   const [controlsVisible, setControlsVisible] = useState(true);
   const [remoteVideoActive, setRemoteVideoActive] = useState(false);
   const [remoteJoined, setRemoteJoined] = useState(false);
+  const [networkQuality, setNetworkQuality] = useState('strong');
+  const localQualityRef = useRef(1);
+  const remoteQualityRef = useRef(1);
+  const qualityHistoryRef = useRef([]);
+
+  const updateOverallQuality = useCallback(() => {
+    const qLocal = localQualityRef.current;
+    const qRemote = remoteQualityRef.current;
+    const currentSample = Math.max(qLocal, qRemote);
+
+    // Maintain a rolling sample buffer (4 samples) to filter out single-second network spikes
+    const history = qualityHistoryRef.current;
+    history.push(currentSample);
+    if (history.length > 4) history.shift();
+
+    const avgQuality = history.reduce((acc, val) => acc + val, 0) / history.length;
+    const maxQuality = Math.max(...history);
+
+    let nextState = 'strong';
+    if (maxQuality >= 6 || avgQuality >= 5.5) {
+      nextState = 'reconnecting';
+    } else if (maxQuality >= 4 || avgQuality >= 3.8) {
+      nextState = 'poor';
+    } else if (maxQuality === 3 || avgQuality >= 2.2) {
+      nextState = 'medium';
+    } else {
+      nextState = 'strong';
+    }
+
+    setNetworkQuality(nextState);
+  }, []);
+
+  const handleNetworkQuality = useCallback((uid, txQuality, rxQuality) => {
+    const quality = Math.max(txQuality || 1, rxQuality || 1);
+    if (uid === 0) {
+      localQualityRef.current = quality;
+    } else {
+      remoteQualityRef.current = quality;
+    }
+    updateOverallQuality();
+  }, [updateOverallQuality]);
+
+  const handleAgoraConnectionStateChanged = useCallback((state, reason) => {
+    if (state === 4 || state === 5 || state === 1) {
+      setNetworkQuality('reconnecting');
+    } else if (state === 3) {
+      updateOverallQuality();
+    }
+  }, [updateOverallQuality]);
   const [callCancelledMessage, setCallCancelledMessage] = useState(
     'The call was cancelled by the user.'
   );
@@ -855,6 +932,18 @@ function VideoCallScreenComponent() {
     };
   }, [navigation]);
 
+  // Keep call audio and microphone active when app transitions to background / another app
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState) => {
+      console.log('[VideoCall] AppState change:', nextAppState);
+      if (agoraRef.current && !callEndedRef.current) {
+        agoraRef.current.ensureBackgroundAudio?.(isMuted);
+      }
+    };
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
+  }, [isMuted]);
+
   // The remote participant hung up / dropped — treat it as the call ending
   // (mirrors Zego's onOnlySelfInRoom + onCallEnd behavior).
   const handleRemoteLeft = useCallback(() => {
@@ -1009,7 +1098,7 @@ function VideoCallScreenComponent() {
 
   if (canUseAgora) {
     return (
-      <Pressable style={styles.container} onPress={toggleControls}>
+      <View style={styles.container}>
         <LinearGradient
           colors={['#2E0A0A', '#140505', '#050101']}
           locations={[0, 0.5, 1]}
@@ -1023,11 +1112,14 @@ function VideoCallScreenComponent() {
           token={effectiveAgoraToken}
           channelName={roomId}
           cameraEnabled={showCamera}
+          initialIsSpeaker={initialIsSpeaker}
           onRemoteVideoActiveChange={setRemoteVideoActive}
           onRemoteJoinedChange={setRemoteJoined}
           onRemoteLeft={handleRemoteLeft}
           onFailedToConnect={handleAgoraFailedToConnect}
           onEngineError={(err, msg) => console.log('[Agora] Engine error:', err, msg)}
+          onNetworkQuality={handleNetworkQuality}
+          onConnectionStateChanged={handleAgoraConnectionStateChanged}
           onJoinSuccess={() => {
             console.log('[VideoCall] Agora joinChannel succeeded — local user is in the channel');
 
@@ -1057,12 +1149,12 @@ function VideoCallScreenComponent() {
           style={[styles.remoteAvatarLayer, { opacity: remoteAvatarOpacity }]}
           pointerEvents={remoteVideoActive ? 'none' : 'auto'}
         >
-          <Animated.View style={[styles.avatarContainer, { transform: [{ scale: pulseAnim }] }]}>
+          <View style={styles.avatarContainer}>
             <Image
               source={{ uri: getAvatarUrl(gender, avatarIndex) }}
               style={styles.mainAvatar}
             />
-          </Animated.View>
+          </View>
           <Text style={styles.callerName}>{name}</Text>
           <View style={styles.statusRow}>
             <View
@@ -1077,13 +1169,12 @@ function VideoCallScreenComponent() {
           </View>
         </Animated.View>
 
-        {/* Call duration timer — centered near the top with enough clearance
-            below the status bar / notch. Always visible while the call is
-            connected (not tied to the controls toggle). */}
-        <View style={[styles.topBar, { paddingTop: insets.top + hp(12) }]} pointerEvents="none">
+        {/* Call duration timer + Network Quality Indicator — centered near top */}
+        <View style={[styles.topBar, { paddingTop: insets.top + hp(12) }]} pointerEvents="box-none">
           {remoteJoined && (
-            <View style={styles.topBarTimerWrap}>
+            <View style={styles.topBarTimerWrap} pointerEvents="box-none">
               <CallTimer active />
+              <NetworkQualityIndicator quality={networkQuality} />
             </View>
           )}
         </View>
@@ -1119,10 +1210,10 @@ function VideoCallScreenComponent() {
           </View>
         </View>
 
-        {/* Floating overlay — tap anywhere toggles it (video feeds stay) */}
-        <Animated.View
-          style={[StyleSheet.absoluteFill, { opacity: controlsOpacity }]}
-          pointerEvents={controlsVisible ? 'box-none' : 'none'}
+        {/* Floating overlay — controls stay permanently visible */}
+        <View
+          style={StyleSheet.absoluteFill}
+          pointerEvents="box-none"
         >
           {/* Balance badge + Recharge + Gift — stacked on the top right */}
           <View style={styles.floatingTopRight}>
@@ -1164,14 +1255,12 @@ function VideoCallScreenComponent() {
           >
             <Ionicons name="shield-checkmark" size={26} color="#4ADE80" />
           </TouchableOpacity>
-        </Animated.View>
+        </View>
 
-        {/* Bottom controls dock — replaces Zego's native bottom bar. The
-            layer is anchored to the bottom of the screen so the dock inside
-            it renders at the bottom, not off-screen. */}
-        <Animated.View
-          style={[styles.agoraControlsLayer, { opacity: controlsOpacity }]}
-          pointerEvents={controlsVisible ? 'auto' : 'none'}
+        {/* Bottom controls dock — permanently visible call controls */}
+        <View
+          style={styles.agoraControlsLayer}
+          pointerEvents="box-none"
         >
           <View style={[styles.agoraControlsWrap, { paddingBottom: Math.max(insets.bottom, vs(12)) }]}>
             <CallControls
@@ -1214,7 +1303,7 @@ function VideoCallScreenComponent() {
               ]}
             />
           </View>
-        </Animated.View>
+        </View>
 
         <EndCallPopup
           visible={showEndCallPopup}
@@ -1267,27 +1356,28 @@ function VideoCallScreenComponent() {
             onComplete={() => setReceivedGift(null)}
           />
         )}
-      </Pressable>
+      </View>
     );
   }
 
   return (
-    <Pressable style={styles.container} onPress={toggleControls}>
+    <View style={styles.container}>
       <LinearGradient
         colors={['#2E0A0A', '#140505', '#050101']}
         locations={[0, 0.5, 1]}
         style={StyleSheet.absoluteFill}
       />
 
-      <Animated.View style={{ opacity: controlsOpacity }} pointerEvents={controlsVisible ? 'auto' : 'none'}>
+      <View pointerEvents="box-none">
       {/* Timer sits clearly below the notification bar — insets.top clears
           the status bar/notch, and hp(12) adds a consistent %-based gap
           so it stays visible on every screen size. */}
       <View style={[styles.topBar, { paddingTop: insets.top + hp(12) }]}>
         {/* Call duration timer — only appears once the call connects */}
         {remoteJoined && (
-          <View style={styles.topBarTimerWrap}>
+          <View style={styles.topBarTimerWrap} pointerEvents="box-none">
             <CallTimer active />
+            <NetworkQualityIndicator quality={networkQuality} />
           </View>
         )}
         <View style={styles.topBarRight}>
@@ -1299,18 +1389,18 @@ function VideoCallScreenComponent() {
           )}
         </View>
       </View>
-      </Animated.View>
+      </View>
 
       {/* Recharge + Gift — stacked on the top right (user only) */}
       {!isListener && (
-        <Animated.View style={{ opacity: controlsOpacity }} pointerEvents={controlsVisible ? 'auto' : 'none'}>
+        <View pointerEvents="box-none">
         <View style={styles.fallbackTopRight}>
           <TouchableOpacity
             style={styles.floatingRechargeGift}
             onPress={(e) => { e.stopPropagation?.(); setShowRecharge(true); }}
             activeOpacity={0.8}
           >
-            <Ionicons name="wallet-outline" size={24} color="#10B981" />
+            <Ionicons name="wallet-outline" size={18} color="#10B981" />
             <Text style={[styles.floatingRechargeText, { color: '#10B981' }]}>Recharge</Text>
           </TouchableOpacity>
 
@@ -1319,32 +1409,28 @@ function VideoCallScreenComponent() {
             onPress={(e) => { e.stopPropagation?.(); setShowGiftPopup(true); }}
             activeOpacity={0.8}
           >
-            <Ionicons name="gift-outline" size={24} color="#10B981" />
+            <Ionicons name="gift-outline" size={18} color="#10B981" />
             <Text style={[styles.floatingRechargeText, { color: '#10B981' }]}>Gift</Text>
           </TouchableOpacity>
         </View>
-        </Animated.View>
+        </View>
       )}
 
       <View style={styles.videoArea}>
         {/* Remote participant — the avatar stands in for their live feed (only
             the Agora path on native builds streams their actual camera). */}
-        <Animated.View
-          style={{ opacity: controlsOpacity, alignItems: 'center', justifyContent: 'center' }}
-          pointerEvents={controlsVisible ? 'auto' : 'none'}
-        >
-          <Animated.View style={[styles.avatarContainer, { transform: [{ scale: pulseAnim }] }]}>
+        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+          <View style={styles.avatarContainer}>
             <Image
               source={{ uri: getAvatarUrl(gender, avatarIndex) }}
               style={styles.mainAvatar}
             />
-          </Animated.View>
+          </View>
           <Text style={styles.callerName}>{name}</Text>
-        </Animated.View>
+        </View>
       </View>
 
-      {/* Self-view preview — my own live camera in the bottom-right corner.
-          Like the main video feeds, this is NOT toggled by the tap gesture. */}
+      {/* Self-view preview — my own live camera in the bottom-right corner. */}
       <View style={styles.selfPreview} pointerEvents="none">
         <View style={styles.selfCamera}>
           {showCamera ? (
@@ -1365,9 +1451,9 @@ function VideoCallScreenComponent() {
       </View>
 
       {/* Safety — left side, middle of the page */}
-      <Animated.View
-        style={[StyleSheet.absoluteFill, { opacity: controlsOpacity }]}
-        pointerEvents={controlsVisible ? 'box-none' : 'none'}
+      <View
+        style={StyleSheet.absoluteFill}
+        pointerEvents="box-none"
       >
         <TouchableOpacity
           style={styles.safetyFloat}
@@ -1377,9 +1463,9 @@ function VideoCallScreenComponent() {
         >
           <Ionicons name="shield-checkmark" size={26} color="#4ADE80" />
         </TouchableOpacity>
-      </Animated.View>
+      </View>
 
-      <Animated.View style={{ opacity: controlsOpacity }} pointerEvents={controlsVisible ? 'auto' : 'none'}>
+      <View pointerEvents="box-none">
         <View style={[styles.fallbackControls, { paddingBottom: Math.max(insets.bottom, vs(24)) }]}>
           <CallControls
             flat
@@ -1392,7 +1478,7 @@ function VideoCallScreenComponent() {
                 label: 'Mute',
                 labelActive: 'Unmute',
                 active: isMuted,
-                onPress: () => setIsMuted(!isMuted),
+                onPress: toggleMute,
               },
               {
                 id: 'speaker',
@@ -1419,7 +1505,7 @@ function VideoCallScreenComponent() {
             ]}
           />
         </View>
-      </Animated.View>
+      </View>
 
       <EndCallPopup
         visible={showEndCallPopup}
@@ -1477,7 +1563,7 @@ function VideoCallScreenComponent() {
           onComplete={() => setReceivedGift(null)}
         />
       )}
-    </Pressable>
+    </View>
   );
 }
 
@@ -1511,8 +1597,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: s(8),
   },
   topBarRight: {
     flexDirection: 'row',
@@ -1630,32 +1718,32 @@ const styles = StyleSheet.create({
   },
   fallbackTopRight: {
     position: 'absolute',
-    top: hp(16),
+    top: hp(14),
     right: s(12),
     alignItems: 'flex-end',
-    gap: vs(10),
+    gap: vs(8),
     zIndex: 999,
   },
   floatingRechargeGift: {
     backgroundColor: 'rgba(0,0,0,0.75)',
-    borderRadius: 28,
-    paddingHorizontal: s(16),
-    paddingVertical: vs(10),
+    borderRadius: 20,
+    paddingHorizontal: s(12),
+    paddingVertical: vs(6),
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.25)',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: s(8),
+    gap: s(6),
     zIndex: 999,
   },
 
   // Agora mode floating elements
   floatingTopRight: {
     position: 'absolute',
-    top: SH * 0.08,
+    top: hp(14),
     right: s(12),
     alignItems: 'flex-end',
-    gap: vs(10),
+    gap: vs(8),
     zIndex: 999,
   },
   coinsBadge: {
@@ -1676,7 +1764,7 @@ const styles = StyleSheet.create({
   },
   floatingRechargeText: {
     color: '#fff',
-    fontSize: ms(13.5, 0.3),
+    fontSize: ms(12, 0.3),
     fontFamily: 'Inter_600SemiBold',
   },
 

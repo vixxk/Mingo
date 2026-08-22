@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Animated, BackHandler, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Animated, BackHandler, Pressable, AppState } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { Camera } from 'expo-camera';
@@ -17,6 +17,7 @@ import CallCancelledPopup from '../../components/shared/CallCancelledPopup';
 import GiftPopup from '../../components/shared/GiftPopup';
 import GiftAnimationOverlay from '../../components/call/GiftAnimationOverlay';
 import VideoUpgradeModal from '../../components/call/VideoUpgradeModal';
+import NetworkQualityIndicator from '../../components/call/NetworkQualityIndicator';
 import { callAPI, walletAPI } from '../../utils/api';
 import { socketService } from '../../utils/socket';
 import { AGORA_APP_ID } from '../../utils/agoraConfig';
@@ -64,11 +65,14 @@ const AgoraAudioEngine = forwardRef(
       appId,
       token,
       channelName,
+      initialIsSpeaker = false,
       onRemoteJoinedChange,
       onRemoteLeft,
       onFailedToConnect,
       onEngineError,
       onJoinSuccess,
+      onNetworkQuality,
+      onConnectionStateChanged,
     },
     ref
   ) => {
@@ -79,21 +83,22 @@ const AgoraAudioEngine = forwardRef(
     const onFailedToConnectRef = useRef(onFailedToConnect);
     const onEngineErrorRef = useRef(onEngineError);
     const onJoinSuccessRef = useRef(onJoinSuccess);
+    const onNetworkQualityRef = useRef(onNetworkQuality);
+    const onConnectionStateChangedRef = useRef(onConnectionStateChanged);
 
     useEffect(() => { onRemoteJoinedChangeRef.current = onRemoteJoinedChange; });
     useEffect(() => { onRemoteLeftRef.current = onRemoteLeft; });
     useEffect(() => { onFailedToConnectRef.current = onFailedToConnect; });
     useEffect(() => { onEngineErrorRef.current = onEngineError; });
     useEffect(() => { onJoinSuccessRef.current = onJoinSuccess; });
+    useEffect(() => { onNetworkQualityRef.current = onNetworkQuality; });
+    useEffect(() => { onConnectionStateChangedRef.current = onConnectionStateChanged; });
 
     useEffect(() => {
       if (!appId || !token || !channelName) return;
 
       let engine = null;
       let active = true;
-      // Tracks whether the local user successfully joined — connection failures
-      // before this point mean the channel is unreachable (bad credentials,
-      // blocked network) and the call cannot proceed.
       let joinedSuccessfully = false;
 
       const setup = () => {
@@ -111,9 +116,6 @@ const AgoraAudioEngine = forwardRef(
           engine.setChannelProfile(ChannelProfileType.ChannelProfileCommunication);
           engine.setClientRole(ClientRoleType.ClientRoleBroadcaster);
 
-          // Set audio profile optimized for voice calls before enabling audio.
-          // SpeechStandard + ChatRoom gives low-latency narrow-band audio ideal
-          // for 1-on-1 voice conversations on Android.
           try {
             if (AudioProfileType && AudioScenarioType) {
               engine.setAudioProfile(
@@ -126,11 +128,7 @@ const AgoraAudioEngine = forwardRef(
           }
 
           engine.enableAudio();
-          // Explicitly enable local audio capture — on some Android builds
-          // enableAudio() alone does not start the microphone.
           try { engine.enableLocalAudio(true); } catch (e) {}
-          // Ensure recording and playback volumes are at full scale so
-          // neither side hears silence.
           try { engine.adjustRecordingSignalVolume(400); } catch (e) {}
           try { engine.adjustPlaybackSignalVolume(400); } catch (e) {}
 
@@ -139,10 +137,8 @@ const AgoraAudioEngine = forwardRef(
               if (!active) return;
               joinedSuccessfully = true;
               console.log('[Agora] Audio joined channel:', channelName);
-              // Route audio through the loudspeaker by default — the SDK's
-              // default routes to the earpiece, which is easily mistaken for
-              // no audio at all.
-              try { engine.setEnableSpeakerphone(true); } catch (e) {}
+              // Route audio through earpiece or speaker according to user setting
+              try { engine.setEnableSpeakerphone(!!initialIsSpeaker); } catch (e) {}
               // Re-assert audio capture & subscription after joining — belt
               // and suspenders for stubborn devices.
               try { engine.enableLocalAudio(true); } catch (e) {}
@@ -158,8 +154,14 @@ const AgoraAudioEngine = forwardRef(
             onUserOffline: (connection, uid, reason) => {
               if (!active) return;
               console.log('[Agora] Remote user offline:', uid, 'reason:', reason);
-              // In a 1-on-1 call the other participant leaving ends the call.
-              if (onRemoteLeftRef.current) onRemoteLeftRef.current();
+              // Only end the call if the user explicitly quit (reason 0 = UserOfflineReasonQuit).
+              // If dropped due to temporary network or app backgrounding (reason 1 = UserOfflineReasonDropped),
+              // do not end immediately — allow socket call_ended or reconnect to manage session state.
+              if (reason === 0 || reason === UserOfflineReasonType?.UserOfflineReasonQuit) {
+                if (onRemoteLeftRef.current) onRemoteLeftRef.current();
+              } else {
+                console.log('[Agora] Remote user dropped temporarily (reason:', reason, ') — keeping audio call active for reconnect');
+              }
             },
             onRemoteAudioStateChanged: (connection, uid, state) => {
               if (!active) return;
@@ -170,6 +172,20 @@ const AgoraAudioEngine = forwardRef(
                 if (onRemoteJoinedChangeRef.current) onRemoteJoinedChangeRef.current(true);
               }
             },
+            onNetworkQuality: (connection, uid, txQuality, rxQuality) => {
+              if (!active) return;
+              let targetUid = uid;
+              let tx = txQuality;
+              let rx = rxQuality;
+              if (typeof connection === 'number') {
+                targetUid = connection;
+                tx = uid;
+                rx = txQuality;
+              }
+              if (onNetworkQualityRef.current) {
+                onNetworkQualityRef.current(targetUid, tx, rx);
+              }
+            },
             onTokenPrivilegeWillExpire: () => {
               console.log('[Agora] Token privilege about to expire');
             },
@@ -178,10 +194,11 @@ const AgoraAudioEngine = forwardRef(
               if (onEngineErrorRef.current) onEngineErrorRef.current(err, msg);
             },
             onConnectionStateChanged: (connection, state, reason) => {
+              if (!active) return;
               console.log('[Agora] Connection state:', state, 'reason:', reason);
-              // If the channel is unreachable before we ever joined, the call
-              // cannot proceed — surface it so the screen ends instead of
-              // showing "Connecting…" forever.
+              if (onConnectionStateChangedRef.current) {
+                onConnectionStateChangedRef.current(state, reason);
+              }
               if (
                 !joinedSuccessfully &&
                 state === ConnectionStateType.ConnectionStateFailed
@@ -231,6 +248,19 @@ const AgoraAudioEngine = forwardRef(
       setSpeaker(on) {
         if (!engineRef.current) return;
         try { engineRef.current.setEnableSpeakerphone(!!on); } catch (e) {}
+      },
+      ensureBackgroundAudio(isMuted) {
+        if (!engineRef.current) return;
+        try {
+          engineRef.current.enableAudio();
+          engineRef.current.enableLocalAudio(true);
+          engineRef.current.muteLocalAudioStream(!!isMuted);
+          engineRef.current.muteAllRemoteAudioStreams(false);
+          engineRef.current.adjustRecordingSignalVolume(400);
+          engineRef.current.adjustPlaybackSignalVolume(400);
+        } catch (e) {
+          console.log('[Agora] Background audio keepalive error:', e.message);
+        }
       },
       leave() {
         if (!engineRef.current) return;
@@ -306,8 +336,9 @@ function AudioCallScreenComponent() {
   const [showRecharge, setShowRecharge] = useState(false);
   const [showGiftPopup, setShowGiftPopup] = useState(false);
   const [receivedGift, setReceivedGift] = useState(null);
+  const initialIsSpeaker = rawParams.isSpeaker === 'true';
   const [isMuted, setIsMuted] = useState(false);
-  const [isSpeaker, setIsSpeaker] = useState(true);
+  const [isSpeaker, setIsSpeaker] = useState(initialIsSpeaker);
   const [upgradeModalVisible, setUpgradeModalVisible] = useState(false);
   const [upgradeModalMode, setUpgradeModalMode] = useState('request');
   const [pendingUpgradeState, setPendingUpgradeState] = useState(null); // null | 'incoming' | 'pending'
@@ -320,6 +351,55 @@ function AudioCallScreenComponent() {
   const [controlsVisible, setControlsVisible] = useState(true);
   const [remoteJoined, setRemoteJoined] = useState(false);
   const [myAvatarUrl, setMyAvatarUrl] = useState('');
+  const [networkQuality, setNetworkQuality] = useState('strong');
+  const localQualityRef = useRef(1);
+  const remoteQualityRef = useRef(1);
+  const qualityHistoryRef = useRef([]);
+
+  const updateOverallQuality = useCallback(() => {
+    const qLocal = localQualityRef.current;
+    const qRemote = remoteQualityRef.current;
+    const currentSample = Math.max(qLocal, qRemote);
+
+    // Maintain a rolling sample buffer (4 samples) to filter out single-second network spikes
+    const history = qualityHistoryRef.current;
+    history.push(currentSample);
+    if (history.length > 4) history.shift();
+
+    const avgQuality = history.reduce((acc, val) => acc + val, 0) / history.length;
+    const maxQuality = Math.max(...history);
+
+    let nextState = 'strong';
+    if (maxQuality >= 6 || avgQuality >= 5.5) {
+      nextState = 'reconnecting';
+    } else if (maxQuality >= 4 || avgQuality >= 3.8) {
+      nextState = 'poor';
+    } else if (maxQuality === 3 || avgQuality >= 2.2) {
+      nextState = 'medium';
+    } else {
+      nextState = 'strong';
+    }
+
+    setNetworkQuality(nextState);
+  }, []);
+
+  const handleNetworkQuality = useCallback((uid, txQuality, rxQuality) => {
+    const quality = Math.max(txQuality || 1, rxQuality || 1);
+    if (uid === 0) {
+      localQualityRef.current = quality;
+    } else {
+      remoteQualityRef.current = quality;
+    }
+    updateOverallQuality();
+  }, [updateOverallQuality]);
+
+  const handleAgoraConnectionStateChanged = useCallback((state, reason) => {
+    if (state === 4 || state === 5 || state === 1) {
+      setNetworkQuality('reconnecting');
+    } else if (state === 3) {
+      updateOverallQuality();
+    }
+  }, [updateOverallQuality]);
   const [callCancelledMessage, setCallCancelledMessage] = useState(
     'The call was cancelled by the user.'
   );
@@ -773,6 +853,18 @@ function AudioCallScreenComponent() {
     };
   }, [navigation]);
 
+  // Keep call audio and microphone active when app transitions to background / another app
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState) => {
+      console.log('[AudioCall] AppState change:', nextAppState);
+      if (agoraRef.current && !callEndedRef.current) {
+        agoraRef.current.ensureBackgroundAudio?.(isMuted);
+      }
+    };
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
+  }, [isMuted]);
+
   // The remote participant hung up / dropped — treat it as the call ending.
   const handleRemoteLeft = useCallback(() => {
     console.log('[Agora] Remote participant left — ending call');
@@ -1007,7 +1099,7 @@ function AudioCallScreenComponent() {
   }, [controlsVisible, controlsOpacity, showEndCallPopup, showSafety, showRecharge, showGiftPopup]);
 
   return (
-    <Pressable style={styles.container} onPress={toggleControls}>
+    <View style={styles.container}>
       <LinearGradient
         colors={['transparent', '#1A0000', '#4A0000']}
         locations={[0, 0.6, 1]}
@@ -1021,10 +1113,13 @@ function AudioCallScreenComponent() {
           appId={resolvedAppId}
           token={effectiveAgoraToken}
           channelName={roomId}
+          initialIsSpeaker={initialIsSpeaker}
           onRemoteJoinedChange={setRemoteJoined}
           onRemoteLeft={handleRemoteLeft}
           onFailedToConnect={handleAgoraFailedToConnect}
           onEngineError={(err, msg) => console.log('[Agora] Engine error:', err, msg)}
+          onNetworkQuality={handleNetworkQuality}
+          onConnectionStateChanged={handleAgoraConnectionStateChanged}
           onJoinSuccess={() => {
             console.log('[AudioCall] Agora joinChannel succeeded — local user is in the audio channel');
 
@@ -1047,13 +1142,13 @@ function AudioCallScreenComponent() {
         />
       )}
 
-      {/* Call duration timer — always visible, with a generous gap below the
-          status bar / notch so it never overlaps them. */}
-      <View style={[styles.topBar, { paddingTop: insets.top + hp(12) }]} pointerEvents="none">
-        {/* Call duration timer — only appears once the call connects */}
+      {/* Call duration timer + Network Quality Indicator — always visible */}
+      <View style={[styles.topBar, { paddingTop: insets.top + hp(12) }]} pointerEvents="box-none">
+        {/* Call duration timer + Network Strength Indicator — only appears once the call connects */}
         {remoteJoined && (
-          <View style={styles.topBarTimerWrap}>
+          <View style={styles.topBarTimerWrap} pointerEvents="box-none">
             <CallTimer active />
+            <NetworkQualityIndicator quality={networkQuality} />
           </View>
         )}
       </View>
@@ -1062,12 +1157,12 @@ function AudioCallScreenComponent() {
         {/* Remote participant — their avatar with a pulsing glow while the
             call connects. Stays on screen even when the controls are hidden. */}
         <View style={{ alignItems: 'center', justifyContent: 'center' }} pointerEvents="none">
-          <Animated.View style={[styles.avatarContainer, { transform: [{ scale: pulseAnim }] }]}>
+          <View style={styles.avatarContainer}>
             <Image
               source={{ uri: getAvatarUrl(gender, avatarIndex) }}
               style={styles.mainAvatar}
             />
-          </Animated.View>
+          </View>
           <Text style={styles.callerName}>{name}</Text>
           <View style={styles.statusRow}>
             <View
@@ -1086,13 +1181,10 @@ function AudioCallScreenComponent() {
       {/* Floating overlay — coins badge + Recharge + Gift (top right, user
           only) and the Safety button (left middle). Rendered as a full-screen
           layer so the buttons sit INSIDE the overlay's touch bounds and stay
-          tappable — a zero-height wrapper would let taps fall through to the
-          background Pressable, which toggled the controls instead of opening
-          the popups. Everything shares the controls fade. Mirrors the video
-          call's overlay structure. */}
-      <Animated.View
-        style={[StyleSheet.absoluteFill, { opacity: controlsOpacity }]}
-        pointerEvents={controlsVisible ? 'box-none' : 'none'}
+          tappable. Controls remain permanently visible. */}
+      <View
+        style={StyleSheet.absoluteFill}
+        pointerEvents="box-none"
       >
         {!isListener && (
           <View style={styles.floatingTopRight}>
@@ -1108,7 +1200,7 @@ function AudioCallScreenComponent() {
               onPress={(e) => { e.stopPropagation?.(); setShowRecharge(true); }}
               activeOpacity={0.8}
             >
-              <Ionicons name="wallet-outline" size={24} color="#10B981" />
+              <Ionicons name="wallet-outline" size={18} color="#10B981" />
               <Text style={[styles.floatingRechargeText, { color: '#10B981' }]}>Recharge</Text>
             </TouchableOpacity>
 
@@ -1117,7 +1209,7 @@ function AudioCallScreenComponent() {
               onPress={(e) => { e.stopPropagation?.(); setShowGiftPopup(true); }}
               activeOpacity={0.8}
             >
-              <Ionicons name="gift-outline" size={24} color="#10B981" />
+              <Ionicons name="gift-outline" size={18} color="#10B981" />
               <Text style={[styles.floatingRechargeText, { color: '#10B981' }]}>Gift</Text>
             </TouchableOpacity>
           </View>
@@ -1132,10 +1224,10 @@ function AudioCallScreenComponent() {
         >
           <Ionicons name="shield-checkmark" size={26} color="#4ADE80" />
         </TouchableOpacity>
-      </Animated.View>
+      </View>
 
-      {/* Bottom controls dock — same flat design as the video call screen */}
-      <Animated.View style={{ opacity: controlsOpacity }} pointerEvents={controlsVisible ? 'auto' : 'none'}>
+      {/* Bottom controls dock — permanently visible call controls */}
+      <View pointerEvents="box-none">
         <View style={[styles.fallbackControls, { paddingBottom: Math.max(insets.bottom, vs(24)) }]}>
           <CallControls
             flat
@@ -1169,7 +1261,7 @@ function AudioCallScreenComponent() {
             ]}
           />
         </View>
-      </Animated.View>
+      </View>
 
       <EndCallPopup
         visible={showEndCallPopup}
@@ -1237,7 +1329,7 @@ function AudioCallScreenComponent() {
           onComplete={() => setReceivedGift(null)}
         />
       )}
-    </Pressable>
+    </View>
   );
 }
 
@@ -1263,8 +1355,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: s(8),
   },
   coinsBadge: {
     flexDirection: 'row',
@@ -1357,27 +1451,27 @@ const styles = StyleSheet.create({
   // exact same spot on both call screens. hp(8) === SH * 0.08.
   floatingTopRight: {
     position: 'absolute',
-    top: hp(8),
+    top: hp(14),
     right: s(12),
     alignItems: 'flex-end',
-    gap: vs(10),
+    gap: vs(8),
     zIndex: 999,
   },
   floatingRechargeGift: {
     backgroundColor: 'rgba(0,0,0,0.75)',
-    borderRadius: 28,
-    paddingHorizontal: s(16),
-    paddingVertical: vs(10),
+    borderRadius: 20,
+    paddingHorizontal: s(12),
+    paddingVertical: vs(6),
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.25)',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: s(8),
+    gap: s(6),
     zIndex: 999,
   },
   floatingRechargeText: {
     color: '#fff',
-    fontSize: ms(13.5, 0.3),
+    fontSize: ms(12, 0.3),
     fontFamily: 'Inter_600SemiBold',
   },
 });

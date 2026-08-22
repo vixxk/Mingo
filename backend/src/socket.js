@@ -1400,7 +1400,7 @@ const initSocket = (server) => {
             });
             if (activeCall) {
               const callIdStr = activeCall._id.toString();
-              console.log(`[Socket] Active call ${callIdStr} found for disconnected user ${disconnectedUserId}. Scheduling 10s disconnect grace timer.`);
+              console.log(`[Socket] Active call ${callIdStr} found for disconnected user ${disconnectedUserId}. Scheduling 60s disconnect grace timer.`);
               setTimeout(async () => {
                 try {
                   const checkSockets = io ? io.sockets.adapter.rooms.get(`user_${disconnectedUserId}`) : null;
@@ -1435,7 +1435,7 @@ const initSocket = (server) => {
                 } catch (graceErr) {
                   console.error('[Socket] Error in call disconnect grace timer:', graceErr.message);
                 }
-              }, 10000);
+              }, 60000);
             }
 
             // 3. Notify other participant that user went offline
