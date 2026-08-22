@@ -775,6 +775,15 @@ function AudioCallScreenComponent() {
       }
     };
 
+    const handleUpgradeCancelled = (data) => {
+      console.log('[AudioCall] call_upgrade_cancelled received:', data);
+      setPendingUpgradeState(null);
+      setUpgradeModalVisible(false);
+      setCallCancelledMessage('The video upgrade request was cancelled.');
+      setCallCancelledNotice(true);
+      setShowCallCancelled(true);
+    };
+
     // Register listeners
     socketService.on('balance_updated', handleBalanceUpdate);
     socketService.on('low_balance_warning', handleLowBalance);
@@ -787,6 +796,7 @@ function AudioCallScreenComponent() {
     socketService.on('call_upgrade_accepted', handleUpgradeAccepted);
     socketService.on('call_upgrade_declined', handleUpgradeDeclined);
     socketService.on('call_upgrade_failed', handleUpgradeFailed);
+    socketService.on('call_upgrade_cancelled', handleUpgradeCancelled);
 
     setupBilling();
 
@@ -806,6 +816,7 @@ function AudioCallScreenComponent() {
       socketService.off('call_upgrade_accepted', handleUpgradeAccepted);
       socketService.off('call_upgrade_declined', handleUpgradeDeclined);
       socketService.off('call_upgrade_failed', handleUpgradeFailed);
+      socketService.off('call_upgrade_cancelled', handleUpgradeCancelled);
     };
   }, [callId]);
 
@@ -1079,11 +1090,12 @@ function AudioCallScreenComponent() {
   }, [callId, roomId]);
 
   const handleCancelUpgradeModal = useCallback(() => {
-    if (upgradeModalMode === 'pending') {
+    if (upgradeModalMode === 'pending' || pendingUpgradeState === 'pending') {
+      socketService.emit('cancel_call_upgrade', { sessionId: callId, roomId });
       setPendingUpgradeState(null);
     }
     setUpgradeModalVisible(false);
-  }, [upgradeModalMode]);
+  }, [upgradeModalMode, pendingUpgradeState, callId, roomId]);
 
   // Tap anywhere on the screen toggles all controls.
   const toggleControls = useCallback(() => {

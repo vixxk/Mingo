@@ -844,23 +844,27 @@ const initSocket = (server) => {
         const isNoAnswer = reason === 'timeout' || reason === 'no_answer';
 
         if (isMongoId) {
-          session = await Session.findByIdAndUpdate(
-            sessionId,
-            { status: isNoAnswer ? 'missed' : 'cancelled' },
-            { new: true }
-          );
+          session = await Session.findById(sessionId);
         }
         
-        // If session was not found by ID, look up any recent active/pending session for this caller
+        // If session was not found by ID, look up any recent unaccepted session for this caller
         if (!session && socket.userId) {
-          session = await Session.findOneAndUpdate(
-            { userId: socket.userId, status: { $in: ['active', 'created', 'pending'] } },
-            { status: isNoAnswer ? 'missed' : 'cancelled' },
-            { new: true, sort: { createdAt: -1 } }
-          );
+          session = await Session.findOne({
+            userId: socket.userId,
+            isAccepted: { $ne: true },
+            status: { $in: ['active', 'created', 'pending'] }
+          }).sort({ createdAt: -1 });
+        }
+
+        // Safety: Never cancel or set to missed an already accepted ongoing call session!
+        if (session && session.isAccepted === true) {
+          console.log(`[Socket] Ignoring call_cancelled for session ${session._id} because session is already accepted and active`);
+          return;
         }
 
         if (session) {
+          session.status = isNoAnswer ? 'missed' : 'cancelled';
+          await session.save();
           sessionId = session._id.toString();
           if (!userId) userId = session.listenerId?.toString();
         }
@@ -1068,6 +1072,34 @@ const initSocket = (server) => {
       } catch (err) {
         console.error('[Socket] Error in request_call_upgrade:', err.message, err.stack);
         socket.emit('call_upgrade_failed', { sessionId, reason: 'server_error' });
+      }
+    });
+
+    socket.on('cancel_call_upgrade', async (data) => {
+      const { sessionId, roomId } = data || {};
+      console.log(`[Socket] cancel_call_upgrade received for session: ${sessionId}, roomId: ${roomId}, from ${socket.userId}`);
+      try {
+        let session = null;
+        if (sessionId && mongoose.Types.ObjectId.isValid(sessionId)) {
+          session = await Session.findById(sessionId);
+        }
+        if (!session && roomId) {
+          session = await Session.findOne({ roomId });
+        }
+        if (session) {
+          const callerUserId = socket.userId;
+          const recipientId = (callerUserId && session.userId.toString() === callerUserId.toString())
+            ? session.listenerId.toString()
+            : session.userId.toString();
+          console.log(`[Socket] Relaying call_upgrade_cancelled to user_${recipientId}`);
+          io.to(`user_${recipientId}`).emit('call_upgrade_cancelled', {
+            sessionId: session._id.toString(),
+            roomId: session.roomId,
+            message: 'The upgrade request was cancelled.'
+          });
+        }
+      } catch (err) {
+        console.error('[Socket] Error in cancel_call_upgrade:', err.message);
       }
     });
 

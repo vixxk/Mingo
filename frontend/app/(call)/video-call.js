@@ -61,7 +61,7 @@ const SafeLocalVideoView = ({ canvas, style, fallbackAvatarUrl, zOrderMediaOverl
     return fallbackAvatarUrl ? (
       <Image source={{ uri: fallbackAvatarUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
     ) : (
-      <View style={[style, { backgroundColor: '#1F2937', justifyContent: 'center', alignItems: 'center' }]}>
+      <View style={[style, { backgroundColor: '#050101', justifyContent: 'center', alignItems: 'center' }]}>
         <Ionicons name="videocam-off" size={28} color="#9CA3AF" />
       </View>
     );
@@ -80,7 +80,7 @@ const SafeLocalVideoView = ({ canvas, style, fallbackAvatarUrl, zOrderMediaOverl
     return fallbackAvatarUrl ? (
       <Image source={{ uri: fallbackAvatarUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
     ) : (
-      <View style={[style, { backgroundColor: '#1F2937', justifyContent: 'center', alignItems: 'center' }]}>
+      <View style={[style, { backgroundColor: '#050101', justifyContent: 'center', alignItems: 'center' }]}>
         <Ionicons name="videocam-off" size={28} color="#9CA3AF" />
       </View>
     );
@@ -938,6 +938,9 @@ function VideoCallScreenComponent() {
       console.log('[VideoCall] AppState change:', nextAppState);
       if (agoraRef.current && !callEndedRef.current) {
         agoraRef.current.ensureBackgroundAudio?.(isMuted);
+        if (nextAppState === 'active') {
+          try { agoraRef.current.restartLocalPreview?.(); } catch (e) {}
+        }
       }
     };
     const subscription = AppState.addEventListener('change', handleAppStateChange);
@@ -1203,7 +1206,7 @@ function VideoCallScreenComponent() {
                 </View>
               </View>
             ) : (
-              <View style={[StyleSheet.absoluteFill, { backgroundColor: '#1F2937', justifyContent: 'center', alignItems: 'center' }]}>
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: '#050101', justifyContent: 'center', alignItems: 'center' }]}>
                 <Ionicons name="videocam-off" size={28} color="#9CA3AF" />
               </View>
             )}
