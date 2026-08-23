@@ -10,6 +10,7 @@ const path = require('path');
 // Native classes registered by this plugin
 const SERVICE_CLASS = 'app.themingo.notification.IncomingCallNotificationService';
 const ACTIVITY_CLASS = '.IncomingCallActivity';
+const FG_SERVICE_CLASS = '.CallForegroundService';
 const MODULE_MARKER = 'add(app.themingo.IncomingCallPackage())';
 
 // Kotlin sources shipped with the plugin — copied into the Android project at
@@ -31,6 +32,7 @@ const KOTLIN_FILES = [
   'IncomingCallModule.kt',
   'IncomingCallPackage.kt',
   'IncomingCallActivity.kt',
+  'CallForegroundService.kt',
 ];
 
 const withIncomingCallManifest = (config) =>
@@ -79,6 +81,19 @@ const withIncomingCallManifest = (config) =>
           'android:showWhenLocked': 'true',
           'android:turnScreenOn': 'true',
           'android:excludeFromRecents': 'true',
+        },
+      });
+    }
+
+    // ── Call foreground service (keeps Agora alive in background) ─
+    if (!Array.isArray(app.service)) app.service = [];
+    const existingServices = app.service.map((s) => s.$ && s.$['android:name']);
+    if (!existingServices.includes(FG_SERVICE_CLASS)) {
+      app.service.push({
+        $: {
+          'android:name': FG_SERVICE_CLASS,
+          'android:exported': 'false',
+          'android:foregroundServiceType': 'microphone',
         },
       });
     }

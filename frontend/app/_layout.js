@@ -81,25 +81,28 @@ function RootLayout() {
     checkWelcome();
   }, [pathname]);
 
-  // ── Global Listener Permissions Check ──────────────────────────────────────
-  // Checks and requests 'Display over other apps' overlay permission prior for
-  // listeners so call pages work when app is backgrounded or killed.
+  // ── Global Overlay Permissions Check ──────────────────────────────────────
+  // Checks and requests 'Display over other apps' overlay permission for all
+  // users so call pages and media sharing continue working smoothly when backgrounded.
   useEffect(() => {
-    const checkListenerPermissions = async () => {
+    const checkOverlayPermission = async () => {
       if (Platform.OS !== 'android') return;
       try {
         const userData = await AsyncStorage.getItem('user');
         if (!userData) return;
-        const user = JSON.parse(userData);
-        const role = String(user.role || 'USER').toUpperCase();
-        if (role.includes('LISTENER')) {
-          const hasOverlay = await incomingCallNative.hasOverlayPermission();
-          if (!hasOverlay) {
+        const hasOverlay = await incomingCallNative.hasOverlayPermission();
+        if (!hasOverlay) {
+          const alreadyDismissed = await AsyncStorage.getItem('overlay_perm_dismissed');
+          if (!alreadyDismissed) {
             Alert.alert(
               'Display Over Other Apps Permission Required',
-              'To receive full-screen incoming call pages when the app is in the background or closed, Mingo requires the "Display over other apps" permission.',
+              'To keep calls active and allow background audio and video sharing when using other apps, Mingo requires the "Display over other apps" permission.',
               [
-                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Cancel',
+                  style: 'cancel',
+                  onPress: () => AsyncStorage.setItem('overlay_perm_dismissed', 'true'),
+                },
                 {
                   text: 'Enable in Settings',
                   onPress: () => incomingCallNative.requestOverlayPermission(),
@@ -112,7 +115,7 @@ function RootLayout() {
         console.log('[RootLayout] Permission check error:', e);
       }
     };
-    checkListenerPermissions();
+    checkOverlayPermission();
   }, [pathname]);
 
   const handleWelcomeAgree = useCallback(async () => {

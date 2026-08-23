@@ -19,6 +19,7 @@ import GiftAnimationOverlay from '../../components/call/GiftAnimationOverlay';
 import NetworkQualityIndicator from '../../components/call/NetworkQualityIndicator';
 import { callAPI, walletAPI } from '../../utils/api';
 import { socketService } from '../../utils/socket';
+import { incomingCallNative } from '../../utils/incomingCall';
 import { AGORA_APP_ID } from '../../utils/agoraConfig';
 import { ms, s, vs, SCREEN_WIDTH, hp, wp } from '../../utils/responsive';
 import { getAvatarUrl } from '../../utils/avatars';
@@ -49,6 +50,8 @@ const {
   RemoteAudioState,
   RenderModeType,
   VideoMirrorModeType,
+  AudioProfileType,
+  AudioScenarioType,
 } = AgoraSDK || {};
 
 // On Android, TextureView (RtcTextureView) is preferred for small floating subviews / overlays
@@ -260,8 +263,21 @@ const AgoraVideoView = forwardRef(
             if (onEngineErrorRef.current) onEngineErrorRef.current(initRet, 'Engine initialize failed');
             return;
           }
+          // Tell Agora to keep audio streaming when the app is in the background
+          try { engine.setParameters('{"che.audio.keep.audiosession":true}'); } catch (e) {}
+          try { engine.setParameters('{"che.audio.opensl":true}'); } catch (e) {}
           engine.setChannelProfile(ChannelProfileType.ChannelProfileCommunication);
           engine.setClientRole(ClientRoleType.ClientRoleBroadcaster);
+          if (AudioProfileType && AudioScenarioType) {
+            try {
+              engine.setAudioProfile(
+                AudioProfileType.AudioProfileMusicStandard || 2,
+                AudioScenarioType.AudioScenarioGameStreaming || 3
+              );
+            } catch (e) {
+              console.log('[Agora] setAudioProfile failed in video call:', e.message);
+            }
+          }
           engine.enableVideo();
           try { engine.enableAudio(); } catch (e) {}
           try { engine.enableLocalAudio(true); } catch (e) {}
@@ -298,17 +314,10 @@ const AgoraVideoView = forwardRef(
             onUserOffline: (connection, uid, reason) => {
               if (!active) return;
               console.log('[Agora] Remote user offline:', uid, 'reason:', reason);
-              // Only end the call if the user explicitly quit (reason 0 = UserOfflineReasonQuit).
-              // If dropped due to temporary network or app backgrounding (reason 1 = UserOfflineReasonDropped),
-              // do not end immediately — allow socket call_ended or reconnect to manage session state.
-              if (reason === 0 || reason === UserOfflineReasonType?.UserOfflineReasonQuit) {
-                setRemoteUid(null);
-                setRemoteActive(false);
-                setRemoteJoined(false);
-                if (onRemoteLeftRef.current) onRemoteLeftRef.current();
-              } else {
-                console.log('[Agora] Remote user dropped temporarily (reason:', reason, ') — keeping video call active for reconnect');
-              }
+              // Hide the remote video surface so Agora does not render a grey box,
+              // showing the avatar overlay instead while keeping the call active.
+              setRemoteActive(false);
+              console.log('[Agora] Remote user went offline — showing avatar layer and keeping call alive');
             },
             onFirstRemoteVideoDecoded: (connection, uid) => {
               if (!active) return;
@@ -320,7 +329,7 @@ const AgoraVideoView = forwardRef(
             onRemoteVideoStateChanged: (connection, uid, state) => {
               if (!active) return;
               // state 0 = Stopped, 1 = Starting, 2 = Decoding, 3 = Frozen, 4 = Failed
-              const isPlaying = state !== 0 && state !== RemoteVideoState?.RemoteVideoStateStopped;
+              const isPlaying = state !== 0 && state !== RemoteVideoState?.RemoteVideoStateStopped && state !== 3;
               console.log('[Agora] Remote video state:', uid, state, 'isPlaying:', isPlaying);
               setRemoteUid(uid);
               setRemoteActive(isPlaying);
@@ -654,6 +663,9 @@ function VideoCallScreenComponent() {
     if (callEndedRef.current) return;
     callEndedRef.current = true;
 
+    // Stop the foreground service — the call is over.
+    incomingCallNative.stopCallService();
+
     // Leave the Agora channel immediately so the other participant gets the
     // userOffline callback and their side can end too.
     if (agoraRef.current) {
@@ -939,13 +951,18 @@ function VideoCallScreenComponent() {
       if (agoraRef.current && !callEndedRef.current) {
         agoraRef.current.ensureBackgroundAudio?.(isMuted);
         if (nextAppState === 'active') {
-          try { agoraRef.current.restartLocalPreview?.(); } catch (e) {}
+          try {
+            agoraRef.current.ensureBackgroundAudio?.(isMuted);
+            agoraRef.current.setSpeaker?.(isSpeaker);
+            agoraRef.current.setCameraEnabled?.(!isCameraOff);
+            agoraRef.current.restartLocalPreview?.();
+          } catch (e) {}
         }
       }
     };
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     return () => subscription.remove();
-  }, [isMuted]);
+  }, [isMuted, isSpeaker, isCameraOff]);
 
   // The remote participant hung up / dropped — treat it as the call ending
   // (mirrors Zego's onOnlySelfInRoom + onCallEnd behavior).
@@ -1125,6 +1142,10 @@ function VideoCallScreenComponent() {
           onConnectionStateChanged={handleAgoraConnectionStateChanged}
           onJoinSuccess={() => {
             console.log('[VideoCall] Agora joinChannel succeeded — local user is in the channel');
+
+            // Start the foreground service so Android keeps Agora alive when
+            // the user switches to another app / locks the screen.
+            incomingCallNative.startCallService();
 
             // Start billing NOW that we're actually connected and can talk.
             if (callId && callId !== 'demo_zego_call' && callId !== 'test_call_id') {

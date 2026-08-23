@@ -92,6 +92,27 @@ export const incomingCallNative = {
       return false;
     }
   },
+
+  /** Starts a foreground service that prevents Android from suspending Agora
+   *  audio/video streams while the call screen is backgrounded. */
+  startCallService() {
+    if (!native) return;
+    try {
+      native.startCallForegroundService();
+    } catch (e) {
+      console.log('[IncomingCall] startCallForegroundService error:', e);
+    }
+  },
+
+  /** Stops the call foreground service (call ended / left). */
+  stopCallService() {
+    if (!native) return;
+    try {
+      native.stopCallForegroundService();
+    } catch (e) {
+      console.log('[IncomingCall] stopCallForegroundService error:', e);
+    }
+  },
 };
 
 /** Subscribe to accept/decline/open actions tapped on the native card while

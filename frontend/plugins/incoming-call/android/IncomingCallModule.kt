@@ -113,6 +113,28 @@ class IncomingCallModule(private val reactContext: ReactApplicationContext) :
             callback.invoke(null, null)
         }
     }
+
+    /** Starts a foreground service that keeps the app alive while a call is in
+     *  progress — prevents Android from killing Agora audio/video streams when
+     *  the user switches to another app. */
+    @ReactMethod
+    fun startCallForegroundService() {
+        try {
+            CallForegroundService.start(reactContext)
+        } catch (e: Exception) {
+            // Best-effort; on some OEMs this may fail silently.
+        }
+    }
+
+    /** Stops the call foreground service when the call ends. */
+    @ReactMethod
+    fun stopCallForegroundService() {
+        try {
+            CallForegroundService.stop(reactContext)
+        } catch (e: Exception) {
+            // ignore
+        }
+    }
     @ReactMethod
     fun hasOverlayPermission(promise: Promise) {
         try {

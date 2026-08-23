@@ -20,6 +20,7 @@ import VideoUpgradeModal from '../../components/call/VideoUpgradeModal';
 import NetworkQualityIndicator from '../../components/call/NetworkQualityIndicator';
 import { callAPI, walletAPI } from '../../utils/api';
 import { socketService } from '../../utils/socket';
+import { incomingCallNative } from '../../utils/incomingCall';
 import { AGORA_APP_ID } from '../../utils/agoraConfig';
 import { ms, s, vs, SCREEN_WIDTH, hp, wp } from '../../utils/responsive';
 import { getAvatarUrl } from '../../utils/avatars';
@@ -113,14 +114,17 @@ const AgoraAudioEngine = forwardRef(
             if (onEngineErrorRef.current) onEngineErrorRef.current(initRet, 'Audio engine initialize failed');
             return;
           }
+          // Tell Agora to keep audio streaming when the app is in the background
+          try { engine.setParameters('{"che.audio.keep.audiosession":true}'); } catch (e) {}
+          try { engine.setParameters('{"che.audio.opensl":true}'); } catch (e) {}
           engine.setChannelProfile(ChannelProfileType.ChannelProfileCommunication);
           engine.setClientRole(ClientRoleType.ClientRoleBroadcaster);
 
           try {
             if (AudioProfileType && AudioScenarioType) {
               engine.setAudioProfile(
-                AudioProfileType.AudioProfileSpeechStandard,
-                AudioScenarioType.AudioScenarioChatRoom
+                AudioProfileType.AudioProfileMusicStandard || 2,
+                AudioScenarioType.AudioScenarioGameStreaming || 3
               );
             }
           } catch (e) {
@@ -154,14 +158,12 @@ const AgoraAudioEngine = forwardRef(
             onUserOffline: (connection, uid, reason) => {
               if (!active) return;
               console.log('[Agora] Remote user offline:', uid, 'reason:', reason);
-              // Only end the call if the user explicitly quit (reason 0 = UserOfflineReasonQuit).
-              // If dropped due to temporary network or app backgrounding (reason 1 = UserOfflineReasonDropped),
-              // do not end immediately — allow socket call_ended or reconnect to manage session state.
-              if (reason === 0 || reason === UserOfflineReasonType?.UserOfflineReasonQuit) {
-                if (onRemoteLeftRef.current) onRemoteLeftRef.current();
-              } else {
-                console.log('[Agora] Remote user dropped temporarily (reason:', reason, ') — keeping audio call active for reconnect');
-              }
+              // NEVER auto-end the call when the remote goes offline.
+              // App backgrounding, screen lock, or switching apps causes Agora
+              // to report the remote as offline (reason 0 = Quit or 1 = Dropped).
+              // The call must continue — only the explicit socket 'call_ended'
+              // event (triggered by the End Call button) should terminate.
+              console.log('[Agora] Remote user went offline — keeping call alive (call persists in background)');
             },
             onRemoteAudioStateChanged: (connection, uid, state) => {
               if (!active) return;
@@ -487,6 +489,9 @@ function AudioCallScreenComponent() {
   const finishAndExit = useCallback(async () => {
     if (callEndedRef.current) return;
     callEndedRef.current = true;
+
+    // Stop the foreground service — the call is over.
+    incomingCallNative.stopCallService();
 
     // Leave the Agora channel immediately so the other participant gets the
     // userOffline callback and their side can end too.
@@ -1134,6 +1139,10 @@ function AudioCallScreenComponent() {
           onConnectionStateChanged={handleAgoraConnectionStateChanged}
           onJoinSuccess={() => {
             console.log('[AudioCall] Agora joinChannel succeeded — local user is in the audio channel');
+
+            // Start the foreground service so Android keeps Agora alive when
+            // the user switches to another app / locks the screen.
+            incomingCallNative.startCallService();
 
             // Start billing NOW that we're actually connected and can talk.
             if (callId && callId !== 'demo_zego_call' && callId !== 'test_call_id') {
