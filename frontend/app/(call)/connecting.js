@@ -24,6 +24,7 @@ import { playRingtone, stopRingtone, setAudioOutputMode } from '../../utils/call
 import { ms, s, vs, SCREEN_HEIGHT } from '../../utils/responsive';
 import { getAvatarUrl } from '../../utils/avatars';
 import InsufficientBalancePopup from '../../components/shared/InsufficientBalancePopup';
+import EndCallPopup from '../../components/call/EndCallPopup';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
@@ -103,10 +104,11 @@ export default function ConnectingScreen() {
   const partnerAvatarIndexRef = useRef(avatarIndex || '0');
   const partnerGenderRef = useRef(gender || 'Female');
 
-  // Quick Action Toggles (Speaker, Mic, Camera)
+  // Quick Action Toggles (Speaker, Mic, Camera) & Confirmation Popup
   const [isSpeaker, setIsSpeaker] = React.useState(callType === 'video');
   const [isMuted, setIsMuted] = React.useState(false);
   const [isCameraOff, setIsCameraOff] = React.useState(false);
+  const [showEndCallPopup, setShowEndCallPopup] = React.useState(false);
 
   const isSpeakerRef = useRef(callType === 'video');
   const isMutedRef = useRef(false);
@@ -701,7 +703,7 @@ export default function ConnectingScreen() {
             <TouchableOpacity
               style={styles.endCallBtn}
               activeOpacity={0.8}
-              onPress={handleCancel}
+              onPress={() => setShowEndCallPopup(true)}
             >
               <LinearGradient
                 colors={['#EF4444', '#DC2626']}
@@ -719,6 +721,15 @@ export default function ConnectingScreen() {
           </View>
         </View>
       </View>
+
+      <EndCallPopup
+        visible={showEndCallPopup}
+        onEndCall={() => {
+          setShowEndCallPopup(false);
+          handleCancel();
+        }}
+        onDismiss={() => setShowEndCallPopup(false)}
+      />
 
       {/* Recharge gate — the call cannot proceed without enough coins */}
       <InsufficientBalancePopup

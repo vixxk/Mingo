@@ -2160,6 +2160,8 @@ async function deductCallMinute(sessionId, userId, listenerId, coinsPerMin, payo
       await session.save();
     }
 
+    const sessIdStr = sessionId ? sessionId.toString() : '';
+
     // Record user debit transaction
     await Transaction.create({
       userId,
@@ -2168,7 +2170,7 @@ async function deductCallMinute(sessionId, userId, listenerId, coinsPerMin, payo
       coins: -coinsPerMin,
       description: `${callType} call - per minute charge`,
       status: 'completed',
-      metadata: { sessionId },
+      metadata: { sessionId: sessIdStr },
     });
 
     // Credit listener
@@ -2185,7 +2187,7 @@ async function deductCallMinute(sessionId, userId, listenerId, coinsPerMin, payo
         coins: 0,
         description: `${callType} call earnings - per minute`,
         status: 'completed',
-        metadata: { sessionId },
+        metadata: { sessionId: sessIdStr },
       });
     }
 

@@ -721,10 +721,11 @@ function VideoCallScreenComponent() {
     }, 800);
   }, [callId, name, listenerId, roomId, router]);
 
-  // When both participants successfully connect (video call timer starts), toggle camera off and back on after a small gap
+  // When both participants successfully connect (video call timer starts), toggle camera off and back on after a small gap.
+  // Skip this automatic toggle if the user explicitly chose to turn the camera off during the connecting phase.
   const cameraRestartDoneRef = useRef(initialIsCameraOff);
   useEffect(() => {
-    if (remoteJoined && !cameraRestartDoneRef.current) {
+    if (remoteJoined && !cameraRestartDoneRef.current && !initialIsCameraOff) {
       cameraRestartDoneRef.current = true;
       console.log('[VideoCall] Video call timer started. Scheduling camera toggle (off then back on) after gap...');
 
@@ -755,7 +756,7 @@ function VideoCallScreenComponent() {
         if (timer2) clearTimeout(timer2);
       };
     }
-  }, [remoteJoined]);
+  }, [remoteJoined, initialIsCameraOff]);
 
   // The remote avatar fades out once the remote camera feed actually decodes.
   // "Joined" (audio or video) is tracked separately so the UI never falls back

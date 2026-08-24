@@ -452,16 +452,28 @@ class CallService {
       }
     } catch (e) {}
 
-    session.coinsDeducted = (session.duration || 1) * coinsPerMin;
-    session.listenerEarnings = (session.duration || 1) * payoutRate;
+    if (!session.coinsDeducted || session.coinsDeducted === 0) {
+      session.coinsDeducted = (session.duration || 1) * coinsPerMin;
+    }
+    if (!session.listenerEarnings || session.listenerEarnings === 0) {
+      session.listenerEarnings = (session.duration || 1) * payoutRate;
+    }
 
     await session.save();
+
+    const sessIdStr = session._id.toString();
 
     // Ensure transaction records exist and listener earnings are credited upon call completion
     try {
       // 1. Check user call_debit transactions for this session
       if (session.coinsDeducted && session.coinsDeducted > 0) {
-        const existingDebitTxs = await Transaction.find({ 'metadata.sessionId': session._id, type: 'call_debit' });
+        const existingDebitTxs = await Transaction.find({
+          type: 'call_debit',
+          $or: [
+            { 'metadata.sessionId': sessIdStr },
+            { 'metadata.sessionId': session._id }
+          ]
+        });
         const totalDebitedCoins = existingDebitTxs.reduce((sum, tx) => sum + Math.abs(tx.coins || 0), 0);
         const undebitedCoins = session.coinsDeducted - totalDebitedCoins;
 
@@ -478,14 +490,20 @@ class CallService {
             coins: -undebitedCoins,
             description: `${session.callType || 'audio'} call session (${session.duration || 1} min)`,
             status: 'completed',
-            metadata: { sessionId: session._id },
+            metadata: { sessionId: sessIdStr },
           });
         }
       }
 
       // 2. Check listener call_credit transactions for this session
       if (session.listenerEarnings && session.listenerEarnings > 0 && session.listenerId) {
-        const existingCreditTxs = await Transaction.find({ 'metadata.sessionId': session._id, type: 'call_credit' });
+        const existingCreditTxs = await Transaction.find({
+          type: 'call_credit',
+          $or: [
+            { 'metadata.sessionId': sessIdStr },
+            { 'metadata.sessionId': session._id }
+          ]
+        });
         const totalCreditedAmount = existingCreditTxs.reduce((sum, tx) => sum + (tx.amount || 0), 0);
         const uncreditedEarnings = Math.round((session.listenerEarnings - totalCreditedAmount) * 100) / 100;
 
@@ -504,7 +522,7 @@ class CallService {
             coins: 0,
             description: `${session.callType || 'audio'} call earnings (${session.duration || 1} min)`,
             status: 'completed',
-            metadata: { sessionId: session._id },
+            metadata: { sessionId: sessIdStr },
           });
         }
       }
