@@ -103,10 +103,37 @@ export default function ConnectingScreen() {
   const partnerAvatarIndexRef = useRef(avatarIndex || '0');
   const partnerGenderRef = useRef(gender || 'Female');
 
+  // Quick Action Toggles (Speaker, Mic, Camera)
+  const [isSpeaker, setIsSpeaker] = React.useState(callType === 'video');
+  const [isMuted, setIsMuted] = React.useState(false);
+  const [isCameraOff, setIsCameraOff] = React.useState(false);
+
+  const isSpeakerRef = useRef(callType === 'video');
+  const isMutedRef = useRef(false);
+  const isCameraOffRef = useRef(false);
+
   useEffect(() => { partnerNameRef.current = partnerName; }, [partnerName]);
   useEffect(() => { partnerListenerIdRef.current = partnerListenerId; }, [partnerListenerId]);
   useEffect(() => { partnerAvatarIndexRef.current = partnerAvatarIndex; }, [partnerAvatarIndex]);
   useEffect(() => { partnerGenderRef.current = partnerGender; }, [partnerGender]);
+
+  useEffect(() => { isSpeakerRef.current = isSpeaker; }, [isSpeaker]);
+  useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
+  useEffect(() => { isCameraOffRef.current = isCameraOff; }, [isCameraOff]);
+
+  const toggleSpeaker = () => {
+    const nextState = !isSpeaker;
+    setIsSpeaker(nextState);
+    setAudioOutputMode(nextState);
+  };
+
+  const toggleMic = () => {
+    setIsMuted(prev => !prev);
+  };
+
+  const toggleCamera = () => {
+    setIsCameraOff(prev => !prev);
+  };
 
   // Sync state with parameters as they load/resolve from Expo Router search params
   useEffect(() => {
@@ -293,6 +320,9 @@ export default function ConnectingScreen() {
               ...(agoraAppIdVal ? { agoraAppId: String(agoraAppIdVal) } : {}),
               ...(agoraTokenVal ? { agoraToken: String(agoraTokenVal) } : {}),
               callType,
+              isSpeaker: isSpeakerRef.current ? 'true' : 'false',
+              isMuted: isMutedRef.current ? 'true' : 'false',
+              isCameraOff: isCameraOffRef.current ? 'true' : 'false',
             } 
           });
         });
@@ -615,15 +645,79 @@ export default function ConnectingScreen() {
         <Text style={styles.safetyText}>
           Keep the conversation safe & respectful.
         </Text>
-        <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-          <TouchableOpacity
-            style={styles.cancelBtn}
-            activeOpacity={0.8}
-            onPress={handleCancel}
-          >
-            <Text style={styles.cancelText}>Cancel Call</Text>
-          </TouchableOpacity>
-        </Animated.View>
+        <View style={styles.controlsRow}>
+          {/* Speaker Button */}
+          <View style={styles.actionItem}>
+            <TouchableOpacity
+              style={[styles.controlBtn, isSpeaker && styles.controlBtnActive]}
+              activeOpacity={0.8}
+              onPress={toggleSpeaker}
+            >
+              <Ionicons
+                name={isSpeaker ? "volume-high" : "volume-medium-outline"}
+                size={ms(24)}
+                color={isSpeaker ? "#000" : "#FFF"}
+              />
+            </TouchableOpacity>
+            <Text style={styles.controlLabel}>Speaker</Text>
+          </View>
+
+          {/* Mic Button */}
+          <View style={styles.actionItem}>
+            <TouchableOpacity
+              style={[styles.controlBtn, isMuted && styles.controlBtnActive]}
+              activeOpacity={0.8}
+              onPress={toggleMic}
+            >
+              <Ionicons
+                name={isMuted ? "mic-off" : "mic"}
+                size={ms(24)}
+                color={isMuted ? "#000" : "#FFF"}
+              />
+            </TouchableOpacity>
+            <Text style={styles.controlLabel}>{isMuted ? "Muted" : "Mic"}</Text>
+          </View>
+
+          {/* Camera Button (Video Call Only) */}
+          {callType === 'video' && (
+            <View style={styles.actionItem}>
+              <TouchableOpacity
+                style={[styles.controlBtn, isCameraOff && styles.controlBtnActive]}
+                activeOpacity={0.8}
+                onPress={toggleCamera}
+              >
+                <Ionicons
+                  name={isCameraOff ? "videocam-off" : "videocam"}
+                  size={ms(24)}
+                  color={isCameraOff ? "#000" : "#FFF"}
+                />
+              </TouchableOpacity>
+              <Text style={styles.controlLabel}>{isCameraOff ? "Cam Off" : "Camera"}</Text>
+            </View>
+          )}
+
+          {/* End Call Button */}
+          <View style={styles.actionItem}>
+            <TouchableOpacity
+              style={styles.endCallBtn}
+              activeOpacity={0.8}
+              onPress={handleCancel}
+            >
+              <LinearGradient
+                colors={['#EF4444', '#DC2626']}
+                style={styles.endCallCircle}
+              >
+                <Ionicons
+                  name="call"
+                  size={ms(24)}
+                  color="#FFF"
+                  style={{ transform: [{ rotate: '135deg' }] }}
+                />
+              </LinearGradient>
+            </TouchableOpacity>
+            <Text style={styles.endCallLabel}>End Call</Text>
+          </View>
+        </View>
       </View>
 
       {/* Recharge gate — the call cannot proceed without enough coins */}
@@ -753,27 +847,64 @@ const styles = StyleSheet.create({
   },
   bottomSection: {
     alignItems: 'center',
-    paddingHorizontal: s(24),
+    paddingHorizontal: s(20),
   },
   safetyText: {
     fontSize: ms(13, 0.3),
     color: '#6B7280',
     fontFamily: 'Inter_400Regular',
     fontStyle: 'italic',
-    marginBottom: vs(16),
+    marginBottom: vs(20),
     textAlign: 'center',
   },
-  cancelBtn: {
-    borderWidth: 1.5,
-    borderColor: '#6B7280',
-    borderRadius: 26,
-    paddingHorizontal: s(36),
-    paddingVertical: vs(12),
+  controlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-evenly',
+    width: '100%',
   },
-  cancelText: {
-    fontSize: ms(15, 0.3),
-    color: '#E5E7EB',
+  actionItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  controlBtn: {
+    width: s(58),
+    height: s(58),
+    borderRadius: s(29),
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  controlBtnActive: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
+  },
+  controlLabel: {
+    fontSize: ms(12, 0.3),
+    color: '#9CA3AF',
     fontFamily: 'Inter_500Medium',
+    marginTop: vs(8),
+    textAlign: 'center',
+  },
+  endCallBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  endCallCircle: {
+    width: s(58),
+    height: s(58),
+    borderRadius: s(29),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  endCallLabel: {
+    fontSize: ms(12, 0.3),
+    color: '#EF4444',
+    fontFamily: 'Inter_600SemiBold',
+    marginTop: vs(8),
+    textAlign: 'center',
   },
   costBadge: {
     flexDirection: 'row',

@@ -170,6 +170,7 @@ const AgoraVideoView = forwardRef(
       channelName,
       cameraEnabled,
       initialIsSpeaker = false,
+      initialIsMuted = false,
       onRemoteVideoActiveChange,
       onRemoteJoinedChange,
       onRemoteLeft,
@@ -298,7 +299,7 @@ const AgoraVideoView = forwardRef(
               try { engine.setEnableSpeakerphone(!!initialIsSpeaker); } catch (e) {}
               // Re-assert audio capture & subscription after joining.
               try { engine.enableLocalAudio(true); } catch (e) {}
-              try { engine.muteLocalAudioStream(false); } catch (e) {}
+              try { engine.muteLocalAudioStream(!!initialIsMuted); } catch (e) {}
               try { engine.muteAllRemoteAudioStreams(false); } catch (e) {}
               ensureLocalPreview();
 
@@ -386,7 +387,7 @@ const AgoraVideoView = forwardRef(
             clientRoleType: ClientRoleType.ClientRoleBroadcaster,
             channelProfile: ChannelProfileType.ChannelProfileCommunication,
             publishCameraTrack: !!cameraEnabled,
-            publishMicrophoneTrack: true,
+            publishMicrophoneTrack: !initialIsMuted,
             autoSubscribeAudio: true,
             autoSubscribeVideo: true,
           });
@@ -499,9 +500,11 @@ function VideoCallScreenComponent() {
   const [receivedGift, setReceivedGift] = useState(null);
   const [myAvatarUrl, setMyAvatarUrl] = useState('');
   const initialIsSpeaker = rawParams.isSpeaker ? rawParams.isSpeaker === 'true' : true;
-  const [isMuted, setIsMuted] = useState(false);
+  const initialIsMuted = rawParams.isMuted === 'true';
+  const initialIsCameraOff = rawParams.isCameraOff === 'true';
+  const [isMuted, setIsMuted] = useState(initialIsMuted);
   const [isSpeaker, setIsSpeaker] = useState(initialIsSpeaker);
-  const [isCameraOff, setIsCameraOff] = useState(false);
+  const [isCameraOff, setIsCameraOff] = useState(initialIsCameraOff);
   const [currentCoins, setCurrentCoins] = useState(null);
   const [lowBalanceMessage, setLowBalanceMessage] = useState('');
   const [permission, setPermission] = useState({ camera: true, mic: true });
@@ -719,7 +722,7 @@ function VideoCallScreenComponent() {
   }, [callId, name, listenerId, roomId, router]);
 
   // When both participants successfully connect (video call timer starts), toggle camera off and back on after a small gap
-  const cameraRestartDoneRef = useRef(false);
+  const cameraRestartDoneRef = useRef(initialIsCameraOff);
   useEffect(() => {
     if (remoteJoined && !cameraRestartDoneRef.current) {
       cameraRestartDoneRef.current = true;
@@ -1133,6 +1136,7 @@ function VideoCallScreenComponent() {
           channelName={roomId}
           cameraEnabled={showCamera}
           initialIsSpeaker={initialIsSpeaker}
+          initialIsMuted={initialIsMuted}
           onRemoteVideoActiveChange={setRemoteVideoActive}
           onRemoteJoinedChange={setRemoteJoined}
           onRemoteLeft={handleRemoteLeft}

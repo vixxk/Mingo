@@ -159,8 +159,12 @@ export default function TransactionsScreen() {
         subtitle = `Transaction ID: ${item._id.toString().slice(-8)}`;
       }
     } else if (item.type === 'call_credit') {
-      title = `Session Earnings (Success)`;
-      subtitle = `${item.description} • ID: ${item._id.toString().slice(-8)}`;
+      const callerName = item.metadata?.sessionId?.userId?.name || 'User';
+      title = `Session Earnings (${callerName})`;
+      subtitle = `${item.description || 'Call earnings credited'} • ID: ${item._id.toString().slice(-8)}`;
+      if (item.metadata?.sessionId?.duration) {
+        duration = ` • ${item.metadata.sessionId.duration.toString().padStart(2, '0')} m`;
+      }
     } else if (item.type === 'signup_bonus') {
       title = `Signup Bonus (Free Coins)`;
       subtitle = `Received ${item.coins} Coins • ID: ${item._id.toString().slice(-8)}`;
@@ -172,7 +176,7 @@ export default function TransactionsScreen() {
     return (
       <View style={styles.transactionCard}>
         <View style={styles.cardHeader}>
-          <Text style={styles.dateText}>•  {date}{duration}</Text>
+          <Text style={styles.dateText}>• {date}{duration}</Text>
         </View>
         
         <View style={styles.cardBody}>
@@ -192,10 +196,10 @@ export default function TransactionsScreen() {
                   `${item.coins > 0 ? '+' : ''}${item.coins}`
                 )
               ) : (
-                `+₹${item.amount.toFixed(2)}`
+                `+₹${(item.amount || 0).toFixed(2)}`
               )}
             </Text>
-            {item.coins !== 0 && (
+            {item.coins !== 0 ? (
               isCallDebit ? (
                 <View style={[styles.coinIconContainer, { backgroundColor: '#38BDF8' }]}>
                   <Text style={{ fontSize: ms(12) }}>💎</Text>
@@ -205,6 +209,10 @@ export default function TransactionsScreen() {
                   <Text style={{ fontSize: ms(12) }}>🪙</Text>
                 </View>
               )
+            ) : (
+              <View style={[styles.coinIconContainer, { backgroundColor: 'rgba(34, 197, 94, 0.2)' }]}>
+                <Text style={{ fontSize: ms(12), color: '#22C55E', fontWeight: 'bold' }}>₹</Text>
+              </View>
             )}
           </View>
         </View>

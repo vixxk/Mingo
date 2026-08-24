@@ -67,6 +67,7 @@ const AgoraAudioEngine = forwardRef(
       token,
       channelName,
       initialIsSpeaker = false,
+      initialIsMuted = false,
       onRemoteJoinedChange,
       onRemoteLeft,
       onFailedToConnect,
@@ -146,7 +147,7 @@ const AgoraAudioEngine = forwardRef(
               // Re-assert audio capture & subscription after joining — belt
               // and suspenders for stubborn devices.
               try { engine.enableLocalAudio(true); } catch (e) {}
-              try { engine.muteLocalAudioStream(false); } catch (e) {}
+              try { engine.muteLocalAudioStream(!!initialIsMuted); } catch (e) {}
               try { engine.muteAllRemoteAudioStreams(false); } catch (e) {}
               if (onJoinSuccessRef.current) onJoinSuccessRef.current();
             },
@@ -338,8 +339,9 @@ function AudioCallScreenComponent() {
   const [showRecharge, setShowRecharge] = useState(false);
   const [showGiftPopup, setShowGiftPopup] = useState(false);
   const [receivedGift, setReceivedGift] = useState(null);
-  const initialIsSpeaker = rawParams.isSpeaker === 'true';
-  const [isMuted, setIsMuted] = useState(false);
+  const initialIsSpeaker = rawParams.isSpeaker !== undefined ? rawParams.isSpeaker === 'true' : false;
+  const initialIsMuted = rawParams.isMuted === 'true';
+  const [isMuted, setIsMuted] = useState(initialIsMuted);
   const [isSpeaker, setIsSpeaker] = useState(initialIsSpeaker);
   const [upgradeModalVisible, setUpgradeModalVisible] = useState(false);
   const [upgradeModalMode, setUpgradeModalMode] = useState('request');
@@ -1131,6 +1133,7 @@ function AudioCallScreenComponent() {
           token={effectiveAgoraToken}
           channelName={roomId}
           initialIsSpeaker={initialIsSpeaker}
+          initialIsMuted={initialIsMuted}
           onRemoteJoinedChange={setRemoteJoined}
           onRemoteLeft={handleRemoteLeft}
           onFailedToConnect={handleAgoraFailedToConnect}

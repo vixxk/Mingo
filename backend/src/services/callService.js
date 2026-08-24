@@ -457,24 +457,59 @@ class CallService {
 
     await session.save();
 
-    // Ensure transaction record exists for call billing summary
+    // Ensure transaction records exist and listener earnings are credited upon call completion
     try {
+      // 1. Check user call_debit transactions for this session
       if (session.coinsDeducted && session.coinsDeducted > 0) {
-        const existingTx = await Transaction.findOne({ 'metadata.sessionId': session._id, type: 'call_debit' });
-        if (!existingTx) {
+        const existingDebitTxs = await Transaction.find({ 'metadata.sessionId': session._id, type: 'call_debit' });
+        const totalDebitedCoins = existingDebitTxs.reduce((sum, tx) => sum + Math.abs(tx.coins || 0), 0);
+        const undebitedCoins = session.coinsDeducted - totalDebitedCoins;
+
+        if (undebitedCoins > 0) {
+          const caller = await User.findById(session.userId);
+          if (caller) {
+            caller.coins = Math.max(0, caller.coins - undebitedCoins);
+            await caller.save();
+          }
           await Transaction.create({
             userId: session.userId,
             type: 'call_debit',
             amount: 0,
-            coins: -session.coinsDeducted,
+            coins: -undebitedCoins,
             description: `${session.callType || 'audio'} call session (${session.duration || 1} min)`,
             status: 'completed',
             metadata: { sessionId: session._id },
           });
         }
       }
+
+      // 2. Check listener call_credit transactions for this session
+      if (session.listenerEarnings && session.listenerEarnings > 0 && session.listenerId) {
+        const existingCreditTxs = await Transaction.find({ 'metadata.sessionId': session._id, type: 'call_credit' });
+        const totalCreditedAmount = existingCreditTxs.reduce((sum, tx) => sum + (tx.amount || 0), 0);
+        const uncreditedEarnings = Math.round((session.listenerEarnings - totalCreditedAmount) * 100) / 100;
+
+        if (uncreditedEarnings > 0) {
+          const listenerProfile = await Listener.findOne({ userId: session.listenerId });
+          if (listenerProfile) {
+            listenerProfile.earnings = (listenerProfile.earnings || 0) + uncreditedEarnings;
+            listenerProfile.todayEarnings = (listenerProfile.todayEarnings || 0) + uncreditedEarnings;
+            await listenerProfile.save();
+          }
+
+          await Transaction.create({
+            userId: session.listenerId,
+            type: 'call_credit',
+            amount: uncreditedEarnings,
+            coins: 0,
+            description: `${session.callType || 'audio'} call earnings (${session.duration || 1} min)`,
+            status: 'completed',
+            metadata: { sessionId: session._id },
+          });
+        }
+      }
     } catch (txErr) {
-      console.error('[CallService] Error processing end-call transaction:', txErr.message);
+      console.error('[CallService] Error processing end-call transaction and listener credit:', txErr.message);
     }
 
     // Update listener call counters (earnings already credited per-minute by billing timer)

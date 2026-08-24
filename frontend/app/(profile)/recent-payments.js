@@ -49,8 +49,9 @@ const PaymentCard = ({ item }) => {
   } else if (item.type === 'gift_receive') {
     title = `Gift Received`;
   } else if (item.type === 'call_credit') {
-    title = 'Session Earnings (Success)';
-    subtitle = `${item.description || ''}`;
+    const callerName = item.metadata?.sessionId?.userId?.name || 'User';
+    title = `Session Earnings (${callerName})`;
+    subtitle = item.description || 'Call earnings credited';
   } else if (item.type === 'signup_bonus') {
     title = 'Signup Bonus (Free Coins)';
     subtitle = `Received ${item.coins} Coins`;

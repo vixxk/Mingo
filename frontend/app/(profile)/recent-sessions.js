@@ -123,8 +123,14 @@ const SessionCard = ({ item, index, onShowOfflinePopup }) => {
           </Text>
         </View>
         <View style={styles.sessionDiamonds}>
-          <Ionicons name="diamond" size={wp(4)} color="#F59E0B" />
-          <Text style={styles.sessionDiamondText}>{item.diamonds}</Text>
+          {item.isListenerRole ? (
+            <Text style={[styles.sessionDiamondText, { color: '#22C55E' }]}>+₹{(item.earnings || 0).toFixed(2)}</Text>
+          ) : (
+            <>
+              <Ionicons name="diamond" size={wp(4)} color="#F59E0B" />
+              <Text style={styles.sessionDiamondText}>{item.diamonds}</Text>
+            </>
+          )}
         </View>
       </LinearGradient>
     </TouchableOpacity>
@@ -144,6 +150,15 @@ export default function RecentSessionsScreen() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
+      const userStr = await AsyncStorage.getItem('user');
+      let currentUserId = null;
+      if (userStr) {
+        try {
+          const userObj = JSON.parse(userStr);
+          currentUserId = userObj.id || userObj._id;
+        } catch (e) {}
+      }
+
       const res = await callAPI.getHistory(5, 0);
       if (res?.data) {
         setSessions(
@@ -159,16 +174,29 @@ export default function RecentSessionsScreen() {
               : (call.status === 'completed' ? dur * coinsPerMin : 0);
             const diamonds = Math.floor(coins / 10);
 
+            const callListenerId = call.listenerId?._id || call.listenerId;
+            const isListenerRole = currentUserId && callListenerId?.toString() === currentUserId.toString();
+            const participantName = isListenerRole
+              ? (call.userId?.name || 'User')
+              : (call.listenerId?.name || 'Unknown');
+
+            const payoutRate = isVideo ? 4.00 : 1.00;
+            const earnings = (call.listenerEarnings && call.listenerEarnings > 0)
+              ? call.listenerEarnings
+              : (call.status === 'completed' ? dur * payoutRate : 0);
+
             return {
               id: call._id,
-              listenerId: call.listenerId?._id || call.listenerId,
-              name: call.listenerId?.name || 'Unknown',
+              listenerId: callListenerId,
+              name: participantName,
               duration: `${dur} min${dur === 1 ? '' : 's'}`,
               durationLabel: formatSessionDuration({ ...call, duration: dur }),
               callType: call.callType || 'audio',
               typeLabel: formatSessionType(call),
               callTime: formatCallTime(call.startTime || call.createdAt),
               diamonds: diamonds,
+              earnings: earnings,
+              isListenerRole: isListenerRole,
               gradientColors: GRADIENTS[index % GRADIENTS.length],
             };
           })
