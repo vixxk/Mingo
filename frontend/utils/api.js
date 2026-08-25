@@ -301,6 +301,13 @@ export const callAPI = {
     });
   },
 
+  rejectCall: async (sessionId, reason = 'busy') => {
+    return apiRequest('/call/reject', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId, reason }),
+    });
+  },
+
   getHistory: async (limit = 20, offset = 0) => {
     return apiRequest(`/call/history?limit=${limit}&offset=${offset}`);
   },

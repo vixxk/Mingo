@@ -838,6 +838,13 @@ const initSocket = (server) => {
       console.log(`[Socket] call_cancelled received from caller (${socket.userId}). Listener: ${userId}, Session: ${sessionId}`);
       
       try {
+        if (userId && mongoose.Types.ObjectId.isValid(userId)) {
+          const listenerDoc = await Listener.findOne({ $or: [{ userId: userId }, { _id: userId }] });
+          if (listenerDoc?.userId) {
+            userId = listenerDoc.userId.toString();
+          }
+        }
+
         let session = null;
         const isMongoId = sessionId && mongoose.Types.ObjectId.isValid(sessionId);
         const isNoAnswer = reason === 'timeout' || reason === 'no_answer';
@@ -2213,33 +2220,59 @@ async function deductCallMinute(sessionId, userId, listenerId, coinsPerMin, payo
 
     const sessIdStr = sessionId ? sessionId.toString() : '';
 
-    // Record user debit transaction
-    await Transaction.create({
-      userId,
-      type: 'call_debit',
-      amount: 0,
-      coins: -coinsPerMin,
-      description: `${callType} call - per minute charge`,
-      status: 'completed',
-      metadata: { sessionId: sessIdStr },
-    });
+    // Record or update single session transaction for user debit
+    await Transaction.findOneAndUpdate(
+      {
+        userId,
+        type: 'call_debit',
+        $or: [
+          { 'metadata.sessionId': sessIdStr },
+          { 'metadata.sessionId': sessionId }
+        ]
+      },
+      {
+        $set: {
+          userId,
+          type: 'call_debit',
+          amount: 0,
+          coins: -(session ? session.coinsDeducted : coinsPerMin),
+          description: `${callType} call session (${session ? session.duration : 1} min)`,
+          status: 'completed',
+          'metadata.sessionId': sessIdStr,
+        }
+      },
+      { upsert: true, new: true }
+    );
 
-    // Credit listener
+    // Credit listener and record/update single session transaction for listener earnings
     const listenerProfile = await Listener.findOne({ userId: listenerId });
     if (listenerProfile) {
       listenerProfile.earnings += payoutPerMin;
       listenerProfile.todayEarnings += payoutPerMin;
       await listenerProfile.save();
 
-      await Transaction.create({
-        userId: listenerId,
-        type: 'call_credit',
-        amount: payoutPerMin,
-        coins: 0,
-        description: `${callType} call earnings - per minute`,
-        status: 'completed',
-        metadata: { sessionId: sessIdStr },
-      });
+      await Transaction.findOneAndUpdate(
+        {
+          userId: listenerId,
+          type: 'call_credit',
+          $or: [
+            { 'metadata.sessionId': sessIdStr },
+            { 'metadata.sessionId': sessionId }
+          ]
+        },
+        {
+          $set: {
+            userId: listenerId,
+            type: 'call_credit',
+            amount: session ? session.listenerEarnings : payoutPerMin,
+            coins: 0,
+            description: `${callType} call earnings (${session ? session.duration : 1} min)`,
+            status: 'completed',
+            'metadata.sessionId': sessIdStr,
+          }
+        },
+        { upsert: true, new: true }
+      );
     }
 
     // Emit balance update to user

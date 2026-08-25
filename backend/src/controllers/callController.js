@@ -22,6 +22,16 @@ class CallController {
     }
   }
 
+    static async rejectCall(req, res, next) {
+    try {
+      const { sessionId, reason } = req.body;
+      const result = await CallService.rejectCall(sessionId, req.user ? req.user.id : null, reason);
+      return ApiResponse.success(res, result, 'Call rejected successfully');
+    } catch (err) {
+      next(err);
+    }
+  }
+
     static async getHistory(req, res, next) {
     try {
       const limit = parseInt(req.query.limit, 10) || 20;

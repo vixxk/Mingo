@@ -1054,6 +1054,7 @@ function AudioCallScreenComponent() {
     }
     setPendingUpgradeState('pending');
     setUpgradeModalMode('pending');
+    setUpgradeModalVisible(true);
     socketService.emit('request_call_upgrade', { sessionId: callId, roomId, targetUserId: listenerId });
   }, [callId, roomId, listenerId, isListener, currentCoins]);
 

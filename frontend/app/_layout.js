@@ -291,10 +291,16 @@ function RootLayout() {
     if (!rejectedCall) return;
     const callId = rejectedCall.callId || rejectedCall.sessionId || rejectedCall.id || rejectedCall._id;
     if (callId) handledCallIdsRef.current.add(callId);
-    // Ensure socket is connected so the rejection reaches the caller
-    await socketService.connect();
     // Dismiss any native card/notification still ringing
     incomingCallNative.stopIncomingCall();
+    // Fire REST reject call for instant server update
+    if (callId) {
+      callAPI.rejectCall(callId, 'busy').catch(err => {
+        console.log('[RootLayout] REST callAPI.rejectCall error:', err.message);
+      });
+    }
+    // Ensure socket is connected so the rejection reaches the caller
+    await socketService.connect();
     socketService.emit('call_rejected', {
       userId: rejectedCall.callerId,
       sessionId: callId,

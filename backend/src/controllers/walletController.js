@@ -241,7 +241,7 @@ class WalletController {
       else if (type === 'Sessions') query.type = { $in: ['call_debit', 'call_credit'] };
       else if (type === 'Recharges') query.type = 'purchase';
 
-      const transactions = await Transaction.find(query)
+      const rawTransactions = await Transaction.find(query)
         .populate({
           path: 'metadata.sessionId',
           populate: [
@@ -249,13 +249,59 @@ class WalletController {
             { path: 'userId', select: 'name username' }
           ]
         })
-        .sort({ createdAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(parseInt(limit));
+        .sort({ createdAt: -1 });
 
-      const total = await Transaction.countDocuments(query);
+      // Consolidate multiple per-minute transactions for the same session ID
+      const consolidated = [];
+      const sessionMap = new Map();
 
-      return ApiResponse.success(res, { transactions, total }, 'Transactions retrieved');
+      for (const tx of rawTransactions) {
+        const isSessionTx = tx.type === 'call_debit' || tx.type === 'call_credit';
+        const sessObj = tx.metadata?.sessionId;
+        const sessId = sessObj?._id ? sessObj._id.toString() : (tx.metadata?.sessionId ? tx.metadata.sessionId.toString() : null);
+
+        if (isSessionTx && sessId) {
+          const groupKey = `${tx.type}_${sessId}`;
+          if (sessionMap.has(groupKey)) {
+            const existingIndex = sessionMap.get(groupKey);
+            const target = consolidated[existingIndex];
+            
+            target.coins = (target.coins || 0) + (tx.coins || 0);
+            target.amount = Math.round(((target.amount || 0) + (tx.amount || 0)) * 100) / 100;
+            
+            if (new Date(tx.createdAt) > new Date(target.createdAt)) {
+              target.createdAt = tx.createdAt;
+            }
+            
+            const sessionDoc = target.metadata?.sessionId;
+            const callType = sessionDoc?.callType || (tx.type === 'call_debit' ? 'audio' : 'audio');
+            const rate = callType === 'video' ? 40 : 10;
+            const computedDuration = Math.max(1, Math.round(Math.abs(target.coins) / rate));
+            const duration = sessionDoc?.duration || computedDuration;
+            
+            if (tx.type === 'call_debit') {
+              target.description = `${callType} call session (${duration} min)`;
+            } else {
+              target.description = `${callType} call earnings (${duration} min)`;
+            }
+          } else {
+            const txObj = tx.toObject ? tx.toObject() : { ...tx };
+            sessionMap.set(groupKey, consolidated.length);
+            consolidated.push(txObj);
+          }
+        } else {
+          consolidated.push(tx.toObject ? tx.toObject() : { ...tx });
+        }
+      }
+
+      consolidated.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+      const pageNum = parseInt(page, 10) || 1;
+      const limitNum = parseInt(limit, 10) || 20;
+      const total = consolidated.length;
+      const paginatedTransactions = consolidated.slice((pageNum - 1) * limitNum, pageNum * limitNum);
+
+      return ApiResponse.success(res, { transactions: paginatedTransactions, total }, 'Transactions retrieved');
     } catch (err) {
       next(err);
     }

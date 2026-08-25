@@ -250,6 +250,11 @@ export default function ConnectingScreen() {
       userId: targetUserId, 
       sessionId: currentSessionId 
     });
+    if (currentSessionId) {
+      callAPI.endCall(currentSessionId).catch(err => {
+        console.log('[Connecting] REST callAPI.endCall on cancel error:', err.message);
+      });
+    }
     socketService.emit('cancel_random_search');
     router.back();
   }, [listenerId, initialCallId]);
@@ -512,6 +517,7 @@ export default function ConnectingScreen() {
                 userId: finalListenerId || listenerId,
                 sessionId: finalSessionId,
               });
+              callAPI.endCall(finalSessionId).catch(() => {});
               return;
             }
 

@@ -8,6 +8,8 @@ router.post('/start', authenticate, authorize('USER'), callStartValidation, Call
 
 router.post('/end', authenticate, authorize('USER', 'LISTENER'), callEndValidation, CallController.endCall);
 
+router.post('/reject', authenticate, CallController.rejectCall);
+
 router.get('/history', authenticate, CallController.getHistory);
 
 router.get('/active/session', authenticate, CallController.getActiveSession);

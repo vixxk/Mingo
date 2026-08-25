@@ -301,6 +301,90 @@ class CallService {
     }
   }
 
+  static async rejectCall(sessionId, userId, reason = 'rejected') {
+    let session = null;
+    if (sessionId && mongoose.Types.ObjectId.isValid(sessionId)) {
+      session = await Session.findById(sessionId);
+    }
+    if (!session && sessionId) {
+      session = await Session.findOne({ roomId: sessionId });
+    }
+
+    const userIdStr = userId ? userId.toString() : null;
+
+    if (!session && userIdStr) {
+      session = await Session.findOne({
+        $or: [{ userId: userIdStr }, { listenerId: userIdStr }],
+        isAccepted: { $ne: true },
+        status: { $in: ['active', 'created', 'pending'] }
+      }).sort({ createdAt: -1 });
+    }
+
+    if (!session) {
+      if (userIdStr) {
+        await Listener.findOneAndUpdate({ userId: userIdStr }, { isBusy: false, busySince: null }).catch(() => {});
+        await MatchingService.releaseLock(userIdStr).catch(() => {});
+        await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, userIdStr).catch(() => {});
+      }
+      return { success: true, message: 'No active session to reject' };
+    }
+
+    const sessIdStr = session._id.toString();
+    const callerIdStr = session.userId.toString();
+    const listenerIdStr = session.listenerId.toString();
+
+    session.status = 'cancelled';
+    session.endTime = new Date();
+    await session.save();
+
+    await Listener.findOneAndUpdate({ userId: listenerIdStr }, { isBusy: false, busySince: null }).catch(() => {});
+    await MatchingService.releaseLock(listenerIdStr).catch(() => {});
+    await redis.sadd(REDIS_KEYS.LISTENERS_AVAILABLE, listenerIdStr).catch(() => {});
+    await redis.set(REDIS_KEYS.ONLINE(listenerIdStr), '1', 'EX', 30).catch(() => {});
+    await PresenceService._updateScore(session.listenerId).catch(() => {});
+
+    try {
+      const { getIo } = require('../socket');
+      const io = getIo();
+      const rejectPayload = { sessionId: sessIdStr, roomId: session.roomId, reason };
+
+      io.to(`user_${callerIdStr}`).emit('call_rejected', rejectPayload);
+      io.to(`user_${callerIdStr}`).emit('call_ended', { sessionId: sessIdStr, roomId: session.roomId });
+
+      io.to(`user_${listenerIdStr}`).emit('call_rejected', rejectPayload);
+      io.to(`user_${listenerIdStr}`).emit('call_ended', { sessionId: sessIdStr, roomId: session.roomId });
+
+      if (session.roomId) {
+        io.to(session.roomId).emit('call_rejected', rejectPayload);
+        io.to(session.roomId).emit('call_ended', { sessionId: sessIdStr, roomId: session.roomId });
+      }
+
+      io.emit('listener_status_changed', { userId: listenerIdStr, isOnline: true, isBusy: false });
+      const sseService = require('./sseService');
+      sseService.broadcastListenerStatus(listenerIdStr, true, false, null);
+    } catch (e) {
+      console.error('[CallService.rejectCall] Socket emit error:', e.message);
+    }
+
+    try {
+      PushService.sendPushNotification(callerIdStr, {
+        title: 'Call Declined',
+        body: 'The call was declined',
+        data: {
+          type: 'call_rejected',
+          callId: sessIdStr,
+          reason,
+        },
+      }).catch(() => {});
+    } catch (e) {}
+
+    return {
+      sessionId: sessIdStr,
+      status: 'cancelled',
+      reason,
+    };
+  }
+
   static async endCall(sessionId, userId) {
     let session = null;
     if (sessionId && mongoose.Types.ObjectId.isValid(sessionId)) {
@@ -472,7 +556,7 @@ class CallService {
 
     // Ensure transaction records exist and listener earnings are credited upon call completion
     try {
-      // 1. Check user call_debit transactions for this session
+      // 1. Ensure user call_debit transaction is recorded for this session
       if (session.coinsDeducted && session.coinsDeducted > 0) {
         const existingDebitTxs = await Transaction.find({
           type: 'call_debit',
@@ -490,19 +574,33 @@ class CallService {
             caller.coins = Math.max(0, caller.coins - undebitedCoins);
             await caller.save();
           }
-          await Transaction.create({
+        }
+
+        await Transaction.findOneAndUpdate(
+          {
             userId: session.userId,
             type: 'call_debit',
-            amount: 0,
-            coins: -undebitedCoins,
-            description: `${session.callType || 'audio'} call session (${session.duration || 1} min)`,
-            status: 'completed',
-            metadata: { sessionId: sessIdStr },
-          });
-        }
+            $or: [
+              { 'metadata.sessionId': sessIdStr },
+              { 'metadata.sessionId': session._id }
+            ]
+          },
+          {
+            $set: {
+              userId: session.userId,
+              type: 'call_debit',
+              amount: 0,
+              coins: -session.coinsDeducted,
+              description: `${session.callType || 'audio'} call session (${session.duration || 1} min)`,
+              status: 'completed',
+              'metadata.sessionId': sessIdStr,
+            }
+          },
+          { upsert: true, new: true }
+        );
       }
 
-      // 2. Check listener call_credit transactions for this session
+      // 2. Ensure listener call_credit transaction is recorded for this session
       if (session.listenerEarnings && session.listenerEarnings > 0 && session.listenerId) {
         const existingCreditTxs = await Transaction.find({
           type: 'call_credit',
@@ -521,17 +619,30 @@ class CallService {
             listenerProfile.todayEarnings = (listenerProfile.todayEarnings || 0) + uncreditedEarnings;
             await listenerProfile.save();
           }
+        }
 
-          await Transaction.create({
+        await Transaction.findOneAndUpdate(
+          {
             userId: session.listenerId,
             type: 'call_credit',
-            amount: uncreditedEarnings,
-            coins: 0,
-            description: `${session.callType || 'audio'} call earnings (${session.duration || 1} min)`,
-            status: 'completed',
-            metadata: { sessionId: sessIdStr },
-          });
-        }
+            $or: [
+              { 'metadata.sessionId': sessIdStr },
+              { 'metadata.sessionId': session._id }
+            ]
+          },
+          {
+            $set: {
+              userId: session.listenerId,
+              type: 'call_credit',
+              amount: session.listenerEarnings,
+              coins: 0,
+              description: `${session.callType || 'audio'} call earnings (${session.duration || 1} min)`,
+              status: 'completed',
+              'metadata.sessionId': sessIdStr,
+            }
+          },
+          { upsert: true, new: true }
+        );
       }
     } catch (txErr) {
       console.error('[CallService] Error processing end-call transaction and listener credit:', txErr.message);

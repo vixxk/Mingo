@@ -266,13 +266,38 @@ object IncomingCallNotifications {
                     // App is running in the background — let JS reject over the socket.
                     emitActionToJs?.invoke(action, payload.toString())
                 }
-                // If the app was killed there is no socket to reject on; the
-                // caller-side ring timeout cancels the session server-side.
+                sendRejectCallRequest(payload)
             }
             ACTION_OPEN -> {
                 launchMainActivity(context, action, payload)
             }
         }
+    }
+
+    private fun sendRejectCallRequest(payload: JSONObject) {
+        val callId = payload.optString("callId", payload.optString("sessionId", ""))
+        if (callId.isEmpty()) return
+        Thread {
+            try {
+                val apiUrl = payload.optString("rejectUrl", "https://backend.themingo.app/api/call/reject")
+                val url = java.net.URL(apiUrl)
+                val conn = url.openConnection() as java.net.HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.connectTimeout = 5000
+                conn.readTimeout = 5000
+                conn.doOutput = true
+                val body = JSONObject().apply {
+                    put("sessionId", callId)
+                    put("reason", "busy")
+                }.toString()
+                conn.outputStream.use { os ->
+                    os.write(body.toByteArray(Charsets.UTF_8))
+                }
+                val responseCode = conn.responseCode
+                conn.disconnect()
+            } catch (_: Exception) {}
+        }.start()
     }
 
     fun launchMainActivity(context: Context, action: String, payload: JSONObject) {
