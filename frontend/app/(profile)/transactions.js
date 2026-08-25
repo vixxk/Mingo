@@ -128,48 +128,44 @@ export default function TransactionsScreen() {
     const date = formatDate(item.createdAt);
     
     let title = item.description || 'Transaction';
-    let subtitle = `Transaction ID: ${item._id.toString().slice(-8)}`;
+    let subtitle = '';
     let duration = '';
     const isCallDebit = item.type === 'call_debit';
+
+    const rawSessionId = item.metadata?.sessionId?._id || item.metadata?.sessionId;
+    const sessionDisplayId = rawSessionId ? String(rawSessionId).slice(-8) : item._id.toString().slice(-8);
 
     if (item.type === 'call_debit') {
       const listenerName = item.metadata?.sessionId?.listenerId?.name || 'Listener';
       const diamonds = Math.abs(item.coins / 10);
       title = `${diamonds} ${diamonds === 1 ? 'Diamond' : 'Diamonds'} used for session with ${listenerName}`;
+      subtitle = item.description || 'Call minute deducted';
       if (item.metadata?.sessionId?.duration) {
         duration = ` •  ${item.metadata.sessionId.duration.toString().padStart(2, '0')} m`;
       }
     } else if (item.type === 'purchase') {
       title = `Wallet Recharge (Success)`;
-      subtitle = `Paid ₹${item.amount} for ${item.coins} Coins • ID: ${item._id.toString().slice(-8)}`;
+      subtitle = `Paid ₹${item.amount} for ${item.coins} Coins`;
     } else if (item.type === 'gift_send') {
       title = `Gift Sent: ${item.description.replace('Sent gift: ', '')}`;
       const recipientName = item.metadata?.sessionId?.listenerId?.name;
-      if (recipientName) {
-        subtitle = `Sent to ${recipientName} during session`;
-      } else {
-        subtitle = `Transaction ID: ${item._id.toString().slice(-8)}`;
-      }
+      subtitle = recipientName ? `Sent to ${recipientName} during session` : 'Gift sent';
     } else if (item.type === 'gift_receive') {
       title = `Gift Received: ${item.description.replace('Received gift: ', '')}`;
       const senderName = item.metadata?.sessionId?.userId?.name;
-      if (senderName) {
-        subtitle = `Received from ${senderName} during session`;
-      } else {
-        subtitle = `Transaction ID: ${item._id.toString().slice(-8)}`;
-      }
+      subtitle = senderName ? `Received from ${senderName} during session` : 'Gift received';
     } else if (item.type === 'call_credit') {
       title = 'Session Earnings';
-      subtitle = `${item.description || 'Call earnings credited'} • ID: ${item._id.toString().slice(-8)}`;
+      subtitle = item.description || 'Call earnings credited';
       if (item.metadata?.sessionId?.duration) {
         duration = ` • ${item.metadata.sessionId.duration.toString().padStart(2, '0')} m`;
       }
     } else if (item.type === 'signup_bonus') {
       title = `Signup Bonus (Free Coins)`;
-      subtitle = `Received ${item.coins} Coins • ID: ${item._id.toString().slice(-8)}`;
+      subtitle = `Received ${item.coins} Coins`;
     } else if (item.type === 'refund') {
       title = `Coins Refunded`;
-      subtitle = `Credited ${item.coins} Coins • ID: ${item._id.toString().slice(-8)}`;
+      subtitle = `Credited ${item.coins} Coins`;
     }
 
     return (
@@ -181,8 +177,9 @@ export default function TransactionsScreen() {
         <View style={styles.cardBody}>
           <View style={styles.infoSection}>
             <Text style={styles.transactionTitle}>{title}</Text>
+            {subtitle ? <Text style={styles.transactionSubtitle}>{subtitle}</Text> : null}
             <TouchableOpacity onPress={() => {/* Download invoice logic */}}>
-              <Text style={styles.transactionSubtitle}>{subtitle}</Text>
+              <Text style={styles.transactionIdText}>ID: {sessionDisplayId}</Text>
             </TouchableOpacity>
           </View>
           
@@ -390,7 +387,13 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     fontSize: ms(13),
     fontFamily: 'Inter_400Regular',
+  },
+  transactionIdText: {
+    color: '#9CA3AF',
+    fontSize: ms(13),
+    fontFamily: 'Inter_400Regular',
     textDecorationLine: 'underline',
+    marginTop: 2,
   },
   amountSection: {
     flexDirection: 'row',
