@@ -1,9 +1,10 @@
-import { View, Text, StyleSheet, Animated, Image, TouchableOpacity, Linking, AppState, Alert } from 'react-native';
+import { View, Text, StyleSheet, Animated, Image, TouchableOpacity, Linking, AppState, Alert, NativeModules, TurboModuleRegistry } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 import { Camera } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import { ms, s, vs, SCREEN_WIDTH, SCREEN_HEIGHT } from '../utils/responsive';
@@ -83,9 +84,17 @@ export default function SplashScreenPage() {
       }
 
       try {
-        const OneSignalModule = require('react-native-onesignal');
-        if (OneSignalModule?.OneSignal?.Notifications) {
-          await OneSignalModule.OneSignal.Notifications.requestPermission(true);
+        const isExpoGo = Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient';
+        const hasNativeOneSignal = !isExpoGo && !!(
+          (TurboModuleRegistry?.get && TurboModuleRegistry.get('OneSignal')) ||
+          NativeModules?.OneSignal ||
+          NativeModules?.RNOneSignal
+        );
+        if (hasNativeOneSignal) {
+          const OneSignalModule = require('react-native-onesignal');
+          if (OneSignalModule?.OneSignal?.Notifications) {
+            await OneSignalModule.OneSignal.Notifications.requestPermission(true);
+          }
         }
       } catch (oneErr) {}
 

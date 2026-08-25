@@ -266,6 +266,25 @@ export default function ListenerHomeScreen() {
     }, [])
   );
 
+  const [syncingLedger, setSyncingLedger] = useState(false);
+
+  const handleSyncLedger = useCallback(async () => {
+    setSyncingLedger(true);
+    try {
+      const statsRes = await listenerAPI.getEarningsStats({ sync: true });
+      if (statsRes?.data) {
+        setEarningsStats(statsRes.data);
+        if (statsRes.data.totalEarnings !== undefined) {
+          setEarnings(statsRes.data.totalEarnings);
+        }
+      }
+    } catch (err) {
+      console.log('Error syncing ledger:', err);
+    } finally {
+      setSyncingLedger(false);
+    }
+  }, []);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -305,7 +324,7 @@ export default function ListenerHomeScreen() {
 
         // Ledger-reconciled earnings (always matches the transaction history)
         try {
-          const statsRes = await listenerAPI.getEarningsStats();
+          const statsRes = await listenerAPI.getEarningsStats({ sync: true });
           if (statsRes?.data) setEarningsStats(statsRes.data);
         } catch (statsErr) {
           console.log('Error fetching earnings stats:', statsErr);
@@ -755,16 +774,33 @@ export default function ListenerHomeScreen() {
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Text style={[styles.cardTitle, { marginBottom: 0 }]}>Total Earnings</Text>
             {earningsStats && (
-              <View style={[styles.syncBadge, earningsStats.synced ? styles.syncBadgeOk : styles.syncBadgeWarn]}>
+              <TouchableOpacity
+                activeOpacity={earningsStats.synced ? 1 : 0.7}
+                disabled={earningsStats.synced || refreshing || syncingLedger}
+                onPress={handleSyncLedger}
+                style={[styles.syncBadge, earningsStats.synced ? styles.syncBadgeOk : styles.syncBadgeWarn]}
+              >
                 <Ionicons
                   name={earningsStats.synced ? 'checkmark-circle' : 'warning'}
                   size={13}
                   color={earningsStats.synced ? '#22C55E' : '#F59E0B'}
                 />
                 <Text style={[styles.syncBadgeText, { color: earningsStats.synced ? '#22C55E' : '#F59E0B' }]}>
-                  {earningsStats.synced ? 'Ledger synced' : 'Mismatch — showing ledger'}
+                  {earningsStats.synced ? 'Ledger synced' : 'Mismatch — click to sync'}
                 </Text>
-              </View>
+                {!earningsStats.synced && (
+                  syncingLedger ? (
+                    <ActivityIndicator size="small" color="#F59E0B" style={{ marginLeft: 2 }} />
+                  ) : (
+                    <Ionicons
+                      name="refresh"
+                      size={13}
+                      color="#F59E0B"
+                      style={{ marginLeft: 2 }}
+                    />
+                  )
+                )}
+              </TouchableOpacity>
             )}
           </View>
 

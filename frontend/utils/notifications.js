@@ -1,4 +1,4 @@
-import { Platform, AppState } from 'react-native';
+import { Platform, AppState, NativeModules, TurboModuleRegistry } from 'react-native';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 
@@ -12,14 +12,25 @@ let LogLevel = null;
 let isClickListenerRegistered = false;
 let isOneSignalInitialized = false;
 
-try {
-  // Use require instead of ES6 import to prevent Expo Go from crashing on startup due to missing native binary
-  const OneSignalModule = require('react-native-onesignal');
-  if (OneSignalModule) {
-    OneSignal = OneSignalModule.OneSignal;
-    LogLevel = OneSignalModule.LogLevel;
+const isExpoGo = Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient';
+const hasOneSignalNativeModule = !isExpoGo && !!(
+  (TurboModuleRegistry?.get && TurboModuleRegistry.get('OneSignal')) ||
+  NativeModules?.OneSignal ||
+  NativeModules?.RNOneSignal
+);
+
+if (hasOneSignalNativeModule) {
+  try {
+    // Use require instead of ES6 import to prevent Expo Go from crashing on startup due to missing native binary
+    const OneSignalModule = require('react-native-onesignal');
+    if (OneSignalModule) {
+      OneSignal = OneSignalModule.OneSignal;
+      LogLevel = OneSignalModule.LogLevel;
+    }
+  } catch (err) {
+    console.log('[OneSignal] Native module is not available in current environment. Bypassing OneSignal.');
   }
-} catch (err) {
+} else {
   console.log('[OneSignal] Native module is not available in current environment (e.g. running in Expo Go). Bypassing OneSignal.');
 }
 
@@ -173,8 +184,6 @@ let Notifications = {
   addNotificationReceivedListener: () => ({ remove: () => {} }),
   addNotificationResponseReceivedListener: () => ({ remove: () => {} }),
 };
-
-const isExpoGo = Constants.appOwnership === 'expo';
 
 if (!isExpoGo) {
   try {

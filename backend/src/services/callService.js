@@ -92,7 +92,14 @@ class CallService {
       status: 'active'
     });
     if (existingUserSession) {
-      throw new AppError('You are already in an active session', 400);
+      if (!existingUserSession.isAccepted && !existingUserSession.connectedAt && !existingUserSession.lastDeductionTime) {
+        console.log(`[CallService.startCall] Cancelling stale unaccepted session ${existingUserSession._id}`);
+        existingUserSession.status = 'cancelled';
+        existingUserSession.endTime = new Date();
+        await existingUserSession.save();
+      } else {
+        throw new AppError('You are already in an active session', 400);
+      }
     }
 
     let matchedListenerId = listenerId;

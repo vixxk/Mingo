@@ -253,8 +253,9 @@ export const listenerAPI = {
     return apiRequest('/listener/my-profile');
   },
 
-  getEarningsStats: async () => {
-    return apiRequest('/listener/earnings-stats');
+  getEarningsStats: async (params = {}) => {
+    const query = params?.sync ? '?sync=true' : '';
+    return apiRequest(`/listener/earnings-stats${query}`);
   },
 
   updatePublicProfile: async (data) => {

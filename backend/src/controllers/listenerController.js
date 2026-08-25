@@ -394,8 +394,16 @@ class ListenerController {
       const totalEarnings = round2(ledgerTotal + giftEarnings);
 
       const Listener = require('../models/listenerModel');
-      const listener = await Listener.findOne({ userId }).select('earnings');
-      const counterTotal = round2(listener?.earnings || 0);
+      const listener = await Listener.findOne({ userId });
+      
+      const shouldSync = req.query.sync === 'true' || req.query.autoSync === 'true';
+      if (listener && (shouldSync || Math.abs((listener.earnings || 0) - totalEarnings) >= 0.01)) {
+        listener.earnings = totalEarnings;
+        await listener.save();
+        console.log(`[getEarningsStats] Reconciled listener ${userId} profile earnings to ledger total: ₹${totalEarnings}`);
+      }
+
+      const counterTotal = round2(listener?.earnings ?? totalEarnings);
 
       return ApiResponse.success(res, {
         totalEarnings,

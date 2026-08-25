@@ -159,8 +159,7 @@ export default function TransactionsScreen() {
         subtitle = `Transaction ID: ${item._id.toString().slice(-8)}`;
       }
     } else if (item.type === 'call_credit') {
-      const callerName = item.metadata?.sessionId?.userId?.name;
-      title = callerName && callerName !== 'User' ? `Session Earnings (${callerName})` : 'Session Earnings';
+      title = 'Session Earnings';
       subtitle = `${item.description || 'Call earnings credited'} • ID: ${item._id.toString().slice(-8)}`;
       if (item.metadata?.sessionId?.duration) {
         duration = ` • ${item.metadata.sessionId.duration.toString().padStart(2, '0')} m`;

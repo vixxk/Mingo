@@ -1114,15 +1114,13 @@ const initSocket = (server) => {
         if (!session && socket.userId) {
           session = await Session.findOne({
             $or: [{ userId: socket.userId }, { listenerId: socket.userId }],
+            callType: 'audio',
             isConverted: { $ne: true },
+            status: 'active',
           }).sort({ createdAt: -1 });
-          if (session && session.status !== 'cancelled' && session.status !== 'completed' && !session.isConverted) {
-            session.status = 'active';
-            await session.save();
-          }
         }
-        if (!session) {
-          console.log(`[Socket] Upgrade Response FAILED: Session ${sessionId || roomId} not found`);
+        if (!session || session.isConverted || session.callType === 'video') {
+          console.log(`[Socket] Upgrade Response FAILED: Session ${sessionId || roomId} not found, already converted, or already video`);
           return;
         }
 
@@ -1182,6 +1180,58 @@ const initSocket = (server) => {
           session.isConverted = true;
           session.convertedAt = new Date();
           await session.save();
+
+          // Create transaction records for the converted audio session
+          try {
+            const existingDebitTxs = await Transaction.find({
+              type: 'call_debit',
+              $or: [{ 'metadata.sessionId': audioSessionId }, { 'metadata.sessionId': session._id }]
+            });
+            const totalDebitedCoins = existingDebitTxs.reduce((sum, tx) => sum + Math.abs(tx.coins || 0), 0);
+            const undebitedCoins = session.coinsDeducted - totalDebitedCoins;
+            if (undebitedCoins > 0) {
+              const caller = await User.findById(audioUserId);
+              if (caller) {
+                caller.coins = Math.max(0, caller.coins - undebitedCoins);
+                await caller.save();
+              }
+              await Transaction.create({
+                userId: audioUserId,
+                type: 'call_debit',
+                amount: 0,
+                coins: -undebitedCoins,
+                description: `audio call session (${session.duration || 1} min)`,
+                status: 'completed',
+                metadata: { sessionId: audioSessionId },
+              });
+            }
+
+            const existingCreditTxs = await Transaction.find({
+              type: 'call_credit',
+              $or: [{ 'metadata.sessionId': audioSessionId }, { 'metadata.sessionId': session._id }]
+            });
+            const totalCreditedAmount = existingCreditTxs.reduce((sum, tx) => sum + (tx.amount || 0), 0);
+            const uncreditedEarnings = Math.round((session.listenerEarnings - totalCreditedAmount) * 100) / 100;
+            if (uncreditedEarnings > 0) {
+              const listenerProfile = await Listener.findOne({ userId: audioListenerId });
+              if (listenerProfile) {
+                listenerProfile.earnings = (listenerProfile.earnings || 0) + uncreditedEarnings;
+                listenerProfile.todayEarnings = (listenerProfile.todayEarnings || 0) + uncreditedEarnings;
+                await listenerProfile.save();
+              }
+              await Transaction.create({
+                userId: audioListenerId,
+                type: 'call_credit',
+                amount: uncreditedEarnings,
+                coins: 0,
+                description: `audio call earnings (${session.duration || 1} min)`,
+                status: 'completed',
+                metadata: { sessionId: audioSessionId },
+              });
+            }
+          } catch (txErr) {
+            console.error('[Socket] Error recording converted audio session transactions:', txErr.message);
+          }
 
           // Increment listener counters for the audio session
           await CallService.incrementListenerCounters(audioListenerId, 'audio');
@@ -1991,12 +2041,13 @@ async function startCallBillingTimer(sessionId, options = {}) {
     session = await Session.findById(realSessionId);
     if (!session || session.status !== 'active') return;
   } else {
-    session = await Session.findOneAndUpdate(
-      { _id: realSessionId, status: 'active', lastDeductionTime: null },
-      { $set: { lastDeductionTime: new Date(), connectedAt: new Date() } },
-      { new: true }
-    );
-    if (!session) return;
+    session = await Session.findById(realSessionId);
+    if (!session || session.status !== 'active') return;
+    if (!session.lastDeductionTime || !session.connectedAt) {
+      session.lastDeductionTime = session.lastDeductionTime || new Date();
+      session.connectedAt = session.connectedAt || new Date();
+      await session.save();
+    }
   }
 
   const isVideo = session.callType === 'video';
