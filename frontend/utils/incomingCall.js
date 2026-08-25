@@ -16,6 +16,16 @@ export const incomingCallNative = {
   /** Whether the native card is available on this build. */
   isAvailable: () => !!native,
 
+  /** Save auth token and API base URL into native SharedPreferences for background call actions. */
+  saveCredentials(token, baseUrl) {
+    if (!native) return;
+    try {
+      native.saveCredentials(token, baseUrl);
+    } catch (e) {
+      console.log('[IncomingCall] saveCredentials error:', e);
+    }
+  },
+
   /** Dismiss the native card + notification + ringtone (call answered,
    *  rejected, cancelled). */
   stopIncomingCall() {

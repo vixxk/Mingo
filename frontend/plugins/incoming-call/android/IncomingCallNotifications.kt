@@ -113,9 +113,15 @@ object IncomingCallNotifications {
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
 
         // ── Dedup: skip if already active or already handled for this call ──
-        val callId = payload.optString("callId", "")
+        val callId = payload.optString("callId", payload.optString("sessionId", ""))
         if (callId.isNotEmpty() && (callId == activeCallId || handledCallIds.contains(callId))) return
         activeCallId = callId
+
+        val token = payload.optString("token", "")
+        val baseUrl = payload.optString("baseUrl", payload.optString("rejectUrl", ""))
+        if (token.isNotEmpty() || baseUrl.isNotEmpty()) {
+            saveCredentials(context, token, baseUrl)
+        }
 
         try {
             ensureCallChannel(context)
@@ -223,6 +229,7 @@ object IncomingCallNotifications {
         if (reactInstanceAlive) {
             emitActionToJs?.invoke(ACTION_TIMEOUT, payload.toString())
         }
+        sendRejectCallRequest(context, payload)
     }
 
     private fun scheduleRingTimeout(context: Context, payload: JSONObject) {
@@ -253,6 +260,43 @@ object IncomingCallNotifications {
         }
     }
 
+    /** Saves token and API base URL into SharedPreferences so native background actions can make authenticated calls. */
+    fun saveCredentials(context: Context, token: String?, baseUrl: String?) {
+        try {
+            val prefs = context.getSharedPreferences("IncomingCallPrefs", Context.MODE_PRIVATE)
+            val editor = prefs.edit()
+            if (!token.isNullOrEmpty()) editor.putString("authToken", token)
+            if (!baseUrl.isNullOrEmpty()) editor.putString("baseUrl", baseUrl)
+            editor.apply()
+        } catch (_: Exception) {}
+    }
+
+    fun getStoredAuthToken(context: Context): String? {
+        try {
+            val prefs = context.getSharedPreferences("IncomingCallPrefs", Context.MODE_PRIVATE)
+            val token = prefs.getString("authToken", null)
+            if (!token.isNullOrEmpty()) return token
+
+            val asyncPrefs = context.getSharedPreferences("RKStorage", Context.MODE_PRIVATE)
+            val asyncToken = asyncPrefs.getString("token", null) ?: asyncPrefs.getString("@token", null)
+            if (!asyncToken.isNullOrEmpty()) return asyncToken
+        } catch (_: Exception) {}
+        return null
+    }
+
+    fun getStoredApiBaseUrl(context: Context): String? {
+        try {
+            val prefs = context.getSharedPreferences("IncomingCallPrefs", Context.MODE_PRIVATE)
+            val baseUrl = prefs.getString("baseUrl", null)
+            if (!baseUrl.isNullOrEmpty()) return baseUrl
+
+            val asyncPrefs = context.getSharedPreferences("RKStorage", Context.MODE_PRIVATE)
+            val asyncUrl = asyncPrefs.getString("baseUrl", null) ?: asyncPrefs.getString("apiUrl", null)
+            if (!asyncUrl.isNullOrEmpty()) return asyncUrl
+        } catch (_: Exception) {}
+        return null
+    }
+
     /** Handles Accept / Decline / Open pressed on the native card. */
     fun handleCardAction(context: Context, action: String, payload: JSONObject) {
         stopIncomingCall(context)
@@ -266,7 +310,7 @@ object IncomingCallNotifications {
                     // App is running in the background — let JS reject over the socket.
                     emitActionToJs?.invoke(action, payload.toString())
                 }
-                sendRejectCallRequest(payload)
+                sendRejectCallRequest(context, payload)
             }
             ACTION_OPEN -> {
                 launchMainActivity(context, action, payload)
@@ -274,16 +318,33 @@ object IncomingCallNotifications {
         }
     }
 
-    private fun sendRejectCallRequest(payload: JSONObject) {
-        val callId = payload.optString("callId", payload.optString("sessionId", ""))
+    private fun sendRejectCallRequest(context: Context, payload: JSONObject) {
+        val callId = payload.optString("callId", payload.optString("sessionId", payload.optString("id", "")))
         if (callId.isEmpty()) return
         Thread {
             try {
-                val apiUrl = payload.optString("rejectUrl", "https://backend.themingo.app/api/call/reject")
+                var apiUrl = payload.optString("rejectUrl", "")
+                if (apiUrl.isBlank()) {
+                    val baseUrl = getStoredApiBaseUrl(context)
+                    if (!baseUrl.isNullOrBlank()) {
+                        val cleanBase = if (baseUrl.endsWith("/")) baseUrl.dropLast(1) else baseUrl
+                        apiUrl = if (cleanBase.endsWith("/call/reject")) cleanBase
+                                 else if (cleanBase.endsWith("/api")) "$cleanBase/call/reject"
+                                 else "$cleanBase/api/call/reject"
+                    } else {
+                        apiUrl = "https://backend.themingo.app/api/call/reject"
+                    }
+                }
                 val url = java.net.URL(apiUrl)
                 val conn = url.openConnection() as java.net.HttpURLConnection
                 conn.requestMethod = "POST"
                 conn.setRequestProperty("Content-Type", "application/json")
+
+                val token = getStoredAuthToken(context)
+                if (!token.isNullOrBlank()) {
+                    conn.setRequestProperty("Authorization", "Bearer $token")
+                }
+
                 conn.connectTimeout = 5000
                 conn.readTimeout = 5000
                 conn.doOutput = true
@@ -295,8 +356,11 @@ object IncomingCallNotifications {
                     os.write(body.toByteArray(Charsets.UTF_8))
                 }
                 val responseCode = conn.responseCode
+                android.util.Log.d("IncomingCallNative", "sendRejectCallRequest completed with status $responseCode for callId $callId to $apiUrl")
                 conn.disconnect()
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                android.util.Log.e("IncomingCallNative", "sendRejectCallRequest failed: ${e.message}", e)
+            }
         }.start()
     }
 

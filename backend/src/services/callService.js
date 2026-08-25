@@ -271,6 +271,7 @@ class CallService {
             callerPhoto: getAvatarUrl(user.gender, user.avatarIndex),
             callType: callType,
             customRingtoneUrl: customRingtoneUrl,
+            rejectUrl: `${(process.env.API_BASE_URL || process.env.PUBLIC_API_URL || 'https://backend.themingo.app/api').replace(/\/$/, '')}/call/reject`,
             // Agora credentials for audio/video calls (accepting side / notification path)
             ...agoraPayload,
           }
@@ -771,6 +772,7 @@ class CallService {
         callerPhoto: getAvatarUrl(caller.gender, caller.avatarIndex),
         callType: session.callType,
         customRingtoneUrl: customRingtoneUrl,
+        rejectUrl: `${(process.env.API_BASE_URL || process.env.PUBLIC_API_URL || 'https://backend.themingo.app/api').replace(/\/$/, '')}/call/reject`,
         ...agoraPayload,
       };
 

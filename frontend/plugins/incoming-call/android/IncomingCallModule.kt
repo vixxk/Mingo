@@ -60,6 +60,14 @@ class IncomingCallModule(private val reactContext: ReactApplicationContext) :
         }
     }
 
+    /** Saves token and API base URL into native SharedPreferences for background call requests. */
+    @ReactMethod
+    fun saveCredentials(token: String?, baseUrl: String?) {
+        try {
+            IncomingCallNotifications.saveCredentials(reactContext, token, baseUrl)
+        } catch (_: Exception) {}
+    }
+
     /** Closes the card + stops the ringtone, keeping the shade notification. */
     @ReactMethod
     fun dismissCard() {

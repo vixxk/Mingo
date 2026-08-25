@@ -1,14 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const CallController = require('../controllers/callController');
-const { authenticate, authorize } = require('../middlewares/auth');
+const { authenticate, authorize, optionalAuthenticate } = require('../middlewares/auth');
 const { callStartValidation, callEndValidation } = require('../utils/validators');
 
 router.post('/start', authenticate, authorize('USER'), callStartValidation, CallController.startCall);
 
 router.post('/end', authenticate, authorize('USER', 'LISTENER'), callEndValidation, CallController.endCall);
 
-router.post('/reject', authenticate, CallController.rejectCall);
+router.post('/reject', optionalAuthenticate, CallController.rejectCall);
 
 router.get('/history', authenticate, CallController.getHistory);
 

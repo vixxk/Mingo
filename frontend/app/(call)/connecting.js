@@ -334,9 +334,9 @@ export default function ConnectingScreen() {
           });
         });
 
-        // Listen for rejection
-        socketService.on('call_rejected', (data) => {
-          console.log('Call rejected by listener:', data.reason);
+        // Listen for rejection or end/cancelled events
+        const handleCallTerminated = (data) => {
+          console.log('[Connecting] Call rejected/ended/cancelled by listener/server:', data?.reason);
           if (callTimeoutRef.current) {
             clearTimeout(callTimeoutRef.current);
             callTimeoutRef.current = null;
@@ -344,9 +344,13 @@ export default function ConnectingScreen() {
           stopRingtone();
           router.replace({
             pathname: '/(call)/user-busy',
-            params: { name: partnerNameRef.current, reason: data.reason || 'no_answer' },
+            params: { name: partnerNameRef.current, reason: data?.reason || 'rejected' },
           });
-        });
+        };
+
+        socketService.on('call_rejected', handleCallTerminated);
+        socketService.on('call_ended', handleCallTerminated);
+        socketService.on('call_cancelled', handleCallTerminated);
 
         // Listen for validation failure — the backend could not relay the
         // acceptance to us (session cancelled, caller offline, etc.)
@@ -597,6 +601,8 @@ export default function ConnectingScreen() {
       stopRingtone();
       socketService.off('call_accepted');
       socketService.off('call_rejected');
+      socketService.off('call_ended');
+      socketService.off('call_cancelled');
       socketService.off('call_validation_failed');
       socketService.off('random_match_found');
       socketService.off('searching_random');

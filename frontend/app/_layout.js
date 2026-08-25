@@ -487,6 +487,11 @@ function RootLayout() {
     };
 
     const setup = async () => {
+      const token = await AsyncStorage.getItem('token');
+      if (token && process.env.EXPO_PUBLIC_API_URL) {
+        incomingCallNative.saveCredentials(token, process.env.EXPO_PUBLIC_API_URL);
+      }
+
       await socketService.connect();
 
       socketService.on('register_active_call_id', handleRegisterActiveCall);

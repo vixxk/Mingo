@@ -36,6 +36,23 @@ const authenticate = async (req, res, next) => {
   }
 };
 
+const optionalAuthenticate = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      const decoded = jwt.verify(token, config.jwt.secret);
+      const user = await User.findById(decoded.userId).select('-password');
+      if (user && !user.isBanned) {
+        req.user = user;
+      }
+    }
+  } catch (err) {
+    // Ignore invalid or expired tokens for optional authentication
+  }
+  next();
+};
+
 const authorize = (...roles) => {
   return (req, res, next) => {
     if (!req.user) {
@@ -48,4 +65,4 @@ const authorize = (...roles) => {
   };
 };
 
-module.exports = { authenticate, authorize };
+module.exports = { authenticate, authorize, optionalAuthenticate };
