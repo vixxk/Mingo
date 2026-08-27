@@ -73,7 +73,7 @@ export default function AdSlider({ ads, intervalSec = 4 }) {
             <Image
               source={{ uri: item.imageUrl }}
               style={styles.image}
-              resizeMode="cover"
+              resizeMode="stretch"
             />
             <View style={styles.arrowContainer}>
               <View style={styles.arrowCircle}>
@@ -122,6 +122,7 @@ const styles = StyleSheet.create({
   image: {
     width: '100%',
     height: '100%',
+    resizeMode: 'stretch',
   },
   arrowContainer: {
     position: 'absolute',

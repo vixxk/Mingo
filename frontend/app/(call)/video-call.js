@@ -257,7 +257,12 @@ const AgoraVideoView = forwardRef(
           engine = createAgoraRtcEngine();
           engineRef.current = engine;
 
-          const initRet = engine.initialize({ appId });
+          const initRet = engine.initialize({
+            appId,
+            audioScenario: AudioScenarioType?.AudioScenarioGameStreaming !== undefined
+              ? AudioScenarioType.AudioScenarioGameStreaming
+              : 3,
+          });
           console.log('[Agora] initialize result:', initRet);
           if (initRet !== 0) {
             console.error('[Agora] Engine initialize failed with code:', initRet);
@@ -267,14 +272,20 @@ const AgoraVideoView = forwardRef(
           // Tell Agora to keep audio streaming when the app is in the background
           try { engine.setParameters('{"che.audio.keep.audiosession":true}'); } catch (e) {}
           try { engine.setParameters('{"che.audio.opensl":true}'); } catch (e) {}
+          // Enable Agora AI Noise Suppression to suppress background static while keeping voice crisp
+          try { engine.setParameters('{"che.audio.enable_ai_ns":true}'); } catch (e) {}
+          try { engine.setParameters('{"che.audio.ains_mode":1}'); } catch (e) {}
           engine.setChannelProfile(ChannelProfileType.ChannelProfileCommunication);
           engine.setClientRole(ClientRoleType.ClientRoleBroadcaster);
           if (AudioProfileType && AudioScenarioType) {
             try {
-              engine.setAudioProfile(
-                AudioProfileType.AudioProfileMusicStandard || 2,
-                AudioScenarioType.AudioScenarioGameStreaming || 3
-              );
+              const profile = AudioProfileType.AudioProfileMusicHighQuality !== undefined
+                ? AudioProfileType.AudioProfileMusicHighQuality
+                : (AudioProfileType.AudioProfileMusicStandard !== undefined ? AudioProfileType.AudioProfileMusicStandard : 2);
+              const scenario = AudioScenarioType.AudioScenarioGameStreaming !== undefined
+                ? AudioScenarioType.AudioScenarioGameStreaming
+                : 3;
+              engine.setAudioProfile(profile, scenario);
             } catch (e) {
               console.log('[Agora] setAudioProfile failed in video call:', e.message);
             }
@@ -282,8 +293,10 @@ const AgoraVideoView = forwardRef(
           engine.enableVideo();
           try { engine.enableAudio(); } catch (e) {}
           try { engine.enableLocalAudio(true); } catch (e) {}
-          try { engine.adjustRecordingSignalVolume(400); } catch (e) {}
-          try { engine.adjustPlaybackSignalVolume(400); } catch (e) {}
+          try { engine.adjustRecordingSignalVolume(100); } catch (e) {}
+          try { engine.adjustPlaybackSignalVolume(100); } catch (e) {}
+          try { engine.setDefaultAudioRouteToSpeakerphone(!!initialIsSpeaker); } catch (e) {}
+          try { engine.setEnableSpeakerphone(!!initialIsSpeaker); } catch (e) {}
 
           try {
             const previewRet = engine.startPreview();
@@ -296,6 +309,7 @@ const AgoraVideoView = forwardRef(
               joinedSuccessfully = true;
               console.log('[Agora] Joined channel:', channelName);
               // Route audio through earpiece or speaker according to user preference
+              try { engine.setDefaultAudioRouteToSpeakerphone(!!initialIsSpeaker); } catch (e) {}
               try { engine.setEnableSpeakerphone(!!initialIsSpeaker); } catch (e) {}
               // Re-assert audio capture & subscription after joining.
               try { engine.enableLocalAudio(true); } catch (e) {}
@@ -451,8 +465,8 @@ const AgoraVideoView = forwardRef(
           engineRef.current.enableLocalAudio(true);
           engineRef.current.muteLocalAudioStream(!!isMuted);
           engineRef.current.muteAllRemoteAudioStreams(false);
-          engineRef.current.adjustRecordingSignalVolume(400);
-          engineRef.current.adjustPlaybackSignalVolume(400);
+          engineRef.current.adjustRecordingSignalVolume(100);
+          engineRef.current.adjustPlaybackSignalVolume(100);
         } catch (e) {
           console.log('[Agora] Background audio keepalive error:', e.message);
         }
@@ -1307,11 +1321,9 @@ function VideoCallScreenComponent() {
                 },
                 {
                   id: 'speaker',
-                  icon: 'volume-off',
-                  iconActive: 'volume-high',
+                  icon: isSpeaker ? 'volume-high' : 'volume-off',
                   label: 'Speaker',
-                  active: isSpeaker,
-                  activeColor: '#22C55E',
+                  active: false,
                   onPress: toggleSpeaker,
                 },
                 {
@@ -1511,11 +1523,9 @@ function VideoCallScreenComponent() {
               },
               {
                 id: 'speaker',
-                icon: 'volume-off',
-                iconActive: 'volume-high',
+                icon: isSpeaker ? 'volume-high' : 'volume-off',
                 label: 'Speaker',
-                active: isSpeaker,
-                activeColor: '#22C55E',
+                active: false,
                 onPress: toggleSpeaker,
               },
               {
