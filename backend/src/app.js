@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const path = require('path');
 const routes = require('./routes');
 console.log('DEBUG: Routes mounted: ', routes.stack.map(r => r.route ? r.route.path : r.name));
 const { errorHandler, notFoundHandler } = require('./middlewares/errorHandler');
@@ -10,7 +11,7 @@ const app = express();
 app.get('/ping', (req, res) => res.json({ status: 'ok' }));
 
 
-app.use(helmet());
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({
   origin: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -31,6 +32,10 @@ app.use((req, res, next) => {
   next();
 });
 
+// Account Deletion Web Page (Served directly via backend URL)
+app.get('/delete-account', (req, res) => {
+  res.sendFile(path.join(__dirname, 'views', 'delete-account.html'));
+});
 
 app.use('/api', routes);
 

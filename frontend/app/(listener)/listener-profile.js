@@ -356,29 +356,8 @@ export default function ListenerProfileScreen() {
         visible={showDeletePopup}
         onClose={() => setShowDeletePopup(false)}
         isDeleting={isDeleting}
-        onConfirm={async (reason) => {
-          setIsDeleting(true);
-          try {
-            await AsyncStorage.multiRemove(['userToken', 'token', 'user', 'listenerStatus', 'isAdmin', 'userGender', 'userAvatarIndex', 'userName']);
-            await userAPI.deleteAccount(reason);
-            try {
-              await listenerAPI.goOffline();
-            } catch (e) {
-              console.log('Go offline on delete account error (non-critical):', e);
-            }
-            try {
-              socketService.disconnect();
-            } catch (e) {}
-            setShowDeletePopup(false);
-            setTimeout(() => {
-              router.replace('/welcome');
-            }, 300);
-          } catch (err) {
-            console.error('Delete account error:', err);
-            setShowDeletePopup(false);
-          } finally {
-            setIsDeleting(false);
-          }
+        onConfirm={() => {
+          setShowDeletePopup(false);
         }}
       />
     </View>

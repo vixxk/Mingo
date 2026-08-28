@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Delete Account - Mingo</title>
+  <meta name="description" content="Request account deletion for your Mingo account." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #070709;
+      --card-bg: rgba(18, 18, 22, 0.75);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --card-border-glow: rgba(239, 68, 68, 0.25);
+      --danger-primary: #ef4444;
+      --danger-hover: #dc2626;
+      --danger-glow: rgba(239, 68, 68, 0.4);
+      --danger-soft: rgba(239, 68, 68, 0.1);
+      --text-main: #f9fafb;
+      --text-muted: #9ca3af;
+      --text-dim: #6b7280;
+      --accent-teal: #14b8a6;
+      --accent-orange: #f97316;
+      --accent-green: #22c55e;
+      --radius-lg: 24px;
+      --radius-md: 16px;
+      --radius-sm: 12px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    /* Floating Ambient Lighting Blobs */
+    .bg-blob {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(100px);
+      z-index: 0;
+      pointer-events: none;
+      opacity: 0.5;
+      animation: floatBlob 12s ease-in-out infinite alternate;
+    }
+
+    .bg-blob-1 {
+      width: 380px;
+      height: 380px;
+      background: radial-gradient(circle, rgba(239, 68, 68, 0.3), transparent 70%);
+      top: -100px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .bg-blob-2 {
+      width: 320px;
+      height: 320px;
+      background: radial-gradient(circle, rgba(249, 115, 22, 0.2), transparent 70%);
+      bottom: -80px;
+      right: -50px;
+    }
+
+    .bg-blob-3 {
+      width: 280px;
+      height: 280px;
+      background: radial-gradient(circle, rgba(20, 184, 166, 0.15), transparent 70%);
+      top: 40%;
+      left: -80px;
+    }
+
+    @keyframes floatBlob {
+      0% { transform: translateY(0) scale(1); }
+      100% { transform: translateY(30px) scale(1.08); }
+    }
+
+    /* Container Card */
+    .container {
+      width: 100%;
+      max-width: 560px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-lg);
+      padding: 36px 28px;
+      box-shadow: 
+        0 30px 60px -15px rgba(0, 0, 0, 0.8),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      position: relative;
+      z-index: 1;
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+
+    .container::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, transparent, var(--danger-primary), var(--accent-orange), transparent);
+    }
+
+    /* Header & Branding */
+    .header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+
+    .brand-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--danger-soft);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      padding: 6px 16px;
+      border-radius: 999px;
+      color: #fca5a5;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+      box-shadow: 0 0 15px rgba(239, 68, 68, 0.15);
+    }
+
+    .brand-badge svg {
+      width: 15px;
+      height: 15px;
+      fill: currentColor;
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 900;
+      color: var(--text-main);
+      letter-spacing: -0.8px;
+      margin-bottom: 8px;
+      background: linear-gradient(180deg, #ffffff 0%, #d1d5db 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    p.subtitle {
+      color: var(--text-muted);
+      font-size: 14px;
+      line-height: 1.5;
+      max-width: 440px;
+      margin: 0 auto;
+    }
+
+    /* Progress Stepper */
+    .stepper {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 18px;
+    }
+
+    .step-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.15);
+      transition: all 0.3s ease;
+    }
+
+    .step-dot.active {
+      width: 24px;
+      border-radius: 12px;
+      background: var(--danger-primary);
+      box-shadow: 0 0 10px var(--danger-glow);
+    }
+
+    /* User Profile Banner */
+    .user-card {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01));
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-md);
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 24px;
+      position: relative;
+    }
+
+    .user-avatar-wrap {
+      position: relative;
+    }
+
+    .user-avatar {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #ef4444, #b91c1c);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 22px;
+      color: white;
+      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+      border: 2px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .status-indicator {
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      border: 2.5px solid var(--bg-dark);
+    }
+
+    .user-info {
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .user-name-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .user-name {
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--text-main);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .role-badge {
+      font-size: 10px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: rgba(20, 184, 166, 0.15);
+      border: 1px solid rgba(20, 184, 166, 0.3);
+      color: var(--accent-teal);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .user-phone {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 3px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Policy Grid / Warning Box */
+    .policy-box {
+      background: rgba(239, 68, 68, 0.06);
+      border: 1px solid rgba(239, 68, 68, 0.18);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      margin-bottom: 28px;
+    }
+
+    .policy-box-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: #fca5a5;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+      letter-spacing: -0.2px;
+    }
+
+    .policy-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    @media (max-width: 480px) {
+      .policy-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .policy-item {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .policy-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: rgba(239, 68, 68, 0.12);
+      color: #fca5a5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .policy-icon svg {
+      width: 16px;
+      height: 16px;
+      fill: currentColor;
+    }
+
+    .policy-text {
+      font-size: 12px;
+      color: #d1d5db;
+      line-height: 1.45;
+    }
+
+    .policy-text strong {
+      color: #fff;
+      font-weight: 700;
+    }
+
+    /* Interactive Reason Cards Grid */
+    .section-header {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .section-header .required-tag {
+      font-size: 11px;
+      color: var(--danger-primary);
+      font-weight: 600;
+    }
+
+    .reasons-cards-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    @media (max-width: 480px) {
+      .reasons-cards-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .reason-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-sm);
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    .reason-card:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.15);
+      transform: translateY(-2px);
+    }
+
+    .reason-card.selected {
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.05));
+      border-color: var(--danger-primary);
+      box-shadow: 0 4px 15px rgba(239, 68, 68, 0.2);
+    }
+
+    .reason-icon-wrap {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.2s ease;
+    }
+
+    .reason-card.selected .reason-icon-wrap {
+      background: var(--danger-primary);
+      color: white;
+      box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+    }
+
+    .reason-icon-wrap svg {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+    }
+
+    .reason-card-text {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      line-height: 1.3;
+      flex: 1;
+      transition: color 0.2s ease;
+    }
+
+    .reason-card.selected .reason-card-text {
+      color: #ffffff;
+      font-weight: 700;
+    }
+
+    .check-badge {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(255, 255, 255, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.2s ease;
+    }
+
+    .reason-card.selected .check-badge {
+      background: var(--danger-primary);
+      border-color: var(--danger-primary);
+    }
+
+    .check-badge svg {
+      width: 10px;
+      height: 10px;
+      fill: white;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    .reason-card.selected .check-badge svg {
+      opacity: 1;
+    }
+
+    /* Input Field */
+    .input-group {
+      margin-bottom: 24px;
+      position: relative;
+    }
+
+    textarea, input[type="text"], input[type="tel"] {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: var(--radius-sm);
+      padding: 14px 16px;
+      color: var(--text-main);
+      font-size: 14px;
+      outline: none;
+      transition: all 0.25s ease;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4);
+    }
+
+    textarea:focus, input[type="text"]:focus, input[type="tel"]:focus {
+      border-color: var(--danger-primary);
+      box-shadow: 0 0 15px rgba(239, 68, 68, 0.2), inset 0 2px 4px rgba(0, 0, 0, 0.4);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 100px;
+      line-height: 1.5;
+    }
+
+    .char-counter {
+      position: absolute;
+      bottom: 10px;
+      right: 14px;
+      font-size: 11px;
+      color: var(--text-dim);
+      pointer-events: none;
+    }
+
+    /* Buttons */
+    .btn {
+      width: 100%;
+      padding: 16px;
+      border-radius: var(--radius-md);
+      border: none;
+      font-size: 15px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-danger {
+      background: linear-gradient(135deg, #ef4444, #b91c1c);
+      color: white;
+      box-shadow: 0 8px 24px var(--danger-glow);
+    }
+
+    .btn-danger::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: linear-gradient(
+        60deg,
+        transparent,
+        rgba(255, 255, 255, 0.2),
+        transparent
+      );
+      transform: rotate(30deg);
+      transition: transform 0.5s ease;
+    }
+
+    .btn-danger:hover:not(:disabled)::before {
+      transform: rotate(30deg) translate(50%, 50%);
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      background: linear-gradient(135deg, #f87171, #dc2626);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 28px rgba(239, 68, 68, 0.5);
+    }
+
+    .btn-danger:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    .btn-danger:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--text-main);
+      margin-top: 10px;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    /* Modal Overlay & Card */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 100;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .modal-content {
+      background: #141418;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: var(--radius-lg);
+      padding: 32px 28px;
+      max-width: 440px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 25px 50px -12px rgba(239, 68, 68, 0.25);
+      transform: scale(0.9) translateY(20px);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .modal-overlay.active .modal-content {
+      transform: scale(1) translateY(0);
+    }
+
+    .modal-icon-ring {
+      width: 68px;
+      height: 68px;
+      border-radius: 50%;
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: var(--danger-primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+      box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+    }
+
+    .modal-icon-ring svg {
+      width: 32px;
+      height: 32px;
+      fill: currentColor;
+    }
+
+    .modal-title {
+      font-size: 22px;
+      font-weight: 900;
+      color: white;
+      margin-bottom: 10px;
+      letter-spacing: -0.5px;
+    }
+
+    .modal-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.55;
+      margin-bottom: 26px;
+    }
+
+    /* Success Card */
+    .success-card {
+      text-align: center;
+      padding: 20px 0;
+    }
+
+    .success-icon-ring {
+      width: 80px;
+      height: 80px;
+      background: rgba(34, 197, 94, 0.12);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      color: var(--accent-green);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+      box-shadow: 0 0 30px rgba(34, 197, 94, 0.25);
+      animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    @keyframes popIn {
+      0% { transform: scale(0); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    .success-icon-ring svg {
+      width: 40px;
+      height: 40px;
+      fill: currentColor;
+    }
+
+    /* Utilities */
+    .hidden {
+      display: none !important;
+    }
+
+    .spinner {
+      border: 3px solid rgba(255, 255, 255, 0.2);
+      border-top: 3px solid white;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      animation: spin 0.8s linear infinite;
+      display: inline-block;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .footer-links {
+      text-align: center;
+      margin-top: 28px;
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    .footer-links a {
+      color: var(--text-muted);
+      text-decoration: underline;
+      transition: color 0.2s ease;
+    }
+
+    .footer-links a:hover {
+      color: var(--text-main);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Ambient Light Blobs -->
+  <div class="bg-blob bg-blob-1"></div>
+  <div class="bg-blob bg-blob-2"></div>
+  <div class="bg-blob bg-blob-3"></div>
+
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="brand-badge">
+        <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8s0 .01 0 .01z"/></svg>
+        Account Security
+      </div>
+      <h1>Account Deletion Request</h1>
+      <p class="subtitle">We're sorry to see you go. Please review your account details and select a reason to submit deletion.</p>
+      
+      <div class="stepper">
+        <div class="step-dot active" id="step1Dot"></div>
+        <div class="step-dot" id="step2Dot"></div>
+        <div class="step-dot" id="step3Dot"></div>
+      </div>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loadingState" style="text-align: center; padding: 48px 0;">
+      <div class="spinner" style="width: 40px; height: 40px; border-width: 4px; border-top-color: var(--danger-primary);"></div>
+      <p style="color: var(--text-muted); margin-top: 20px; font-size: 14px; font-weight: 500;">Verifying account authorization token...</p>
+    </div>
+
+    <!-- Login / Phone Authentication Fallback -->
+    <div id="loginFormState" class="hidden">
+      <div class="policy-box" style="background: rgba(20, 184, 166, 0.08); border-color: rgba(20, 184, 166, 0.25);">
+        <div class="policy-box-title" style="color: var(--accent-teal);">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+          Direct Web Authentication
+        </div>
+        <p class="policy-text">
+          Enter your registered 10-digit mobile number below to receive an OTP code and verify your identity before proceeding.
+        </p>
+      </div>
+
+      <div class="input-group">
+        <label class="section-header" for="phoneInput">Registered Mobile Phone Number</label>
+        <input type="tel" id="phoneInput" placeholder="Enter 10-digit phone number" maxlength="10" />
+      </div>
+
+      <div id="otpSection" class="input-group hidden">
+        <label class="section-header" for="otpInput">Enter 6-Digit Verification Code</label>
+        <input type="text" id="otpInput" placeholder="Enter 6-digit OTP" maxlength="6" />
+      </div>
+
+      <button id="sendOtpBtn" class="btn btn-danger" onclick="handleSendOtp()">
+        Send Verification OTP
+      </button>
+      <button id="verifyOtpBtn" class="btn btn-danger hidden" onclick="handleVerifyOtp()">
+        Verify Credentials & Continue
+      </button>
+    </div>
+
+    <!-- Deletion Form State -->
+    <div id="deletionFormState" class="hidden">
+      <!-- User Summary Card -->
+      <div class="user-card">
+        <div class="user-avatar-wrap">
+          <div class="user-avatar" id="userAvatarLetter">M</div>
+          <div class="status-indicator"></div>
+        </div>
+        <div class="user-info">
+          <div class="user-name-row">
+            <span class="user-name" id="userNameText">Mingo User</span>
+            <span class="role-badge" id="userRoleTag">USER</span>
+          </div>
+          <div class="user-phone" id="userPhoneText">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+            +91 ----------
+          </div>
+        </div>
+      </div>
+
+      <!-- Policy Grid -->
+      <div class="policy-box">
+        <div class="policy-box-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+          Important Deletion Terms & Policy:
+        </div>
+        <div class="policy-grid">
+          <div class="policy-item">
+            <div class="policy-icon">
+              <svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
+            </div>
+            <div class="policy-text"><strong>Immediate Deletion:</strong> Your account and data are permanently deleted immediately.</div>
+          </div>
+          <div class="policy-item">
+            <div class="policy-icon">
+              <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15h2v-2h-2v2zm0-4h2V7h-2v6z"/></svg>
+            </div>
+            <div class="policy-text"><strong>Unused Coins & Balance:</strong> All coins and wallet funds will be permanently forfeited.</div>
+          </div>
+          <div class="policy-item">
+            <div class="policy-icon">
+              <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+            </div>
+            <div class="policy-text"><strong>No Data Recovery:</strong> Your account cannot be recovered or restored after deletion.</div>
+          </div>
+          <div class="policy-item">
+            <div class="policy-icon">
+              <svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2z"/></svg>
+            </div>
+            <div class="policy-text"><strong>New Account Sign Up:</strong> Future sign ups with this phone will create a brand new account.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Reason Selection Cards Grid -->
+      <div class="section-header">
+        <span>Why are you deleting your account?</span>
+        <span class="required-tag">* Required</span>
+      </div>
+
+      <div class="reasons-cards-grid" id="reasonsGrid">
+        <!-- Card 1 -->
+        <div class="reason-card" data-id="Not able to hear listener" onclick="selectReasonCard(this)">
+          <div class="reason-icon-wrap">
+            <svg viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9v7c0 1.1.9 2 2 2h3v-8H5v-1c0-3.87 3.13-7 7-7s7 3.13 7 7v1h-3v8h3c1.1 0 2-.9 2-2v-7c0-4.97-4.03-9-9-9z"/></svg>
+          </div>
+          <div class="reason-card-text">Audio or Sound Issues</div>
+          <div class="check-badge">
+            <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+          </div>
+        </div>
+
+        <!-- Card 2 -->
+        <div class="reason-card" data-id="Abusive language" onclick="selectReasonCard(this)">
+          <div class="reason-icon-wrap">
+            <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 12h-2v-2h2v2zm0-4h-2V6h2v4z"/></svg>
+          </div>
+          <div class="reason-card-text">Abusive Language</div>
+          <div class="check-badge">
+            <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+          </div>
+        </div>
+
+        <!-- Card 3 -->
+        <div class="reason-card" data-id="Listener not polite" onclick="selectReasonCard(this)">
+          <div class="reason-icon-wrap">
+            <svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm-3.5-9c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm7 0c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-3.5 3c-2.33 0-4.31 1.46-5.11 3.5h10.22c-.8-2.04-2.78-3.5-5.11-3.5z"/></svg>
+          </div>
+          <div class="reason-card-text">Listener Not Polite</div>
+          <div class="check-badge">
+            <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+          </div>
+        </div>
+
+        <!-- Card 4 -->
+        <div class="reason-card" data-id="Asked for money" onclick="selectReasonCard(this)">
+          <div class="reason-icon-wrap">
+            <svg viewBox="0 0 24 24"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg>
+          </div>
+          <div class="reason-card-text">Asked for Money</div>
+          <div class="check-badge">
+            <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+          </div>
+        </div>
+
+        <!-- Card 5 -->
+        <div class="reason-card" data-id="Listener not interested" onclick="selectReasonCard(this)">
+          <div class="reason-icon-wrap">
+            <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5.5-2.5l7.51-3.49L17.5 6.5l-7.51 3.49z"/></svg>
+          </div>
+          <div class="reason-card-text">Not Interested</div>
+          <div class="check-badge">
+            <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+          </div>
+        </div>
+
+        <!-- Card 6 -->
+        <div class="reason-card" data-id="Other" onclick="selectReasonCard(this)">
+          <div class="reason-icon-wrap">
+            <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+          </div>
+          <div class="reason-card-text">Other Reason</div>
+          <div class="check-badge">
+            <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- Custom Reason Input -->
+      <div class="input-group hidden" id="customReasonGroup">
+        <label class="section-header" for="customReasonInput">Please specify your reason</label>
+        <textarea id="customReasonInput" placeholder="Help us understand how we can improve Mingo..." maxlength="300" oninput="updateCharCount()"></textarea>
+        <span class="char-counter" id="charCounter">0 / 300</span>
+      </div>
+
+      <!-- Delete Button -->
+      <button id="submitDeleteBtn" class="btn btn-danger" disabled onclick="openConfirmModal()">
+        Proceed to Confirm Deletion
+      </button>
+    </div>
+
+    <!-- Success State -->
+    <div id="successState" class="hidden success-card">
+      <div class="success-icon-ring">
+        <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+      </div>
+      <h2 style="font-size: 24px; font-weight: 900; color: white; margin-bottom: 10px; letter-spacing: -0.5px;">Account Deleted Successfully</h2>
+      <p style="color: var(--text-muted); font-size: 14px; line-height: 1.6; margin-bottom: 24px; max-width: 440px; margin-left: auto; margin-right: auto;">
+        Your Mingo account and all associated data have been permanently deleted immediately. Any future login or sign up with this phone number will create a brand new account.
+      </p>
+      <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); padding: 18px; border-radius: 16px; font-size: 13px; color: #9ca3af;">
+        You can now safely close this browser tab. Thank you for using Mingo.
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer-links">
+      Need help? Write to <a href="mailto:support@talkmingo.com">support@talkmingo.com</a>
+    </div>
+  </div>
+
+  <!-- Confirmation Modal -->
+  <div class="modal-overlay" id="confirmModal">
+    <div class="modal-content">
+      <div class="modal-icon-ring">
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v4z"/></svg>
+      </div>
+      <div class="modal-title">Final Confirmation</div>
+      <div class="modal-desc">
+        Are you sure you want to permanently delete your account right now? All profile data, wallet balance, and coins will be permanently deleted immediately.
+      </div>
+      <button class="btn btn-danger" id="finalDeleteBtn" onclick="executeAccountDeletion()">
+        Yes, Delete My Account Immediately
+      </button>
+      <button class="btn btn-secondary" onclick="closeConfirmModal()">
+        Cancel & Keep Account
+      </button>
+    </div>
+  </div>
+
+  <script>
+    let authToken = null;
+    let selectedReasonText = null;
+    let currentUserData = null;
+
+    function getQueryParam(param) {
+      const urlParams = new URLSearchParams(window.location.search);
+      return urlParams.get(param);
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      authToken = getQueryParam('token') || localStorage.getItem('mingo_temp_token');
+
+      if (authToken) {
+        const verified = await verifyTokenAndLoadUser(authToken);
+        if (verified) {
+          showState('deletionFormState', 2);
+          return;
+        }
+      }
+
+      showState('loginFormState', 1);
+    });
+
+    function showState(stateId, stepNum = 1) {
+      document.getElementById('loadingState').classList.add('hidden');
+      document.getElementById('loginFormState').classList.add('hidden');
+      document.getElementById('deletionFormState').classList.add('hidden');
+      document.getElementById('successState').classList.add('hidden');
+
+      document.getElementById(stateId).classList.remove('hidden');
+
+      // Update Dots
+      document.getElementById('step1Dot').className = stepNum >= 1 ? 'step-dot active' : 'step-dot';
+      document.getElementById('step2Dot').className = stepNum >= 2 ? 'step-dot active' : 'step-dot';
+      document.getElementById('step3Dot').className = stepNum >= 3 ? 'step-dot active' : 'step-dot';
+    }
+
+    async function verifyTokenAndLoadUser(token) {
+      try {
+        const res = await fetch('/api/auth/me', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (res.ok && data?.data) {
+          currentUserData = data.data;
+          authToken = token;
+          localStorage.setItem('mingo_temp_token', token);
+
+          // Populate user card
+          document.getElementById('userNameText').innerText = currentUserData.name || currentUserData.username || 'Mingo Member';
+          document.getElementById('userPhoneText').innerText = currentUserData.phone ? `+91 ${currentUserData.phone}` : 'Registered Member';
+          document.getElementById('userRoleTag').innerText = (currentUserData.role || 'USER').toUpperCase();
+          document.getElementById('userAvatarLetter').innerText = (currentUserData.name || 'M').charAt(0).toUpperCase();
+
+          return true;
+        }
+      } catch (err) {
+        console.error('Token verification error:', err);
+      }
+      return false;
+    }
+
+    async function handleSendOtp() {
+      const phoneInput = document.getElementById('phoneInput').value.trim();
+      if (!phoneInput || phoneInput.length < 10) {
+        alert('Please enter a valid 10-digit mobile phone number.');
+        return;
+      }
+
+      const sendBtn = document.getElementById('sendOtpBtn');
+      sendBtn.disabled = true;
+      sendBtn.innerHTML = '<span class="spinner"></span> Sending Code...';
+
+      try {
+        const res = await fetch('/api/auth/send-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: phoneInput })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          document.getElementById('phoneInput').disabled = true;
+          document.getElementById('otpSection').classList.remove('hidden');
+          sendBtn.classList.add('hidden');
+          document.getElementById('verifyOtpBtn').classList.remove('hidden');
+        } else {
+          alert(data.message || 'Unable to send OTP. Please verify your phone number.');
+        }
+      } catch (e) {
+        alert('Network connection failure. Please check your internet.');
+      } finally {
+        sendBtn.disabled = false;
+        sendBtn.innerText = 'Send Verification OTP';
+      }
+    }
+
+    async function handleVerifyOtp() {
+      const phone = document.getElementById('phoneInput').value.trim();
+      const otp = document.getElementById('otpInput').value.trim();
+      if (!otp || otp.length < 4) {
+        alert('Please enter the OTP code received on your mobile.');
+        return;
+      }
+
+      const verifyBtn = document.getElementById('verifyOtpBtn');
+      verifyBtn.disabled = true;
+      verifyBtn.innerHTML = '<span class="spinner"></span> Authenticating...';
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone, otp })
+        });
+        const data = await res.json();
+        if (res.ok && data?.data?.token) {
+          const token = data.data.token;
+          await verifyTokenAndLoadUser(token);
+          showState('deletionFormState', 2);
+        } else {
+          alert(data.message || 'Invalid OTP code.');
+        }
+      } catch (e) {
+        alert('Authentication failed.');
+      } finally {
+        verifyBtn.disabled = false;
+        verifyBtn.innerText = 'Verify Credentials & Continue';
+      }
+    }
+
+    function selectReasonCard(cardElement) {
+      document.querySelectorAll('.reason-card').forEach(c => c.classList.remove('selected'));
+      cardElement.classList.add('selected');
+      selectedReasonText = cardElement.getAttribute('data-id');
+
+      const customGroup = document.getElementById('customReasonGroup');
+      if (selectedReasonText === 'Other') {
+        customGroup.classList.remove('hidden');
+      } else {
+        customGroup.classList.add('hidden');
+      }
+
+      validateForm();
+    }
+
+    function updateCharCount() {
+      const val = document.getElementById('customReasonInput').value;
+      document.getElementById('charCounter').innerText = `${val.length} / 300`;
+      validateForm();
+    }
+
+    function validateForm() {
+      const submitBtn = document.getElementById('submitDeleteBtn');
+      if (!selectedReasonText) {
+        submitBtn.disabled = true;
+        return;
+      }
+
+      if (selectedReasonText === 'Other') {
+        const text = document.getElementById('customReasonInput').value.trim();
+        submitBtn.disabled = text.length === 0;
+      } else {
+        submitBtn.disabled = false;
+      }
+    }
+
+    function openConfirmModal() {
+      document.getElementById('confirmModal').classList.add('active');
+    }
+
+    function closeConfirmModal() {
+      document.getElementById('confirmModal').classList.remove('active');
+    }
+
+    async function executeAccountDeletion() {
+      const finalBtn = document.getElementById('finalDeleteBtn');
+      finalBtn.disabled = true;
+      finalBtn.innerHTML = '<span class="spinner"></span> Processing...';
+
+      let reason = selectedReasonText;
+      if (reason === 'Other') {
+        reason = document.getElementById('customReasonInput').value.trim();
+      }
+
+      try {
+        const res = await fetch('/api/user/delete-account', {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ reason })
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+          localStorage.removeItem('mingo_temp_token');
+          closeConfirmModal();
+          showState('successState', 3);
+        } else {
+          alert(data.message || 'Account deletion request failed.');
+          finalBtn.disabled = false;
+          finalBtn.innerText = 'Yes, Delete My Account';
+        }
+      } catch (err) {
+        alert('Network error during deletion request.');
+        finalBtn.disabled = false;
+        finalBtn.innerText = 'Yes, Delete My Account';
+      }
+    }
+  </script>
+</body>
+</html>

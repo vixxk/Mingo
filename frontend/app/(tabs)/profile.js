@@ -334,19 +334,8 @@ export default function ProfileScreen() {
         visible={showDeletePopup}
         onClose={() => setShowDeletePopup(false)}
         isDeleting={isDeleting}
-        onConfirm={async (reason) => {
-          setIsDeleting(true);
-          try {
-            await userAPI.deleteAccount(reason);
-            socketService.disconnect();
-            await AsyncStorage.multiRemove(['userToken', 'token', 'user', 'listenerStatus', 'isAdmin']);
-            setShowDeletePopup(false);
-            router.replace('/welcome');
-          } catch (err) {
-            console.error('Delete account error:', err);
-          } finally {
-            setIsDeleting(false);
-          }
+        onConfirm={() => {
+          setShowDeletePopup(false);
         }}
       />
     </View>

@@ -1,50 +1,35 @@
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform, ScrollView, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, wp, hp, SCREEN_HEIGHT } from '../../utils/responsive';
-
-const DELETION_REASONS = [
-  { id: 'not_hear', label: 'Not able to hear listener' },
-  { id: 'abusive', label: 'Abusive language' },
-  { id: 'not_polite', label: 'Listener not polite' },
-  { id: 'not_interested', label: 'Listener not interested' },
-  { id: 'asked_money', label: 'Asked for money' },
-  { id: 'other', label: 'Other' },
-];
 
 const DELETION_INFO = [
   [
-    { text: 'Your account information will be kept for ' },
-    { text: '30 days', bold: true },
-    { text: ' after your deletion request. If you do not log in during this period, your account will be permanently deleted.' },
+    { text: 'Your account information and profile data will be ' },
+    { text: 'permanently deleted immediately', bold: true },
+    { text: ' upon confirming deletion on the web page.' },
   ],
   [
-    { text: 'Once your account is permanently deleted, you ' },
-    { text: 'cannot log in or recover your account', bold: true },
+    { text: 'Once deleted, you ' },
+    { text: 'cannot recover your account or previous profile data', bold: true },
     { text: '.' },
   ],
   [
-    { text: 'After deletion, your personal information, profile, wallet balance, transaction history, coins, and other account data will be permanently removed, except where we are required by law to retain certain records.' },
+    { text: 'Personal information, profile details, wallet balance, transaction history, and coins will be permanently erased.' },
   ],
   [
-    { text: 'Unused coins, wallet balance, rewards, or credits will not be refunded', bold: true },
-    { text: ' and will be permanently forfeited after your account is deleted.' },
-  ],
-  [
-    { text: 'If your account is under investigation for fraud, abuse, illegal activity, or a legal request, Mingo may delay or deny the deletion request until the investigation is complete.' },
-  ],
-  [
-    { text: 'Deleting your account ' },
-    { text: 'does not release you from any legal obligations or liabilities', bold: true },
-    { text: ' arising from your use of the platform before deletion.' },
+    { text: 'If you sign up in the future using the same mobile number, it will be ' },
+    { text: 'treated as a brand new account', bold: true },
+    { text: ' with no restored data.' },
   ],
 ];
 
 export default function DeleteAccountPopup({ visible, onClose, onConfirm, isDeleting = false }) {
-  const [selectedReason, setSelectedReason] = useState(null);
-  const [customReason, setCustomReason] = useState('');
   const [showMore, setShowMore] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
 
   const scrollViewRef = useRef(null);
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
@@ -52,9 +37,8 @@ export default function DeleteAccountPopup({ visible, onClose, onConfirm, isDele
 
   useEffect(() => {
     if (visible) {
-      setSelectedReason(null);
-      setCustomReason('');
       setShowMore(false);
+      setRedirecting(false);
       Animated.parallel([
         Animated.timing(overlayAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
         Animated.spring(slideAnim, { toValue: 0, friction: 9, tension: 40, useNativeDriver: true }),
@@ -67,22 +51,24 @@ export default function DeleteAccountPopup({ visible, onClose, onConfirm, isDele
     }
   }, [visible]);
 
-  useEffect(() => {
-    if (selectedReason === 'other') {
-      setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: true });
-      }, 150);
+  const handleProceed = useCallback(async () => {
+    try {
+      setRedirecting(true);
+      const token = (await AsyncStorage.getItem('token')) || (await AsyncStorage.getItem('userToken')) || '';
+      
+      const rawApiUrl = process.env.EXPO_PUBLIC_SOCKET_URL || process.env.EXPO_PUBLIC_API_URL?.replace(/\/api\/?$/, '') || 'http://192.168.0.120:3000';
+      const backendUrl = rawApiUrl.replace(/\/+$/, '');
+      const deleteUrl = `${backendUrl}/delete-account?token=${encodeURIComponent(token)}`;
+
+      onClose();
+      await Linking.openURL(deleteUrl);
+      if (onConfirm) onConfirm();
+    } catch (err) {
+      console.error('Failed to open account deletion page:', err);
+    } finally {
+      setRedirecting(false);
     }
-  }, [selectedReason]);
-
-  const handleConfirm = useCallback(() => {
-    const reason = selectedReason === 'other'
-      ? customReason.trim()
-      : DELETION_REASONS.find(r => r.id === selectedReason)?.label || '';
-    onConfirm(reason);
-  }, [selectedReason, customReason, onConfirm]);
-
-  const canConfirm = !!selectedReason && (selectedReason !== 'other' || customReason.trim().length > 0);
+  }, [onClose, onConfirm]);
 
   if (!visible) return null;
 
@@ -123,6 +109,14 @@ export default function DeleteAccountPopup({ visible, onClose, onConfirm, isDele
 
               <Text style={st.title}>Delete Account</Text>
 
+              {/* Notice Banner */}
+              <View style={st.noticeBox}>
+                <Ionicons name="information-circle" size={wp(5)} color="#FCA5A5" style={{ marginRight: wp(2) }} />
+                <Text style={st.noticeText}>
+                  You will be redirected to the secure Mingo account deletion web page to specify your reason and confirm deletion.
+                </Text>
+              </View>
+
               {/* Deletion Information */}
               <View style={st.infoContainer}>
                 <Text style={st.infoHeaderText}>Before you delete your account, please read the following:</Text>
@@ -154,45 +148,6 @@ export default function DeleteAccountPopup({ visible, onClose, onConfirm, isDele
                 </Text>
               </View>
 
-              {/* Reason Selection */}
-              <Text style={st.reasonTitle}>Please select at least one reason for deleting your account</Text>
-              
-              <View style={st.reasonsContainer}>
-                {DELETION_REASONS.map((reason) => (
-                  <TouchableOpacity
-                    key={reason.id}
-                    style={[st.reasonChip, selectedReason === reason.id && st.reasonChipActive]}
-                    onPress={() => setSelectedReason(reason.id)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[st.reasonChipText, selectedReason === reason.id && st.reasonChipTextActive]}>
-                      {reason.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {/* Custom reason input */}
-              {selectedReason === 'other' && (
-                <View style={st.inputBox}>
-                  <TextInput
-                    style={st.input}
-                    placeholder="Please specify..."
-                    placeholderTextColor="#4B5563"
-                    value={customReason}
-                    onChangeText={setCustomReason}
-                    multiline
-                    maxLength={300}
-                    textAlignVertical="top"
-                    onFocus={() => {
-                      setTimeout(() => {
-                        scrollViewRef.current?.scrollToEnd({ animated: true });
-                      }, 150);
-                    }}
-                  />
-                </View>
-              )}
-
               {/* Help Text */}
               <Text style={st.helpText}>
                 Need help? Please write to:{' '}
@@ -201,12 +156,12 @@ export default function DeleteAccountPopup({ visible, onClose, onConfirm, isDele
                 </Text>
               </Text>
 
-              {/* Delete Button */}
+              {/* Proceed Button */}
               <TouchableOpacity
                 activeOpacity={0.8}
-                onPress={handleConfirm}
-                disabled={!canConfirm || isDeleting}
-                style={[st.btnWrap, (!canConfirm || isDeleting) && { opacity: 0.4 }]}
+                onPress={handleProceed}
+                disabled={redirecting || isDeleting}
+                style={[st.btnWrap, (redirecting || isDeleting) && { opacity: 0.6 }]}
               >
                 <LinearGradient
                   colors={['#EF4444', '#B91C1C']}
@@ -214,10 +169,10 @@ export default function DeleteAccountPopup({ visible, onClose, onConfirm, isDele
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                 >
-                  {isDeleting ? (
+                  {redirecting || isDeleting ? (
                     <ActivityIndicator size="small" color="#fff" />
                   ) : (
-                    <Text style={st.actionBtnText}>Delete Account</Text>
+                    <Text style={st.actionBtnText}>Proceed to Deletion Web Page</Text>
                   )}
                 </LinearGradient>
               </TouchableOpacity>
@@ -283,6 +238,25 @@ const st = StyleSheet.create({
     marginBottom: hp(1.5),
     textAlign: 'center',
     letterSpacing: 0.4,
+  },
+  noticeBox: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+    borderRadius: 14,
+    paddingHorizontal: wp(3.5),
+    paddingVertical: hp(1.2),
+    marginBottom: hp(1.5),
+  },
+  noticeText: {
+    flex: 1,
+    color: '#FCA5A5',
+    fontSize: ms(12),
+    fontFamily: 'Inter_500Medium',
+    lineHeight: ms(17),
   },
   infoContainer: {
     width: '100%',
