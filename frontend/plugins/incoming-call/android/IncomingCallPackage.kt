@@ -1,4 +1,4 @@
-package app.themingo
+package com.talkmingo.app
 
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.NativeModule

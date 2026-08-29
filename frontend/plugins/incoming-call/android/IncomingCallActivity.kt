@@ -1,4 +1,4 @@
-package app.themingo
+package com.talkmingo.app
 
 import android.app.Activity
 import android.app.PendingIntent

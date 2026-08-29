@@ -8,10 +8,10 @@ const fs = require('fs');
 const path = require('path');
 
 // Native classes registered by this plugin
-const SERVICE_CLASS = 'app.themingo.notification.IncomingCallNotificationService';
+const SERVICE_CLASS = 'com.talkmingo.app.notification.IncomingCallNotificationService';
 const ACTIVITY_CLASS = '.IncomingCallActivity';
 const FG_SERVICE_CLASS = '.CallForegroundService';
-const MODULE_MARKER = 'add(app.themingo.IncomingCallPackage())';
+const MODULE_MARKER = 'add(com.talkmingo.app.IncomingCallPackage())';
 
 // Kotlin sources shipped with the plugin — copied into the Android project at
 // prebuild time so they survive `expo prebuild` regenerating the android/ dir.
@@ -146,7 +146,7 @@ const withIncomingCallStyles = (config) =>
 const withIncomingCallSources = (config) =>
   withDangerousMod(config, ['android', async (config) => {
     const platformRoot = config.modRequest.platformProjectRoot;
-    const javaDir = path.join(platformRoot, 'app', 'src', 'main', 'java', 'app', 'themingo');
+    const javaDir = path.join(platformRoot, 'app', 'src', 'main', 'java', 'com', 'talkmingo', 'app');
     const notifDir = path.join(javaDir, 'notification');
     const rawDir = path.join(platformRoot, 'app', 'src', 'main', 'res', 'raw');
 

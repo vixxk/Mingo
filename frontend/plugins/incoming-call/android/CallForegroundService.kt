@@ -1,4 +1,4 @@
-package app.themingo
+package com.talkmingo.app
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -28,8 +28,8 @@ class CallForegroundService : Service() {
     companion object {
         const val CHANNEL_ID = "call_ongoing"
         const val NOTIFICATION_ID = 9902
-        const val ACTION_START = "app.themingo.action.START_CALL_SERVICE"
-        const val ACTION_STOP = "app.themingo.action.STOP_CALL_SERVICE"
+        const val ACTION_START = "com.talkmingo.app.action.START_CALL_SERVICE"
+        const val ACTION_STOP = "com.talkmingo.app.action.STOP_CALL_SERVICE"
 
         @Volatile
         var isRunning = false

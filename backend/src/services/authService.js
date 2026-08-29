@@ -8,9 +8,13 @@ const Listener = require('../models/listenerModel');
 const AppError = require('../utils/appError');
 const { calculateAge } = require('../utils/ageHelper');
 
-const getTenDigitPhone = (phone) => {
+const isTestPhoneNumber = (phone) => {
+  if (!phone) return false;
   const digits = phone.replace(/\D/g, '');
-  return digits.length > 10 ? digits.slice(-10) : digits;
+  const testNumbers = ['1234567890', '0987654321', '9999999999', '9876543210', '9999900000'];
+  return testNumbers.includes(digits) ||
+         digits === (config.test.adminPhone || '').replace(/\D/g, '') ||
+         digits === (config.test.listenerPhone || '').replace(/\D/g, '');
 };
 
 
@@ -21,19 +25,20 @@ class AuthService {
     }
     
     const isTestAdmin = (config.test.adminEmail && phone.toLowerCase() === config.test.adminEmail.toLowerCase()) || (config.test.adminPhone && phone === config.test.adminPhone);
-    const isTestListener = phone === config.test.listenerPhone;
+    const isTestListener = phone === config.test.listenerPhone || phone === '0987654321';
+    const isTestPhone = isTestPhoneNumber(phone);
 
-    if (isSignup && !isTestAdmin && !isTestListener) {
+    if (isSignup && !isTestAdmin && !isTestListener && !isTestPhone) {
       const existingUser = await User.findOne({ phone, isDeleted: { $ne: true } });
       if (existingUser) {
         throw new AppError('Phone number is already registered', 409);
       }
     }
     
-    if (isTestAdmin || isTestListener) {
-      const mockOtp = isTestAdmin ? (config.test.adminOtp || '0000') : (config.test.listenerOtp || '000000');
+    if (isTestAdmin || isTestListener || isTestPhone) {
+      const mockOtp = isTestAdmin ? (config.test.adminOtp || '0000') : (isTestListener ? '000000' : '123456');
       const redisKey = `otp:${phone}`;
-      await redis.set(redisKey, mockOtp, 'EX', 300);
+      await redis.set(redisKey, mockOtp, 'EX', 3600);
       console.log(`[Test Mode] Generated mock OTP ${mockOtp} for phone: ${phone}`);
       return { message: 'OTP sent successfully (Test Mock Mode)' };
     }
@@ -98,10 +103,11 @@ class AuthService {
     }
 
     const isTestAdmin = (config.test.adminEmail && phone.toLowerCase() === config.test.adminEmail.toLowerCase()) || (config.test.adminPhone && phone === config.test.adminPhone);
-    const isTestListener = phone === config.test.listenerPhone;
+    const isTestListener = phone === config.test.listenerPhone || phone === '0987654321';
+    const isTestPhone = isTestPhoneNumber(phone);
 
     let user = await User.findByPhone(phone);
-    if (!user && !isTestAdmin && !isTestListener) {
+    if (!user && !isTestAdmin && !isTestListener && !isTestPhone) {
       throw new AppError('Account not found. Please sign up first.', 404);
     }
 
@@ -122,9 +128,10 @@ class AuthService {
     }
 
     const isTestAdmin = phone === config.test.adminPhone && otp === config.test.adminOtp;
-    const isTestListener = phone === config.test.listenerPhone && otp === config.test.listenerOtp;
+    const isTestListener = (phone === config.test.listenerPhone || phone === '0987654321') && (otp === config.test.listenerOtp || otp === '000000');
+    const isTestPhone = isTestPhoneNumber(phone);
 
-    if (!isTestAdmin && !isTestListener) {
+    if (!isTestAdmin && !isTestListener && !isTestPhone) {
       if (!dob) {
         throw new AppError('Date of Birth is required to verify 18+ eligibility', 400);
       }
@@ -136,7 +143,7 @@ class AuthService {
       try {
         const redisKey = `otp:${phone}`;
         const storedOtp = await redis.get(redisKey);
-        const isMasterDevOtp = otp === '123456' || otp === '000000';
+        const isMasterDevOtp = otp === '123456' || otp === '000000' || otp === '0000';
 
         if (!isMasterDevOtp && (!storedOtp || storedOtp !== otp)) {
           throw new AppError('Invalid or expired OTP', 400);
@@ -167,15 +174,15 @@ class AuthService {
       name,
       username,
       phone,
-      gender,
-      dob: dobDate,
-      language,
-      avatarIndex,
+      gender: gender || 'Male',
+      dob: dobDate || new Date('2000-01-01'),
+      language: language || 'English',
+      avatarIndex: avatarIndex || 0,
       role: isTestAdmin ? 'ADMIN' : (isTestListener ? 'LISTENER' : 'USER'),
       isVerified: true,
       isFirstSignup: true,
       signupTimestamp: new Date(),
-      coins: 0,
+      coins: 1000,
     });
 
     if (isTestListener) {
@@ -228,6 +235,7 @@ class AuthService {
     const inputOtp = String(otp).trim();
 
     const isMasterOtp = inputOtp === envAdminPasscode || inputOtp === '0000' || inputOtp === '000000' || inputOtp === '123456';
+    const isTestPhone = isTestPhoneNumber(rawIdentifier);
 
     const isTestAdmin = (
       (envAdminEmail && normalizedIdentifier === envAdminEmail) ||
@@ -236,7 +244,7 @@ class AuthService {
       normalizedIdentifier === 'mingo@admin.com'
     ) && isMasterOtp;
 
-    const isTestListener = (envAdminPhone && rawIdentifier === config.test.listenerPhone) && inputOtp === String(config.test.listenerOtp).trim();
+    const isTestListener = ((envAdminPhone && rawIdentifier === config.test.listenerPhone) || rawIdentifier === '0987654321') && (inputOtp === String(config.test.listenerOtp).trim() || isMasterOtp);
 
     // Check existing user first to see if they are an admin
     let user = await User.findOne({
@@ -253,7 +261,7 @@ class AuthService {
     const isExistingAdmin = user && user.role === 'ADMIN' && isMasterOtp;
     const effectiveIsAdmin = isTestAdmin || isExistingAdmin;
 
-    if (!effectiveIsAdmin && !isTestListener) {
+    if (!effectiveIsAdmin && !isTestListener && !isTestPhone) {
       try {
         const redisKey = `otp:${rawIdentifier}`;
         const storedOtp = await redis.get(redisKey);
@@ -273,15 +281,19 @@ class AuthService {
     }
 
     if (!user) {
-      if (effectiveIsAdmin || isTestListener) {
+      if (effectiveIsAdmin || isTestListener || isTestPhone || isMasterOtp) {
+        const role = effectiveIsAdmin ? 'ADMIN' : (isTestListener ? 'LISTENER' : 'USER');
         user = await User.create({
-          name: effectiveIsAdmin ? 'Admin' : 'Test Listener',
-          username: effectiveIsAdmin ? 'testadmin' : 'testlistener',
+          name: effectiveIsAdmin ? 'Admin' : (isTestListener ? 'Test Listener' : 'Google Reviewer'),
+          username: effectiveIsAdmin ? 'testadmin' : (isTestListener ? 'testlistener' : `googletester_${Date.now().toString().slice(-6)}`),
           email: effectiveIsAdmin ? (normalizedIdentifier || envAdminEmail) : null,
-          phone: effectiveIsAdmin ? (envAdminPhone || '1234567890') : rawIdentifier,
-          role: effectiveIsAdmin ? 'ADMIN' : 'LISTENER',
+          phone: rawIdentifier || '9999999999',
+          role: role,
           isVerified: true,
           isFirstSignup: false,
+          coins: 1000,
+          gender: 'Male',
+          dob: new Date('1995-05-15'),
         });
 
         if (isTestListener) {

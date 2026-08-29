@@ -85,7 +85,7 @@
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": false,
-      "package": "app.themingo",
+      "package": "com.talkmingo.app",
       "versionCode": 3,
       "googleServicesFile": "./google-services.json",
       "permissions": [
@@ -120,9 +120,9 @@
             }
           }
         },
-        "projectId": "d0b23362-d4a0-4c00-9c57-a9f7d5ad0b98"
+        "projectId": "50c7177e-a133-4798-b262-5297a51b5b87"
       }
     },
-    "owner": "gsfebe"
+    "owner": "talkmingo"
   }
 }

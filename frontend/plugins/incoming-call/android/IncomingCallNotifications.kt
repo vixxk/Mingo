@@ -1,4 +1,4 @@
-package app.themingo
+package com.talkmingo.app
 
 import android.app.Notification
 import android.app.NotificationChannel
