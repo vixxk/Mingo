@@ -18,6 +18,12 @@ const isTestPhoneNumber = (phone) => {
 };
 
 
+const getTenDigitPhone = (phone) => {
+  if (!phone) return '';
+  const digits = String(phone).replace(/\D/g, '');
+  return digits.length > 10 ? digits.slice(-10) : digits;
+};
+
 class AuthService {
     static async sendOtp(phone, isSignup = true) {
     if (!phone) {
