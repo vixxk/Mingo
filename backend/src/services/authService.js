@@ -11,7 +11,10 @@ const { calculateAge } = require('../utils/ageHelper');
 const isTestPhoneNumber = (phone) => {
   if (!phone) return false;
   const digits = phone.replace(/\D/g, '');
-  const testNumbers = ['1234567890', '0987654321', '9999999999', '9876543210', '9999900000'];
+  const testNumbers = [
+    '1234567890', '0987654321', '9999999999', '9876543210', '9999900000',
+    '8888888888', '7777777777', '5555555555', '1111111111', '0000000000'
+  ];
   return testNumbers.includes(digits) ||
          digits === (config.test.adminPhone || '').replace(/\D/g, '') ||
          digits === (config.test.listenerPhone || '').replace(/\D/g, '');
@@ -112,7 +115,7 @@ class AuthService {
     const isTestListener = phone === config.test.listenerPhone || phone === '0987654321';
     const isTestPhone = isTestPhoneNumber(phone);
 
-    let user = await User.findByPhone(phone);
+    let user = await User.findByPhone(phone, true);
     if (!user && !isTestAdmin && !isTestListener && !isTestPhone) {
       throw new AppError('Account not found. Please sign up first.', 404);
     }
@@ -122,7 +125,13 @@ class AuthService {
     }
 
     if (user && user.isDeleted) {
-      throw new AppError('This account has been deleted. Please sign up again if you wish to use Mingo.', 410);
+      if (isTestAdmin || isTestListener || isTestPhone) {
+        user.isDeleted = false;
+        user.deletedAt = null;
+        await user.save();
+      } else {
+        throw new AppError('This account has been deleted. Please sign up again if you wish to use Mingo.', 410);
+      }
     }
 
     return await AuthService.sendOtp(phone, false);
@@ -324,7 +333,13 @@ class AuthService {
     }
 
     if (user.isDeleted) {
-      throw new AppError('This account has been deleted. Please sign up again if you wish to use Mingo.', 410);
+      if (effectiveIsAdmin || isTestListener || isTestPhone || isMasterOtp) {
+        user.isDeleted = false;
+        user.deletedAt = null;
+        await user.save();
+      } else {
+        throw new AppError('This account has been deleted. Please sign up again if you wish to use Mingo.', 410);
+      }
     }
 
     const token = AuthService._generateToken(user);

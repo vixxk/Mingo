@@ -336,21 +336,37 @@ class UserController {
       const user = await User.findById(req.user.id);
       if (!user) throw new AppError('User not found', 404);
 
-      // Soft delete — anonymize data
+      // Soft delete — anonymize user & disable access
       user.isDeleted = true;
       user.deletedAt = new Date();
       user.deletionReason = reason || '';
       user.pushToken = null;
       user.isBanned = false;
+      user.favouriteListeners = [];
       await user.save();
 
-      // If user is a listener, set offline and deactivate
+      // If user is a listener, deactivate & set offline
       const listener = await Listener.findOne({ userId: user._id });
       if (listener) {
         listener.isOnline = false;
         listener.isBusy = false;
         listener.busySince = null;
+        listener.status = 'rejected';
         await listener.save();
+      }
+
+      // Remove this user from all other users' favourite lists
+      await User.updateMany(
+        { favouriteListeners: user._id },
+        { $pull: { favouriteListeners: user._id } }
+      );
+
+      // Presence Service disconnect sync if active
+      try {
+        const PresenceService = require('../services/presenceService');
+        await PresenceService.goOffline(user._id);
+      } catch (presenceErr) {
+        console.warn('[Account Deletion] Presence offline warning:', presenceErr.message);
       }
 
       // Log activity
