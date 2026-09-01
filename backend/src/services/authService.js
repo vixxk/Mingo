@@ -271,7 +271,7 @@ class AuthService {
           { username: 'testadmin', isDeleted: { $ne: true } }
         ] : []),
       ]
-    });
+    }).sort({ createdAt: -1 });
 
     const isExistingAdmin = user && user.role === 'ADMIN' && isMasterOtp;
     const effectiveIsAdmin = isTestAdmin || isExistingAdmin;

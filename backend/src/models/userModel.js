@@ -151,12 +151,13 @@ userSchema.index(
   }
 );
 
-userSchema.statics.findByPhone = function (phone, includeDeleted = false) {
-  const query = { phone };
+userSchema.statics.findByPhone = async function (phone, includeDeleted = false) {
   if (!includeDeleted) {
-    query.isDeleted = { $ne: true };
+    return this.findOne({ phone, isDeleted: { $ne: true } }).sort({ createdAt: -1 });
   }
-  return this.findOne(query);
+  const activeUser = await this.findOne({ phone, isDeleted: { $ne: true } }).sort({ createdAt: -1 });
+  if (activeUser) return activeUser;
+  return this.findOne({ phone }).sort({ createdAt: -1 });
 };
 
 userSchema.statics.exists = async function (username, phone) {
