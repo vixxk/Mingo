@@ -23,9 +23,11 @@ function ParticipantAvatar({ participant, size = 40, support = false }) {
       </div>
     )
   }
-  const getAvatarUrl = (g, idx) => {
-    const base = 'https://mingo-avatars.s3.amazonaws.com'
-    return `${base}/${g}_${idx}.png`
+  const getAvatarUrl = (gender, index) => {
+    const base = import.meta.env.VITE_CDN_URL || 'https://starpix-media-production.s3.ap-south-1.amazonaws.com'
+    const i = Math.min(Math.max(parseInt(index, 10) || 0, 0), 49)
+    const g = String(gender).toLowerCase() === 'male' ? 'male' : 'female'
+    return `${base}/avatars/${g}_${i + 1}.png`
   }
   return (
     <img

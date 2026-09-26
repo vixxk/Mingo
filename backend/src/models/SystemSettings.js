@@ -91,7 +91,9 @@ const systemSettingsSchema = new mongoose.Schema(
 // Ensure settings document exists and has exact 12 coin purchase slabs synced
 systemSettingsSchema.statics.getSettings = async function () {
   let settings = await this.findOne();
-  const cloudFrontUrl = process.env.AWS_CLOUDFRONT_URL || 'https://d3arutsevouzgm.cloudfront.net';
+  const cloudFrontUrl = process.env.AWS_CLOUDFRONT_URL
+    ? process.env.AWS_CLOUDFRONT_URL.replace(/\/+$/, '')
+    : `https://${process.env.AWS_S3_BUCKET_NAME || 'starpix-media-production'}.s3.${process.env.AWS_REGION || 'ap-south-1'}.amazonaws.com`;
   const defaults = [
     { id: '1',  coins: 80,    originalPrice: 62,    price: 62,    discount: 0,  tag: 'Starter Offer', subTag: '',               isPopular: false, iconUrl: `${cloudFrontUrl}/coin_packages/pack_80.png` },
     { id: '2',  coins: 300,   originalPrice: 149,   price: 149,   discount: 0,  tag: '',              subTag: '',               isPopular: false, iconUrl: `${cloudFrontUrl}/coin_packages/pack_300.png` },

@@ -171,7 +171,7 @@ export default function InCallRechargePopup({ visible, onClose, onRechargeSucces
                             source={{
                               uri: (typeof pkg?.iconUrl === 'string' && pkg.iconUrl)
                                 ? (pkg.iconUrl.includes('/coin_packages/v3/') ? pkg.iconUrl : pkg.iconUrl.replace('/coin_packages/', '/coin_packages/v3/'))
-                                : `https://d3arutsevouzgm.cloudfront.net/coin_packages/v3/pack_${pkg?.coins || 100}.png`
+                                : `${process.env.EXPO_PUBLIC_CDN_URL || 'https://starpix-media-production.s3.ap-south-1.amazonaws.com'}/coin_packages/v3/pack_${pkg?.coins || 100}.png`
                             }}
                             style={{ width: 24, height: 24, marginRight: 6 }}
                             resizeMode="contain"

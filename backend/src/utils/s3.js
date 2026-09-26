@@ -26,7 +26,10 @@ const generateUploadUrl = async (fileType, extension, folder = 'listener_intros'
   });
 
   const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
-  const fileUrl = `${process.env.AWS_CLOUDFRONT_URL}/${key}`;
+  const baseUrl = process.env.AWS_CLOUDFRONT_URL
+    ? process.env.AWS_CLOUDFRONT_URL.replace(/\/+$/, '')
+    : `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com`;
+  const fileUrl = `${baseUrl}/${key}`;
 
   return { uploadUrl, fileUrl, key };
 };
@@ -65,7 +68,7 @@ const deleteObject = async (key) => {
 const extractKeyFromUrl = (url) => {
   if (!url) return null;
   const cloudFrontUrl = process.env.AWS_CLOUDFRONT_URL;
-  if (url.startsWith(cloudFrontUrl)) {
+  if (cloudFrontUrl && url.startsWith(cloudFrontUrl)) {
     return url.replace(`${cloudFrontUrl}/`, '');
   }
   // Fallback: try to get path after bucket name

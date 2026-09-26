@@ -10,7 +10,7 @@ import { walletAPI } from '../../utils/api';
 import StatusPopup from '../../components/shared/StatusPopup';
 import PaymentStateOverlay from '../../components/shared/PaymentStateOverlay';
 
-const CDN_URL = 'https://d3arutsevouzgm.cloudfront.net';
+const CDN_URL = process.env.EXPO_PUBLIC_CDN_URL || 'https://starpix-media-production.s3.ap-south-1.amazonaws.com';
 
 const DEFAULT_PACKAGES = [
   { id: '1',  coins: 80,    originalPrice: 62,    price: 62,    discount: 0,  tag: 'Starter Offer', subTag: '',               iconUrl: `${CDN_URL}/coin_packages/v3/pack_80.png` },

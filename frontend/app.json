@@ -86,7 +86,7 @@
       },
       "edgeToEdgeEnabled": false,
       "package": "com.talkmingo.app",
-      "versionCode": 3,
+      "versionCode": 4,
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.CAMERA",

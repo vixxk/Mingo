@@ -53,11 +53,13 @@ export default function ChatLogDetail() {
     if (item.isAdminMessage) return { name: 'Mingo Support', support: true }
     const senderId = item.sender?.id
     const match = (conversation?.participants || []).find(p => String(p.id) === String(senderId))
-    const base = 'https://mingo-avatars.s3.amazonaws.com'
+    const base = import.meta.env.VITE_CDN_URL || 'https://starpix-media-production.s3.ap-south-1.amazonaws.com'
     if (match) {
+      const i = Math.min(Math.max(parseInt(match.avatarIndex, 10) || 0, 0), 49)
+      const g = String(match.gender).toLowerCase() === 'male' ? 'male' : 'female'
       return {
         name: match.name || 'Unknown',
-        avatarUrl: `${base}/${match.gender || 'Female'}_${match.avatarIndex || 0}.png`,
+        avatarUrl: `${base}/avatars/${g}_${i + 1}.png`,
         support: match.role === 'ADMIN' || String(match.role || '').endsWith('_ADMIN'),
       }
     }
@@ -146,7 +148,7 @@ export default function ChatLogDetail() {
                 </div>
               ) : (
                 <img
-                  src={`https://mingo-avatars.s3.amazonaws.com/${conversation.otherParticipant?.gender || 'Female'}_${conversation.otherParticipant?.avatarIndex || 0}.png`}
+                  src={`${import.meta.env.VITE_CDN_URL || 'https://starpix-media-production.s3.ap-south-1.amazonaws.com'}/avatars/${String(conversation.otherParticipant?.gender).toLowerCase() === 'male' ? 'male' : 'female'}_${Math.min(Math.max(parseInt(conversation.otherParticipant?.avatarIndex, 10) || 0, 0), 49) + 1}.png`}
                   alt=""
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   onError={e => { e.target.style.display = 'none' }}

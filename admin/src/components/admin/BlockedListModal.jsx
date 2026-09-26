@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react'
 import { IoClose, IoBan, IoPersonOutline } from 'react-icons/io5'
 import { adminAPI } from '../../utils/api'
 
-const CLOUDFRONT_URL = 'https://d3arutsevouzgm.cloudfront.net';
+const CLOUDFRONT_URL = import.meta.env.VITE_CDN_URL || 'https://starpix-media-production.s3.ap-south-1.amazonaws.com';
 const getAvatarUrl = (gender, index) => {
   const i = Math.min(Math.max(parseInt(index, 10) || 0, 0), 49);
-  const g = gender === 'Male' ? 'male' : 'female';
+  const g = String(gender).toLowerCase() === 'male' ? 'male' : 'female';
   return `${CLOUDFRONT_URL}/avatars/${g}_${i + 1}.png`;
 }
 
@@ -144,7 +144,7 @@ export default function BlockedListModal({ visible, userId, userName, onClose })
                     }}
                     onError={(e) => {
                       e.target.onerror = null;
-                      e.target.src = 'https://d3arutsevouzgm.cloudfront.net/avatars/male_1.png';
+                      e.target.src = `${CLOUDFRONT_URL}/avatars/male_1.png`;
                     }}
                   />
                   <div>

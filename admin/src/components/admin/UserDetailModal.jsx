@@ -4,10 +4,10 @@ import { adminAPI } from '../../utils/api'
 import ToastNotification from '../shared/ToastNotification'
 import BlockedListModal from './BlockedListModal'
 
-const CLOUDFRONT_URL = 'https://d3arutsevouzgm.cloudfront.net';
+const CLOUDFRONT_URL = import.meta.env.VITE_CDN_URL || 'https://starpix-media-production.s3.ap-south-1.amazonaws.com';
 const getAvatarUrl = (gender, index) => {
   const i = Math.min(Math.max(parseInt(index, 10) || 0, 0), 49);
-  const g = gender === 'Male' ? 'male' : 'female';
+  const g = String(gender).toLowerCase() === 'male' ? 'male' : 'female';
   return `${CLOUDFRONT_URL}/avatars/${g}_${i + 1}.png`;
 }
 
