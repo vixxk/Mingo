@@ -193,10 +193,10 @@ const DedicatedCallPage = ({ call, onAccept, onReject }) => {
         style={styles.gradientBackground}
       >
         <SafeAreaView style={styles.safeArea}>
-          {/* Top Bar with Mingo Logo on Top Left */}
+          {/* Top Bar with TalkMingo Logo on Top Left */}
           <View style={styles.headerRow}>
             <Image
-              source={require('../../images/Mingo Splash Text.png')}
+              source={require('../../images/TalkMingo Splash Text.png')}
               style={styles.logoImage}
               resizeMode="contain"
             />
@@ -214,7 +214,7 @@ const DedicatedCallPage = ({ call, onAccept, onReject }) => {
             </Animated.View>
 
             <Text style={styles.callerName} numberOfLines={1}>
-              {call.callerName || 'Mingo User'}
+              {call.callerName || 'TalkMingo User'}
             </Text>
 
             <Text style={styles.callTypeSubtitle}>

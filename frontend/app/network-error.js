@@ -139,7 +139,7 @@ export default function NetworkErrorScreen() {
         visible: true,
         message: !hasInternet
           ? 'No internet connection. Please check your network connection.'
-          : 'Server Unreachable: We cannot reach the Mingo servers. Please try again later.',
+          : 'Server Unreachable: We cannot reach the TalkMingo servers. Please try again later.',
         type: 'error'
       });
     } finally {
@@ -210,7 +210,7 @@ export default function NetworkErrorScreen() {
           {status === 'restored'
             ? 'Welcoming you back... We are redirecting you to your screen.'
             : internetStatus === 'online'
-            ? 'Mingo servers are currently unreachable. We are working to restore connection. Please try again in a few moments.'
+            ? 'TalkMingo servers are currently unreachable. We are working to restore connection. Please try again in a few moments.'
             : "We couldn't complete your request. Please check your internet connection and try again."}
         </Text>
 

@@ -1,7 +1,7 @@
 {
-  "name": "mingo-backend",
+  "name": "talkmingo-backend",
   "version": "1.0.0",
-  "description": "Mingo - Connect with listeners via audio/video calls",
+  "description": "TalkMingo - Connect with listeners via audio/video calls",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",

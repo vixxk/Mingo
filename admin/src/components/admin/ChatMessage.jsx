@@ -255,7 +255,7 @@ export function MessageBubble({ item, avatarUrl, senderName, support = false }) 
             🛡️
           </div>
           <span style={{ fontSize: 10, fontWeight: 800, color: '#FBBF24', letterSpacing: '0.8px' }}>
-            MINGO SUPPORT
+            TALKMINGO SUPPORT
           </span>
         </div>
           <span style={{ fontSize: 13, color: '#fff', lineHeight: 1.5 }}>{item.content}</span>

@@ -130,7 +130,7 @@ class AuthService {
         user.deletedAt = null;
         await user.save();
       } else {
-        throw new AppError('This account has been deleted. Please sign up again if you wish to use Mingo.', 410);
+        throw new AppError('This account has been deleted. Please sign up again if you wish to use TalkMingo.', 410);
       }
     }
 
@@ -152,7 +152,7 @@ class AuthService {
       }
       const age = calculateAge(dob);
       if (age === null || age < 18) {
-        throw new AppError('You must be at least 18 years old to join Mingo', 400);
+        throw new AppError('You must be at least 18 years old to join TalkMingo', 400);
       }
 
       try {
@@ -338,7 +338,7 @@ class AuthService {
         user.deletedAt = null;
         await user.save();
       } else {
-        throw new AppError('This account has been deleted. Please sign up again if you wish to use Mingo.', 410);
+        throw new AppError('This account has been deleted. Please sign up again if you wish to use TalkMingo.', 410);
       }
     }
 

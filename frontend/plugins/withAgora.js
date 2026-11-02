@@ -82,11 +82,11 @@ const withAgoraIosPermissions = (config) => {
     // rendering never hits a missing usage-description crash on iOS.
     if (!config.modResults.NSCameraUsageDescription) {
       config.modResults.NSCameraUsageDescription =
-        'Allow Mingo to access your camera for video calls.';
+        'Allow TalkMingo to access your camera for video calls.';
     }
     if (!config.modResults.NSMicrophoneUsageDescription) {
       config.modResults.NSMicrophoneUsageDescription =
-        'Allow Mingo to access your microphone for audio and video calls.';
+        'Allow TalkMingo to access your microphone for audio and video calls.';
     }
     if (!Array.isArray(config.modResults.UIBackgroundModes)) {
       config.modResults.UIBackgroundModes = [];

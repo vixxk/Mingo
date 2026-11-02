@@ -311,7 +311,7 @@ export default function CallFeedbackScreen() {
         
         <View style={[styles.transitionContent, { paddingTop: insets.top + vs(120) }]}>
           <Image 
-            source={require('../../images/Mingo Splash Text.png')} 
+            source={require('../../images/TalkMingo Splash Text.png')} 
             style={styles.headerLogoImage} 
             resizeMode="contain" 
           />

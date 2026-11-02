@@ -28,7 +28,7 @@ if (process.env.NODE_ENV !== 'test') {
 
 
 app.use((req, res, next) => {
-  res.setHeader('X-Powered-By', 'Mingo API');
+  res.setHeader('X-Powered-By', 'TalkMingo API');
   next();
 });
 
@@ -42,7 +42,7 @@ app.use('/api', routes);
 
 app.get('/', (req, res) => {
   res.json({
-    name: 'Mingo API',
+    name: 'TalkMingo API',
     version: '1.0.0',
     description: 'Connect with listeners via audio/video calls',
     docs: '/api/health',

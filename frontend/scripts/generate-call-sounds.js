@@ -1,5 +1,5 @@
 /**
- * Generate non-copyright call sounds for Mingo.
+ * Generate non-copyright call sounds for TalkMingo.
  *
  * Both files are synthesized from scratch from pure sine waves — they are
  * original, functional signaling tones (no melody, no samples, no third-party

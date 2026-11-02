@@ -72,7 +72,7 @@ function SessionCard({ session, onClick }) {
   const listenerPart = participants.find(p => p && p.role === 'LISTENER') || null
 
   const rows = isAdmin
-    ? [userPart, { name: 'Mingo Support', role: 'ADMIN', support: true }].filter(Boolean)
+    ? [userPart, { name: 'TalkMingo Support', role: 'ADMIN', support: true }].filter(Boolean)
     : [userPart, listenerPart].filter(Boolean)
 
   // One card = ONE session → show that session's own status & stats.

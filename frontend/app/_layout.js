@@ -96,7 +96,7 @@ function RootLayout() {
           if (!alreadyDismissed) {
             Alert.alert(
               'Display Over Other Apps Permission Required',
-              'To keep calls active and allow background audio and video sharing when using other apps, Mingo requires the "Display over other apps" permission.',
+              'To keep calls active and allow background audio and video sharing when using other apps, TalkMingo requires the "Display over other apps" permission.',
               [
                 {
                   text: 'Cancel',
@@ -235,21 +235,17 @@ function RootLayout() {
         }
       });
 
-    const zegoAppIdVal = session?.zegoAppId || acceptedCall?.zegoAppId;
-    const zegoAppSignVal = session?.zegoAppSign || acceptedCall?.zegoAppSign;
     const agoraAppIdVal = session?.agoraAppId || acceptedCall?.agoraAppId;
     const agoraTokenVal = session?.agoraToken || acceptedCall?.agoraToken;
 
     // Notify caller we accepted — include session-scoped credentials so the
-    // user's connecting screen has the latest Zego/Agora tokens (they may
+    // user's connecting screen has the latest Agora tokens (they may
     // differ from the initial startCall response if the backend regenerated
     // them).
     socketService.emit('call_accepted', {
       userId: callerId,
       sessionId: callId,
       roomId,
-      ...(zegoAppIdVal ? { zegoAppId: zegoAppIdVal } : {}),
-      ...(zegoAppSignVal ? { zegoAppSign: zegoAppSignVal } : {}),
       ...(agoraAppIdVal ? { agoraAppId: agoraAppIdVal } : {}),
       ...(agoraTokenVal ? { agoraToken: agoraTokenVal } : {}),
     });
@@ -269,7 +265,7 @@ function RootLayout() {
         roomId,
         // For a listener, listenerId is their OWN id (us); for a user, the
         // caller is the listener they're joining. userId is always the
-        // CURRENT participant's own id — used as the Zego/Agora uid so both
+        // CURRENT participant's own id — used as the Agora uid so both
         // sides always have unique ids in the call channel.
         ...(myRole === 'LISTENER'
           ? { listenerId: myUserId, userId: myUserId }
@@ -278,9 +274,7 @@ function RootLayout() {
         gender,
         callType,
         isIncoming: 'true',
-        // Session-scoped credentials (Zego for audio calls, Agora for video calls)
-        ...(zegoAppIdVal ? { zegoAppId: String(zegoAppIdVal) } : {}),
-        ...(zegoAppSignVal ? { zegoAppSign: String(zegoAppSignVal) } : {}),
+        // Session-scoped Agora credentials for both audio and video calls
         ...(agoraAppIdVal ? { agoraAppId: String(agoraAppIdVal) } : {}),
         ...(agoraTokenVal ? { agoraToken: String(agoraTokenVal) } : {}),
       },

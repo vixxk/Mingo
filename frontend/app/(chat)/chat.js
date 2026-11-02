@@ -206,7 +206,7 @@ const MessageBubble = ({ item }) => {
         >
           <View style={styles.adminBadgeRow}>
             <Ionicons name="shield-checkmark" size={12} color="#FBBF24" style={{ marginRight: wp(1) }} />
-            <Text style={styles.adminBadgeText}>MINGO SUPPORT</Text>
+            <Text style={styles.adminBadgeText}>TALKMINGO SUPPORT</Text>
           </View>
           <Text style={styles.adminBubbleText}>{item.text}</Text>
           <Text style={styles.adminTimeStamp}>

@@ -70,7 +70,7 @@ export default function RoleSelectionScreen() {
         <View style={styles.content}>
           <View style={styles.header}>
             <Text style={styles.title}>Choose Your Journey</Text>
-            <Text style={styles.subtitle}>Tell us how you'd like to experience Mingo.</Text>
+            <Text style={styles.subtitle}>Tell us how you'd like to experience TalkMingo.</Text>
           </View>
 
           <View style={styles.cardsContainer}>

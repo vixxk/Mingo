@@ -6,7 +6,7 @@
  * on the backend (backend/src/utils/abusiveLanguage.js) so abusive
  * content can never be delivered from a modified client.
  *
- * Coverage (as broad as practical for Mingo's India-first user base):
+ * Coverage (as broad as practical for TalkMingo's India-first user base):
  *   • English profanity, slurs, ableist language, threats, self-harm
  *     phrases and the most common internet abbreviations.
  *   • Hinglish / romanised-Hindi abuses (madarchod, behenchod,

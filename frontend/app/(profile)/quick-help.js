@@ -25,7 +25,7 @@ const QUICK_HELP_DATA = [
     id: '1',
     question: 'Why am I unable to connect with any listener?',
     answer:
-      'All available listeners may be busy or offline at the moment. Please check your internet connection, app permissions, and coin balance, then try again after a few minutes. If the issue continues, contact Mingo Support.',
+      'All available listeners may be busy or offline at the moment. Please check your internet connection, app permissions, and coin balance, then try again after a few minutes. If the issue continues, contact TalkMingo Support.',
   },
   {
     id: '2',

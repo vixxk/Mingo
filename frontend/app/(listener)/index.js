@@ -445,7 +445,7 @@ export default function ListenerHomeScreen() {
               if (!hasOverlay) {
                 Alert.alert(
                   'Display Over Other Apps Required',
-                  'To display full-screen incoming call pages while using other apps, Mingo requires the "Display over other apps" permission.',
+                  'To display full-screen incoming call pages while using other apps, TalkMingo requires the "Display over other apps" permission.',
                   [
                     { text: 'Cancel', style: 'cancel' },
                     {
@@ -599,7 +599,7 @@ export default function ListenerHomeScreen() {
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Image 
-            source={require('../../images/Mingo Splash Text.png')} 
+            source={require('../../images/TalkMingo Splash Text.png')} 
             style={styles.logoImage} 
             resizeMode="contain" 
           />
@@ -651,7 +651,7 @@ export default function ListenerHomeScreen() {
         {}
         <View style={[styles.card, isOnline && { opacity: 0.7 }]}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: vs(10) }}>
-            <Text style={[styles.cardTitle, { marginBottom: 0 }]}>Mingo Mode</Text>
+            <Text style={[styles.cardTitle, { marginBottom: 0 }]}>TalkMingo Mode</Text>
             {isOnline && (
               <View style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
                 <Text style={{ color: '#EF4444', fontSize: 10, fontWeight: 'bold' }}>OFFLINE TO EDIT</Text>
@@ -899,9 +899,8 @@ const styles = StyleSheet.create({
     gap: wp(2),
   },
   logoImage: {
-    width: wp(38),
-    height: hp(5),
-    marginLeft: -wp(6),
+    width: wp(34),
+    height: hp(4),
   },
   headerRight: {
     flexDirection: 'row',

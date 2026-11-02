@@ -129,7 +129,7 @@ object IncomingCallNotifications {
             // Channel creation failed — still try to post below.
         }
 
-        val callerName = payload.optString("callerName", "Mingo")
+        val callerName = payload.optString("callerName", "TalkMingo")
         val callType = payload.optString("callType", "audio")
         val title = "Incoming ${if (callType == "video") "Video" else "Audio"} Call"
 

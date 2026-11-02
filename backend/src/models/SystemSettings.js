@@ -76,7 +76,7 @@ const systemSettingsSchema = new mongoose.Schema(
       provider: { type: String, default: 'firebase' },
     },
     notifications: {
-      welcomeMessage: { type: String, default: 'Welcome to Mingo!' },
+      welcomeMessage: { type: String, default: 'Welcome to TalkMingo!' },
     },
     customRingtoneUrl: {
       type: String,

@@ -315,7 +315,7 @@ export default function EditProfileScreen() {
           visible: true,
           type: 'error',
           title: 'Error',
-          message: 'You must be at least 18 years old to use Mingo.',
+          message: 'You must be at least 18 years old to use TalkMingo.',
           onClose: () => setPopup((prev) => ({ ...prev, visible: false })),
         });
         return;

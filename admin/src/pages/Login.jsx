@@ -98,7 +98,7 @@ export default function Login() {
         <div style={{ textAlign: 'center', marginBottom: 36 }}>
           <img
             src="/logo.png"
-            alt="Mingo"
+            alt="TalkMingo"
             style={{
               width: 56,
               height: 56,
@@ -116,7 +116,7 @@ export default function Login() {
             margin: '16px 0 4px',
             letterSpacing: '-0.3px',
           }}>
-            Mingo
+            TalkMingo
           </h1>
           <p style={{
             color: 'var(--text-muted)',

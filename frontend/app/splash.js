@@ -41,7 +41,7 @@ export default function SplashTransition() {
       <StatusBar style="light" />
       <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
           <Image 
-            source={require('../images/Mingo Splash Text.png')} 
+            source={require('../images/TalkMingo Splash Text.png')} 
             style={{ width: SCREEN_WIDTH * 0.8, height: SCREEN_HEIGHT * 0.2 }} 
             resizeMode="contain" 
         />

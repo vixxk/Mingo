@@ -15,12 +15,14 @@ import {
   Modal,
   Linking,
   BackHandler,
+  AppState,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ms, s, vs, hp, wp, SCREEN_HEIGHT, SCREEN_WIDTH, isSmallPhone } from '../../utils/responsive';
 import { authAPI } from '../../utils/api';
@@ -46,6 +48,7 @@ export default function SignupScreen() {
   const [showWelcomePopup, setShowWelcomePopup] = useState(false);
   const [userName, setUserName] = useState('');
   const [countdown, setCountdown] = useState(60);
+  const lastBackPressRef = useRef(0);
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -64,6 +67,31 @@ export default function SignupScreen() {
         useNativeDriver: true,
       }),
     ]).start();
+
+    // Restore pending OTP session if active (e.g. returning to app or after activity resume)
+    const restorePendingOtp = async () => {
+      try {
+        const saved = await AsyncStorage.getItem('pending_signup_otp_step');
+        if (saved) {
+          const data = JSON.parse(saved);
+          const elapsed = Date.now() - (data.timestamp || 0);
+          if (elapsed < 300000 && data.phone) {
+            if (data.name) setName(data.name);
+            if (data.username) setUsername(data.username);
+            if (data.dobDay) setDobDay(data.dobDay);
+            if (data.dobMonth) setDobMonth(data.dobMonth);
+            if (data.dobYear) setDobYear(data.dobYear);
+            setPhone(data.phone);
+            setShowOtpStep(true);
+            const remaining = Math.max(0, 60 - Math.floor(elapsed / 1000));
+            setCountdown(remaining);
+          } else {
+            await AsyncStorage.removeItem('pending_signup_otp_step');
+          }
+        }
+      } catch (e) {}
+    };
+    restorePendingOtp();
   }, []);
 
   useEffect(() => {
@@ -76,17 +104,57 @@ export default function SignupScreen() {
     return () => clearInterval(interval);
   }, [showOtpStep, countdown]);
 
-  // Intercept Android hardware back press when on OTP step to prevent exiting the page (e.g. from Truecaller popups)
+  // Intercept Android hardware back press when on OTP step
+  // Truecaller popup dismissals and notification swipes fire back press events.
+  // Require double back-press to intentionally exit OTP step, preventing accidental dismissal.
   useEffect(() => {
     const onBackPress = () => {
       if (showOtpStep) {
-        setShowOtpStep(false);
-        setOtp('');
-        return true; // Handled — do not exit the page
+        const now = Date.now();
+        if (now - lastBackPressRef.current < 2000) {
+          setShowOtpStep(false);
+          setOtp('');
+          setCountdown(60);
+          AsyncStorage.removeItem('pending_signup_otp_step').catch(() => {});
+          return true;
+        }
+        lastBackPressRef.current = now;
+        return true; // Absorb single back press (e.g. from Truecaller overlay/notification closing)
       }
       return false; // Standard navigation
     };
     const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [showOtpStep]);
+
+  // Auto-fill OTP from clipboard when returning to app (e.g. copied from Truecaller or SMS notification)
+  useEffect(() => {
+    const handleAppStateChange = async (nextAppState) => {
+      if (nextAppState === 'active' && showOtpStep) {
+        try {
+          const hasString = await Clipboard.hasStringAsync();
+          if (hasString) {
+            const clipText = await Clipboard.getStringAsync();
+            if (clipText) {
+              const match = clipText.trim().match(/\b\d{6}\b/);
+              if (match && match[0]) {
+                setOtp((currentOtp) => {
+                  if (!currentOtp || currentOtp.length < 6) {
+                    clearFieldError('otp');
+                    return match[0];
+                  }
+                  return currentOtp;
+                });
+              }
+            }
+          }
+        } catch (e) {
+          // Clipboard read error ignored
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
     return () => subscription.remove();
   }, [showOtpStep]);
 
@@ -255,7 +323,7 @@ export default function SignupScreen() {
     } else {
       const age = calculateAgeFromDob(formattedDob);
       if (age === null || age < 18) {
-        newErrors.dob = 'You must be at least 18 years old to join Mingo';
+        newErrors.dob = 'You must be at least 18 years old to join TalkMingo';
       }
     }
 
@@ -283,6 +351,17 @@ export default function SignupScreen() {
       setShowOtpStep(true);
       setCountdown(60);
       setShowSuccessPopup(true);
+      try {
+        await AsyncStorage.setItem('pending_signup_otp_step', JSON.stringify({
+          name: name.trim(),
+          username: username.trim(),
+          phone: phone.trim(),
+          dobDay,
+          dobMonth,
+          dobYear,
+          timestamp: Date.now()
+        }));
+      } catch (e) {}
       setTimeout(() => setShowSuccessPopup(false), 3000);
     } catch (error) {
       if (error.status === 409) {
@@ -324,6 +403,7 @@ export default function SignupScreen() {
       await AsyncStorage.setItem('user', JSON.stringify(result.data.user));
       await AsyncStorage.removeItem('listenerStatus');
       await AsyncStorage.setItem('showLoginOffers', 'true');
+      await AsyncStorage.removeItem('pending_signup_otp_step').catch(() => {});
       
       setUserName(result.data.user.name);
       setShowWelcomePopup(true);
@@ -403,7 +483,7 @@ export default function SignupScreen() {
                 </LinearGradient>
               </View>
               <Text style={styles.modalTitle}>Account Created!</Text>
-              <Text style={styles.modalText}>Welcome to Mingo, {userName}!</Text>
+              <Text style={styles.modalText}>Welcome to TalkMingo, {userName}!</Text>
               <TouchableOpacity 
                 activeOpacity={0.8}
                 onPress={async () => {
@@ -446,10 +526,14 @@ export default function SignupScreen() {
       {/* Top Header Back Button */}
       <TouchableOpacity 
         style={[styles.backButton, { top: insets.top + 10 }]} 
-        onPress={() => {
+        onPress={async () => {
           if (showOtpStep) {
             setShowOtpStep(false);
             setOtp('');
+            setCountdown(60);
+            try {
+              await AsyncStorage.removeItem('pending_signup_otp_step');
+            } catch (e) {}
           } else {
             router.back();
           }
@@ -531,7 +615,7 @@ export default function SignupScreen() {
 
               <Text style={styles.header}>Create Account</Text>
               <Text style={styles.description}>
-                Join Mingo and connect with listeners anytime, anywhere.
+                Join TalkMingo and connect with listeners anytime, anywhere.
               </Text>
 
               {}
@@ -683,7 +767,14 @@ export default function SignupScreen() {
                       </Text>
                     </TouchableOpacity>
                     <TouchableOpacity 
-                      onPress={() => { setShowOtpStep(false); setOtp(''); setCountdown(60); }} 
+                      onPress={async () => { 
+                        setShowOtpStep(false); 
+                        setOtp(''); 
+                        setCountdown(60); 
+                        try {
+                          await AsyncStorage.removeItem('pending_signup_otp_step');
+                        } catch (e) {}
+                      }} 
                     >
                       <Text style={{ color: '#3B82F6', fontSize: ms(12) }}>Change phone number</Text>
                     </TouchableOpacity>

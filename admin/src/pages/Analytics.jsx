@@ -133,7 +133,7 @@ export default function Analytics() {
       doc.setFontSize(22)
       doc.setFont(undefined, 'bold')
       doc.setTextColor(139, 92, 246)
-      doc.text('Mingo Analytics Report', 14, 22)
+      doc.text('TalkMingo Analytics Report', 14, 22)
 
       doc.setFontSize(10)
       doc.setFont(undefined, 'normal')
@@ -234,7 +234,7 @@ export default function Analytics() {
         })
       }
 
-      const fileName = `mingo-analytics-${new Date().toISOString().split('T')[0]}.pdf`
+      const fileName = `talkmingo-analytics-${new Date().toISOString().split('T')[0]}.pdf`
       doc.save(fileName)
 
       setToast({ visible: true, message: 'PDF report downloaded successfully!', type: 'success' })

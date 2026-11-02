@@ -91,7 +91,7 @@ export default function ReportUserPopup({ visible, onClose, reportedUserId, repo
               </View>
               <Text style={st.title}>Report Submitted</Text>
               <Text style={st.description}>
-                Thank you for helping keep Mingo safe. Our team will review this report shortly.
+                Thank you for helping keep TalkMingo safe. Our team will review this report shortly.
               </Text>
             </View>
           ) : (

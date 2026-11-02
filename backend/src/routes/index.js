@@ -33,7 +33,7 @@ router.use('/ads', adRoutes);
 router.get('/health', (req, res) => {
   res.json({
     success: true,
-    message: 'Mingo API is running',
+    message: 'TalkMingo API is running',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
   });

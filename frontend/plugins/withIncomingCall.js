@@ -171,7 +171,10 @@ const withIncomingCallSources = (config) =>
     }
 
     // Logo resource
-    const LOGO_SOURCE = path.join(__dirname, '..', 'images', 'Mingo Splash Text.png');
+    let LOGO_SOURCE = path.join(__dirname, '..', 'images', 'TalkMingo Splash Text.png');
+    if (!fs.existsSync(LOGO_SOURCE)) {
+      LOGO_SOURCE = path.join(__dirname, '..', 'images', 'Mingo Splash Text.png');
+    }
     const drawableDir = path.join(platformRoot, 'app', 'src', 'main', 'res', 'drawable');
     if (!fs.existsSync(drawableDir)) fs.mkdirSync(drawableDir, { recursive: true });
     if (fs.existsSync(LOGO_SOURCE)) {

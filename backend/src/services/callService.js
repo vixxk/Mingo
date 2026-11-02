@@ -22,13 +22,7 @@ const PushService = require('./pushService');
  */
 function getAgoraCallPayload(roomId, callType) {
   if (callType === 'chat') return {};
-  const config = require('../config/env');
   const payload = {};
-
-  if (config.zego.appId && config.zego.appSign) {
-    payload.zegoAppId = config.zego.appId;
-    payload.zegoAppSign = config.zego.appSign;
-  }
 
   try {
     const { appId } = getAgoraCredentials();

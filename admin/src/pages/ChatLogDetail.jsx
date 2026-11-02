@@ -50,7 +50,7 @@ export default function ChatLogDetail() {
   }
 
   const getSenderInfo = (item) => {
-    if (item.isAdminMessage) return { name: 'Mingo Support', support: true }
+    if (item.isAdminMessage) return { name: 'TalkMingo Support', support: true }
     const senderId = item.sender?.id
     const match = (conversation?.participants || []).find(p => String(p.id) === String(senderId))
     const base = import.meta.env.VITE_CDN_URL || 'https://starpix-media-production.s3.ap-south-1.amazonaws.com'
@@ -160,7 +160,7 @@ export default function ChatLogDetail() {
                 fontSize: 14, fontWeight: 700, color: conversation.isAdminConversation ? '#FBBF24' : '#fff',
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}>
-                {conversation.isAdminConversation ? 'Mingo Support' : (conversation.otherParticipant?.name || 'Unknown')}
+                {conversation.isAdminConversation ? 'TalkMingo Support' : (conversation.otherParticipant?.name || 'Unknown')}
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                 {conversation.messageCount} messages · {status.label}

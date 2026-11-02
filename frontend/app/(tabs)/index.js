@@ -986,7 +986,7 @@ export default function HomeScreen() {
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Image
-            source={require('../../images/Mingo Splash Text.png')}
+            source={require('../../images/TalkMingo Splash Text.png')}
             style={styles.logoImage}
             resizeMode="contain"
           />
@@ -1052,7 +1052,7 @@ export default function HomeScreen() {
         {bestChoiceData.length > 0 && (
           <>
             <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Mingo Mates</Text>
+              <Text style={styles.sectionTitle}>TalkMingo Mates</Text>
             </View>
 
             {/* Mingo Mates Horizontal Cards (Same size as People cards) */}
@@ -1224,9 +1224,8 @@ const styles = StyleSheet.create({
     borderColor: '#EC4899',
   },
   logoImage: {
-    width: wp(38),
-    height: hp(5),
-    marginLeft: -wp(6),
+    width: wp(34),
+    height: hp(4),
   },
   coinBadge: {
     flexDirection: 'row',

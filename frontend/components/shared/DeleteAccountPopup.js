@@ -113,7 +113,7 @@ export default function DeleteAccountPopup({ visible, onClose, onConfirm, isDele
               <View style={st.noticeBox}>
                 <Ionicons name="information-circle" size={wp(5)} color="#FCA5A5" style={{ marginRight: wp(2) }} />
                 <Text style={st.noticeText}>
-                  You will be redirected to the secure Mingo account deletion web page to specify your reason and confirm deletion.
+                  You will be redirected to the secure TalkMingo account deletion web page to specify your reason and confirm deletion.
                 </Text>
               </View>
 

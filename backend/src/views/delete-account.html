@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Delete Account - Mingo - Talk & Feel Better (SIGLER)</title>
-  <meta name="description" content="Official Account & Data Deletion Portal for Mingo - Talk & Feel Better by SIGLER." />
+  <title>Delete Account - TalkMingo - Talk & Feel Better (SIGLER)</title>
+  <meta name="description" content="Official Account & Data Deletion Portal for TalkMingo - Talk & Feel Better by SIGLER." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -742,10 +742,10 @@
     <div class="header">
       <div class="brand-badge">
         <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8s0 .01 0 .01z"/></svg>
-        Mingo - Account Security
+        TalkMingo - Account Security
       </div>
-      <h1>Delete Your Mingo Account</h1>
-      <p class="subtitle">Official Account & Data Deletion Portal for <strong>Mingo - Talk & Feel Better</strong> (by SIGLER).</p>
+      <h1>Delete Your TalkMingo Account</h1>
+      <p class="subtitle">Official Account & Data Deletion Portal for <strong>TalkMingo - Talk & Feel Better</strong> (by SIGLER).</p>
       
       <div class="stepper">
         <div class="step-dot active" id="step1Dot"></div>
@@ -800,7 +800,7 @@
         </div>
         <div class="user-info">
           <div class="user-name-row">
-            <span class="user-name" id="userNameText">Mingo User</span>
+            <span class="user-name" id="userNameText">TalkMingo User</span>
             <span class="role-badge" id="userRoleTag">USER</span>
           </div>
           <div class="user-phone" id="userPhoneText">
@@ -921,7 +921,7 @@
       <!-- Custom Reason Input -->
       <div class="input-group hidden" id="customReasonGroup">
         <label class="section-header" for="customReasonInput">Please specify your reason</label>
-        <textarea id="customReasonInput" placeholder="Help us understand how we can improve Mingo..." maxlength="300" oninput="updateCharCount()"></textarea>
+        <textarea id="customReasonInput" placeholder="Help us understand how we can improve TalkMingo..." maxlength="300" oninput="updateCharCount()"></textarea>
         <span class="char-counter" id="charCounter">0 / 300</span>
       </div>
 
@@ -938,10 +938,10 @@
       </div>
       <h2 style="font-size: 24px; font-weight: 900; color: white; margin-bottom: 10px; letter-spacing: -0.5px;">Account Deleted Successfully</h2>
       <p style="color: var(--text-muted); font-size: 14px; line-height: 1.6; margin-bottom: 24px; max-width: 440px; margin-left: auto; margin-right: auto;">
-        Your Mingo account and all associated data have been permanently deleted immediately. Any future login or sign up with this phone number will create a brand new account.
+        Your TalkMingo account and all associated data have been permanently deleted immediately. Any future login or sign up with this phone number will create a brand new account.
       </p>
       <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); padding: 18px; border-radius: 16px; font-size: 13px; color: #9ca3af;">
-        You can now safely close this browser tab. Thank you for using Mingo.
+        You can now safely close this browser tab. Thank you for using TalkMingo.
       </div>
     </div>
 
@@ -1020,7 +1020,7 @@
           localStorage.setItem('mingo_temp_token', token);
 
           // Populate user card
-          document.getElementById('userNameText').innerText = currentUserData.name || currentUserData.username || 'Mingo Member';
+          document.getElementById('userNameText').innerText = currentUserData.name || currentUserData.username || 'TalkMingo Member';
           document.getElementById('userPhoneText').innerText = currentUserData.phone ? `+91 ${currentUserData.phone}` : 'Registered Member';
           document.getElementById('userRoleTag').innerText = (currentUserData.role || 'USER').toUpperCase();
           document.getElementById('userAvatarLetter').innerText = (currentUserData.name || 'M').charAt(0).toUpperCase();

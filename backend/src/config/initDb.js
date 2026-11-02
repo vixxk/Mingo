@@ -8,7 +8,7 @@ require('../models/ratingModel');
 
 async function initDatabase() {
   try {
-    console.log('🚀 Initializing Mingo database...');
+    console.log('🚀 Initializing TalkMingo database...');
     await connectDB();
 
     

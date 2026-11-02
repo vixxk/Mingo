@@ -1307,7 +1307,7 @@ class AdminController {
         switch (status) {
           case 'paid':
             title = 'Payout Credited 🎉';
-            body = `Your payout of ${netStr}${tdsNote} has been credited. Thanks for being part of Mingo!`;
+            body = `Your payout of ${netStr}${tdsNote} has been credited. Thanks for being part of TalkMingo!`;
             break;
           case 'approved':
             title = 'Payout Approved ✅';

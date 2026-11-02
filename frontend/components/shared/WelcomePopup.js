@@ -153,7 +153,7 @@ export default function WelcomePopup({ visible, onAgree, onClose }) {
                 showsVerticalScrollIndicator={false}
                 bounces={false}
               >
-                <Text style={styles.welcomeTitleStep2}>Welcome to Mingo</Text>
+                <Text style={styles.welcomeTitleStep2}>Welcome to TalkMingo</Text>
                 <Text style={styles.welcomeSubtitleStep2}>Let's keep this space safe.</Text>
 
                 <View style={styles.guidelinesContainer}>
@@ -175,7 +175,7 @@ export default function WelcomePopup({ visible, onAgree, onClose }) {
                 </View>
 
                 <Text style={styles.termsTextStep2}>
-                  By Using Mingo, you're agreeing to adhere to our values as well as our{' '}
+                  By using TalkMingo, you're agreeing to adhere to our values as well as our{' '}
                   <Text style={styles.termsLink} onPress={() => Linking.openURL('https://www.talkmingo.com/terms')}>
                     Terms & Conditions
                   </Text>,{' '}

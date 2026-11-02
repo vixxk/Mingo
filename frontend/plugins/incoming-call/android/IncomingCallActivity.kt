@@ -221,7 +221,7 @@ class IncomingCallActivity : Activity() {
      */
     private fun silenceChannelNotification(payload: JSONObject) {
         try {
-            val callerName = payload.optString("callerName", "Mingo")
+            val callerName = payload.optString("callerName", "TalkMingo")
             val callType = payload.optString("callType", "audio")
             val title = "Incoming ${if (callType == "video") "Video" else "Audio"} Call"
 
@@ -253,7 +253,7 @@ class IncomingCallActivity : Activity() {
     // ── UI ───────────────────────────────────────────────────────
 
     private fun buildUi(payload: JSONObject): View {
-        val callerName = payload.optString("callerName", "Mingo User")
+        val callerName = payload.optString("callerName", "TalkMingo User")
         val callType = payload.optString("callType", "audio")
         val isVideo = callType == "video"
         val dp = resources.displayMetrics.density
@@ -268,7 +268,7 @@ class IncomingCallActivity : Activity() {
             )
         }
 
-        // 1. Top Bar Header - Mingo Logo Image (Top Left)
+        // 1. Top Bar Header - TalkMingo Logo Image (Top Left)
         val logoImage = android.widget.ImageView(this).apply {
             scaleType = android.widget.ImageView.ScaleType.FIT_START
             try {

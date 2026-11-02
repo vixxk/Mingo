@@ -33,7 +33,7 @@ class UserController {
         }
         const age = calculateAge(dob);
         if (age === null || age < 18) {
-          throw new AppError('You must be at least 18 years old to join Mingo', 400);
+          throw new AppError('You must be at least 18 years old to join TalkMingo', 400);
         }
         update.dob = new Date(dob);
       }

@@ -106,7 +106,7 @@ export default function SplashScreenPage() {
         setShowPermissionScreen(true);
         Alert.alert(
           "Permissions Required",
-          "Audio, Video, and Notification permissions are required to use Mingo. Please grant all permissions to proceed.",
+          "Audio, Video, and Notification permissions are required to use TalkMingo. Please grant all permissions to proceed.",
           [
             { text: "Open Settings", onPress: handleOpenSettings },
             { text: "Try Again", onPress: () => requestAndVerify() }
@@ -221,6 +221,26 @@ export default function SplashScreenPage() {
           router.replace('/(tabs)');
         }
       } else {
+        // Check if there is an active OTP session before falling back to welcome
+        try {
+          const pendingLogin = await AsyncStorage.getItem('pending_login_otp_step');
+          if (pendingLogin) {
+            const data = JSON.parse(pendingLogin);
+            if (Date.now() - (data.timestamp || 0) < 300000) {
+              router.replace('/login');
+              return;
+            }
+          }
+          const pendingSignup = await AsyncStorage.getItem('pending_signup_otp_step');
+          if (pendingSignup) {
+            const data = JSON.parse(pendingSignup);
+            if (Date.now() - (data.timestamp || 0) < 300000) {
+              router.replace('/signup');
+              return;
+            }
+          }
+        } catch (e) {}
+
         router.replace('/welcome');
       }
     } catch (error) {
@@ -283,7 +303,7 @@ export default function SplashScreenPage() {
         <View style={styles.permissionCard}>
           <Text style={styles.permissionTitle}>Permissions Required</Text>
           <Text style={styles.permissionDesc}>
-            To start using Mingo for calling and chatting with listeners, please allow the following permissions:
+            To start using TalkMingo for calling and chatting with listeners, please allow the following permissions:
           </Text>
 
           <View style={styles.permissionList}>
@@ -347,7 +367,7 @@ export default function SplashScreenPage() {
       <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
         <View style={styles.logoRow}>
           <Image 
-            source={require('../images/Mingo Splash Text.png')} 
+            source={require('../images/TalkMingo Splash Text.png')} 
             style={{ width: SCREEN_WIDTH * 0.8, height: SCREEN_HEIGHT * 0.2 }} 
             resizeMode="contain" 
           />

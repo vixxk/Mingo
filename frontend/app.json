@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Mingo",
+    "name": "TalkMingo",
     "slug": "frontend",
-    "scheme": "mingo",
+    "scheme": "talkmingo",
     "version": "1.0.0",
     "runtimeVersion": {
       "policy": "appVersion"
@@ -65,8 +65,8 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow Mingo to access your camera for video calls.",
-          "microphonePermission": "Allow Mingo to access your microphone for audio and video calls."
+          "cameraPermission": "Allow TalkMingo to access your camera for video calls.",
+          "microphonePermission": "Allow TalkMingo to access your microphone for audio and video calls."
         }
       ],
       "./plugins/withAgora.js",

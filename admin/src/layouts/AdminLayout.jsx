@@ -205,7 +205,7 @@ export default function AdminLayout() {
             )}
             <img
               src="/logo.png"
-              alt="Mingo"
+              alt="TalkMingo"
               style={{
                 width: collapsed ? 40 : 50,
                 height: collapsed ? 40 : 50,
@@ -227,7 +227,7 @@ export default function AdminLayout() {
               transition: 'opacity 0.15s, font-size 0.3s',
               lineHeight: 1.2,
             }}>
-              Mingo
+              TalkMingo
             </div>
             <div style={{
               fontSize: collapsed ? 0 : 14,
@@ -632,8 +632,8 @@ export default function AdminLayout() {
               gap: 10,
               minWidth: 0,
             }}>
-              <img src="/logo.png" alt="Mingo" style={{ width: 32, height: 32, borderRadius: 8, objectFit: 'contain', flexShrink: 0 }} />
-              <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-display)', letterSpacing: '-0.3px' }}>Mingo Admin Panel</span>
+              <img src="/logo.png" alt="TalkMingo" style={{ width: 32, height: 32, borderRadius: 8, objectFit: 'contain', flexShrink: 0 }} />
+              <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-display)', letterSpacing: '-0.3px' }}>TalkMingo Admin Panel</span>
             </div>
           </div>
         )}

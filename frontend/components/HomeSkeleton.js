@@ -181,10 +181,9 @@ const styles = StyleSheet.create({
     gap: wp(2),
   },
   logo: {
-    width: wp(38),
-    height: hp(5),
+    width: wp(34),
+    height: hp(4),
     borderRadius: 4,
-    marginLeft: -wp(6),
   },
   coinBadge: {
     width: wp(18),

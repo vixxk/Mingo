@@ -355,7 +355,7 @@ const sendNotificationToOneSignalByUserIds = async (userIds, title, body, data =
         app_id: appId,
         include_external_user_ids: cleanIds,
         channel_for_external_user_ids: 'push',
-        headings: { en: title || 'Mingo' },
+        headings: { en: title || 'TalkMingo' },
         contents: { en: body || 'Notification' },
         data,
         ios_badgeType: 'Increase',

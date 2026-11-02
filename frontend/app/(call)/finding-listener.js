@@ -340,7 +340,7 @@ export default function FindingListenerScreen() {
       {/* Branded header */}
       <Animated.View style={[styles.header, { paddingTop: insets.top + hp(1), opacity: fadeAnim }]}>
         <Image
-          source={require('../../images/Mingo Splash Text.png')}
+          source={require('../../images/TalkMingo Splash Text.png')}
           style={styles.logo}
           resizeMode="contain"
         />

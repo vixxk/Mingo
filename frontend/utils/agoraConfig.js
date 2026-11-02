@@ -1,4 +1,4 @@
-// Agora RTC credentials for VIDEO calls.
+// Agora RTC credentials for AUDIO and VIDEO calls.
 //
 // The App ID is provided through the EXPO_PUBLIC_AGORA_APP_ID environment
 // variable (see .env.example). It must match the backend's AGORA_APP_ID —

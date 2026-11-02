@@ -34,7 +34,7 @@ class PlayBillingService {
    * @returns {Promise<object>} The purchase details from Google API
    */
   static async verifyProductPurchase(productId, purchaseToken) {
-    const packageName = process.env.GOOGLE_PLAY_PACKAGE_NAME || 'com.vixxk.mingo';
+    const packageName = process.env.GOOGLE_PLAY_PACKAGE_NAME || 'com.talkmingo.app';
     const playDeveloperApi = this.getPublisherClient();
 
     try {

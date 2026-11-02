@@ -472,7 +472,7 @@ const initSocket = (server) => {
           if (recipientIdStr && !isRecipientInConvRoom) {
             io.to(`user_${recipientIdStr}`).emit('receive_message', message);
             PushService.sendPushNotification(recipientIdStr, {
-              title: sender.name || 'Mingo',
+              title: sender.name || 'TalkMingo',
               body: type === 'text' ? content : `Sent a ${type}`,
               data: { 
                 url: `/chat?id=${conversationId}`,
@@ -614,7 +614,7 @@ const initSocket = (server) => {
         
         // Send push notification so recipient is informed when not in conversation room
         PushService.sendPushNotification(recipientIdStr, {
-          title: sender.name || 'Mingo',
+          title: sender.name || 'TalkMingo',
           body: type === 'text' ? content : `Sent a ${type}`,
           data: { 
             url: `/chat?id=${conversationId}`,
@@ -742,7 +742,7 @@ const initSocket = (server) => {
 
         const agoraPayload = CallService.getAgoraCallPayload(roomId, session.callType);
 
-        // Notify the caller with the Agora/Zego credentials to join the channel
+        // Notify the caller with the Agora credentials to join the channel
         io.to(`user_${userId}`).emit('call_accepted', { sessionId, roomId, ...agoraPayload });
 
         // Also confirm to the listener that the backend successfully relayed the acceptance

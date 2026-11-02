@@ -103,7 +103,7 @@ export default function Exports() {
         u.createdAt ? new Date(u.createdAt).toLocaleString() : '—'
       ])
 
-      downloadCSV(`Mingo_User_List_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows)
+      downloadCSV(`TalkMingo_User_List_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows)
       showToast(`Exported ${rows.length} registered user records`)
     } catch (e) {
       showToast(e.message || 'Failed to export users', 'error')
@@ -133,7 +133,7 @@ export default function Exports() {
         l.profileSubmittedAt ? new Date(l.profileSubmittedAt).toLocaleString() : '—'
       ])
 
-      downloadCSV(`Mingo_Listener_List_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows)
+      downloadCSV(`TalkMingo_Listener_List_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows)
       showToast(`Exported ${rows.length} listener records`)
     } catch (e) {
       showToast(e.message || 'Failed to export listeners', 'error')
@@ -164,7 +164,7 @@ export default function Exports() {
         s.startTime ? new Date(s.startTime).toLocaleString() : '—'
       ])
 
-      downloadCSV(`Mingo_Sessions_Report_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows)
+      downloadCSV(`TalkMingo_Sessions_Report_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows)
       showToast(`Exported ${rows.length} session records`)
     } catch (e) {
       showToast(e.message || 'Failed to export sessions', 'error')
@@ -193,7 +193,7 @@ export default function Exports() {
         t.createdAt ? new Date(t.createdAt).toLocaleString() : '—'
       ])
 
-      downloadCSV(`Mingo_Transaction_Report_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows)
+      downloadCSV(`TalkMingo_Transaction_Report_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows)
       showToast(`Exported ${rows.length} transaction records`)
     } catch (e) {
       showToast(e.message || 'Failed to export transactions', 'error')
@@ -237,7 +237,7 @@ export default function Exports() {
         r.adminNotes || '—'
       ])
 
-      downloadCSV(`Mingo_Payouts_Report_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows)
+      downloadCSV(`TalkMingo_Payouts_Report_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows)
       showToast(`Exported ${rows.length} payout records`)
     } catch (e) {
       showToast(e.message || 'Failed to export payouts', 'error')

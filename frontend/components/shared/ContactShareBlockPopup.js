@@ -62,8 +62,8 @@ export default function ContactShareBlockPopup({
           <Text style={st.description}>
             For your safety, phone numbers and other contact details can't be sent in chat.{' '}
             {hasContactIntent
-              ? 'Please keep all conversations on Mingo.'
-              : 'Please keep the conversation on Mingo.'}
+              ? 'Please keep all conversations on TalkMingo.'
+              : 'Please keep the conversation on TalkMingo.'}
           </Text>
 
           {/* Masked number preview */}

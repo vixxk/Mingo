@@ -15,7 +15,7 @@ import { ms, s, vs, wp, hp } from '../../utils/responsive';
 
 /**
  * Dedicated Payment Processing, Success, and Failure screens for coin purchase flow.
- * Follows Mingo Darkish Red theme matching Help & Support page.
+ * Follows TalkMingo Darkish Red theme matching Help & Support page.
  * Uses percentage-based screen calculations (% wp/hp) for responsive UI consistency.
  */
 export default function PaymentStateOverlay({
