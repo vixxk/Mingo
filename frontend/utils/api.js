@@ -1,8 +1,19 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 
+import Constants from 'expo-constants';
+
 const getBaseUrl = () => {
-  return process.env.EXPO_PUBLIC_API_URL;
+  const envUrl = process.env.EXPO_PUBLIC_API_URL;
+  // If running in development with Expo Go or dev client, infer the host IP from Metro bundler if available
+  const hostUri = Constants?.expoConfig?.hostUri || Constants?.manifest2?.extra?.expoGo?.debuggerHost || Constants?.manifest?.debuggerHost;
+  if (hostUri) {
+    const hostIp = hostUri.split(':')[0];
+    if (hostIp && hostIp !== 'localhost' && hostIp !== '127.0.0.1') {
+      return `http://${hostIp}:3000/api`;
+    }
+  }
+  return envUrl || 'http://localhost:3000/api';
 };
 
 const API_BASE_URL = getBaseUrl();
@@ -105,6 +116,7 @@ const apiRequest = async (endpoint, options = {}) => {
       '/listener/my-profile',
       '/notifications',
       '/chat/conversations',
+      '/call/active/incoming',
     ];
     const shouldSkip = skipRedirectEndpoints.some(ep => endpoint.startsWith(ep));
 
@@ -113,11 +125,16 @@ const apiRequest = async (endpoint, options = {}) => {
       try {
         const healthController = new AbortController();
         const healthTimeout = setTimeout(() => healthController.abort(), 6000);
-        await fetch(`${API_BASE_URL}/health`, { signal: healthController.signal });
+        const healthUrl = API_BASE_URL.endsWith('/api') ? `${API_BASE_URL}/health` : `${API_BASE_URL}/api/health`;
+        const healthRes = await fetch(healthUrl, { signal: healthController.signal });
         clearTimeout(healthTimeout);
-        // Health check passed — server is reachable, so this was a transient failure
-        console.log('[apiRequest] Transient error on', endpoint, '— health check passed. Not redirecting.');
+        if (healthRes.ok) {
+          // Health check passed — server is reachable, so this was a transient failure
+          console.log('[apiRequest] Transient error on', endpoint, '— health check passed. Not redirecting.');
+          throw error;
+        }
       } catch (healthErr) {
+        if (healthErr === error) throw error;
         // Health check also failed — network is truly down
         console.log('[apiRequest] Network confirmed down (health check failed). Redirecting to /network-error for endpoint:', endpoint);
         isNetworkErrorScreenOpen = true;

@@ -16,7 +16,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
-import { Audio } from 'expo-av';
+import { 
+  requestRecordingPermissionsAsync, 
+  setAudioModeAsync, 
+  RecordingPresets, 
+  createAudioPlayer,
+  AudioModule 
+} from 'expo-audio';
 import { ms, s, vs, hp, wp, SCREEN_HEIGHT, SCREEN_WIDTH } from '../../utils/responsive';
 
 const languageSamples = [
@@ -232,12 +238,12 @@ export default function VoiceVerificationScreen() {
 
   const startRecording = useCallback(async () => {
     try {
-      const { granted } = await Audio.requestPermissionsAsync();
+      const { granted } = await requestRecordingPermissionsAsync();
       if (!granted) return;
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true, staysActiveInBackground: true });
-      const rec = new Audio.Recording();
-      await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      await rec.startAsync();
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true, shouldPlayInBackground: true });
+      const rec = new AudioModule.AudioRecorder(RecordingPresets.HIGH_QUALITY);
+      await rec.prepareToRecordAsync();
+      rec.record();
       setRecordingInstance(rec);
       setIsRecording(true);
       durationRef.current = 0;
@@ -254,8 +260,8 @@ export default function VoiceVerificationScreen() {
   const stopRecording = useCallback(async () => {
     if (!recordingInstance) return;
     try {
-      await recordingInstance.stopAndUnloadAsync();
-      setRecordingUri(recordingInstance.getURI());
+      await recordingInstance.stop();
+      setRecordingUri(recordingInstance.uri);
       setIsRecording(false);
       setRecordingInstance(null);
       if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
@@ -294,21 +300,36 @@ export default function VoiceVerificationScreen() {
   const playRecording = useCallback(async () => {
     if (!recordingUri) return;
     try {
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
-      if (soundInstance) await soundInstance.unloadAsync();
-      const { sound } = await Audio.Sound.createAsync({ uri: recordingUri }, { shouldPlay: true });
-      setSoundInstance(sound);
+      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
+      if (soundInstance) {
+        soundInstance.pause();
+        soundInstance.remove?.();
+      }
+      const player = createAudioPlayer({ uri: recordingUri });
+      setSoundInstance(player);
       setIsPlaying(true);
-      sound.setOnPlaybackStatusUpdate((s) => { if (s.didJustFinish) setIsPlaying(false); });
+      player.play();
+      player.addListener('playbackStatusUpdate', (s) => {
+        if (s.playbackState === 'stopped' || (!s.playing && s.currentTime >= s.duration && s.duration > 0)) {
+          setIsPlaying(false);
+        }
+      });
     } catch (err) { console.error('Playback failed:', err); }
   }, [recordingUri, soundInstance]);
 
   const stopPlayback = useCallback(async () => {
-    if (soundInstance) { await soundInstance.stopAsync(); setIsPlaying(false); }
+    if (soundInstance) {
+      soundInstance.pause();
+      setIsPlaying(false);
+    }
   }, [soundInstance]);
 
   const deleteRecording = useCallback(() => {
-    if (soundInstance) { soundInstance.unloadAsync(); setSoundInstance(null); }
+    if (soundInstance) {
+      soundInstance.pause();
+      soundInstance.remove?.();
+      setSoundInstance(null);
+    }
     setIsPlaying(false);
     setRecordingUri(null);
     setRecordingDuration(0);

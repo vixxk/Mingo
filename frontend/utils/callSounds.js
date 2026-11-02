@@ -1,7 +1,7 @@
-import { Audio } from 'expo-av';
+import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 
-let ringtoneSound = null;
-let incomingSound = null;
+let ringtonePlayer = null;
+let incomingPlayer = null;
 let ringtoneLoading = false;
 let incomingLoading = false;
 let currentIsSpeaker = false; // Default: normal earpiece mode
@@ -9,12 +9,11 @@ let currentIsSpeaker = false; // Default: normal earpiece mode
 async function configureAudioMode(isSpeaker = currentIsSpeaker) {
   try {
     currentIsSpeaker = !!isSpeaker;
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      staysActiveInBackground: true,
-      playsInSilentModeIOS: true,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: !currentIsSpeaker,
+    await setAudioModeAsync({
+      allowsRecording: false,
+      playsInSilentMode: true,
+      shouldPlayInBackground: true,
+      shouldRouteThroughEarpiece: !currentIsSpeaker,
     });
   } catch (e) {
     console.log('callSounds: Audio mode config error', e);
@@ -26,9 +25,8 @@ export async function setAudioOutputMode(isSpeaker) {
   await configureAudioMode(currentIsSpeaker);
 }
 
-
 async function loadAndPlay(key, asset, isLooping = true) {
-  const existing = key === 'ringtone' ? ringtoneSound : incomingSound;
+  const existing = key === 'ringtone' ? ringtonePlayer : incomingPlayer;
   const loading = key === 'ringtone' ? ringtoneLoading : incomingLoading;
   if (existing || loading) return true; // already playing / loading
 
@@ -37,20 +35,13 @@ async function loadAndPlay(key, asset, isLooping = true) {
 
   try {
     await configureAudioMode();
-    const { sound } = await Audio.Sound.createAsync(
-      asset,
-      {
-        shouldPlay: true,
-        isLooping,
-        volume: 1.0,
-      }
-    );
-    await sound.setVolumeAsync(1.0);
-    await sound.setIsLoopingAsync(isLooping);
-    await sound.playAsync();
+    const player = createAudioPlayer(asset);
+    player.loop = isLooping;
+    player.volume = 1.0;
+    player.play();
 
-    if (key === 'ringtone') ringtoneSound = sound;
-    else incomingSound = sound;
+    if (key === 'ringtone') ringtonePlayer = player;
+    else incomingPlayer = player;
     return true;
   } catch (e) {
     console.log('callSounds: failed to play', key, e);
@@ -62,17 +53,17 @@ async function loadAndPlay(key, asset, isLooping = true) {
 }
 
 async function stopAndUnload(key) {
-  const sound = key === 'ringtone' ? ringtoneSound : incomingSound;
-  if (!sound) return;
+  const player = key === 'ringtone' ? ringtonePlayer : incomingPlayer;
+  if (!player) return;
 
   try {
-    await sound.stopAsync();
-    await sound.unloadAsync();
+    player.pause();
+    player.remove?.();
   } catch (e) {
     console.log('callSounds: failed to stop', key, e);
   }
-  if (key === 'ringtone') ringtoneSound = null;
-  else incomingSound = null;
+  if (key === 'ringtone') ringtonePlayer = null;
+  else incomingPlayer = null;
 }
 
 export async function playRingtone() {
@@ -89,7 +80,7 @@ export async function stopRingtone() {
 
 export async function playIncomingCallSound(customUrl) {
   // If already playing, don't restart
-  if (incomingSound) return;
+  if (incomingPlayer) return;
 
   let loadedCustom = false;
   if (customUrl && typeof customUrl === 'string' && (customUrl.startsWith('http://') || customUrl.startsWith('https://'))) {
@@ -102,7 +93,7 @@ export async function playIncomingCallSound(customUrl) {
     }
   }
   
-  if (!loadedCustom && !incomingSound) {
+  if (!loadedCustom && !incomingPlayer) {
     try {
       await loadAndPlay('incoming', require('../assets/sounds/incoming-call.wav'));
     } catch (e) {

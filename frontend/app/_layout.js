@@ -360,6 +360,8 @@ function RootLayout() {
 
   const syncActiveIncomingCall = useCallback(async () => {
     try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
       const res = await callAPI.getActiveIncomingCall();
       if (res?.data?.hasIncomingCall && res.data.callData) {
         const cid = String(res.data.callData.callId || res.data.callData.sessionId || '');

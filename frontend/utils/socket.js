@@ -1,7 +1,21 @@
 import io from 'socket.io-client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL;
+import Constants from 'expo-constants';
+
+const getSocketUrl = () => {
+  const envUrl = process.env.EXPO_PUBLIC_SOCKET_URL;
+  const hostUri = Constants?.expoConfig?.hostUri || Constants?.manifest2?.extra?.expoGo?.debuggerHost || Constants?.manifest?.debuggerHost;
+  if (hostUri) {
+    const hostIp = hostUri.split(':')[0];
+    if (hostIp && hostIp !== 'localhost' && hostIp !== '127.0.0.1') {
+      return `http://${hostIp}:3000`;
+    }
+  }
+  return envUrl || 'http://localhost:3000';
+};
+
+const SOCKET_URL = getSocketUrl();
 
 class SocketService {
   constructor() {
